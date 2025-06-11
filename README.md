@@ -1,4 +1,4 @@
-# 📘 Nome do Projeto
+# 📘 Carro em Dia
 
 <!--
 Breve descrição do projeto, incluindo o objetivo, nome do cliente e o setor envolvido.
@@ -14,7 +14,7 @@ Acesse a solução por meio deste [🔗 Link](https://www.nasa.gov/)
 
 A documentação completa do projeto pode ser acessada através do link abaixo:  
 
-**[Template de Documentação](https://intelijr.github.io/template-repo/)**
+**[Carro em Dia Docs](https://intelijr.github.io/CarroEmDia/)**
 
 > A documentação é mantida utilizando o [Docusaurus](https://docusaurus.io/). Para informações sobre como configurar e manter a documentação, consulte o [guia de configuração](./docs/README.md).
 
