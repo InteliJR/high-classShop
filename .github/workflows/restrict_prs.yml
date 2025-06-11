@@ -1,0 +1,23 @@
+name: Verificar origem do PR para main
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-pr-origin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificando se PR veio de develop ou hotfix/*
+        run: |
+          BASE_BRANCH="${{ github.base_ref }}"
+          HEAD_BRANCH="${{ github.head_ref }}"
+          echo "Base branch: $BASE_BRANCH"
+          echo "Head branch: $HEAD_BRANCH"
+          if [[ "$BASE_BRANCH" == "main" && ! "$HEAD_BRANCH" =~ ^(develop|hotfix/.*)$ ]]; then
+            echo "❌ PRs para 'main' só podem vir de 'develop' ou 'hotfix/*'."
+            exit 1
+          else
+            echo "✅ Origem válida do PR."
+          fi
