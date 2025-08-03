@@ -4,15 +4,12 @@ on:
   push:
     branches: [main]
 
-<<<<<<< HEAD
 # Configuração explícita de permissões
 permissions:
   contents: write
   pages: write
   id-token: write
 
-=======
->>>>>>> develop
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -24,17 +21,11 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: 18
-<<<<<<< HEAD
           cache: 'npm'
           cache-dependency-path: './docs/package-lock.json'
 
       - name: Install dependencies
         run: npm install
-=======
-
-      - name: Install dependencies
-        run: npm ci
->>>>>>> develop
         working-directory: ./docs
 
       - name: Build website
@@ -46,11 +37,8 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./docs/build
-<<<<<<< HEAD
           # Configurações adicionais para mais robustez
           force_orphan: true
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
           commit_message: 'docs: update documentation'
-=======
->>>>>>> develop

@@ -51,7 +51,6 @@ O documento de **Design** consolida todas as decisões visuais tomadas durante o
 
 ---
 
-<<<<<<< HEAD
 ## ⚙️ Tecnologias
 
 🔗 [Acessar documento da área de Tecnologias](./tecnologias.md)
@@ -69,8 +68,6 @@ O documento de **Tecnologias** centraliza as decisões técnicas e o planejament
 
 ---
 
-=======
->>>>>>> develop
 ## 💻 Desenvolvimento
 
 🔗 [Acessar documento da área de Desenvolvimento](./desenvolvimento.md)
@@ -99,4 +96,3 @@ Quando possível, os conteúdos destes arquivos também podem ser replicados den
 Se você está participando de um projeto, certifique-se de estar familiarizado com os documentos e utilizar os modelos corretos durante cada fase.
 
 > Para mais informações sobre o funcionamento geral da área de projetos, consulte a [documentação de reestruturação organizacional da área](https://docs.google.com/document/d/1Sot0V98EBWKO2TeUhFDBzjCmca8TnsJDkCPgRgE-yU0/edit?usp=sharing).
-
