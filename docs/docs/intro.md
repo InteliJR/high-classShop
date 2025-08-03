@@ -51,6 +51,7 @@ O documento de **Design** consolida todas as decisões visuais tomadas durante o
 
 ---
 
+<<<<<<< HEAD
 ## ⚙️ Tecnologias
 
 🔗 [Acessar documento da área de Tecnologias](./tecnologias.md)
@@ -68,6 +69,8 @@ O documento de **Tecnologias** centraliza as decisões técnicas e o planejament
 
 ---
 
+=======
+>>>>>>> develop
 ## 💻 Desenvolvimento
 
 🔗 [Acessar documento da área de Desenvolvimento](./desenvolvimento.md)

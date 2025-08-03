@@ -5,17 +5,20 @@ import type * as Preset from "@docusaurus/preset-classic";
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  // Ajustar com o nome do projeto
-  title: "Carro em Dia Docs",
-  baseUrl: "/CarroEmDia/",
-  projectName: "CarroEmDia",
-  tagline: "Documentação do projeto Carro em Dia",
-
-
+  title: "High-class Shop Docs",
+  tagline: "Documentação do projeto High-class Shop",
   favicon: "img/favicon.ico",
+
   // Set the production url of your site here
   url: "https://InteliJR.github.io",
+  // Set the /<baseUrl>/ pathname under which your site is served
+  // For GitHub pages deployment, it is often '/<projectName>/'
+  baseUrl: "/high-classShop/",
+
+  // GitHub pages deployment config.
+  // If you aren't using GitHub pages, you don't need these.
   organizationName: "InteliJR", // Usually your GitHub org/user name.
+  projectName: "high-classShop", // Usually your repo name.
   trailingSlash: false,
 
   onBrokenLinks: "throw",
@@ -61,7 +64,7 @@ const config: Config = {
     footer: {
       style: "dark",
 
-      copyright: `Copyright © ${new Date().getFullYear()} Carro em Dia, Inc. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} high-classShop, Inc. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,
