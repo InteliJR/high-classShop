@@ -37,30 +37,30 @@
 ## 📘 Resumo do Projeto
 
 **Descrição:**
-Desenvolver uma plataforma digital sofisticada voltada para público de alto poder aquisitivo, onde clientes de escritórios de investimento possam visualizar opções de bens de luxo (exclusivamente carros de luxo, lanchas e helicópteros) e agendar reuniões com especialistas através de uma integração com calendário externo. A plataforma terá um design elegante em tons de preto e branco, com uma estrutura de navegação lateral (navbar).
+Desenvolver uma plataforma digital sofisticada voltada para público de alto poder aquisitivo, onde clientes de escritórios de investimento possam visualizar opções de bens (exclusivamente carros, lanchas e helicópteros) e agendar reuniões com especialistas através de uma integração com calendário externo. A plataforma terá um design elegante em tons de preto e branco, com uma estrutura de navegação lateral (navbar).
 
 O painel do cliente será comum a todos os usuários em termos de funcionalidade e design, mudando apenas a identificação visual (logo e elementos de marca) do escritório de investimento ao qual o cliente está vinculado. Essa abordagem permite manter uma experiência consistente enquanto oferece a personalização necessária para cada parceiro estratégico. A plataforma garantirá a segurança das informações e incluirá um painel administrativo completo para controle total das operações e acompanhamento dos processos de venda.
 
 **Estrutura de Navegação:**
-- **Navbar Lateral para Clientes:** Organizada com as 3 categorias principais (Carros de Luxo, Lanchas, Helicópteros), opções para agendamento de reuniões com especialistas de cada categoria, e identificação visual do escritório de investimento ao qual está vinculado.
+- **Navbar Lateral para Clientes:** Organizada com as 3 categorias principais (Carros, Lanchas, Helicópteros), opções para agendamento de reuniões com especialistas de cada categoria, e identificação visual do escritório de investimento ao qual está vinculado.
 - **Navbar Lateral para Especialistas:** Personalizada para cada tipo de especialista:
-  * **Especialista em Carros:** Dashboard focado exclusivamente em agendamentos e processos relacionados a carros de luxo
+  * **Especialista em Carros:** Dashboard focado exclusivamente em agendamentos e processos relacionados a carros
   * **Especialista em Lanchas:** Dashboard focado exclusivamente em agendamentos e processos relacionados a lanchas
   * **Especialista em Helicópteros:** Dashboard focado exclusivamente em agendamentos e processos relacionados a helicópteros
   * Todos com acesso às ferramentas de gestão de processos de vendas e documentação específicos de sua categoria
 - **Navbar Lateral para Administradores:** Acesso completo a todas as funcionalidades administrativas, métricas e configurações de parceiros, com visão consolidada das três categorias.
 
 **Objetivos:**
-- Criar um ambiente exclusivo, seguro e sofisticado para apresentação de itens de luxo, com navegação lateral intuitiva
+- Criar um ambiente exclusivo, seguro e sofisticado para apresentação de itens de auto padrão, com navegação lateral intuitiva
 - Facilitar o processo de descoberta de produtos de alto padrão para clientes de escritórios de investimento
-- Proporcionar aos clientes uma experiência premium de navegação e agendamento com especialistas
+- Proporcionar aos clientes uma experiência de auto padrão de navegação e agendamento com especialistas
 - Permitir que especialistas acompanhem e registrem o andamento dos processos de venda
 - Fornecer ferramentas administrativas para gestão completa dos processos e escritórios parceiros
 - Personalizar a experiência com a marca de cada escritório de investimento parceiro, mantendo a estrutura funcional comum
 
 **Público-Alvo:**
 - Clientes de alto poder aquisitivo vinculados a escritórios de investimento
-- Especialistas em bens de luxo (carros, lanchas e helicópteros)
+- Especialistas em bens de auto padrão (carros, lanchas e helicópteros)
 - Administradores da plataforma e gestores de escritórios de investimento.
 
 ## 👤 Personas
@@ -77,15 +77,15 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
 - Toma decisões baseadas em confiança e recomendações de especialistas
 
 **Objetivos na plataforma:**
-- Explorar opções de bens de luxo sem precisar visitar múltiplos locais
+- Explorar opções de bens de auto padrão sem precisar visitar múltiplos locais
 - Visualizar detalhes e especificações técnicas de alto nível
 - Agendar reuniões com especialistas qualificados de forma discreta e eficiente
 - Obter informações exclusivas sobre produtos não disponíveis ao público geral
 - Encontrar itens que se alinhem ao seu estilo de vida e expectativas
 
 **Tarefas principais:**
-- Navegar entre as categorias de produtos de luxo (carros, lanchas, helicópteros)
-- Filtrar por especificações e faixas de preço premium
+- Navegar entre as categorias de produtos de auto padrão (carros, lanchas, helicópteros)
+- Filtrar por especificações e faixas de preço auto padrão
 - Visualizar imagens e informações detalhadas dos itens
 - Preencher formulário com informações pessoais e preferências
 - Agendar reunião com especialista em horário conveniente
@@ -93,20 +93,20 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
 
 ### 🏎️ **Persona 2: Especialistas por Categoria**
 
-#### **Especialista em Carros de Luxo - Ricardo Mendonça**
-**Perfil:** Especialista em carros de luxo de 38 anos, com mais de 15 anos de experiência no mercado de automóveis de alto padrão. É responsável por atender exclusivamente clientes interessados em carros de luxo.
+#### **Especialista em Carros de auto padrão - Ricardo Mendonça**
+**Perfil:** Especialista em carros de auto padrão de 38 anos, com mais de 15 anos de experiência no mercado de automóveis de alto padrão. É responsável por atender exclusivamente clientes interessados em carros de auto padrão.
 
 **Características:**
-- Conhecimento técnico aprofundado sobre carros de luxo, motorização, desempenho e raridade
-- Experiência anterior em concessionárias premium como Ferrari e Lamborghini
+- Conhecimento técnico aprofundado sobre carros de auto padrão, motorização, desempenho e raridade
+- Experiência anterior em concessionárias de auto padrão
 - Contatos diretos com importadoras e colecionadores de veículos raros
 
 #### **Especialista em Lanchas - Ana Ribeiro**
-**Perfil:** Especialista em lanchas de luxo de 42 anos, com experiência de 12 anos no setor náutico de alta performance. É responsável por atender exclusivamente clientes interessados em lanchas.
+**Perfil:** Especialista em lanchas de auto padrão de 42 anos, com experiência de 12 anos no setor náutico de alta performance. É responsável por atender exclusivamente clientes interessados em lanchas.
 
 **Características:**
-- Conhecimento técnico sobre embarcações de luxo, motorização marítima e navegação
-- Experiência anterior em estaleiros premium e mercado internacional de iates
+- Conhecimento técnico sobre embarcações de auto padrão, motorização marítima e navegação
+- Experiência anterior em estaleiros de auto padrão e mercado internacional de iates
 - Contatos com marinas exclusivas e fabricantes de embarcações personalizadas
 
 #### **Especialista em Helicópteros - Marcelo Santos**
@@ -115,7 +115,7 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
 **Características:**
 - Conhecimento técnico sobre modelos executivos de helicópteros, especificações e manutenção
 - Experiência em consultoria para empresários e celebridades na aquisição de aeronaves
-- Contatos com fabricantes e distribuidores exclusivos de aeronaves de luxo
+- Contatos com fabricantes e distribuidores exclusivos de aeronaves de auto padrão
 
 **Características comuns aos especialistas:**
 - Experiência em vendas para público de alto padrão
@@ -148,7 +148,7 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
 - Foco em métricas de performance e conversão
 - Preocupação com segurança, confidencialidade e compliance
 - Capacidade de gerenciar múltiplas parcerias simultaneamente
-- Entendimento profundo do mercado de luxo e investimentos
+- Entendimento profundo do mercado de auto padrão e investimentos
 
 **Tarefas principais:**
 - Monitorar todos os processos de venda e seu status em tempo real
@@ -162,9 +162,9 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
 
 | Categoria  | Descrição |
 |-----------|-----------|
-| **É**     | Uma plataforma exclusiva para visualização de bens de luxo com design sofisticado e sistema de agendamento integrado |
+| **É**     | Uma plataforma exclusiva para visualização de bens de auto padrão com design sofisticado e sistema de agendamento integrado |
 | **Não É** | Um e-commerce tradicional, um marketplace comum ou uma vitrine genérica de produtos |
-| **Faz**   | Permite a visualização de carros de luxo, lanchas e helicópteros; agendamento de reuniões com especialistas via calendário externo; acompanhamento do processo de venda; personalização por escritório de investimento |
+| **Faz**   | Permite a visualização de carros de auto padrão, lanchas e helicópteros; agendamento de reuniões com especialistas via calendário externo; acompanhamento do processo de venda; personalização por escritório de investimento |
 | **Não Faz** | Não permite venda de outras categorias de produtos além das três definidas; não processa pagamentos diretamente; não é acessível ao público geral sem vínculo com escritórios parceiros |
 
 </div>
@@ -177,8 +177,8 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
 
 | Tipo        | Descrição                                                                |
 |-------------|--------------------------------------------------------------------------|
-| **Certeza**   | A plataforma precisa ter design sofisticado em preto e branco; integrar agendamento de calendário; permitir personalização por escritório; focar exclusivamente em carros de luxo, lanchas e helicópteros |
-| **Certeza**   | O público-alvo são clientes de alto poder aquisitivo vinculados a escritórios de investimento que buscam retirar valores sob custódia para aquisição de bens de luxo |
+| **Certeza**   | A plataforma precisa ter design sofisticado em preto e branco; integrar agendamento de calendário; permitir personalização por escritório; focar exclusivamente em carros de auto padrão, lanchas e helicópteros |
+| **Certeza**   | O público-alvo são clientes de alto poder aquisitivo vinculados a escritórios de investimento que buscam retirar valores sob custódia para aquisição de bens de auto padrão |
 | **Certeza**   | Especialistas precisam registrar o andamento das negociações e ter acesso às informações fornecidas pelos clientes |
 | **Suposição** | Clientes valorizarão a discrição e exclusividade da plataforma como diferencial |
 | **Suposição** | A integração com escritórios de investimento aumentará a credibilidade e conversão |
@@ -192,22 +192,22 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
 
 ## 🧱 Epics e User Stories
 
-### 🔸 **Epic 1: Visualização e Navegação de Bens de Luxo**
+### 🔸 **Epic 1: Visualização e Navegação de Bens de auto padrão**
 
-#### US1.1 - Visualização de Catálogo Premium
+#### US1.1 - Visualização de Catálogo 
 - **Usuário:** Como cliente de alto poder aquisitivo (Alexandre)
-- **Objetivo:** Quero visualizar um catálogo exclusivo de carros de luxo, lanchas e helicópteros com design sofisticado e elegante
+- **Objetivo:** Quero visualizar um catálogo exclusivo de carros de auto padrão, lanchas e helicópteros com design sofisticado e elegante
 - **Justificativa:** Para encontrar opções de alto padrão que se alinhem com meu estilo de vida e expectativas
 - **Critérios de Aceitação:**
   - Interface em tons de preto e branco com design minimalista e sofisticado
-  - Visualização em categorias distintas: carros de luxo, lanchas e helicópteros
+  - Visualização em categorias distintas: carros de auto padrão, lanchas e helicópteros
   - Exibição de imagens de alta qualidade dos produtos
   - Identificação visual do escritório de investimento do cliente na interface
 
-#### US1.2 - Filtragem Premium
+#### US1.2 - Filtragem
 - **Usuário:** Como cliente de alto poder aquisitivo (Alexandre)
-- **Objetivo:** Quero filtrar os produtos de luxo usando critérios específicos e relevantes para cada categoria
-- **Justificativa:** Para encontrar rapidamente bens de luxo que atendam às minhas exigências e preferências pessoais
+- **Objetivo:** Quero filtrar os produtos de auto padrão usando critérios específicos e relevantes para cada categoria
+- **Justificativa:** Para encontrar rapidamente bens de auto padrão que atendam às minhas exigências e preferências pessoais
 - **Critérios de Aceitação:**
   - Filtros específicos para cada categoria:
     - Carros: marca, modelo, ano, motorização, cor, preço
@@ -216,9 +216,9 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
   - Ordenação por relevância, preço, exclusividade
   - Salvamento de preferências de busca
 
-#### US1.3 - Detalhamento de Produto de Luxo
+#### US1.3 - Detalhamento de Produto de auto padrão
 - **Usuário:** Como cliente de alto poder aquisitivo (Alexandre)
-- **Objetivo:** Quero acessar informações detalhadas e exclusivas sobre cada item de luxo
+- **Objetivo:** Quero acessar informações detalhadas e exclusivas sobre cada item de auto padrão
 - **Justificativa:** Para tomar decisões informadas sobre quais itens merecem uma reunião com especialista
 - **Critérios de Aceitação:**
   - Galeria de imagens de alta resolução com visualização ampliada
@@ -227,14 +227,14 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
   - Opções de personalização disponíveis
   - Botão de destaque para agendar reunião com especialista
 
-### 🔸 **Epic 2: Sistema de Agendamento Premium e Comunicação**
+### 🔸 **Epic 2: Sistema de Agendamento**
 
 #### US2.1 - Formulário de Interesse Personalizado
 - **Usuário:** Como cliente de alto poder aquisitivo (Alexandre)
 - **Objetivo:** Quero preencher um formulário personalizado com minhas informações e preferências antes de agendar uma reunião
 - **Justificativa:** Para que o especialista possa se preparar adequadamente e oferecer um atendimento personalizado
 - **Critérios de Aceitação:**
-  - Formulário elegante e discreto integrado ao fluxo de agendamento
+  - Formulário elegante e discreto integrado ao fluxo padrão de agendamento
   - Campos relevantes sobre preferências específicas para cada categoria de produto
   - Opção para incluir comentários adicionais
   - Garantia de privacidade e segurança das informações fornecidas
@@ -242,7 +242,7 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
 
 #### US2.2 - Agendamento de Reuniões com Especialistas
 - **Usuário:** Como cliente de alto poder aquisitivo (Alexandre)
-- **Objetivo:** Quero agendar uma reunião com um especialista para discutir detalhes sobre o bem de luxo de meu interesse
+- **Objetivo:** Quero agendar uma reunião com um especialista para discutir detalhes sobre o bem de auto padrão de meu interesse
 - **Justificativa:** Para obter informações exclusivas e avançar no processo de aquisição do item
 - **Critérios de Aceitação:**
   - Visualização de horários disponíveis do especialista 
@@ -252,7 +252,7 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
   - Vinculação do agendamento ao item de interesse
 
 #### US2.3 - Configuração de Disponibilidade por Tipo de Especialista
-- **Usuário:** Como especialista em uma categoria específica (carros de luxo/lanchas/helicópteros)
+- **Usuário:** Como especialista em uma categoria específica (carros de auto padrão/lanchas/helicópteros)
 - **Objetivo:** Quero definir minha disponibilidade de horários para reuniões com clientes interessados na minha categoria de especialidade
 - **Justificativa:** Para organizar minha agenda e garantir atendimento de qualidade dentro da minha área de especialização
 - **Critérios de Aceitação:**
@@ -261,7 +261,7 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
   - Definição de intervalos entre reuniões
   - Agendamentos visíveis somente para o tipo de especialista correspondente à categoria do produto de interesse do cliente
 
-#### US2.4 - Sistema de Notificações Premium
+#### US2.4 - Sistema de Notificações
 - **Usuário:** Como cliente/especialista
 - **Objetivo:** Quero receber notificações sobre agendamentos, confirmações e lembretes
 - **Justificativa:** Para garantir que reuniões importantes não sejam esquecidas e manter a comunicação
@@ -270,7 +270,7 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
   - Opções discretas para reagendar ou cancelar
   - Sincronização com calendário externo
 
-### 🔸 **Epic 3: Gestão de Usuários Premium e Segurança**
+### 🔸 **Epic 3: Gestão de Usuários e Segurança**
 
 #### US3.1 - Acesso Exclusivo via Escritórios de Investimento
 - **Usuário:** Como cliente de escritório de investimento
@@ -283,7 +283,7 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
   - Personalização da experiência baseada no escritório de origem
 
 #### US3.2 - Portal Segregado por Tipo de Especialista
-- **Usuário:** Como especialista em uma categoria específica (carros de luxo/lanchas/helicópteros)
+- **Usuário:** Como especialista em uma categoria específica (carros de auto padrão/lanchas/helicópteros)
 - **Objetivo:** Quero acessar uma área exclusiva com agendamentos e informações dos clientes relacionados apenas à minha categoria de especialidade
 - **Justificativa:** Para me preparar adequadamente para as reuniões e oferecer um atendimento personalizado dentro da minha área de expertise
 - **Critérios de Aceitação:**
@@ -323,9 +323,9 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
   - Notificação automática para administradores sobre conclusão/encerramento
 
 
-### 🔸 **Epic 5: Painel Administrativo Premium**
+### 🔸 **Epic 5: Painel Administrativo**
 
-#### US5.1 - Dashboard Executivo de Luxo
+#### US5.1 - Dashboard Executivo de auto padrão
 - **Usuário:** Como administrador (Carolina)
 - **Objetivo:** Quero visualizar métricas estratégicas e acompanhar todos os processos de venda
 - **Justificativa:** Para monitorar o desempenho da plataforma e tomar decisões estratégicas baseadas em dados
@@ -357,16 +357,16 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
 
 ## ⚙️ Requisitos Funcionais
 
-### 🔹 **Apresentação de Produtos de Luxo e Navegação**
+### 🔹 **Apresentação de Produtos de auto padrão e Navegação**
 
-* **RF01** – O sistema deve exibir catálogo exclusivo de bens de luxo (carros, lanchas e helicópteros) com imagens de alta qualidade e descrições detalhadas.
+* **RF01** – O sistema deve exibir catálogo exclusivo de bens de auto padrão (carros, lanchas e helicópteros) com imagens de alta qualidade e descrições detalhadas.
 * **RF02** – Interface sofisticada em tons de preto e branco com design minimalista e elegante.
-* **RF03** – Funcionalidade de busca e filtros avançados específicos para cada categoria de produto de luxo.
+* **RF03** – Funcionalidade de busca e filtros avançados específicos para cada categoria de produto de auto padrão.
 * **RF04** – Cada escritório de investimento parceiro deve ter sua própria marca visual na plataforma através de uma navbar lateral personalizada, mantendo a estrutura funcional comum mas exibindo o logo e elementos visuais específicos do escritório ao qual o cliente está vinculado.
 * **RF05** – Implementar sistema de navegação lateral (navbar) distinto para cada tipo de usuário:
-  * **Cliente:** Navbar com acesso às três categorias de produtos (Carros de Luxo, Lanchas e Helicópteros), opção de agendamento de reuniões para cada categoria, e acesso ao histórico de interações
+  * **Cliente:** Navbar com acesso às três categorias de produtos (Carros de auto padrão, Lanchas e Helicópteros), opção de agendamento de reuniões para cada categoria, e acesso ao histórico de interações
   * **Especialistas (três tipos):** 
-     - **Especialista em Carros:** Navbar com acesso exclusivo ao dashboard de agendamentos e processos de venda de carros de luxo
+     - **Especialista em Carros:** Navbar com acesso exclusivo ao dashboard de agendamentos e processos de venda de carros de auto padrão
      - **Especialista em Lanchas:** Navbar com acesso exclusivo ao dashboard de agendamentos e processos de venda de lanchas
      - **Especialista em Helicópteros:** Navbar com acesso exclusivo ao dashboard de agendamentos e processos de venda de helicópteros
      - Cada especialista terá acesso somente às ferramentas de gestão de processos e documentação da sua categoria
@@ -381,7 +381,7 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
 ### 🔹 **Portal do Especialista (Segregado por Categoria)**
 
 * **RF10** – Dashboard para especialistas visualizarem agendamentos e informações fornecidas pelos clientes, específico para sua categoria de atuação:
-  * Dashboard exclusivo para especialistas em carros de luxo
+  * Dashboard exclusivo para especialistas em carros de auto padrão
   * Dashboard exclusivo para especialistas em lanchas
   * Dashboard exclusivo para especialistas em helicópteros
 * **RF11** – Interface para registro do andamento das negociações, com sistema de fases do processo, personalizada com campos específicos para cada categoria de produto.
@@ -407,7 +407,7 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
 * **RNF02** – A plataforma deve ser responsiva, priorizando experiência em desktops de alta resolução e celulares.
 * **RNF03** – Disponibilidade de 99,9% para garantir acesso ininterrupto a clientes de alto valor.
 * **RNF04** – Integração perfeita e confiável com sistemas de calendário externos (Google Calendar).
-* **RNF05** – Suporte a imagens de alta resolução para exibição detalhada de produtos de luxo.
+* **RNF05** – Suporte a imagens de alta resolução para exibição detalhada de produtos de auto padrão.
 * **RNF08** – Escalabilidade para suportar crescimento no número de escritórios parceiros sem degradação de performance.
 
 ---
@@ -419,9 +419,9 @@ O painel do cliente será comum a todos os usuários em termos de funcionalidade
 
 **Se sim, até qual ponto?**
 - [ ] Mobile-first
-- [x] Adaptável para tablets premium
-- [x] Prioridade para desktops de alta resolução e notebooks premium
-- [ ] Totalmente responsivo (otimização completa para mobile)
+- [x] Adaptável para tablets 
+- [x] Prioridade para desktops de alta resolução e notebooks
+- [X] Totalmente responsivo (otimização completa para mobile)
 
 **Observações sobre Responsividade:**
 - O design prioritário será para desktop e tablets de alta resolução, refletindo o comportamento típico do público-alvo
