@@ -94,10 +94,6 @@ sidebar_position: 4
 **Link para o modelo:** 
 <!-- Exemplo: https://dbdiagram.io/xyz -->
 
-Perfeito! Aqui vai uma versão melhorada e mais didática da seção **"Estrutura de Dados (Frontend < > Backend)"**, com uma explicação clara sobre a importância dos contratos, exemplos de **interfaces** que funcionam como contratos e também um exemplo de como esses contratos se transformam em dados reais durante o desenvolvimento e testes.
-
----
-
 ### 🔄 Estrutura de Dados (Frontend ↔ Backend)
 
 <!-- 
