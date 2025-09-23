@@ -2073,17 +2073,3 @@ Paginação: page, limit, sort ('created_at'|'valor'|'status'), order
 }
 ```
 
----
-
-## 📝 **OBSERVAÇÕES FINAIS**
-
-### Escalabilidade
-* Caso o tráfego cresça, avaliar migração gradual para **EC2 + ALB + RDS** mantendo domínio e CDN
-* Para WebSockets/Realtime, considerar Lightsail com Nginx reverso ou API Gateway/WebSocket
-
-### Próximos Passos
-* Implementação de cache (Redis/ElastiCache)
-* Sistema de filas para processamento assíncrono
-* Testes automatizados (unitários e integração)
-* Monitoramento avançado com métricas customizadas
-* Sistema de notificações em tempo real
