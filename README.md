@@ -22,43 +22,46 @@ A documentação completa do projeto pode ser acessada através do link abaixo:
 
 ## 🚀 Tecnologias Utilizadas
 
-<!-- Liste aqui as principais tecnologias utilizadas no projeto.  -->
+* Frontend: React, TypeScript, Vite, TailwindCSS
 
+* Backend: Node.js, Nest.js, TypeScript, Prisma ORM
 
-- React
-- Node.js
-- PostgreSQL
-- Figma
-- TailwindCSS
+* Banco de Dados: PostgreSQL
 
+* Ambiente de Desenvolvimento: Docker
+
+* Hospedagem: AWS (S3, CloudFront, Lightsail)
 ---
 
 ## 🛠️ Como Rodar o Projeto
 
+### Pré-requisitos 
+
+* [Git](https://git-scm.com/downloads)
+* [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+
 <!-- Passos para rodar o projeto.   -->
-Exemplo:
-
 ```bash
-# Clone o repositório
-git clone https://github.com/inteli-junior/nomedoprojeto.git
+# 1. Clone o repositório
+git clone https://github.com/InteliJR/high-classShop.git
 
-# Acesse o diretório do projeto
-cd nomedoprojeto
+# 2. Acesse o diretório do projeto
+cd high-classShop
 
-# Instale as dependências do backend
+# 3. Inicie todo o ambiente (Banco de Dados, Backend e Frontend) com Docker Compose
+# O --build é necessário apenas na primeira vez ou quando os Dockerfiles são alterados
+docker-compose up --build -d
+
+# 4. Rode as migrations do banco de dados pela primeira vez
+# Este comando cria todas as tabelas necessárias no banco de dados do Docker
 cd backend
-npm install
-
-# Inicie o servidor backend
-npm run dev
-
-# Em outro terminal, vá para o frontend
-cd ../frontend
-npm install
-npm run dev
+npx prisma migrate dev
 ```
+## 📆 Como Rodar o Projeto
 
 ---
+
+
 
 ## 🗂️ Estrutura de Diretórios
 
