@@ -1,6 +1,4 @@
-# 📋 Documentação Completa - Marketplace de Bens de Luxo
-
-## ⚙️ **TECNOLOGIAS E ARQUITETURA**
+# ⚙️ **TECNOLOGIAS E ARQUITETURA**
 
 ### 🗓 Informações Gerais
 
