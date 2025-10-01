@@ -1,4 +1,4 @@
-# ⚙️ **TECNOLOGIAS E ARQUITETURA**
+# ⚙️ Tecnologias e Arquitetura
 
 ### 🗓 Informações Gerais
 
