@@ -22,43 +22,76 @@ A documentação completa do projeto pode ser acessada através do link abaixo:
 
 ## 🚀 Tecnologias Utilizadas
 
-<!-- Liste aqui as principais tecnologias utilizadas no projeto.  -->
+* Frontend: React, TypeScript, Vite, TailwindCSS
 
+* Backend: Node.js, Nest.js, TypeScript, Prisma ORM
 
-- React
-- Node.js
-- PostgreSQL
-- Figma
-- TailwindCSS
+* Banco de Dados: PostgreSQL
 
+* Ambiente de Desenvolvimento: Docker
+
+* Hospedagem: AWS (S3, CloudFront, Lightsail)
 ---
 
 ## 🛠️ Como Rodar o Projeto
 
+### Pré-requisitos 
+
+* [Git](https://git-scm.com/downloads)
+* [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+* [Node.js](https://nodejs.org/en)
+
 <!-- Passos para rodar o projeto.   -->
-Exemplo:
-
 ```bash
-# Clone o repositório
-git clone https://github.com/inteli-junior/nomedoprojeto.git
+# 1. Clone o repositório
+git clone https://github.com/InteliJR/high-classShop.git
 
-# Acesse o diretório do projeto
-cd nomedoprojeto
+# 2. Acesse o diretório do projeto
+cd high-classShop
 
-# Instale as dependências do backend
+# 3. Inicie todo o ambiente (Banco, Backend e Frontend) com Docker Compose.
+# O --build é recomendado na primeira vez para construir as imagens.
+docker-compose up --build -d
+
+# 4. Instale as dependências do Backend
 cd backend
 npm install
 
-# Inicie o servidor backend
-npm run dev
-
-# Em outro terminal, vá para o frontend
+# 5. Instale as dependências do Frontend
 cd ../frontend
 npm install
-npm run dev
+
+# 6. Sincronize o Banco de Dados com as Migrations
+# Este comando lê as 'plantas baixas' do banco e cria as tabelas.
+cd ../backend
+npx prisma migrate dev
+```
+
+🌐 Acesse o Frontend (site) em: http://localhost:5173
+
+⚙️ Acesse o Backend (API) em: http://localhost:3000
+
+🗂️ Para visualizar o banco de dados, na pasta backend, rode o comando: npx prisma studio
+
+## 📆 Comando úteis
+
+```bash
+# Ligar o ambiente em segundo plano
+docker-compose up -d
+
+# Desligar o ambiente
+docker-compose down
+
+# Ver os logs (mensagens) do backend em tempo real
+docker-compose logs -f backend
+
+# Ver os logs do frontend
+docker-compose logs -f frontend
 ```
 
 ---
+
+
 
 ## 🗂️ Estrutura de Diretórios
 
