@@ -17,9 +17,11 @@ services:
     build: ./backend
     ports:
       - "3000:3000"
+    volumes:
+    - ./backend/prisma:/app/prisma
     environment:
       DATABASE_URL: "postgresql://user:password@db:5432/highclassdb?schema=public"
-    depends_on:
+    depends_on: 
       - db
 
   frontend:
