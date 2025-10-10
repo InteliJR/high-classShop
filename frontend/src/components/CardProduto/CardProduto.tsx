@@ -12,7 +12,7 @@ function formatValue(valor : number){
 
 export const CardProduto = ( { image_url, marca, modelo, descricao, valor} : CardProdutoProps) => {
     return(
-        <article className="h-full w-full rounded-2xl border border-black p-3 flex flex-col gap-2">
+        <article className="h-full w-full rounded-2xl border border-black p-6 flex flex-col gap-2">
             <div className="flex justify-center">
                 <img src={image_url} alt={`Imagem do produto ${marca} ${modelo}`} className="rounded-2xl"/>
             </div>
@@ -21,7 +21,7 @@ export const CardProduto = ( { image_url, marca, modelo, descricao, valor} : Car
                 <h2 className="font-semibold">
                     {marca} {modelo}
                 </h2>
-                <p className="text-[8px] text-balance line-clamp-2">
+                <p className="text-[8px] text-justify line-clamp-2">
                     {descricao}
                 </p>
                 <p className="">
