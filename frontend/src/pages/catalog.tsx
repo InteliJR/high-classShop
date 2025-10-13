@@ -1,4 +1,4 @@
-import { CardProduto } from "../components/CardProduto";
+import CardProduto from "../components/CardProduto.tsx";
 
  const mockCards = Array.from({length : 5}, (_, __) => ({
     image_url: "https://picsum.photos/id/183/300/200",
