@@ -1,6 +1,5 @@
 import MainLayout from './layouts/MainLayout'
 
-
 function App() {
   return (
     <>
@@ -10,3 +9,5 @@ function App() {
     </>
   )
 }
+
+export default App
