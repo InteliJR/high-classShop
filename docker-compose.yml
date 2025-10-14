@@ -1,9 +1,10 @@
-version: '3.8'
+version: "3.9"
 
 services:
-  db:
-    image: postgres:15-alpine
-    restart: always
+  postgres:
+    image: postgres:16
+    container_name: highclass-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
@@ -11,25 +12,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  backend:
-    build: ./backend
-    ports:
-      - "3000:3000"
-    volumes:
-    - ./backend/prisma:/app/prisma
-    environment:
-      DATABASE_URL: "postgresql://user:password@db:5432/highclassdb?schema=public"
-    depends_on: 
-      - db
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "5173:5173"
-    depends_on:
-      - backend
+      - pgdata_highclass:/var/lib/postgresql/data
 
 volumes:
-  postgres_data:
+  pgdata_highclass:
