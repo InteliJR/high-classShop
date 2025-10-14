@@ -1,7 +1,12 @@
-// frontend/src/App.tsx
+import MainLayout from './layouts/MainLayout'
 
-import CompaniesPage from "./pages/admin/CompaniesPage";
 
-export default function App() {
-  return <CompaniesPage />;
+function App() {
+  return (
+    <>
+      <MainLayout >
+        example
+      </MainLayout>
+    </>
+  )
 }
