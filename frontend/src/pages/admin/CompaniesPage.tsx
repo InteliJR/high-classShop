@@ -3,26 +3,34 @@ import { getCompanies, type Company } from "../../services/companies.service";
 import Button from "../../components/ui/button";
 import EditIcon from "../../assets/icons/edit.svg";
 import TrashIcon from "../../assets/icons/trash.svg";
+import Modal from "../../components/ui/Modal";
+import NewCompanyForm from "./NewCompanyForm";
 
 export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleFormSuccess = () => {
+    setIsModalOpen(false);
+    fetchData();
+  };
+
+  async function fetchData() {
+    try {
+      setIsLoading(true);
+      const data = await getCompanies();
+      setCompanies(data);
+      setError(null);
+    } catch (err) {
+      setError("Não foi possível carregar os escritórios.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        setIsLoading(true);
-        const data = await getCompanies();
-        setCompanies(data);
-        setError(null);
-      } catch (err) {
-        setError("Não foi possível carregar os escritórios.");
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
     fetchData();
   }, []);
 
@@ -38,7 +46,9 @@ export default function CompaniesPage() {
     <div className="text-text-main w-full">
       <div className="flex justify-between items-center mb-6">
         <h1 className="h1-style">Gestão de Escritórios</h1>
-        <Button type="button">+ Novo Escritório</Button>
+        <Button type="button" onClick={() => setIsModalOpen(true)}>
+          + Novo Escritório
+        </Button>
       </div>
 
       {/* Tabela de Escritórios */}
@@ -102,6 +112,9 @@ export default function CompaniesPage() {
           ))}
         </div>
       </div>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+        <NewCompanyForm onSuccess={handleFormSuccess} />
+      </Modal>
     </div>
   );
 }
