@@ -1,3 +1,5 @@
+// Fotmulário para criar um novo escritório dentro do modal
+
 import React, { useState } from "react";
 import Button from "../../components/ui/Button";
 import { createCompany } from "../../services/companies.service";
@@ -7,12 +9,21 @@ interface NewCompanyFormProps {
 }
 
 export default function NewCompanyForm({ onSuccess }: NewCompanyFormProps) {
+  // Guarda o valor do campo "Nome do Escritório".
   const [name, setName] = useState("");
+  // Guarda o valor do campo "CNPJ".
   const [cnpj, setCnpj] = useState("");
+  // Guarda o ficheiro de imagem selecionado pelo utilizador. Começa como nulo.
   const [logo, setLogo] = useState<File | null>(null);
+  // Controla se o formulário está a ser enviado, para desativar o botão e evitar cliques duplos.
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Guarda qualquer mensagem de erro que ocorra durante a validação ou o envio.
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Função chamada quando o utilizador clica no botão "Salvar Escritório".
+   * É responsável por validar, preparar e enviar os dados para a API.
+   */
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!name || !cnpj) {
@@ -32,7 +43,6 @@ export default function NewCompanyForm({ onSuccess }: NewCompanyFormProps) {
 
     try {
       await createCompany(formData);
-
       onSuccess();
     } catch (err) {
       setError(
@@ -48,6 +58,7 @@ export default function NewCompanyForm({ onSuccess }: NewCompanyFormProps) {
       <h2 className="h2-style">Novo Escritório</h2>
 
       <div>
+        {/* --- CAMPO NOME --- */}
         <label
           htmlFor="name"
           className="block text-sm font-medium text-text-secondary"
@@ -65,6 +76,7 @@ export default function NewCompanyForm({ onSuccess }: NewCompanyFormProps) {
       </div>
 
       <div>
+        {/* --- CAMPO CNPJ --- */}
         <label
           htmlFor="cnpj"
           className="block text-sm font-medium text-text-secondary"
@@ -82,6 +94,7 @@ export default function NewCompanyForm({ onSuccess }: NewCompanyFormProps) {
       </div>
 
       <div>
+        {/* --- CAMPO LOGO (UPLOAD DE FICHEIRO) --- */}
         <label
           htmlFor="logo"
           className="block text-sm font-medium text-text-secondary"
@@ -101,8 +114,10 @@ export default function NewCompanyForm({ onSuccess }: NewCompanyFormProps) {
         />
       </div>
 
+      {/* Exibe a mensagem de erro apenas se o estado 'error' tiver algum conteúdo. */}
       {error && <p className="text-red-500 text-sm">{error}</p>}
 
+      {/* --- BOTÃO DE SUBMISSÃO --- */}
       <div className="flex justify-end pt-4">
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? "Salvando..." : "Salvar Escritório"}

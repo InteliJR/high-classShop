@@ -11,11 +11,13 @@ export type Company = {
   logoUrl?: string | null;
 };
 
+// Busca a lista completa de empresas na API.
 export async function getCompanies(): Promise<Company[]> {
   const res = await fetch(`${API}/companies`);
   return res.json();
 }
 
+// Cria uma nova empresa enviando os dados para a API.
 export async function createCompany(formData: FormData): Promise<Company> {
   const API_URL = "http://localhost:3000";
 
@@ -31,6 +33,7 @@ export async function createCompany(formData: FormData): Promise<Company> {
   return response.json();
 }
 
+// Atualiza os dados de uma empresa existente.
 export async function updateCompany(
   id: number,
   data: Partial<Company>
@@ -43,6 +46,7 @@ export async function updateCompany(
   return res.json();
 }
 
+// Apaga uma empresa pelo seu ID.
 export async function deleteCompany(id: number): Promise<void> {
   await fetch(`${API}/companies/${id}`, { method: "DELETE" });
 }

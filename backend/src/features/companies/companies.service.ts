@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { S3Service } from 'src/aws/s3.service';
 
 @Injectable()
@@ -9,6 +9,7 @@ export class CompaniesService {
     private s3Service: S3Service,
   ) {}
 
+  // Retorna todas as empresas, com o URL do logo assinado para acesso temporário.
   async findAll() {
     const companies = await this.prisma.companies.findMany();
     return Promise.all(
@@ -22,10 +23,12 @@ export class CompaniesService {
     );
   }
 
+  // Cria uma nova empresa na base de dados.
   create(data: { name: string; cnpj: string; logo?: string }) {
     return this.prisma.companies.create({ data });
   }
 
+  // Retorna uma única empresa pelo ID, com o URL do logo assinado.
   async findOne(id: number) {
     const company = await this.prisma.companies.findUnique({ where: { id } });
     if (!company) {
@@ -40,6 +43,7 @@ export class CompaniesService {
     return { ...company, logoUrl };
   }
 
+  // Atualiza os dados de uma empresa existente.
   async update(
     id: number,
     data: Partial<{
@@ -53,6 +57,7 @@ export class CompaniesService {
     return this.prisma.companies.update({ where: { id }, data });
   }
 
+  // Apaga uma empresa pelo ID.
   async remove(id: number) {
     await this.findOne(id);
     await this.prisma.companies.delete({ where: { id } });
