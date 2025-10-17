@@ -1,5 +1,3 @@
-import { Image, Specialist } from "./index";
-
 export class Boat {
     id: String;
     marca: String;
@@ -16,8 +14,8 @@ export class Boat {
     tipo_embarcacao: String
     descricao: String;
     acessorios: String;
-    specialist: Specialist;
-    images: Image;
+    specialist: string; //Fix
+    images: string; //Fix
     created_at: Date;
     updated_at: Date;
 }

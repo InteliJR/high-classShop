@@ -1,5 +1,3 @@
-import { Specialist, Image } from "./index";
-
 export class Car {
     id: String;
     marca: String;
@@ -13,8 +11,8 @@ export class Car {
     combustivel: String;
     tipo_categoria: String;
     descricao: String;
-    specialist: Specialist;
-    images: Image;
+    specialist: string; //Fix
+    images: string; //Fix
     created_at: Date;
     updated_at: Date;
 }

@@ -1,5 +1,3 @@
-import { Specialist, Image} from "./index"
-
 export class Aircrafts {
     id: String;
     categoria: String;
@@ -11,8 +9,8 @@ export class Aircrafts {
     descricao: String;
     valor: number;
     tipo_aeronave: String
-    specialist: Specialist;
-    images: Image;
+    specialist: string; //Fix
+    images: string; //Fix
     created_at: Date;
     updated_at: Date;
 }

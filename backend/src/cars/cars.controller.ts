@@ -9,10 +9,10 @@ import {
   Query,
 } from '@nestjs/common';
 import { CarsService } from './cars.service';
-import { CreateCarDto } from '../dto/create-car.dto';
-import { UpdateCarDto } from '../dto/update-car.dto';
-import { PaginationQueryDto } from 'src/dto/api-response/pagination-qery.dto';
-import { PaginationDto } from 'src/dto/api-response/pagination.dto';
+import { CreateCarDto } from './dto/create-car.dto';
+import { UpdateCarDto } from './dto/update-car.dto';
+import { PaginationQueryDto } from 'src/utils/dto/pagination-qery.dto';
+import { PaginationDto } from 'src/utils/dto/pagination.dto';
 
 @Controller('cars')
 export class CarsController {

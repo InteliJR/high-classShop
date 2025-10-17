@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { CreateCarDto } from '../dto/create-car.dto';
-import { UpdateCarDto } from '../dto/update-car.dto';
+import { CreateCarDto } from './dto/create-car.dto';
+import { UpdateCarDto } from './dto/update-car.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { PaginationQueryDto } from 'src/dto/api-response/pagination-qery.dto';
+import { PaginationQueryDto } from 'src/utils/dto/pagination-qery.dto';
 
 @Injectable()
 export class CarsService {
@@ -21,13 +21,12 @@ export class CarsService {
         take: take,
       }),
       this.prismaService.cars.count(),
-    ])
+    ]);
 
     return {
       data: cars,
       count: total,
-    }
-
+    };
   }
 
   findOne(id: number) {
