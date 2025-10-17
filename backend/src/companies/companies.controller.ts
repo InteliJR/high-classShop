@@ -1,9 +1,26 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Param,
+  Body,
+  ParseIntPipe,
+  UseInterceptors,
+  UploadedFile,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CompaniesService } from './companies.service';
+import { S3Service } from '../aws/s3.service';
 
 @Controller('companies')
 export class CompaniesController {
-  constructor(private readonly companiesService: CompaniesService) {}
+
+  constructor(
+    private readonly companiesService: CompaniesService,
+    private readonly s3Service: S3Service,
+  ) {}
 
   @Get()
   findAll() {
@@ -11,8 +28,27 @@ export class CompaniesController {
   }
 
   @Post()
-  create(@Body() body: { name: string; cnpj: string }) {
-    return this.companiesService.create(body);
+  @UseInterceptors(FileInterceptor('logo')) 
+  async create(
+    @Body() body: { name: string; cnpj: string }, 
+    @UploadedFile() file: Express.Multer.File, 
+  ) {
+    let logoKey: string | undefined = undefined;
+
+
+    if (file) {
+
+      const uniqueFileName = `logos/${Date.now()}-${file.originalname}`;
+      
+
+      logoKey = await this.s3Service.uploadFile(file, uniqueFileName);
+    }
+
+
+    return this.companiesService.create({
+      ...body,
+      logo: logoKey,
+    });
   }
 
   @Get(':id')

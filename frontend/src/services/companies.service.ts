@@ -8,6 +8,7 @@ export type Company = {
   cnpj: string;
   logo?: string | null;
   description?: string | null;
+  logoUrl?: string | null;
 };
 
 export async function getCompanies(): Promise<Company[]> {

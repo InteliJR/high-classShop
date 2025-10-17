@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { getCompanies, type Company } from "../../services/companies.service";
-import Button from "../../components/ui/button";
+import { getCompanies, deleteCompany, type Company } from "../../services/companies.service";
+import Button from "../../components/ui/Button";
 import EditIcon from "../../assets/icons/edit.svg";
 import TrashIcon from "../../assets/icons/trash.svg";
 import Modal from "../../components/ui/Modal";
@@ -10,10 +10,13 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  
+
+  const [isNewCompanyModalOpen, setIsNewCompanyModalOpen] = useState(false);
+  const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null);
 
   const handleFormSuccess = () => {
-    setIsModalOpen(false);
+    setIsNewCompanyModalOpen(false);
     fetchData();
   };
 
@@ -30,6 +33,19 @@ export default function CompaniesPage() {
     }
   }
 
+  const handleConfirmDelete = async () => {
+    if (!companyToDelete) return;
+
+    try {
+      await deleteCompany(companyToDelete.id);
+      fetchData();
+    } catch (err) {
+      alert("Erro ao apagar o escritório. Tente novamente.");
+    } finally {
+      setCompanyToDelete(null); 
+    }
+  };
+  
   useEffect(() => {
     fetchData();
   }, []);
@@ -46,13 +62,12 @@ export default function CompaniesPage() {
     <div className="text-text-main w-full">
       <div className="flex justify-between items-center mb-6">
         <h1 className="h1-style">Gestão de Escritórios</h1>
-        <Button type="button" onClick={() => setIsModalOpen(true)}>
+        <Button type="button" onClick={() => setIsNewCompanyModalOpen(true)}>
           + Novo Escritório
         </Button>
       </div>
 
-      {/* Tabela de Escritórios */}
-      <div className="p-6 rounded-lg shadow bg-bg-container">
+      <div className="p-6 rounded-lg shadow bg-brand-container bg-bg-container">
         <h2 className="h2-style">Escritórios</h2>
         <p className="text-base mb-8 mt-2">
           Lista completa de empresa parceiras
@@ -66,54 +81,68 @@ export default function CompaniesPage() {
           <div className="text-right">Ações</div>
         </div>
 
-        {/* Corpo da Lista */}
-        <div className="mt-2 space-y-4 overflow-y-auto p-2 rounded-xl">
+        <div className="mt-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto p-2">
           {companies.map((company) => (
             <div
               key={company.id}
               className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6 rounded-lg shadow-sm bg-white"
             >
               <div className="flex items-center gap-3">
-                {/* O logo virá da API no futuro */}
-                <img
-                  src={`https://via.placeholder.com/100x40.png/ddd/000?text=${
-                    company.name.split(" ")[0]
-                  }`}
-                  alt={company.name}
-                  className="h-6 object-contain"
-                />
+                {company.logoUrl ? (
+                  <img src={company.logoUrl} alt={company.name} className="h-8 w-24 object-contain" />
+                ) : (
+                  <div className="h-8 w-24 flex items-center justify-center bg-gray-200 rounded text-xs text-gray-500">
+                    Sem Logo
+                  </div>
+                )}
                 <span className="font-normal">{company.name}</span>
               </div>
-              <div>0</div> {/* Placeholder */}
+              <div>0</div>
               <div>
-                <span className="bg-status-active-bg text-normal font-normal rounded-full">
+                <span className="bg-status-active-bg text-status-active-text text-base px-2.5 py-0.5 rounded-full">
                   Ativo
                 </span>
-              </div>{" "}
-              {/* Placeholder */}
-              <div>-</div> {/* Placeholder */}
+              </div>
+              <div>-</div>
               <div className="flex justify-end items-center gap-4 text-gray-400">
                 <button>
-                  <img
-                    src={EditIcon}
-                    alt="Editar"
-                    className="h-6 w-6 cursor-pointer"
-                  />
+                  <img src={EditIcon} alt="Editar" className="h-6 w-6 cursor-pointer" />
                 </button>
-                <button>
-                  <img
-                    src={TrashIcon}
-                    alt="Deletar"
-                    className="h-5 w-5 cursor-pointer"
-                  />
+
+                <button onClick={() => setCompanyToDelete(company)}>
+                  <img src={TrashIcon} alt="Deletar" className="h-5 w-5 cursor-pointer" />
                 </button>
               </div>
             </div>
           ))}
         </div>
       </div>
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+
+      {/* Modal para criar novo escritório */}
+      <Modal isOpen={isNewCompanyModalOpen} onClose={() => setIsNewCompanyModalOpen(false)}>
         <NewCompanyForm onSuccess={handleFormSuccess} />
+      </Modal>
+
+      {/* --- NOVO MODAL PARA CONFIRMAÇÃO DE EXCLUSÃO --- */}
+      <Modal isOpen={!!companyToDelete} onClose={() => setCompanyToDelete(null)}>
+        <div className="text-center">
+          <h2 className="h2-style mb-4">Confirmar Exclusão</h2>
+          <p className="text-text-secondary mb-8">
+            Tem a certeza que deseja apagar o escritório <span className="font-bold">{companyToDelete?.name}</span>? Esta ação não pode ser desfeita.
+          </p>
+          <div className="flex justify-center gap-4">
+            <Button
+              onClick={() => setCompanyToDelete(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmDelete}
+            >
+              Confirmar Exclusão
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
