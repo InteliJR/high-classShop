@@ -1,5 +1,5 @@
-interface CardProdutoProps {
-    image_url: string,
+interface ProductCardProps {
+    image_url?: string,
     marca: string,
     modelo: string,
     descricao: string,
@@ -10,7 +10,7 @@ function formatValue(valor : number){
     return valor.toLocaleString('pt-br', {style: 'currency', currency:'BRL'})
 }
 
-export default function CardProduto( { image_url, marca, modelo, descricao, valor} : CardProdutoProps){
+export default function ProductCard( { image_url, marca, modelo, descricao, valor} : ProductCardProps){
     return(
         <article className="h-full w-full rounded-lg border border-black px-6 pt-6 pb-4 flex flex-col gap-2">
             <div className="flex justify-center">

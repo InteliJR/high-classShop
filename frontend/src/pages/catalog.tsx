@@ -1,38 +1,59 @@
-import CardProduto from "../components/CardProduto.tsx";
+import { useEffect, useState } from "react";
+import ProductCard from "../components/ProductCard.tsx";
+import { getCars } from "../services/cars.service.ts";
 
- const mockCards = Array.from({length : 5}, (_, __) => ({
-    image_url: "https://picsum.photos/id/183/300/200",
-    marca: "Ford",
-    modelo: "Uno",
-    descricao: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur rhoncus neque risus, non interdum ligula ullamcorper condimentum. Quisque mauris elit, malesuada quis fermentum eget, sollicitudin interdum massa. Ut consectetur egestas quam, id ultrices magna sollicitudin id. Duis venenatis, orci a suscipit volutpat, nisi purus porttitor nisl, sed egestas mi nibh bibendum justo. Morbi et metus congue, euismod elit sit amet, aliquet neque. Nulla ipsum nisl, lobortis id felis molestie, vestibulum tempus ipsum. Morbi tempor tempor magna id hendrerit.",
-    valor: 25000.00
-  }));
+interface Car {
+  id: string;
+  marca: string;
+  modelo: string;
+  descricao: string;
+  valor: number;
+  imageUrl?: string;
+}
 
-  const title = "Carros"
+const title = "Carros";
 
-export default function Catalog(){
-    return(
-        <div className="flex flex-col gap-8 mx-auto">
-            <div className="flex justify-between">
-                <h1 className="text-4xl">
-                    {title}
-                </h1>
-                <button className="bg-secondary text-white rounded-sm px-4 py-1 flex justify-center items-center text-base">
-                    Filtro
-                </button>
-            </div>
+export default function Catalog() {
+  const [cars, setCars] = useState<Car[]>([]);
+  const [loading, setLoading] = useState(true);
 
-            {mockCards.length >= 4 && 
-                (
-                <div className="grid grid-cols-4 gap-x-4 gap-y-10"> 
-                {
-                    mockCards.map( (element, index) => (
-                        <CardProduto key={index} {...element} />
-                ))}
-                </div>
-            )
-            } 
+  //Consumo da api
+  useEffect(() => {
+    getCars()
+      .then((carsCleaned) => {
+        setCars(carsCleaned);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
 
-        </div>
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen w-screen text-6xl">
+        <h1>Carregando...</h1>
+      </div>
     );
+  }
+
+  return (
+    <div className="flex flex-col gap-8 mx-auto w-full">
+      <div className="flex justify-between">
+        <h1 className="text-4xl">{title}</h1>
+        <button className="bg-secondary text-white rounded-sm px-4 py-1 flex justify-center items-center text-base">
+          Filtro
+        </button>
+      </div>
+
+      {cars.length > 0 ? (
+        <div className="grid grid-cols-4 gap-x-4 gap-y-10">
+          {cars.map((element) => (
+            <ProductCard key={element.id} {...element} />
+          ))}
+        </div>
+      ) : (
+        <p>Nenhum carro encontrado.</p>
+      )}
+    </div>
+  );
 }
