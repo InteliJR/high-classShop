@@ -1,71 +1,72 @@
 import api from "./api";
 
-interface rawAircrafts {
-  id: string;
+interface RawAircrafts {
+  id: number;
   marca: string;
   modelo: string;
   valor: number;
   estado: string;
   ano: number;
-  cor: string;
-  km: number;
-  cambio: string;
+  fabricante: string;
+  tamanho: string;
+  estilo: string;
   combustivel: string;
-  tipo_categoria: string;
+  motor: string;
+  ano_motor: string;
+  tipo_embarcacao: string;
   descricao: string;
+  acessorios: string;
   specialist: {
     id: number;
     name: string;
     email: string;
+    especialidade: string;
   };
-  images: [
-    {
+  images: {
       id: number;
       image_url: string;
       is_primary: boolean;
-    }
-  ];
-  created_at: Date;
-  updated_at: Date;
+    }[];
+  created_at: number;
+  updated_at: number;
 }
 
 interface Aircrafts {
-  id: string;
+  id: number;
   marca: string;
   modelo: string;
   descricao: string;
   valor: number;
-  imageUrl?: string;
+  imageUrl: string;
 }
 
-// Get /boats
+// Get /aircrafts
 export async function getAircrafts(): Promise<Aircrafts[]> {
   try {
-    const response = await api.get("/boats");
+    const response = await api.get("/aircrafts");
 
-    //Extrai o array produto
-    const rawAircrafts: rawAircrafts[] = await response.data.data;
+    //Extrai o array da respota da api
+    const rawAircrafts: RawAircrafts[] = await response.data.data;
 
     //Realiza o processo de formatação do array com as informações necessárias
-    const boats: Aircrafts[] = rawAircrafts.map((rawAircrafts) => {
+    const aircrafts: Aircrafts[] = rawAircrafts.map((rawAircraft) => {
+      const primaryImage = rawAircraft.images.find(
+          (imageUrl) => imageUrl.is_primary === true
+        )?.image_url
+
       return {
-        id: rawAircrafts.id,
-        marca: rawAircrafts.marca,
-        modelo: rawAircrafts.modelo,
-        descricao: rawAircrafts.descricao,
-        imageUrl: rawAircrafts.images.find((imageUrl) => imageUrl.is_primary === true)
-          ?.image_url,
-        valor: rawAircrafts.valor,
+        id: rawAircraft.id,
+        marca: rawAircraft.marca,
+        modelo: rawAircraft.modelo,
+        descricao: rawAircraft.descricao,
+        imageUrl: primaryImage ?? "",
+        valor: rawAircraft.valor,
       };
     });
+    return aircrafts;
 
-    console.log("Raw ", rawAircrafts);
-
-    console.log(boats);
-
-    return boats;
   } catch (error) {
-    console.log("Ocorreu algum erro: ", error);
+    console.error("Ocorreu um erro na busca das aeronaves: ", error);
     throw error;
   }
 }

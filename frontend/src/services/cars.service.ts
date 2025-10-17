@@ -1,7 +1,7 @@
 import api from "./api";
 
-interface rawCar {
-  id: string;
+interface RawCar {
+  id: number;
   marca: string;
   modelo: string;
   valor: number;
@@ -17,25 +17,24 @@ interface rawCar {
     id: number;
     name: string;
     email: string;
+    especialidade: string;
   };
-  images: [
-    {
-      id: number;
-      image_url: string;
-      is_primary: boolean;
-    }
-  ];
-  created_at: Date;
-  updated_at: Date;
+  images: {
+    id: number;
+    image_url: string;
+    is_primary: boolean;
+  }[];
+  created_at: string;
+  updated_at: string;
 }
 
 interface Car {
-  id: string;
+  id: number;
   marca: string;
   modelo: string;
   descricao: string;
   valor: number;
-  imageUrl?: string;
+  imageUrl: string;
 }
 
 // Get /cars
@@ -43,29 +42,28 @@ export async function getCars(): Promise<Car[]> {
   try {
     const response = await api.get("/cars");
 
-    //Extrai o array produto
-    const rawCars: rawCar[] = await response.data.data;
+    //Extrai o array da respota da api
+    const rawCars: RawCar[] = response.data.data;
 
     //Realiza o processo de formatação do array com as informações necessárias
     const cars: Car[] = rawCars.map((rawCar) => {
+      const primaryImage = rawCar.images.find(
+        (imageUrl) => imageUrl.is_primary
+      )?.image_url;
+
       return {
         id: rawCar.id,
         marca: rawCar.marca,
         modelo: rawCar.modelo,
         descricao: rawCar.descricao,
-        imageUrl: rawCar.images.find((imageUrl) => imageUrl.is_primary === true)
-          ?.image_url,
+        imageUrl: primaryImage ?? "",
         valor: rawCar.valor,
       };
     });
-
-    console.log("Raw ", rawCars);
-
-    console.log(cars);
-
     return cars;
+
   } catch (error) {
-    console.log("Ocorreu algum erro: ", error);
+    console.log("Ocorreu um erro na busca dos carros: ", error);
     throw error;
   }
 }
