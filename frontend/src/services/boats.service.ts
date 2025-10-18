@@ -1,3 +1,4 @@
+import type { PaginationMeta, Product } from "../types/types";
 import api from "./api";
 
 interface RawBoats {
@@ -31,25 +32,19 @@ interface RawBoats {
   updated_at: string;
 }
 
-interface Boats {
-  id: number;
-  marca: string;
-  modelo: string;
-  descricao: string;
-  valor: number;
-  imageUrl: string;
-}
-
 // Get /boats
-export async function getBoats(): Promise<Boats[]> {
+export async function getBoats( page = 1, perPage = 20 ): Promise<{boats: Product[], pagination: PaginationMeta}> {
   try {
-    const response = await api.get("/boats");
+    const response = await api.get("/boats", {
+      params: {page, per_page: perPage},
+    });
 
-    //Extrai o array da respota da api
+    //Extrai a respota da api
     const rawBoats: RawBoats[] = response.data.data;
+    const pagination: PaginationMeta = response.data.meta.pagination;
 
     //Realiza o processo de formatação do array com as informações necessárias
-    const boats: Boats[] = rawBoats.map((rawBoats) => {
+    const boats: Product[] = rawBoats.map((rawBoats) => {
       const primaryImage = rawBoats.images.find((imageUrl) => imageUrl.is_primary === true)
           ?.image_url
 
@@ -62,7 +57,7 @@ export async function getBoats(): Promise<Boats[]> {
         valor: rawBoats.valor,
       };
     });
-    return boats;
+    return { boats, pagination};
 
   } catch (error) {
     console.error("Ocorreu um erro na busca dos barcos: ", error);

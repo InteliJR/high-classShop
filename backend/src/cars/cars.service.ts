@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { PaginationQueryDto } from 'src/utils/dto/pagination-qery.dto';
+import { PaginationQueryDto } from 'src/utils/dto/pagination-query.dto';
 
 @Injectable()
 export class CarsService {
@@ -12,9 +12,12 @@ export class CarsService {
     return 'This action adds a new car';
   }
 
-  async getAllCars(paginationQueryDto: PaginationQueryDto) {
-    const { take = 10, skip = 0 } = paginationQueryDto;
+  async getAllCars({ page, perPage }: PaginationQueryDto) {
+    // Cálculo das variáveis usadas na requisição ao banco de dados
+    const take = perPage;
+    const skip = (page - 1) * take;
 
+    // Agrupamento de operações para serem realizadas no banco de dados
     const [cars, total] = await this.prismaService.$transaction([
       this.prismaService.cars.findMany({
         skip: skip,

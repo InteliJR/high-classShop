@@ -1,3 +1,4 @@
+import type { PaginationMeta, Product } from "../types/types";
 import api from "./api";
 
 interface RawAircrafts {
@@ -31,25 +32,19 @@ interface RawAircrafts {
   updated_at: number;
 }
 
-interface Aircrafts {
-  id: number;
-  marca: string;
-  modelo: string;
-  descricao: string;
-  valor: number;
-  imageUrl: string;
-}
-
 // Get /aircrafts
-export async function getAircrafts(): Promise<Aircrafts[]> {
+export async function getAircrafts(page = 1, perPage = 20): Promise<{ aircrafts: Product[], pagination: PaginationMeta}> {
   try {
-    const response = await api.get("/aircrafts");
+    const response = await api.get("/aircrafts", {
+      params: {page, perPage},
+    });
 
-    //Extrai o array da respota da api
-    const rawAircrafts: RawAircrafts[] = await response.data.data;
+    //Extrai a respota da api
+    const rawAircrafts: RawAircrafts[] = response.data.data;
+    const pagination: PaginationMeta = response.data.meta.pagination;
 
     //Realiza o processo de formatação do array com as informações necessárias
-    const aircrafts: Aircrafts[] = rawAircrafts.map((rawAircraft) => {
+    const aircrafts: Product[] = rawAircrafts.map((rawAircraft) => {
       const primaryImage = rawAircraft.images.find(
           (imageUrl) => imageUrl.is_primary === true
         )?.image_url
@@ -63,7 +58,7 @@ export async function getAircrafts(): Promise<Aircrafts[]> {
         valor: rawAircraft.valor,
       };
     });
-    return aircrafts;
+    return {aircrafts, pagination};
 
   } catch (error) {
     console.error("Ocorreu um erro na busca das aeronaves: ", error);

@@ -1,3 +1,4 @@
+import type { PaginationMeta, Product } from "../types/types";
 import api from "./api";
 
 interface RawCar {
@@ -28,25 +29,19 @@ interface RawCar {
   updated_at: string;
 }
 
-interface Car {
-  id: number;
-  marca: string;
-  modelo: string;
-  descricao: string;
-  valor: number;
-  imageUrl: string;
-}
-
 // Get /cars
-export async function getCars(): Promise<Car[]> {
+export async function getCars(page = 1, perPage = 20): Promise<{cars:Product[], pagination:PaginationMeta}>{
   try {
-    const response = await api.get("/cars");
+    const response = await api.get("/cars", {
+      params: { page, perPage},
+    });
 
-    //Extrai o array da respota da api
+    //Extrai a respota da api
     const rawCars: RawCar[] = response.data.data;
+    const pagination: PaginationMeta = response.data.meta.pagination; 
 
     //Realiza o processo de formatação do array com as informações necessárias
-    const cars: Car[] = rawCars.map((rawCar) => {
+    const cars: Product[] = rawCars.map((rawCar) => {
       const primaryImage = rawCar.images.find(
         (imageUrl) => imageUrl.is_primary
       )?.image_url;
@@ -60,7 +55,7 @@ export async function getCars(): Promise<Car[]> {
         valor: rawCar.valor,
       };
     });
-    return cars;
+    return { cars, pagination };
 
   } catch (error) {
     console.log("Ocorreu um erro na busca dos carros: ", error);

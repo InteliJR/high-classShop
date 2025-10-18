@@ -4,15 +4,7 @@ import { useParams } from "react-router-dom";
 import { getCars } from "../services/cars.service.ts";
 import { getBoats } from "../services/boats.service.ts";
 import { getAircrafts } from "../services/aircrafts.service.ts";
-
-interface Product {
-  id: number;
-  marca: string;
-  modelo: string;
-  descricao: string;
-  valor: number;
-  imageUrl: string;
-}
+import type { PaginationMeta, Product } from "../types/types.ts";
 
 // Mapeamento dos títulos de acordo com a rota passada
 const titles: { [key: string]: string } = {
@@ -25,9 +17,11 @@ export default function Catalog() {
   // Coleta a categoria passada na rota
   const { category } = useParams();
 
-  //Gerenciamento dos estados dos produtos e carregamento
+  //Gerenciamento dos estados dos produtos, carregamento, e páginas
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationMeta | null>(null);
 
   //Consumir a api
   useEffect(() => {
@@ -36,17 +30,18 @@ export default function Catalog() {
 
       try {
         let data: Product[] = [];
+        let pagination: PaginationMeta | null = null;
         switch (category) {
           case "cars":
-            data = await getCars();
+            ({ cars: data, pagination } = await getCars(page));
             break;
 
           case "boats":
-            data = await getBoats();
+            ({ boats: data, pagination } = await getBoats(page));
             break;
 
           case "aircrafts":
-            data = await getAircrafts();
+            ({ aircrafts: data, pagination } = await getAircrafts(page));
             break;
 
           default:
@@ -54,10 +49,9 @@ export default function Catalog() {
         }
 
         setProducts(data);
-
+        setPagination(pagination);
       } catch (error) {
         console.error("Ocorreu um erro: ", error);
-
       } finally {
         setLoading(false);
       }
@@ -65,7 +59,25 @@ export default function Catalog() {
     if (category) {
       fetchData();
     }
-  }, [category]); //Repete cada vez que a categoria for trocada
+  }, [category, page]); //Repete cada vez que a categoria ou página for trocada
+
+  // Funções para torcar de página
+  function goNextPage() {
+    if (pagination?.has_next) {
+      setPage((page) => page + 1);
+    }
+  }
+  function goPrevPage() {
+    if (pagination?.has_prev) {
+      setPage((page) => page - 1);
+    }
+  }
+  function goLastPage() {
+    setPage(pagination?.total_pages || page);
+  }
+  function goFirstPage() {
+    setPage(1);
+  }
 
   // Tela de carregamento
   if (loading) {
@@ -86,14 +98,34 @@ export default function Catalog() {
         </button>
       </div>
 
+      {/* Apresentação dos produtos */}
       {products.length > 0 ? (
-        <div className="grid grid-cols-4 gap-x-4 gap-y-10">
+        <div className="grid grid-cols-4 gap-x-4 gap-y-10 min-h-screen">
           {products.map((element) => (
             <ProductCard key={element.id} {...element} />
           ))}
         </div>
       ) : (
-        <p>Nenhum produto encontrado.</p>
+        <p className="min-h-screen">Nenhum produto encontrado.</p>
+      )}
+
+      {/* Numeração das páginas*/}
+      {pagination && pagination?.total_pages > 1 && (
+        <div className="border w-full h-full flex flex-row justify-center items-center gap-2">
+          {pagination?.has_prev && (
+            <>
+              <button onClick={goFirstPage}></button>
+              <button onClick={goPrevPage}></button>
+            </>
+          )}
+          <span>{page}</span>
+          {pagination?.has_next && (
+            <>
+              <button onClick={goNextPage}></button>
+              <button onClick={goLastPage}></button>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
