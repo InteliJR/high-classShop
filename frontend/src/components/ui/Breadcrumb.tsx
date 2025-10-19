@@ -13,10 +13,10 @@ interface BreadcrumbProps {
 }
 
 export default function Breadcrumb({ itemName }: BreadcrumbProps) {
-  // Extrai os parâmetros da URL automaticamente
-  const { categoria, id } = useParams<{ categoria: string; id: string }>();
 
-  // Se não tiver categoria, não renderiza nada
+  const { categoria, id } = useParams<{ categoria: string; id: string }>();   // Extrai os parâmetros da URL
+
+
   if (!categoria) {
     return null;
   }

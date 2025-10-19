@@ -11,7 +11,7 @@ const SchedulerPage = () => {
   // const { id } = useParams<{ id: string }>();
   // adicionar a linha de cima quando integrar com a api, por enquanto deixa o mock abaixo
 
-  
+//mock
   const productData = {
     model: 'Toyota Corolla',
     year: 2023,
