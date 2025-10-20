@@ -28,7 +28,7 @@ const SchedulerPage = () => {
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
-      <Breadcrumb itemName={productData.model} />
+      <Breadcrumb category="Carros" itemName={productData.model} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         <ProductDetails {...productData} />

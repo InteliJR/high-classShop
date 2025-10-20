@@ -6,7 +6,7 @@ interface ProductDetailsProps {
   year: number;
   status: string;
   description: string;
-  // imageUrls: string[];
+  imageUrls: string[];
 }
 
 export default function ProductDetails({
@@ -30,11 +30,13 @@ export default function ProductDetails({
         </div>
 
         {/* <!-- Imagem do carro --> */}
-        <img
+        {/* <img
           src="https://via.placeholder.com" 
           alt="Toyota Corolla" 
           className="w-full h-64 object-cover"
-        />
+        /> */}
+
+        {/* <ProductCarousel imageUrls={imageUrls} /> */}
 
         {/* <!-- Descrição --> */}
         <div className="text-gray-700 text-xs mb-4 text-wrap">

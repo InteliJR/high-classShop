@@ -1,69 +1,66 @@
 // src/components/ui/Breadcrumb.tsx
 import { Link, useParams } from "react-router-dom";
+import { ChevronRight } from 'lucide-react';
 
-// Mapeamento de categorias técnicas para nomes amigáveis
+
+// Traduz os nomes técnicos.
 const categoryLabels: Record<string, string> = {
   carros: "Carros",
-  avioes: "Aviões", 
+  avioes: "Aviões",
   barcos: "Barcos",
 };
 
+// O componente agora aceita props opcionais. Mock.
 interface BreadcrumbProps {
-  itemName?: string; // Opcional, se não passar usa o ID
+  category?: string;
+  itemName?: string;
 }
 
-export default function Breadcrumb({ itemName }: BreadcrumbProps) {
 
-  const { categoria, id } = useParams<{ categoria: string; id: string }>();   // Extrai os parâmetros da URL
+export default function Breadcrumb({ category, itemName }: BreadcrumbProps) {
 
+  const { categoria, id } = useParams<{ categoria?: string; id?: string }>();
 
-  if (!categoria) {
-    return null;
-  }
+  const currentCategory = category || categoria; 
+  const currentItem = itemName || formatId(id || ""); // prioriza props, senão usa a URL
 
-  // Ajusta os nomes
-  const categoryLabel = categoryLabels[categoria.toLowerCase()] || categoria;
+  const categoryLabel =
+    currentCategory &&
+    (categoryLabels[currentCategory.toLowerCase()] || currentCategory);
 
-  const displayName = itemName || formatId(id || "");
+  if (!currentCategory && !currentItem) return null;   // se não tiver categoria nem item, não mostra nada
+
 
   return (
-    <nav 
-      className="flex items-center text-sm text-gray-600 mb-6" 
-      aria-label="Breadcrumb"
+    <nav
+      className="flex items-center text-gray-900 mb-6"
+      aria-label="breadcrumb"
     >
-      {/* Link para a página inicial */}
-      <Link
-        to="/"
-        className="hover:text-gray-900 transition-colors hover:underline"
-      >
-        Início
-      </Link>
+      
+      {/* Se houver categoria, mostra */}
+      {categoryLabel && (
+        <>
+          <Link
+            to={`/${currentCategory}`}
+            className="hover:text-gray-700 hover:underline transition-colors text-4xl"
+          >
+            {categoryLabel}
+          </Link>
+        </>
+      )}
 
-      <span className="mx-2 text-gray-400" aria-hidden="true">
-        ›
-      </span>
-
-      {/* Link para a listagem da categoria */}
-      <Link
-        to={`/${categoria}`}
-        className="hover:text-gray-900 transition-colors hover:underline"
-      >
-        {categoryLabel}
-      </Link>
-
-      <span className="mx-2 text-gray-400" aria-hidden="true">
-        ›
-      </span>
-
-      {/* Produto atual (não clicável) */}
-      <span className="text-gray-900 font-medium" aria-current="page">
-        {displayName}
-      </span>
+      {/* Se houver item, mostra */}
+      {currentItem && (
+        <>
+         <ChevronRight className="w-3 h-3 mx-3 text-gray-500" />
+         <span className="text-gray-900 font-medium text-2xl">{currentItem}</span>
+        </>
+      )}
     </nav>
   );
 }
 
-// Função para formatar o ID da URL
+// Transforma "toyota-corolla" → "Toyota Corolla"
 function formatId(id: string): string {
   return id
     .split("-")
