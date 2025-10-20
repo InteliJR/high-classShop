@@ -1,5 +1,6 @@
 // import { useState } from 'react';
 // import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import ProductCarousel from './ProductCarousel';
 
 interface ProductDetailsProps {
   model: string;
@@ -14,7 +15,7 @@ export default function ProductDetails({
     year,
     status,
     description,
-    // imageUrls,
+    imageUrls,
   }: ProductDetailsProps) {
     
   return (
@@ -30,13 +31,7 @@ export default function ProductDetails({
         </div>
 
         {/* <!-- Imagem do carro --> */}
-        {/* <img
-          src="https://via.placeholder.com" 
-          alt="Toyota Corolla" 
-          className="w-full h-64 object-cover"
-        /> */}
-
-        {/* <ProductCarousel imageUrls={imageUrls} /> */}
+        <ProductCarousel imageUrls={imageUrls} />
 
         {/* <!-- Descrição --> */}
         <div className="text-gray-700 text-xs mb-4 text-wrap">
