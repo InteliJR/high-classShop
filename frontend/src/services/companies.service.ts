@@ -1,6 +1,6 @@
 // frontend/src/services/companies.service.ts
 
-const API = 'http://localhost:3000';
+const API = "http://localhost:3000";
 
 export type Company = {
   id: number;
@@ -8,31 +8,45 @@ export type Company = {
   cnpj: string;
   logo?: string | null;
   description?: string | null;
+  logoUrl?: string | null;
 };
 
+// Busca a lista completa de empresas na API.
 export async function getCompanies(): Promise<Company[]> {
   const res = await fetch(`${API}/companies`);
   return res.json();
 }
 
-export async function createCompany(data: { name: string; cnpj: string }): Promise<Company> {
-  const res = await fetch(`${API}/companies`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+// Cria uma nova empresa enviando os dados para a API.
+export async function createCompany(formData: FormData): Promise<Company> {
+  const API_URL = "http://localhost:3000";
+
+  const response = await fetch(`${API_URL}/companies`, {
+    method: "POST",
+    body: formData,
   });
-  return res.json();
+
+  if (!response.ok) {
+    throw new Error("Falha ao criar o escritório.");
+  }
+
+  return response.json();
 }
 
-export async function updateCompany(id: number, data: Partial<Company>): Promise<Company> {
+// Atualiza os dados de uma empresa existente.
+export async function updateCompany(
+  id: number,
+  data: Partial<Company>
+): Promise<Company> {
   const res = await fetch(`${API}/companies/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
   return res.json();
 }
 
+// Apaga uma empresa pelo seu ID.
 export async function deleteCompany(id: number): Promise<void> {
-  await fetch(`${API}/companies/${id}`, { method: 'DELETE' });
+  await fetch(`${API}/companies/${id}`, { method: "DELETE" });
 }

@@ -1,10 +1,11 @@
 import MainLayout from './layouts/MainLayout'
+import CompaniesPage from './pages/admin/CompaniesPage'
 
 function App() {
   return (
     <>
       <MainLayout >
-        example
+        <CompaniesPage />
       </MainLayout>
     </>
   )
