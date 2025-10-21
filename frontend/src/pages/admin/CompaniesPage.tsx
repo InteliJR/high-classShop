@@ -6,7 +6,7 @@ import {
   deleteCompany,
   type Company,
 } from "../../services/companies.service";
-import Button from "../../components/ui/Button";
+import Button from "../../components/ui/button";
 import EditIcon from "../../assets/icons/edit.svg";
 import TrashIcon from "../../assets/icons/trash.svg";
 import Modal from "../../components/ui/Modal";

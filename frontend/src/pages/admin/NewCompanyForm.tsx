@@ -1,7 +1,7 @@
 // Fotmulário para criar um novo escritório dentro do modal
 
 import React, { useState } from "react";
-import Button from "../../components/ui/Button";
+import Button from "../../components/ui/button";
 import { createCompany } from "../../services/companies.service";
 
 interface NewCompanyFormProps {
