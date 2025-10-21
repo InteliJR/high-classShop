@@ -1,12 +1,28 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
 @import "tailwindcss";
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 @theme {
    /* Cores da plataforma */
   --color-primary: #1C1C1C;
   --color-secondary: #B3B3B3;
   --color-background-secondary: #3C3C3C;
   --color-background: #F5F5F5; 
+  --color-button: #2C2C2C;
+  --color-bg-container: #C1C7CD;
+}
+
+@layer components {
+  .h1-style {
+    @apply text-3xl font-normal;
+  }
+  
+  .h2-style {
+    @apply text-2xl font-semibold;
+  }
 }
 
 :root {
