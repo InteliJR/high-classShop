@@ -14,90 +14,100 @@ datasource db {
 }
 
 // =====================
+// ENUMS
+// =====================
+
+enum CivilState {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+  SEPARATED
+  STABLE_UNION
+}
+
+enum SpecialityType {
+  CAR
+  BOAT
+  AIRCRAFT
+}
+
+enum UserRole {
+  CUSTOMER
+  CONSULTANT
+  SPECIALIST
+  ADMIN
+}
+
+// =====================
 // MODELS
 // =====================
 
-model companies {
-  id          Int           @id @default(autoincrement())
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  surname       String
+  email         String   @unique
+  cpf           String   @unique @db.VarChar(11)
+  rg            String   @unique @db.VarChar(10)
+  role          UserRole
+  password_hash String
+
+  civil_state           CivilState?
+  speciality            SpecialityType?
+  identification_number String?         @unique @db.VarChar(50)
+
+  address_id    String? @db.Uuid
+  consultant_id String? @db.Uuid
+  company_id    String? @db.Uuid
+
+  address    Address? @relation(fields: [address_id], references: [id])
+  consultant User?    @relation("ConsultantUsers", fields: [consultant_id], references: [id])
+  clients    User[]   @relation("ConsultantUsers")
+  company    Company? @relation(fields: [company_id], references: [id])
+
+  created_at               DateTime            @default(now())
+  updated_at               DateTime            @default(now())
+  cars                     Car[]
+  boats                    Boat[]
+  aircraft                 Aircraft[]
+  processesAsClient        Proccess[]          @relation("proccess_as_client")
+  processesAsSpecialist    Proccess[]          @relation("proccess_as_specialist")
+  appointmentsAsClient     Appointment[]       @relation("appointment_as_client")
+  appointmentsAsSpecialist Appointment[]       @relation("appointment_as_specialist")
+  car_interests            Car_interest[]
+  boat_interests           Boat_interest[]
+  aircraft_interests       Aircraft_interest[]
+}
+
+model Address {
+  id           String @id @default(uuid()) @db.Uuid
+  street       String
+  number       String
+  neighborhood String
+  city         String
+  state        String
+  cep          String
+  country      String
+
+  users User[]
+}
+
+model Company {
+  id          String   @id @default(uuid()) @db.Uuid
   name        String
-  cnpj        String        @unique
+  cnpj        String   @unique
   logo        String?
   description String?
-  created_at  DateTime      @default(now())
-  updated_at  DateTime      @default(now())
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
 
-  consultants consultants[]
+  consultants User[]
 }
 
-model consultants {
-  id                    Int       @id @default(autoincrement())
-  company_id            Int?
-  name                  String
-  identification_number String
-  rg                    String
-  cpf                   String    @unique
-  cargo                 String?
-  email                 String    @unique
-  password_hash         String
-  created_at            DateTime  @default(now())
-  updated_at            DateTime  @default(now())
-
-  company companies? @relation(fields: [company_id], references: [id])
-  clients clients[] // relação inversa: um consultor pode ter vários clientes
-}
-
-model clients {
-  id            Int              @id @default(autoincrement())
-  consultant_id Int?
-  name          String
-  rg            String
-  cpf           String           @unique
-  estado_civil  String?
-  cep           String?
-  endereco      String?
-  email         String           @unique
-  password_hash String
-  created_at    DateTime         @default(now())
-  updated_at    DateTime         @default(now())
-
-  consultant          consultants?       @relation(fields: [consultant_id], references: [id])
-  processes           processes[]
-  appointments        appointments[]
-  car_interests       car_interests[]
-  boat_interests      boat_interests[]
-  aircraft_interests  aircraft_interests[]
-}
-
-model specialists {
-  id            Int      @id @default(autoincrement())
-  name          String
-  rg            String
-  cpf           String   @unique
-  email         String   @unique
-  especialidade String
-  password_hash String
-  created_at    DateTime @default(now())
-  updated_at    DateTime @default(now())
-
-  cars          cars[]
-  boats         boats[]
-  aircraft      aircraft[]
-  processes     processes[]
-  appointments  appointments[]
-}
-
-model admins {
-  id            Int      @id @default(autoincrement())
-  name          String
-  email         String   @unique
-  password_hash String
-  created_at    DateTime @default(now())
-  updated_at    DateTime @default(now())
-}
-
-model cars {
-  id             Int         @id @default(autoincrement())
-  specialist_id  Int?
+model Car {
+  id             Int      @id @default(autoincrement())
+  specialist_id  String?  @db.Uuid
   marca          String
   modelo         String
   valor          Decimal
@@ -109,15 +119,15 @@ model cars {
   cambio         String?
   combustivel    String?
   tipo_categoria String?
-  created_at     DateTime    @default(now())
-  updated_at     DateTime    @default(now())
+  created_at     DateTime @default(now())
+  updated_at     DateTime @default(now())
 
-  specialist specialists? @relation(fields: [specialist_id], references: [id])
+  specialist User? @relation(fields: [specialist_id], references: [id])
 }
 
-model boats {
+model Boat {
   id                 Int      @id @default(autoincrement())
-  specialist_id      Int?
+  specialist_id      String?  @db.Uuid
   marca              String
   modelo             String
   valor              Decimal
@@ -135,12 +145,12 @@ model boats {
   created_at         DateTime @default(now())
   updated_at         DateTime @default(now())
 
-  specialist specialists? @relation(fields: [specialist_id], references: [id])
+  specialist User? @relation(fields: [specialist_id], references: [id])
 }
 
-model aircraft {
+model Aircraft {
   id            Int      @id @default(autoincrement())
-  specialist_id Int?
+  specialist_id String?  @db.Uuid
   categoria     String?
   ano           Int
   marca         String
@@ -153,50 +163,49 @@ model aircraft {
   created_at    DateTime @default(now())
   updated_at    DateTime @default(now())
 
-  specialist specialists? @relation(fields: [specialist_id], references: [id])
+  specialist User? @relation(fields: [specialist_id], references: [id])
 }
 
-model car_images {
-  id           Int     @id @default(autoincrement())
+model Car_image {
+  id           Int      @id @default(autoincrement())
   product_type String
   image_url    String
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
 }
 
-model boat_images {
-  id           Int     @id @default(autoincrement())
+model Boat_image {
+  id           Int      @id @default(autoincrement())
   product_type String
   image_url    String
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
 }
 
-model aircraft_images {
-  id           Int     @id @default(autoincrement())
+model Aircraft_image {
+  id           Int      @id @default(autoincrement())
   product_type String
   image_url    String
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
 }
 
-model processes {
+model Proccess {
   id            Int      @id @default(autoincrement())
-  client_id     Int?
-  specialist_id Int?
+  client_id     String?  @db.Uuid
+  specialist_id String?  @db.Uuid
   product_type  String
   status        String   @default("agendamento")
   notes         String?
   created_at    DateTime @default(now())
   updated_at    DateTime @default(now())
 
-  client     clients?     @relation(fields: [client_id], references: [id])
-  specialist specialists? @relation(fields: [specialist_id], references: [id])
-  documents  documents[]
-
+  client     User?      @relation("proccess_as_client", fields: [client_id], references: [id], map: "fk_proccess_as_client")
+  specialist User?      @relation("proccess_as_specialist", fields: [specialist_id], references: [id], map: "fk_proccess_as_specialist")
+  documents  Document[]
 }
 
-model documents {
+model Document {
   id               Int      @id @default(autoincrement())
   process_id       Int?
   file_name        String
@@ -206,13 +215,13 @@ model documents {
   uploaded_by_type String
   created_at       DateTime @default(now())
 
-  process processes? @relation(fields: [process_id], references: [id])
+  process Proccess? @relation(fields: [process_id], references: [id])
 }
 
-model appointments {
+model Appointment {
   id            Int      @id @default(autoincrement())
-  client_id     Int?
-  specialist_id Int?
+  client_id     String?  @db.Uuid
+  specialist_id String?  @db.Uuid
   product_type  String
   date          DateTime
   time          DateTime
@@ -221,13 +230,13 @@ model appointments {
   created_at    DateTime @default(now())
   updated_at    DateTime @default(now())
 
-  client     clients?     @relation(fields: [client_id], references: [id])
-  specialist specialists? @relation(fields: [specialist_id], references: [id])
+  client     User? @relation("appointment_as_client", fields: [client_id], references: [id], map: "fk_appointment_as_client")
+  specialist User? @relation("appointment_as_specialist", fields: [specialist_id], references: [id], map: "fk_appointment_as_specialist")
 }
 
-model car_interests {
+model Car_interest {
   id                      Int      @id @default(autoincrement())
-  client_id               Int?
+  client_id               String?  @db.Uuid
   uso_principal           String?
   preferencia_foco        String?
   faixa_valor             String?
@@ -245,12 +254,12 @@ model car_interests {
   created_at              DateTime @default(now())
   updated_at              DateTime @default(now())
 
-  client clients? @relation(fields: [client_id], references: [id])
+  client User? @relation(fields: [client_id], references: [id])
 }
 
-model boat_interests {
+model Boat_interest {
   id                      Int      @id @default(autoincrement())
-  client_id               Int?
+  client_id               String?  @db.Uuid
   uso_principal           String?
   preferencia_foco        String?
   faixa_valor             String?
@@ -270,12 +279,12 @@ model boat_interests {
   created_at              DateTime @default(now())
   updated_at              DateTime @default(now())
 
-  client clients? @relation(fields: [client_id], references: [id])
+  client User? @relation(fields: [client_id], references: [id])
 }
 
-model aircraft_interests {
+model Aircraft_interest {
   id                      Int      @id @default(autoincrement())
-  client_id               Int?
+  client_id               String?  @db.Uuid
   uso_principal           String?
   preferencia_foco        String?
   faixa_valor             String?
@@ -294,65 +303,64 @@ model aircraft_interests {
   created_at              DateTime @default(now())
   updated_at              DateTime @default(now())
 
-  client clients? @relation(fields: [client_id], references: [id])
+  client User? @relation(fields: [client_id], references: [id])
 }
-
 
 // =====================
 // ENUMS 
 // =====================
 
 enum Especialidade {
-  CARROS     @map("carros")
-  BARCOS     @map("barcos")
-  AERONAVES  @map("aeronaves")
+  CARROS    @map("carros")
+  BARCOS    @map("barcos")
+  AERONAVES @map("aeronaves")
 }
 
 // ---------- Produtos (carros, barcos, aeronaves) ----------
 enum EstadoProduto {
-  NOVO       @map("novo")
-  SEMINOVO   @map("seminovo")
-  COLECAO    @map("colecao")
+  NOVO     @map("novo")
+  SEMINOVO @map("seminovo")
+  COLECAO  @map("colecao")
 }
 
 enum TipoCategoriaCarro {
-  SUV          @map("SUV")
-  SEDAN        @map("sedan")
-  COUPE        @map("coupe")
-  CONVERSIVEL  @map("conversivel")
-  ESPORTIVO    @map("esportivo")
-  SUPERCARRO   @map("supercarro")
+  SUV         @map("SUV")
+  SEDAN       @map("sedan")
+  COUPE       @map("coupe")
+  CONVERSIVEL @map("conversivel")
+  ESPORTIVO   @map("esportivo")
+  SUPERCARRO  @map("supercarro")
 }
 
 enum TipoEmbarcacaoProduto {
-  IATE       @map("iate")
-  LANCHA     @map("lancha")
-  CATAMARA   @map("catamara")
-  VELEIRO    @map("veleiro")
-  JET_BOAT   @map("jet_boat")
-  OUTRO      @map("outro")
+  IATE     @map("iate")
+  LANCHA   @map("lancha")
+  CATAMARA @map("catamara")
+  VELEIRO  @map("veleiro")
+  JET_BOAT @map("jet_boat")
+  OUTRO    @map("outro")
 }
 
 enum TipoAeronaveProduto {
-  VLJ               @map("VLJ")
-  EXECUTIVO_MEDIO   @map("executivo_medio")
-  INTERCONTINENTAL  @map("intercontinental")
-  TURBOHELICE       @map("turbohelice")
-  HELICOPTERO       @map("helicoptero")
+  VLJ              @map("VLJ")
+  EXECUTIVO_MEDIO  @map("executivo_medio")
+  INTERCONTINENTAL @map("intercontinental")
+  TURBOHELICE      @map("turbohelice")
+  HELICOPTERO      @map("helicoptero")
 }
 
 // ---------- Processos ----------
 enum TipoProdutoProcesso {
-  CAR        @map("car")
-  BOAT       @map("boat")
-  AIRCRAFT   @map("aircraft")
+  CAR      @map("car")
+  BOAT     @map("boat")
+  AIRCRAFT @map("aircraft")
 }
 
 enum StatusProcesso {
-  AGENDAMENTO   @map("agendamento")
-  NEGOCIACAO    @map("negociacao")
-  DOCUMENTACAO  @map("documentacao")
-  CONCLUIDO     @map("concluido")
+  AGENDAMENTO  @map("agendamento")
+  NEGOCIACAO   @map("negociacao")
+  DOCUMENTACAO @map("documentacao")
+  CONCLUIDO    @map("concluido")
 }
 
 // ---------- Documentos ----------
@@ -363,23 +371,23 @@ enum UploadTypeDocumento {
 
 // ---------- Agendamentos ----------
 enum TipoProdutoAgendamento {
-  CAR        @map("car")
-  BOAT       @map("boat")
-  AIRCRAFT   @map("aircraft")
+  CAR      @map("car")
+  BOAT     @map("boat")
+  AIRCRAFT @map("aircraft")
 }
 
 enum StatusAgendamento {
-  SCHEDULED  @map("scheduled")
-  COMPLETED  @map("completed")
-  CANCELLED  @map("cancelled")
+  SCHEDULED @map("scheduled")
+  COMPLETED @map("completed")
+  CANCELLED @map("cancelled")
 }
 
 // ---------- Interesses de Barcos ----------
 enum UsoPrincipalBoatInterest {
-  LAZER               @map("lazer")
-  CRUZEIROS           @map("cruzeiros")
-  PESCA               @map("pesca")
-  EVENTOS             @map("eventos")
+  LAZER                @map("lazer")
+  CRUZEIROS            @map("cruzeiros")
+  PESCA                @map("pesca")
+  EVENTOS              @map("eventos")
   COLECAO_INVESTIMENTO @map("colecao_investimento")
 }
 
@@ -390,83 +398,83 @@ enum PreferenciaFocoBoatInterest {
 }
 
 enum FaixaValorBoatInterest {
-  ATE_500K    @map("ate_500k")
-  DE_500K_1M  @map("500k_1M")
-  ACIMA_1M    @map("acima_1M")
+  ATE_500K   @map("ate_500k")
+  DE_500K_1M @map("500k_1M")
+  ACIMA_1M   @map("acima_1M")
 }
 
 enum StatusBoatInterest {
-  NOVA              @map("nova")
-  SEMINOVA          @map("seminova")
-  COLECAO_RARIDADE  @map("colecao_raridade")
+  NOVA             @map("nova")
+  SEMINOVA         @map("seminova")
+  COLECAO_RARIDADE @map("colecao_raridade")
 }
 
 enum TipoEmbarcacaoBoatInterest {
-  IATE       @map("iate")
-  LANCHA     @map("lancha")
-  CATAMARA   @map("catamara")
-  VELEIRO    @map("veleiro")
-  JET_BOAT   @map("jet_boat")
-  OUTRO      @map("outro")
+  IATE     @map("iate")
+  LANCHA   @map("lancha")
+  CATAMARA @map("catamara")
+  VELEIRO  @map("veleiro")
+  JET_BOAT @map("jet_boat")
+  OUTRO    @map("outro")
 }
 
 enum TamanhoEmbarcacao {
-  ATE_30_PES    @map("ate_30_pes")
-  DE_30_50_PES  @map("30_50_pes")
-  ACIMA_50_PES  @map("acima_50_pes")
+  ATE_30_PES   @map("ate_30_pes")
+  DE_30_50_PES @map("30_50_pes")
+  ACIMA_50_PES @map("acima_50_pes")
 }
 
 enum MotorBoatInterest {
-  DIESEL            @map("diesel")
-  GASOLINA          @map("gasolina")
-  ELETRICO_HIBRIDO  @map("eletrico_hibrido")
+  DIESEL           @map("diesel")
+  GASOLINA         @map("gasolina")
+  ELETRICO_HIBRIDO @map("eletrico_hibrido")
 }
 
 enum CapacidadePessoasBoat {
-  DE_1_4      @map("1_4")
-  DE_5_8      @map("5_8")
-  MAIS_8      @map("mais_8")
+  DE_1_4 @map("1_4")
+  DE_5_8 @map("5_8")
+  MAIS_8 @map("mais_8")
 }
 
 enum CabinePernoiteBoat {
-  DAY_BOAT        @map("day_boat")
-  UMA_DUAS        @map("1_2_cabines")
-  MAIS_DUAS       @map("mais_2_cabines")
+  DAY_BOAT  @map("day_boat")
+  UMA_DUAS  @map("1_2_cabines")
+  MAIS_DUAS @map("mais_2_cabines")
 }
 
 enum ExperienciaNavegacao {
-  NENHUMA        @map("nenhuma")
-  BASICA         @map("basica")
-  MEDIO_PORTE    @map("medio_porte")
-  IATES_GRANDES  @map("iates_grandes")
+  NENHUMA       @map("nenhuma")
+  BASICA        @map("basica")
+  MEDIO_PORTE   @map("medio_porte")
+  IATES_GRANDES @map("iates_grandes")
 }
 
 enum OperacaoEmbarcacao {
-  PESSOAL         @map("pessoal")
-  COM_AUXILIO     @map("com_auxilio")
-  APENAS_CREW     @map("apenas_crew_capitao")
+  PESSOAL     @map("pessoal")
+  COM_AUXILIO @map("com_auxilio")
+  APENAS_CREW @map("apenas_crew_capitao")
 }
 
 enum MarinaPreferencia {
-  POSSUI             @map("possui")
-  PRECISA_INDICACAO  @map("precisa_indicacao")
-  NAO_PRIORIDADE     @map("nao_prioridade")
+  POSSUI            @map("possui")
+  PRECISA_INDICACAO @map("precisa_indicacao")
+  NAO_PRIORIDADE    @map("nao_prioridade")
 }
 
 enum PrazoAquisicaoBoat {
-  IMEDIATO  @map("imediato")
-  CURTO     @map("curto")
-  MEDIO     @map("medio")
-  LONGO     @map("longo")
+  IMEDIATO @map("imediato")
+  CURTO    @map("curto")
+  MEDIO    @map("medio")
+  LONGO    @map("longo")
 }
 
 // ---------- Interesses de Aeronaves ----------
 enum UsoPrincipalAircraftInterest {
-  CORPORATIVO           @map("corporativo")
-  LAZER                 @map("lazer")
-  TURISMO               @map("turismo")
-  TRANSPORTE_FAMILIA    @map("transporte_familia")
-  COLECAO_INVESTIMENTO  @map("colecao_investimento")
+  CORPORATIVO          @map("corporativo")
+  LAZER                @map("lazer")
+  TURISMO              @map("turismo")
+  TRANSPORTE_FAMILIA   @map("transporte_familia")
+  COLECAO_INVESTIMENTO @map("colecao_investimento")
 }
 
 enum PreferenciaFocoAircraft {
@@ -476,36 +484,36 @@ enum PreferenciaFocoAircraft {
 }
 
 enum FaixaValorAircraft {
-  ATE_5M     @map("ate_5M")
-  DE_5_20M   @map("5_20M")
-  ACIMA_20M  @map("acima_20M")
+  ATE_5M    @map("ate_5M")
+  DE_5_20M  @map("5_20M")
+  ACIMA_20M @map("acima_20M")
 }
 
 enum StatusAircraft {
-  NOVA              @map("nova")
-  SEMINOVA          @map("seminova")
-  COLECAO_RARIDADE  @map("colecao_raridade")
+  NOVA             @map("nova")
+  SEMINOVA         @map("seminova")
+  COLECAO_RARIDADE @map("colecao_raridade")
 }
 
 enum TipoAeronaveAircraft {
-  VLJ               @map("VLJ")
-  EXECUTIVO         @map("executivo")
-  INTERCONTINENTAL  @map("intercontinental")
-  TURBOHELICE       @map("turbohelice")
-  HELICOPTERO       @map("helicoptero")
-  OUTRO             @map("outro")
+  VLJ              @map("VLJ")
+  EXECUTIVO        @map("executivo")
+  INTERCONTINENTAL @map("intercontinental")
+  TURBOHELICE      @map("turbohelice")
+  HELICOPTERO      @map("helicoptero")
+  OUTRO            @map("outro")
 }
 
 enum AlcanceAutonomia {
-  CURTA  @map("curta")
-  MEDIA  @map("media")
-  LONGA  @map("longa")
+  CURTA @map("curta")
+  MEDIA @map("media")
+  LONGA @map("longa")
 }
 
 enum CapacidadePassageiros {
-  ATE_4   @map("ate_4")
-  DE_5_8  @map("5_8")
-  MAIS_8  @map("mais_8")
+  ATE_4  @map("ate_4")
+  DE_5_8 @map("5_8")
+  MAIS_8 @map("mais_8")
 }
 
 enum ExperienciaVoo {
@@ -522,9 +530,9 @@ enum OperacaoAeronave {
 }
 
 enum HangarPreferencia {
-  POSSUI             @map("possui")
-  PRECISA_INDICACAO  @map("precisa_indicacao")
-  NAO_PRIORIDADE     @map("nao_prioridade")
+  POSSUI            @map("possui")
+  PRECISA_INDICACAO @map("precisa_indicacao")
+  NAO_PRIORIDADE    @map("nao_prioridade")
 }
 
 enum ConfiguracaoCabine {
@@ -534,8 +542,8 @@ enum ConfiguracaoCabine {
 }
 
 enum PrazoAquisicaoAircraft {
-  IMEDIATO  @map("imediato")
-  CURTO     @map("curto")
-  MEDIO     @map("medio")
-  LONGO     @map("longo")
+  IMEDIATO @map("imediato")
+  CURTO    @map("curto")
+  MEDIO    @map("medio")
+  LONGO    @map("longo")
 }
