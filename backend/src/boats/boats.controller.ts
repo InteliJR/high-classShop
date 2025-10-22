@@ -11,8 +11,9 @@ import {
 import { BoatsService } from './boats.service';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
-import { PaginationQueryDto } from 'src/utils/dto/pagination-query.dto';
+import { QueryDto } from 'src/utils/dto/query.dto';
 import { PaginationDto } from 'src/utils/dto/pagination.dto';
+import { FiltersBoatMeta } from 'src/utils/dto/filters.dto';
 
 @Controller('boats')
 export class BoatsController {
@@ -24,13 +25,17 @@ export class BoatsController {
   }
 
   @Get()
-  async getAllBoats(@Query() {page, perPage}: PaginationQueryDto) {
+  async getAllBoats(@Query() { page, perPage, appliedFilters }: QueryDto<FiltersBoatMeta>) {
     // Tratamento das varíaveis recebidas do front
-    Number(page);
-    Number(perPage)
+    page = Number(page);
+    perPage = Number(perPage);
 
     // Chama o serviço para obter os dados
-    const { data, count } = await this.boatsService.getAllBoats({ page, perPage });
+    const { data, count, filters = {} } = await this.boatsService.getAllBoats({
+      page,
+      perPage,
+      appliedFilters
+    });
 
     // Cálculo dos elementos já visualizados
     const skip = (page - 1) * perPage;
@@ -38,7 +43,7 @@ export class BoatsController {
     // Atualiza os metadados de paginação
     const pagination = new PaginationDto();
     pagination.current_page = page;
-    pagination.total_pages = count/perPage;
+    pagination.total_pages = count / perPage;
     pagination.has_next = skip + perPage < count;
     pagination.has_prev = skip > 0;
     pagination.total = count;
@@ -50,6 +55,10 @@ export class BoatsController {
       data: data,
       meta: {
         pagination: pagination,
+        filters: {
+          applied_filters: filters,
+          total_without_filters: count,
+        }
       },
     };
   }

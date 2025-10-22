@@ -1,4 +1,4 @@
-import type { PaginationMeta, Product } from "../types/types";
+import type { FiltersBoatsMeta, FiltersMeta, PaginationMeta, Product, ResponseAPI } from "../types/types";
 import api from "./api";
 
 interface RawBoats {
@@ -33,15 +33,16 @@ interface RawBoats {
 }
 
 // Get /boats
-export async function getBoats( page = 1, perPage = 20 ): Promise<{boats: Product[], pagination: PaginationMeta}> {
+export async function getBoats( page = 1, perPage = 20, appliedFilters = [] ): Promise<{boats: Product[], pagination: PaginationMeta, filters: FiltersMeta<FiltersBoatsMeta>}> {
   try {
-    const response = await api.get("/boats", {
-      params: {page, per_page: perPage},
+    const response = await api.get<ResponseAPI<RawBoats, FiltersBoatsMeta>>("/boats", {
+      params: {page, perPage, appliedFilters },
     });
 
     //Extrai a respota da api
     const rawBoats: RawBoats[] = response.data.data;
     const pagination: PaginationMeta = response.data.meta.pagination;
+    const filters: FiltersMeta<FiltersBoatsMeta> = response.data.meta.filters;
 
     //Realiza o processo de formatação do array com as informações necessárias
     const boats: Product[] = rawBoats.map((rawBoats) => {
@@ -57,7 +58,7 @@ export async function getBoats( page = 1, perPage = 20 ): Promise<{boats: Produc
         valor: rawBoats.valor,
       };
     });
-    return { boats, pagination};
+    return { boats, pagination, filters};
 
   } catch (error) {
     console.error("Ocorreu um erro na busca dos barcos: ", error);

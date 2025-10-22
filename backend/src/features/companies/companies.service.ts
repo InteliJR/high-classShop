@@ -11,7 +11,7 @@ export class CompaniesService {
 
   // Retorna todas as empresas, com o URL do logo assinado para acesso temporário.
   async findAll() {
-    const companies = await this.prisma.companies.findMany();
+    const companies = await this.prisma.company.findMany();
     return Promise.all(
       companies.map(async (company) => {
         let logoUrl: string | null = null;
@@ -25,12 +25,12 @@ export class CompaniesService {
 
   // Cria uma nova empresa na base de dados.
   create(data: { name: string; cnpj: string; logo?: string }) {
-    return this.prisma.companies.create({ data });
+    return this.prisma.company.create({ data });
   }
 
   // Retorna uma única empresa pelo ID, com o URL do logo assinado.
-  async findOne(id: number) {
-    const company = await this.prisma.companies.findUnique({ where: { id } });
+  async findOne(id: string) {
+    const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) {
       throw new NotFoundException('Company not found');
     }
@@ -45,7 +45,7 @@ export class CompaniesService {
 
   // Atualiza os dados de uma empresa existente.
   async update(
-    id: number,
+    id: string,
     data: Partial<{
       name: string;
       cnpj: string;
@@ -54,13 +54,13 @@ export class CompaniesService {
     }>,
   ) {
     await this.findOne(id);
-    return this.prisma.companies.update({ where: { id }, data });
+    return this.prisma.company.update({ where: { id }, data });
   }
 
   // Apaga uma empresa pelo ID.
-  async remove(id: number) {
+  async remove(id: string) {
     await this.findOne(id);
-    await this.prisma.companies.delete({ where: { id } });
+    await this.prisma.company.delete({ where: { id } });
     return { ok: true };
   }
 }

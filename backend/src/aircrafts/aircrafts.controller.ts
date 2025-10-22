@@ -11,8 +11,9 @@ import {
 import { AircraftsService } from './aircrafts.service';
 import { CreateAircraftDto } from './dto/create-aircraft.dto';
 import { UpdateAircraftDto } from './dto/update-aircraft.dto';
-import { PaginationQueryDto } from 'src/utils/dto/pagination-query.dto';
+import { QueryDto } from 'src/utils/dto/query.dto';
 import { PaginationDto } from 'src/utils/dto/pagination.dto';
+import { FiltersAircraftMeta } from 'src/utils/dto/filters.dto';
 
 @Controller('aircrafts')
 export class AircraftsController {
@@ -24,13 +25,23 @@ export class AircraftsController {
   }
 
   @Get()
-  async getAllAircrafts(@Query() { page, perPage }: PaginationQueryDto) {
+  async getAllAircrafts(
+    @Query() { page, perPage, appliedFilters }: QueryDto<FiltersAircraftMeta>,
+  ) {
     //Tratamento das variáveis recebidas do front
-    Number(page);
-    Number(perPage);
+    page = Number(page);
+    perPage = Number(perPage);
 
     // Chama o serviço para obter os dados
-    const { data, count } = await this.aircraftsService.getAllAircrafts({ page, perPage});
+    const {
+      data,
+      count,
+      filters = {},
+    } = await this.aircraftsService.getAllAircrafts({
+      page,
+      perPage,
+      appliedFilters,
+    });
 
     // Cálculo dos elementos já visualizados
     const skip = (page - 1) * perPage;
@@ -38,8 +49,8 @@ export class AircraftsController {
     // Atualiza os metadados de paginação
     const pagination = new PaginationDto();
     pagination.current_page = page;
-    pagination.total_pages = count/perPage;
-    pagination.has_next = skip + perPage< count;
+    pagination.total_pages = count / perPage;
+    pagination.has_next = skip + perPage < count;
     pagination.has_prev = skip > 0;
     pagination.total = count;
     pagination.per_page = perPage;
@@ -50,6 +61,10 @@ export class AircraftsController {
       data: data,
       meta: {
         pagination: pagination,
+        filters: {
+          total_without_filters: count,
+          applied_filters: filters,
+        },
       },
     };
   }
