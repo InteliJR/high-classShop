@@ -4,7 +4,10 @@ import { useParams } from "react-router-dom";
 import { getCars } from "../services/cars.service.ts";
 import { getBoats } from "../services/boats.service.ts";
 import { getAircrafts } from "../services/aircrafts.service.ts";
-import type { PaginationMeta, Product } from "../types/types.ts";
+import type { FiltersAircraftsMeta, FiltersBoatsMeta, FiltersCarMeta, FiltersMeta, PaginationMeta, Product } from "../types/types.ts";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FunnelIcon } from "lucide-react";
+import Button from "../components/ui/button.tsx";
+import Modal from "../components/ui/Modal.tsx";
 
 // Mapeamento dos títulos de acordo com a rota passada
 const titles: { [key: string]: string } = {
@@ -22,6 +25,8 @@ export default function Catalog() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
+  const [filter, setFilters] = useState< FiltersMeta<FiltersCarMeta> | FiltersMeta<FiltersBoatsMeta> |  FiltersMeta<FiltersAircraftsMeta > | null>(null);
+  const [filterModal, setFilterModal] = useState(false);
 
   //Consumir a api
   useEffect(() => {
@@ -31,17 +36,18 @@ export default function Catalog() {
       try {
         let data: Product[] = [];
         let pagination: PaginationMeta | null = null;
+        let filters: FiltersMeta<FiltersCarMeta> | FiltersMeta<FiltersBoatsMeta> |  FiltersMeta<FiltersAircraftsMeta>| null = null;
         switch (category) {
           case "cars":
-            ({ cars: data, pagination } = await getCars(page));
+            ({ cars: data, pagination, filters } = await getCars(page));
             break;
 
           case "boats":
-            ({ boats: data, pagination } = await getBoats(page));
+            ({ boats: data, pagination, filters } = await getBoats(page));
             break;
 
           case "aircrafts":
-            ({ aircrafts: data, pagination } = await getAircrafts(page));
+            ({ aircrafts: data, pagination, filters } = await getAircrafts(page));
             break;
 
           default:
@@ -59,8 +65,7 @@ export default function Catalog() {
     if (category) {
       fetchData();
     }
-  }, [category, page]); //Repete cada vez que a categoria ou página for trocada
-
+  }, [category, page, filter]); //Repete cada vez que a categoria, página ou filtro for trocado
   // Funções para torcar de página
   function goNextPage() {
     if (pagination?.has_next) {
@@ -93,9 +98,10 @@ export default function Catalog() {
     <div className="flex flex-col gap-8 mx-auto w-full">
       <div className="flex justify-between">
         <h1 className="text-4xl">{title}</h1>
-        <button className="bg-secondary text-white rounded-sm px-4 py-1 flex justify-center items-center text-base">
+        <Button className="bg-secondary text-white rounded-sm px-4 py-1 flex justify-center items-center text-base gap-2" onClick={() => setFilterModal(true)}>
+          <FunnelIcon fill="#FFFFFF" />
           Filtro
-        </button>
+        </Button>
       </div>
 
       {/* Apresentação dos produtos */}
@@ -111,22 +117,32 @@ export default function Catalog() {
 
       {/* Numeração das páginas*/}
       {pagination && pagination?.total_pages > 1 && (
-        <div className="border w-full h-full flex flex-row justify-center items-center gap-2">
+        <div className="w-full h-full flex flex-row justify-center items-center gap-2">
           {pagination?.has_prev && (
             <>
-              <button onClick={goFirstPage}></button>
-              <button onClick={goPrevPage}></button>
+              <button onClick={goFirstPage}><ChevronsLeft/></button>
+              <button onClick={goPrevPage}><ChevronLeft/></button>
             </>
           )}
           <span>{page}</span>
           {pagination?.has_next && (
             <>
-              <button onClick={goNextPage}></button>
-              <button onClick={goLastPage}></button>
+              <button onClick={goNextPage}><ChevronRight/></button>
+              <button onClick={goLastPage}><ChevronsRight/></button>
             </>
           )}
         </div>
       )}
+
+      {/* Modal de filtros */}
+      {/* TODO: Construir um components com o Modal de filtros */}
+      <Modal isOpen={filterModal} onClose={ () =>
+         {
+          setFilters(filter);
+          setFilterModal(false);
+         } }>
+          Inserir informações
+      </Modal>
     </div>
   );
 }

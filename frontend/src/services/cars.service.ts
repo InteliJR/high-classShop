@@ -1,4 +1,4 @@
-import type { PaginationMeta, Product } from "../types/types";
+import type { FiltersCarMeta, FiltersMeta, PaginationMeta, Product, ResponseAPI } from "../types/types";
 import api from "./api";
 
 interface RawCar {
@@ -30,15 +30,16 @@ interface RawCar {
 }
 
 // Get /cars
-export async function getCars(page = 1, perPage = 20): Promise<{cars:Product[], pagination:PaginationMeta}>{
+export async function getCars(page = 1, perPage = 20, appliedFilters = {} ): Promise<{cars:Product[], pagination:PaginationMeta, filters: FiltersMeta<FiltersCarMeta>}>{
   try {
-    const response = await api.get("/cars", {
-      params: { page, perPage},
+    const response = await api.get<ResponseAPI<RawCar, FiltersCarMeta>>("/cars", {
+      params: { page, perPage , appliedFilters },
     });
 
     //Extrai a respota da api
     const rawCars: RawCar[] = response.data.data;
     const pagination: PaginationMeta = response.data.meta.pagination; 
+    const filters: FiltersMeta<FiltersCarMeta> = response.data.meta.filters;
 
     //Realiza o processo de formatação do array com as informações necessárias
     const cars: Product[] = rawCars.map((rawCar) => {
@@ -55,7 +56,7 @@ export async function getCars(page = 1, perPage = 20): Promise<{cars:Product[], 
         valor: rawCar.valor,
       };
     });
-    return { cars, pagination };
+    return { cars, pagination, filters };
 
   } catch (error) {
     console.log("Ocorreu um erro na busca dos carros: ", error);

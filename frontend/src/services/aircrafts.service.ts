@@ -1,4 +1,4 @@
-import type { PaginationMeta, Product } from "../types/types";
+import type { FiltersAircraftsMeta, FiltersMeta, PaginationMeta, Product, ResponseAPI } from "../types/types";
 import api from "./api";
 
 interface RawAircrafts {
@@ -33,15 +33,16 @@ interface RawAircrafts {
 }
 
 // Get /aircrafts
-export async function getAircrafts(page = 1, perPage = 20): Promise<{ aircrafts: Product[], pagination: PaginationMeta}> {
+export async function getAircrafts(page = 1, perPage = 20, appliedFilters = []): Promise<{ aircrafts: Product[], pagination: PaginationMeta, filters: FiltersMeta<FiltersAircraftsMeta>}> {
   try {
-    const response = await api.get("/aircrafts", {
-      params: {page, perPage},
+    const response = await api.get<ResponseAPI<RawAircrafts, FiltersAircraftsMeta>>("/aircrafts", {
+      params: {page, perPage, appliedFilters},
     });
 
     //Extrai a respota da api
     const rawAircrafts: RawAircrafts[] = response.data.data;
     const pagination: PaginationMeta = response.data.meta.pagination;
+    const filters: FiltersMeta<FiltersAircraftsMeta> = response.data.meta.filters;
 
     //Realiza o processo de formatação do array com as informações necessárias
     const aircrafts: Product[] = rawAircrafts.map((rawAircraft) => {
@@ -58,7 +59,7 @@ export async function getAircrafts(page = 1, perPage = 20): Promise<{ aircrafts:
         valor: rawAircraft.valor,
       };
     });
-    return {aircrafts, pagination};
+    return {aircrafts, pagination, filters};
 
   } catch (error) {
     console.error("Ocorreu um erro na busca das aeronaves: ", error);

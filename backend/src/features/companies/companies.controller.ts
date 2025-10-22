@@ -66,14 +66,14 @@ export class CompaniesController {
 
   // Rota para buscar um único escritório pelo seu ID.
   @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
+  findOne(@Param('id', ParseIntPipe) id: string) {
     return this.companiesService.findOne(id);
   }
 
   // Rota para atualizar os dados de um escritório.
   @Put(':id')
   update(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseIntPipe) id: string,
     @Body()
     body: Partial<{
       name: string;
@@ -87,7 +87,7 @@ export class CompaniesController {
 
   // Rota para apagar um escritório.
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
+  remove(@Param('id', ParseIntPipe) id: string) {
     return this.companiesService.remove(id);
   }
 }

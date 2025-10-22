@@ -1,8 +1,12 @@
-import { MetaDto } from "./meta.dto";
+import { FiltersDto } from "./filters.dto";
+import { PaginationDto } from "./pagination.dto";
 
-export class ApiResponseDto<T> {
+export class ApiResponseDto<T, S> {
     sucess: boolean;
     message: String;
     data: T;
-    meta?: MetaDto;
+    meta?: {
+        pagination: PaginationDto,
+        filters: FiltersDto <S>
+    };
 }

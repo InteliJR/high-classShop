@@ -11,8 +11,9 @@ import {
 import { CarsService } from './cars.service';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
-import { PaginationQueryDto } from 'src/utils/dto/pagination-query.dto';
+import { QueryDto } from 'src/utils/dto/query.dto';
 import { PaginationDto } from 'src/utils/dto/pagination.dto';
+import { FiltersCarMeta } from 'src/utils/dto/filters.dto';
 
 @Controller('cars')
 export class CarsController {
@@ -24,15 +25,16 @@ export class CarsController {
   }
 
   @Get()
-  async getAllCars(@Query() { page, perPage }: PaginationQueryDto) {
+  async getAllCars(@Query() { page, perPage, appliedFilters }: QueryDto<FiltersCarMeta>) {
     // Tratamento das variáveis recebidas do front
     page = Number(page);
     perPage = Number(perPage);
 
     // Chama o serviço para obter os dados
-    const { data, count } = await this.carsService.getAllCars({
+    const { data, count, filters = {} } = await this.carsService.getAllCars({
       page,
       perPage,
+      appliedFilters
     });
 
     // Cálculo dos elementos já visualizados
@@ -53,6 +55,10 @@ export class CarsController {
       data: data,
       meta: {
         pagination: pagination,
+        filters: {
+          applied_filters: filters,
+          total_without_filters: count,
+        }
       },
     };
   }
