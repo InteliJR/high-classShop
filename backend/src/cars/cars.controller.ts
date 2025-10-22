@@ -26,7 +26,6 @@ export class CarsController {
 
   @Get()
   async getAllCars(@Query() { page, perPage, appliedFilters }: QueryDto<FiltersCarMeta>) {
-    console.log("Execução do controller do back")
     // Tratamento das variáveis recebidas do front
     page = Number(page);
     perPage = Number(perPage);

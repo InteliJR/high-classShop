@@ -32,7 +32,6 @@ interface RawCar {
 // Get /cars
 export async function getCars(page = 1, perPage = 20, appliedFilters = {} ): Promise<{cars:Product[], pagination:PaginationMeta, filters: FiltersMeta<FiltersCarMeta>}>{
   try {
-    console.log("no front: ", page, perPage, appliedFilters)
     const response = await api.get<ResponseAPI<RawCar, FiltersCarMeta>>("/cars", {
       params: { page, perPage , appliedFilters },
     });
@@ -57,7 +56,6 @@ export async function getCars(page = 1, perPage = 20, appliedFilters = {} ): Pro
         valor: rawCar.valor,
       };
     });
-    console.log(response.data)
     return { cars, pagination, filters };
 
   } catch (error) {

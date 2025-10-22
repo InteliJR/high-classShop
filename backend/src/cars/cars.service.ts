@@ -17,8 +17,6 @@ export class CarsService {
     // Cálculo das variáveis usadas na requisição ao banco de dados
     const take = perPage;
     const skip = (page - 1) * take;
-    console.log("Fiktros aplicados no service do backend: ", appliedFilters);
-    console.log("Cambio recebido pelo back: ", appliedFilters?.cambio);
 
     // Separação dos filtros
     const where: any = {}
@@ -26,7 +24,6 @@ export class CarsService {
     const exactFilter:ExactCarFilters = {
       ...appliedFilters
     } ;
-    console.log(exactFilter)
     Object.assign(where, exactFilter); // Insere a filtragem exata na variavel where
 
     // Contains

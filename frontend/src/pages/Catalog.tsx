@@ -66,7 +66,6 @@ export default function Catalog() {
       fetchData();
     }
   }, [category, page, filter]); //Repete cada vez que a categoria, página ou filtro for trocado
-  console.log("na page de catalog: ", );
   // Funções para torcar de página
   function goNextPage() {
     if (pagination?.has_next) {
