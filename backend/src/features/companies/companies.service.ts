@@ -1,58 +1,33 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { S3Service } from 'src/aws/s3.service';
+import { CreateCompanyDto } from './dto/create-company.dto';
+import { UpdateCompanyDto } from './dto/update-company.dto';
 
 @Injectable()
 export class CompaniesService {
-  constructor(
-    private prisma: PrismaService,
-    private s3Service: S3Service,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
-  // Retorna todas as empresas, com o URL do logo assinado para acesso temporário.
+  // Retorna todas as empresas.
   async findAll() {
-    const companies = await this.prisma.company.findMany();
-    return Promise.all(
-      companies.map(async (company) => {
-        let logoUrl: string | null = null;
-        if (company.logo) {
-          logoUrl = await this.s3Service.getSignedUrl(company.logo);
-        }
-        return { ...company, logoUrl };
-      }),
-    );
+    return this.prisma.company.findMany();
   }
 
   // Cria uma nova empresa na base de dados.
-  create(data: { name: string; cnpj: string; logo?: string }) {
+  create(data: CreateCompanyDto) {
     return this.prisma.company.create({ data });
   }
 
-  // Retorna uma única empresa pelo ID, com o URL do logo assinado.
+  // Retorna uma única empresa pelo ID.
   async findOne(id: string) {
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) {
       throw new NotFoundException('Company not found');
     }
-
-    let logoUrl: string | null = null;
-    if (company.logo) {
-      logoUrl = await this.s3Service.getSignedUrl(company.logo);
-    }
-
-    return { ...company, logoUrl };
+    return company;
   }
 
   // Atualiza os dados de uma empresa existente.
-  async update(
-    id: string,
-    data: Partial<{
-      name: string;
-      cnpj: string;
-      logo: string;
-      description: string;
-    }>,
-  ) {
+  async update(id: string, data: UpdateCompanyDto) {
     await this.findOne(id);
     return this.prisma.company.update({ where: { id }, data });
   }
