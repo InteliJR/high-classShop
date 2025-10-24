@@ -7,7 +7,7 @@ import { UpdateCompanyDto } from './dto/update-company.dto';
 export class CompaniesService {
   constructor(private prisma: PrismaService) {}
 
-  // Retorna todas as empresas.
+  // Busca todas as empresas.
   async findAll() {
     return this.prisma.company.findMany();
   }

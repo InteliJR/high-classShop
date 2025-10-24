@@ -26,7 +26,7 @@ export class CompaniesController {
 
   // Rota para buscar todos os escritórios.
   @Get()
-  findAll() {
+  findAll() { // Busca todas as empresas
     return this.companiesService.findAll();
   }
 
