@@ -5,11 +5,12 @@ import { PrismaService } from '../prisma/prisma.service';
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getCarById(id: number) {
-    const car = await this.prisma.cars.findUnique({ where: { id } });
+  async getCarById(id: string) {
+    const carId = parseInt(id);
+    const car = await this.prisma.car.findUnique({ where: { id: carId } });
     if (!car) throw new NotFoundException('Car not found');
 
-    const images = await this.prisma.car_images.findMany({ where: { car_id: id } });
+    const images = await this.prisma.car_image.findMany({ where: { car_id: carId } });
 
     return {
       id: car.id,
@@ -22,11 +23,12 @@ export class ProductsService {
     };
   }
 
-  async getBoatById(id: number) {
-    const boat = await this.prisma.boats.findUnique({ where: { id } });
+  async getBoatById(id: string) {
+    const boatId = parseInt(id);
+    const boat = await this.prisma.boat.findUnique({ where: { id: boatId } });
     if (!boat) throw new NotFoundException('Boat not found');
 
-    const images = await this.prisma.boat_images.findMany({ where: { boat_id: id } });
+    const images = await this.prisma.boat_image.findMany({ where: { boat_id: boatId } });
 
     return {
       id: boat.id,
@@ -39,11 +41,12 @@ export class ProductsService {
     };
   }
 
-  async getAircraftById(id: number) {
-    const aircraft = await this.prisma.aircraft.findUnique({ where: { id } });
+  async getAircraftById(id: string) {
+    const aircraftId = parseInt(id);
+    const aircraft = await this.prisma.aircraft.findUnique({ where: { id: aircraftId } });
     if (!aircraft) throw new NotFoundException('Aircraft not found');
 
-    const images = await this.prisma.aircraft_images.findMany({ where: { aircraft_id: id } });
+    const images = await this.prisma.aircraft_image.findMany({ where: { aircraft_id: aircraftId } });
 
     return {
       id: aircraft.id,
