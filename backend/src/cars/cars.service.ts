@@ -10,7 +10,7 @@ export class CarsService {
   constructor(private prismaService: PrismaService) { }
 
   create(data: {
-    specialist?: string | null;
+    specialist?: any;
     marca: string;
     modelo: string;
     valor: number;
@@ -23,21 +23,8 @@ export class CarsService {
     combustivel: string;
     tipo_categoria: string;
   }) {
-    const formattedData: any = {
-      marca: data.marca,
-      modelo: data.modelo,
-      valor: data.valor,
-      estado: data.estado,
-      ano: data.ano,
-      descricao: data.descricao,
-      cor: data.cor,
-      km: data.km,
-      cambio: data.cambio,
-      combustivel: data.combustivel,
-      tipo_categoria: data.tipo_categoria,
-    };
 
-    return this.prismaService.car.create({ data: formattedData });
+    return this.prismaService.car.create({ data: data });
   }
 
 
@@ -107,7 +94,7 @@ export class CarsService {
   async update(
     id: number,
     data: Partial<{
-      specialist: string;
+      specialist: any;
       marca: string;
       modelo: string;
       valor: number;
@@ -123,17 +110,14 @@ export class CarsService {
   ) {
    await this.findOne(id);
 
-    const formattedData: any = { ...data };
 
-    if ('specialist' in formattedData) {
-      if (formattedData.specialist) {
-        formattedData.specialist = { connect: { id: formattedData.specialist } };
-      } else {
-        formattedData.specialist = { disconnect: true };
-      }
+    if (data.specialist) {
+      data.specialist = { connect: { id: data.specialist } };
+    } else {
+      data.specialist = { disconnect: true };
     }
 
-    return this.prismaService.car.update({ where: { id }, data: formattedData  });
+    return this.prismaService.car.update({ where: { id }, data: data  });
   }
 
   async remove(id: number) {
