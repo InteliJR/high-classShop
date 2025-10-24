@@ -7,7 +7,7 @@ export class CompaniesService {
   constructor(
     private prisma: PrismaService,
     private s3Service: S3Service,
-  ) {}
+  ) { }
 
   // Retorna todas as empresas, com o URL do logo assinado para acesso temporário.
   async findAll() {
