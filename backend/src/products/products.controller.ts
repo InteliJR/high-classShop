@@ -7,17 +7,17 @@ export class ProductsController {
 
   @Get('cars/:id')
   getCar(@Param('id') id: string) {
-    return this.productsService.getCarById(Number(id));
+    return this.productsService.getCarById(id);
   }
 
   @Get('boats/:id')
   getBoat(@Param('id') id: string) {
-    return this.productsService.getBoatById(Number(id));
+    return this.productsService.getBoatById(id);
   }
 
   @Get('aircraft/:id')
   getAircraft(@Param('id') id: string) {
-    return this.productsService.getAircraftById(Number(id));
+    return this.productsService.getAircraftById(id);
   }
 }
 
