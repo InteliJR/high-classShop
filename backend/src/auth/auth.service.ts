@@ -1,9 +1,11 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { ApiResponseDto, LoginDto } from './dto/auth';
+import { ApiResponseDto, LoginDto, RegisterDto } from './dto/auth';
 import * as bcrypt from 'bcrypt';
 import { jwtConstants } from './constants';
+import { PrismaClient } from '@prisma/client/extension';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -11,6 +13,33 @@ export class AuthService {
     private readonly prismaService: PrismaService,
     private jwtService: JwtService,
   ) {}
+
+  async register(data: RegisterDto) {
+    // Verificar se o usuário já existe
+    const userAlreadyExists = await this.prismaService.user.findUnique({
+      where: {
+        email: data.email,
+      },
+    });
+    if (userAlreadyExists) {
+      throw new UnauthorizedException('This user already exists');
+    }
+
+    // Separação da req
+    const { password, ...dataSave} = data;
+
+    // Criar o hash da senha
+    const passwordHash = await bcrypt.hash(data.password, 10);
+
+    // Cria o usuário
+    const user = await this.prismaService.user.create({
+      data: { ...dataSave, password_hash: passwordHash,
+
+       },
+    });
+
+    return user;
+  }
 
   async login(data: LoginDto) {
     // Procurar o usuário pelo e-mail
@@ -27,7 +56,7 @@ export class AuthService {
 
     // Realizar a comparação se as senhas são iguais
     const passwordMatch = await bcrypt.compare(
-      data.password_hash,
+      data.password,
       user.password_hash,
     );
     // Validar se as senhas são parecidas

@@ -8,11 +8,17 @@ import {
   Delete,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { LoginDto } from './dto/auth';
+import { LoginDto, RegisterDto } from './dto/auth';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('register')
+  async register( @Body() body:RegisterDto) {
+    return await this.authService.register(body)
+
+  }
 
   @Post('login')
   async login(@Body() body: LoginDto) {
