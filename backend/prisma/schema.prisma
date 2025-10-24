@@ -123,6 +123,8 @@ model Car {
   updated_at     DateTime @default(now())
 
   specialist User? @relation(fields: [specialist_id], references: [id])
+  images        car_images[]
+
 }
 
 model Boat {
@@ -146,6 +148,8 @@ model Boat {
   updated_at         DateTime @default(now())
 
   specialist User? @relation(fields: [specialist_id], references: [id])
+  images        boat_images[]
+
 }
 
 model Aircraft {
@@ -164,6 +168,8 @@ model Aircraft {
   updated_at    DateTime @default(now())
 
   specialist User? @relation(fields: [specialist_id], references: [id])
+  images        aircraft_images[]
+
 }
 
 model Car_image {
@@ -172,6 +178,10 @@ model Car_image {
   image_url    String
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
+
+  // relation to specific car (nullable to avoid breaking existing data)
+  car_id       Int?
+  car          cars?    @relation(fields: [car_id], references: [id])
 }
 
 model Boat_image {
@@ -180,6 +190,9 @@ model Boat_image {
   image_url    String
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
+
+  boat_id      Int?
+  boat         boats?   @relation(fields: [boat_id], references: [id])
 }
 
 model Aircraft_image {
@@ -188,6 +201,9 @@ model Aircraft_image {
   image_url    String
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
+
+  aircraft_id  Int?
+  aircraft     aircraft? @relation(fields: [aircraft_id], references: [id])
 }
 
 model Proccess {
