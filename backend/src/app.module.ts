@@ -7,6 +7,7 @@ import { CarsModule } from './cars/cars.module';
 import { PrismaService } from './prisma/prisma.service';
 import { CompaniesModule } from './features/companies/companies.module';
 import { ConsultantsModule } from './features/consultants/consultants.module';
+import { SpecialistsModule } from './features/specialists/specialists.module';
 import { ConfigModule } from '@nestjs/config';
 
 @Module({
@@ -14,7 +15,7 @@ import { ConfigModule } from '@nestjs/config';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    CompaniesModule, ConsultantsModule, CarsModule, BoatsModule, AircraftsModule
+    CompaniesModule, ConsultantsModule, SpecialistsModule, CarsModule, BoatsModule, AircraftsModule
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],
