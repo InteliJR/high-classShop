@@ -14,7 +14,7 @@ import { AuthModule } from './auth/auth.module';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    CompaniesModule, CarsModule, BoatsModule, AircraftsModule, AuthModule
+    CompaniesModule, CarsModule, BoatsModule, AircraftsModule, AuthModule, 
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],
