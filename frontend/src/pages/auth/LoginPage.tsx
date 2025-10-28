@@ -1,7 +1,41 @@
 import LoginImageMobile from "../../assets/loginCarMobile.png";
 import LoginImageDesktop from "../../assets/loginCarDesktop.png";
+import { useForm, type Resolver } from "react-hook-form";
+
+interface FormValues {
+  email: string;
+  password: string;
+}
+
+// TODO: Melhorar a lógica adicionando o for ou algo do tipo
+const resolver: Resolver<FormValues> = async (values) => {
+  return {
+    values: (values.email ? values : {}) && (values.password ? values : {}),
+    errors:
+      !values.email && !values.password
+        ? {
+            email: {
+              type: "required",
+              message: "This is required.",
+            },
+            password: {
+              type: "required",
+              message: "This is required.",
+            },
+          }
+        : {},
+  };
+};
 
 export default function Login() {
+  //Lógica de submissão do formulário
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<FormValues>({ resolver });
+  const onSubmit = handleSubmit((data) => console.log(data));
+
   return (
     <div className=" sm:absolute w-screen h-screen flex flex-col sm:justify-between sm:items-center sm:flex-row-reverse">
       {/* Imagem */}
@@ -26,7 +60,7 @@ export default function Login() {
           </p>
         </div>
         {/* Campo para preencher as informações */}
-        <div className=" sm:relative sm:right-8">
+        <form className=" sm:relative sm:right-8" onSubmit={onSubmit}>
           <div className="flex flex-col gap-6 text-sm sm:text-2xl sm:gap-12">
             <div className="flex flex-col gap-1 sm:gap-2">
               <label about="E-mail">E-mail</label>
@@ -34,9 +68,11 @@ export default function Login() {
                 //about="E-mail"
                 alt="Campo para inserir o e-mail"
                 type="text"
-                value="Insira seu e-mail"
-                className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl text-color-input-text sm:text-xl"
-              ></input>
+                placeholder="Insira seu e-mail"
+                className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl sm:text-xl"
+                {...register("email")}
+              />
+              {errors?.email && <p>{errors.email.message}</p>}
             </div>
             <div className="flex flex-col gap-1 sm:gap-2">
               <label about="Senha">Senha</label>
@@ -44,9 +80,11 @@ export default function Login() {
                 about="Senha"
                 alt="Campo para inserir a senha"
                 type="text"
-                value="Insira sua senha"
-                className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl text-color-input-text sm:text-xl"
-              ></input>
+                placeholder="Insira sua senha"
+                className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl sm:text-xl"
+                {...register("password")}
+              />
+              {errors?.password && <p>{errors.password.message}</p>}
             </div>
           </div>
           {/* Campo de ações */}
@@ -54,12 +92,14 @@ export default function Login() {
             <a className="text-xs text-color-a sm:text-base">
               Esqueceu sua senha?
             </a>
-            <button className="text-sm bg-background-secondary p-2 w-full text-color-text-secondary rounded-md sm:text-2xl sm:rounded-lg">
-              Entrar
-            </button>
+            <input
+              type="submit"
+              className="text-sm bg-background-secondary p-2 w-full text-color-text-secondary rounded-md sm:text-2xl sm:rounded-lg"
+              value={"Entrar"}
+            />
             <a className="text-xs text-color-a sm:text-base">Cadastre-se</a>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );
