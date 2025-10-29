@@ -13,7 +13,7 @@ export class CompaniesService {
   }
 
   // Cria uma nova empresa na base de dados.
-  create(data: CreateCompanyDto) {
+  async create(data: CreateCompanyDto) {
     return this.prisma.company.create({ data });
   }
 
