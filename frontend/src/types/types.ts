@@ -92,3 +92,31 @@ export interface Product {
   valor: number;
   imageUrl: string;
 }
+
+// Usuários
+export type UserRole = ['CUSTOMER', 'CONSULTANT', 'SPECIALIST', 'ADMIN',];
+export type CivilState = ['SINGLE', 'MARRIED', 'DIVORCIED', 'WIDOWED', 'SEPARETED', 'STABLE_UNION'];
+export type SpecialityType = ['CAR', 'BOAT', 'AIRCRAFT'];
+
+export interface UserProps {
+  id: string;
+  name: string;
+  surname: string;
+  token: string;
+  email: string;
+  cpf: string;
+  rg: string;
+  role: UserRole;
+  password: string;
+  civilState?: CivilState;
+  speciality?: SpecialityType;
+  identicationNumber?: string;
+  address_id?: string;
+  consultant_id?: string;
+}
+
+// Tipgem das informações de login
+export interface LoginValues {
+  email: string;
+  password: string;
+}

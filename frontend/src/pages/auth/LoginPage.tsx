@@ -1,40 +1,49 @@
 import LoginImageMobile from "../../assets/loginCarMobile.png";
 import LoginImageDesktop from "../../assets/loginCarDesktop.png";
-import { useForm, type Resolver } from "react-hook-form";
-
-interface FormValues {
-  email: string;
-  password: string;
-}
-
-// TODO: Melhorar a lógica adicionando o for ou algo do tipo
-const resolver: Resolver<FormValues> = async (values) => {
-  return {
-    values: (values.email ? values : {}) && (values.password ? values : {}),
-    errors:
-      !values.email && !values.password
-        ? {
-            email: {
-              type: "required",
-              message: "This is required.",
-            },
-            password: {
-              type: "required",
-              message: "This is required.",
-            },
-          }
-        : {},
-  };
-};
+import {
+  useForm,
+  type SubmitErrorHandler,
+  type SubmitHandler,
+} from "react-hook-form";
+import { AuthContext } from "../../contexts/AuthContext";
+import { useContext, useState, type ChangeEvent } from "react";
+import type { LoginValues } from "../../types/types";
 
 export default function Login() {
-  //Lógica de submissão do formulário
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<FormValues>({ resolver });
-  const onSubmit = handleSubmit((data) => console.log(data));
+  // Criação do contexto no navegador
+  const auth = useContext(AuthContext);
+
+  // Lógica de submissão do formulário
+  // Funções para registrar o input e a submissão do formulário
+  const { register, handleSubmit } = useForm<LoginValues>({
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
+  // Estado para o input dos campos de login
+  const [input, setInput] = useState<LoginValues>({
+    email: "",
+    password: "",
+  });
+  // Submissão das informações dos formulário 
+  const onSubmit: SubmitHandler<LoginValues> = () => {
+    if (input !== null) {
+      auth.login(input);
+      return;
+    }
+    alert("Informações incorretas");
+  };
+  // Lidar com os erros
+  const onError: SubmitErrorHandler<LoginValues> = (errors) =>
+    console.log(errors);
+  // Lidar com a submissão em partes do input
+  const handleInput = (e: ChangeEvent<HTMLInputElement>) => {
+    setInput((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
+  };
 
   return (
     <div className=" sm:absolute w-screen h-screen flex flex-col sm:justify-between sm:items-center sm:flex-row-reverse">
@@ -60,31 +69,36 @@ export default function Login() {
           </p>
         </div>
         {/* Campo para preencher as informações */}
-        <form className=" sm:relative sm:right-8" onSubmit={onSubmit}>
+        <form
+          className=" sm:relative sm:right-8"
+          onSubmit={handleSubmit(onSubmit, onError)}
+        >
           <div className="flex flex-col gap-6 text-sm sm:text-2xl sm:gap-12">
             <div className="flex flex-col gap-1 sm:gap-2">
               <label about="E-mail">E-mail</label>
               <input
                 //about="E-mail"
                 alt="Campo para inserir o e-mail"
-                type="text"
+                type="email"
+                name="email"
                 placeholder="Insira seu e-mail"
                 className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl sm:text-xl"
-                {...register("email")}
+                {...(register("email"), { required: true })}
+                onChange={handleInput}
               />
-              {errors?.email && <p>{errors.email.message}</p>}
             </div>
             <div className="flex flex-col gap-1 sm:gap-2">
               <label about="Senha">Senha</label>
               <input
                 about="Senha"
                 alt="Campo para inserir a senha"
-                type="text"
+                type="password"
+                name="password"
                 placeholder="Insira sua senha"
                 className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl sm:text-xl"
-                {...register("password")}
+                {...(register("password"), { required: true })}
+                onChange={handleInput}
               />
-              {errors?.password && <p>{errors.password.message}</p>}
             </div>
           </div>
           {/* Campo de ações */}
@@ -95,7 +109,6 @@ export default function Login() {
             <input
               type="submit"
               className="text-sm bg-background-secondary p-2 w-full text-color-text-secondary rounded-md sm:text-2xl sm:rounded-lg"
-              value={"Entrar"}
             />
             <a className="text-xs text-color-a sm:text-base">Cadastre-se</a>
           </div>
