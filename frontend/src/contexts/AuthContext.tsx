@@ -12,6 +12,7 @@ export interface AuthContextProps {
   user: UserProps | null;
   login: (user: LoginValues) => void;
   logout: () => void;
+  loading: boolean;
 }
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -28,15 +29,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
     try {
+      // Realizar o login fazendo a req para o backend
       const response: any = await api.post("auth/login", {
         email: user.email,
         password: user.password,
       });
       const data = response.data;
+      // Guarda as informações de login no navegador
       if (data) {
         setUser(data.user);
         setToken(data.accessToken);
-        localStorage.setItem("site", data.accessToken);
+        localStorage.setItem("highClassShop", data.accessToken);
         navigate("/");
         setLoading(false);
         return;
@@ -47,15 +50,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setLoading(false);
       console.error("Ocorreu um erro durante o login: ", error);
     }
-  };
+  };  
 
+  // Logout do usuário
   const logout = () => {
-    console.log("logout");
+    setUser(null);
+    setToken("");
+    localStorage.removeItem("highClassShop");
+    navigate("/login");
     setLoading(false);
   };
 
   return (
-    <AuthContext.Provider value={{ token, user, login, logout }}>
+    <AuthContext.Provider value={{ token, user, login, logout, loading }}>
       <>{children}</>
     </AuthContext.Provider>
   );
