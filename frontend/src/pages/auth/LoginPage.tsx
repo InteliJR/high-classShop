@@ -8,10 +8,12 @@ import {
 import { AuthContext } from "../../contexts/AuthContext";
 import { useContext, useState, type ChangeEvent } from "react";
 import type { LoginValues } from "../../types/types";
+import { useNavigate } from "react-router-dom";
 
 export default function Login() {
   // Criação do contexto no navegador
   const auth = useContext(AuthContext);
+  const navigate = useNavigate();
 
   // Lógica de submissão do formulário
   // Funções para registrar o input e a submissão do formulário
@@ -26,11 +28,16 @@ export default function Login() {
     email: "",
     password: "",
   });
-  // Submissão das informações dos formulário 
+  // Submissão das informações dos formulário
   const onSubmit: SubmitHandler<LoginValues> = () => {
     if (input !== null) {
-      auth.login(input);
-      return;
+      try {
+        auth.login(input);
+        navigate("/catalog/aircrafts");
+        return
+      } catch (error) {
+        console.log("Ocorreu esse erro no login: ", error);
+      }
     }
     alert("Informações incorretas");
   };
@@ -108,7 +115,8 @@ export default function Login() {
             </a>
             <input
               type="submit"
-              className="text-sm bg-background-secondary p-2 w-full text-color-text-secondary rounded-md sm:text-2xl sm:rounded-lg"
+              className="text-sm bg-background-secondary p-2 w-full text-color-text-secondary rounded-md sm:text-2xl sm:rounded-lg hover:bg-gray-500"
+              placeholder="Entrar"
             />
             <a className="text-xs text-color-a sm:text-base">Cadastre-se</a>
           </div>
