@@ -23,6 +23,9 @@ export class AuthService {
       throw new UnauthorizedException('This user already exists');
     }
 
+    // Criar o role para registrar o usuário padrão
+    const registerRole = data.role ? data.role : "CUSTOMER";
+
     // Separação da req
     const { password, ...dataSave } = data;
 
@@ -31,7 +34,7 @@ export class AuthService {
 
     // Cria o usuário
     const user = await this.prismaService.user.create({
-      data: { ...dataSave, password_hash: passwordHash },
+      data: { ...dataSave, password_hash: passwordHash, role: registerRole },
     });
 
     return {
