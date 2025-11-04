@@ -1,5 +1,4 @@
 import axios from "axios";
-import { getRefreshToken, getToken } from "./authService";
 
 // Instanciar a origem das rquisições para a api
 const api = axios.create({
@@ -8,7 +7,7 @@ const api = axios.create({
 
 // Adiciona token de acesso no header das requisições
 api.interceptors.request.use((config) => {
-  const token = getToken();
+  const token = localStorage.getItem("AccessHCS");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

@@ -1,15 +1,15 @@
 // Substituto do tipo ENUM nos postgres
 // Carro
-export type estadoValues = ['novo', 'seminovo', 'colecao'];
-export type tipoCategoriaCarValues = ['SUV', 'sedan', 'coupe', 'conversivel', 'esportivo', 'supercarro'];
-export type cambioCarValues = ['manual', 'automatico', 'cvt'];
-export type combustivelCarValues = ['gasolina', 'alcool', 'flex', 'diesel', 'eletrico', 'hibrido'];
+export type estadoValues = 'novo'| 'seminovo'| 'colecao';
+export type tipoCategoriaCarValues = 'SUV'| 'sedan'| 'coupe'| 'conversivel'| 'esportivo'| 'supercarro';
+export type cambioCarValues = 'manual'| 'automatico'| 'cvt';
+export type combustivelCarValues = 'gasolina'| 'alcool'| 'flex'| 'diesel'| 'eletrico'| 'hibrido';
 // Barco
-export type combustivelBoatsValues = ['diesel', 'gasolina', 'eletrico', 'hibrido'];
-export type tipoEmbarcacaoBoatsValues = ['iate', 'lancha', 'catamara', 'veleiro', 'jet_boat', 'outro'];
-export type tamanhoBoatsValues = ['ate_30_pes','30_50_pes','acima_50_pes'];
+export type combustivelBoatsValues = 'diesel'| 'gasolina'| 'eletrico'| 'hibrido';
+export type tipoEmbarcacaoBoatsValues = 'iate'| 'lancha'| 'catamara'| 'veleiro'| 'jet_boat'| 'outro';
+export type tamanhoBoatsValues = 'ate_30_pes'|'30_50_pes'|'acima_50_pes';
 // Aeronave
-export type tipoAeronaveValues = ['VLJ', 'executivo_medio', 'intercontinental', 'turbohelice', 'helicoptero']
+export type tipoAeronaveValues = 'VLJ'| 'executivo_medio'| 'intercontinental'| 'turbohelice'| 'helicoptero'
 
 // Filtros
 // Carro
@@ -94,9 +94,9 @@ export interface Product {
 }
 
 // Usuários
-export type UserRole = ['CUSTOMER', 'CONSULTANT', 'SPECIALIST', 'ADMIN',];
-export type CivilState = ['SINGLE', 'MARRIED', 'DIVORCIED', 'WIDOWED', 'SEPARETED', 'STABLE_UNION'];
-export type SpecialityType = ['CAR', 'BOAT', 'AIRCRAFT'];
+export type UserRole = 'CUSTOMER' |'CONSULTANT' |'SPECIALIST' |'ADMIN';
+export type CivilState = 'SINGLE' |'MARRIED' |'DIVORCIED' |'WIDOWED' |'SEPARETED' |'STABLE_UNION' ;
+export type SpecialityType = 'CAR' |'BOAT' |'AIRCRAFT';
 
 export interface UserProps {
   id: string;

@@ -1,24 +1,31 @@
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
 import { AuthContext } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
-export default function ProtectedRoute( {children}: {children: React.ReactNode}) {
-    const {user, loading} = useContext(AuthContext);
-    const navigate = useNavigate();
+export default function ProtectedRoute({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { user, loading } = useContext(AuthContext);
+  const navigate = useNavigate();
 
-    // Mostrar a tela de carregamento caso esteja carregando conteúdos de acordo com o authContext
-    if(loading){
-        return (
-            <div>Carregando</div>
-        )
+  // Gerenciador da lógica de redirecionar a página
+  useEffect(() => {
+    if (!user && !loading) {
+      navigate("/login");
     }
+  }, [loading, user]);
 
-    // Redirecionar para a tela de login 
-    if(!user) {
-        navigate('/login');
-        return
-    }
+  // Indicar visualmente que está carregando a página
+  if (loading) {
+    return <div>Carregando...</div>;
+  }
+  // Indicar visualmente que está redirecionando a página
+  if (!user && !loading) {
+    return <div>Redirecionando...</div>;
+  }
 
-    return children;  
-
+  // Retorna a página normalmente caso o usuário exista e não esteja carregando
+  return children;
 }

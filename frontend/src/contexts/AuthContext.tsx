@@ -1,7 +1,6 @@
 import { createContext, useEffect, useState } from "react";
 import type { LoginValues, UserProps } from "../types/types";
 import api from "../services/api";
-import { TOKEN_KEY } from "../services/authService";
 
 export const AuthContext = createContext<AuthContextProps>(
   {} as AuthContextProps
@@ -20,17 +19,16 @@ export interface AuthContextProps {
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<UserProps | null>(null);
   const [accessToken, setAccessToken] = useState(
-    localStorage.getItem("highClassShop") || ""
+    localStorage.getItem("AccessHCS") || ""
   );
   const [refreshToken, setRefreshToken] = useState(
     localStorage.getItem("RefreshHCS") || ""
   );
   const [loading, setLoading] = useState<boolean>(true);
 
-
   // Verificar se há um token no navegador
   useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = localStorage.getItem("AccessHCS");
 
     if (!token && !refreshToken) {
       setLoading(false);
@@ -51,7 +49,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(data);
       return true;
     } catch (error) {
-      console.log("Ocorreu esse erro na verificação do token: ", error);
+      // Tentar conseguir o accessToken a partir do refreshToken caso ele exista
+      if (refreshToken) {
+        return await refreshUser();
+      }
+      console.log("Ocorreu o seguinte erro na verificação do token: ", error);
       return false;
     } finally {
       setLoading(false);
@@ -60,27 +62,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Criar o accessToken a partir do refreshToken
   const refreshUser = async () => {
-    console.log("Fazendo o refresh");
     try {
       const response = await api.post(
         "auth/refresh",
         {
-          body: refreshToken,
+          refresh_token: refreshToken,
         },
         { withCredentials: true }
       );
       const data = response.data;
-
-      setAccessToken(data.accessToken);
+      setAccessToken(data.access_token);
+      localStorage.setItem("AccessHCS", data.access_token);
       setUser(data.user);
-      setLoading(false);
       return true;
     } catch (error) {
-      setLoading(false);
       return false;
     }
   };
 
+  // Possibilitar o login na plataforma
   const login = async (user: LoginValues) => {
     //Verificar se o usuário já possui o accessToken de acesso
     if (accessToken !== "") {
@@ -103,7 +103,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(data.user);
         setAccessToken(data.accessToken);
         setRefreshToken(data.refreshToken);
-        localStorage.setItem("highClassShop", data.accessToken);
+        localStorage.setItem("AccessHCS", data.accessToken);
         localStorage.setItem("RefreshHCS", data.refreshToken);
         setLoading(false);
         return data;
@@ -122,12 +122,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(null);
     setAccessToken("");
     setRefreshToken("");
-    localStorage.removeItem("highClassShop");
+    localStorage.removeItem("AccessHCS");
     localStorage.removeItem("RefreshHCS");
   };
 
   return (
-    <AuthContext.Provider value={{ accessToken, user, login, logout, loading, refreshUser, verifyToken }}>
+    <AuthContext.Provider
+      value={{
+        accessToken,
+        user,
+        login,
+        logout,
+        loading,
+        refreshUser,
+        verifyToken,
+      }}
+    >
       <>{children}</>
     </AuthContext.Provider>
   );

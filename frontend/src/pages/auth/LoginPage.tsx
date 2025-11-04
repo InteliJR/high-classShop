@@ -6,7 +6,7 @@ import {
   type SubmitHandler,
 } from "react-hook-form";
 import { AuthContext } from "../../contexts/AuthContext";
-import { useContext, useState, type ChangeEvent } from "react";
+import { useContext } from "react";
 import type { LoginValues } from "../../types/types";
 import { useNavigate } from "react-router-dom";
 
@@ -23,34 +23,21 @@ export default function Login() {
       password: "",
     },
   });
-  // Estado para o input dos campos de login
-  const [input, setInput] = useState<LoginValues>({
-    email: "",
-    password: "",
-  });
   // Submissão das informações dos formulário
-  const onSubmit: SubmitHandler<LoginValues> = async() => {
-    if (input !== null) {
-      try {
-        await auth.login(input);
-        navigate("/catalog/cars");
-        return
-      } catch (error) {
-        console.log("Ocorreu esse erro no login: ", error);
-      }
+  const onSubmit: SubmitHandler<LoginValues> = async (data) => {
+    console.log("data: ", data);
+    try {
+      await auth.login(data);
+      navigate("/catalog/cars");
+      return;
+    } catch (error) {
+      console.log("Ocorreu esse erro no login: ", error);
     }
     alert("Informações incorretas");
   };
   // Lidar com os erros
   const onError: SubmitErrorHandler<LoginValues> = (errors) =>
     console.log(errors);
-  // Lidar com a submissão em partes do input
-  const handleInput = (e: ChangeEvent<HTMLInputElement>) => {
-    setInput((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
-  };
 
   return (
     <div className=" sm:absolute w-screen h-screen flex flex-col sm:justify-between sm:items-center sm:flex-row-reverse">
@@ -84,14 +71,11 @@ export default function Login() {
             <div className="flex flex-col gap-1 sm:gap-2">
               <label about="E-mail">E-mail</label>
               <input
-                //about="E-mail"
                 alt="Campo para inserir o e-mail"
                 type="email"
-                name="email"
                 placeholder="Insira seu e-mail"
                 className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl sm:text-xl"
-                {...(register("email"), { required: true })}
-                onChange={handleInput}
+                {...register("email", { required: true })}
               />
             </div>
             <div className="flex flex-col gap-1 sm:gap-2">
@@ -100,11 +84,9 @@ export default function Login() {
                 about="Senha"
                 alt="Campo para inserir a senha"
                 type="password"
-                name="password"
                 placeholder="Insira sua senha"
                 className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl sm:text-xl"
-                {...(register("password"), { required: true })}
-                onChange={handleInput}
+                {...register("password", { required: true })}
               />
             </div>
           </div>
