@@ -5,8 +5,8 @@ function App() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Redireciona para a página de companies por padrão
-    navigate('/admin/companies')
+    // Redireciona para a dashboard por padrão
+    navigate('/admin/dashboard')
   }, [navigate])
 
   return null
