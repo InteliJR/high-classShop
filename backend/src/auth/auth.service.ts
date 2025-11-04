@@ -1,7 +1,11 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { ApiResponseDto, LoginDto, UserRegisterDto } from './dto/auth';
+import { ApiResponseDto, LoginDto, User, UserRegisterDto } from './dto/auth';
 import * as bcrypt from 'bcrypt';
 import { jwtConstants } from './constants';
 
@@ -24,7 +28,7 @@ export class AuthService {
     }
 
     // Criar o role para registrar o usuário padrão
-    const registerRole = data.role ? data.role : "CUSTOMER";
+    const registerRole = data.role ? data.role : 'CUSTOMER';
 
     // Separação da req
     const { password, ...dataSave } = data;
@@ -100,5 +104,55 @@ export class AuthService {
         role: user.role,
       },
     };
+  }
+
+  async generateToken (payload: any) {
+    console.log()
+    const accessToken = this.jwtService.sign(
+      {email: payload.email},
+      {
+        secret: jwtConstants.access,
+        expiresIn: '15m',
+      }
+    )
+
+    return {acess_token: accessToken, user: payload};
+  }
+
+  async refresh(body: { refresh_token: string }) {
+    const payload = await this.verifyRefreshToken(body);
+    return this.generateToken(payload);
+  }
+
+  private async verifyRefreshToken(body: { refresh_token: string }) {
+    const refreshToken = body.refresh_token;
+
+    if (!refreshToken) {
+      throw new NotFoundException('Usário não encontrado');
+    }
+
+    const id = this.jwtService.decode(refreshToken)['id'];
+    const user = await this.prismaService.user.findUnique({
+      where: { id: id },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    try {
+      this.jwtService.verify(refreshToken, {
+        secret: jwtConstants.refresh,
+      });
+      return user;
+    } catch (error) {
+      if (error.name === 'JsonWebTokenError') {
+        throw new UnauthorizedException('Assinatura inválida');
+      }
+      if (error.name === 'TokenExpiredError') {
+        throw new UnauthorizedException('Token expirado');
+      }
+      throw new UnauthorizedException(error.name);
+    }
   }
 }

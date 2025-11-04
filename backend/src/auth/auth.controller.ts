@@ -27,6 +27,11 @@ export class AuthController {
     return await this.authService.login(body);
   }
 
+  @Post('refresh')
+  async refresh(@Body() body: {refresh_token: string}){
+    return this.authService.refresh(body);
+  }
+
   @UseGuards(AuthGuard)
   @Get('me')
   async getUser(@Request() req: auth.RequestWithUser) {
