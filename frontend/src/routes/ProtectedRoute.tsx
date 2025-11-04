@@ -6,15 +6,15 @@ export default function ProtectedRoute( {children}: {children: React.ReactNode})
     const {user, loading} = useContext(AuthContext);
     const navigate = useNavigate();
 
+    // Mostrar a tela de carregamento caso esteja carregando conteúdos de acordo com o authContext
     if(loading){
-        console.log("Carregando");
         return (
             <div>Carregando</div>
         )
     }
 
+    // Redirecionar para a tela de login 
     if(!user) {
-        console.log("Sem usuário")
         navigate('/login');
         return
     }

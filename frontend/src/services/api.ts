@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getToken } from "./authService";
+import { getRefreshToken, getToken } from "./authService";
 
 // Instanciar a origem das rquisições para a api
 const api = axios.create({

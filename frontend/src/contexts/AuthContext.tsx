@@ -13,6 +13,8 @@ export interface AuthContextProps {
   login: (user: LoginValues) => void;
   logout: () => void;
   loading: boolean;
+  refreshUser: () => Promise<boolean>;
+  verifyToken: () => Promise<boolean>;
 }
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -20,37 +22,64 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [accessToken, setAccessToken] = useState(
     localStorage.getItem("highClassShop") || ""
   );
+  const [refreshToken, setRefreshToken] = useState(
+    localStorage.getItem("RefreshHCS") || ""
+  );
   const [loading, setLoading] = useState<boolean>(true);
 
-  console.log("User sendo renderizado: ", user);
 
   // Verificar se há um token no navegador
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY);
 
-    if (!token) {
+    if (!token && !refreshToken) {
       setLoading(false);
       return;
     }
 
-    // Validar o token
-    const verifyToken = async () => {
-      try {
-        const response = await api.get<UserProps>("auth/me", {
-          withCredentials: true,
-        });
-        const data = response.data;
-        console.log("Usuário que será setado: ", data);
-        setUser(data);
-      } catch (error) {
-        console.log("Ocorreu esse erro na verificação do token: ", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     verifyToken();
   }, []);
+
+  // Validar o token
+  const verifyToken = async () => {
+    try {
+      const response = await api.get<UserProps>("auth/me", {
+        withCredentials: true,
+      });
+      const data = response.data;
+      console.log("Usuário que será setado: ", data);
+      setUser(data);
+      return true;
+    } catch (error) {
+      console.log("Ocorreu esse erro na verificação do token: ", error);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Criar o accessToken a partir do refreshToken
+  const refreshUser = async () => {
+    console.log("Fazendo o refresh");
+    try {
+      const response = await api.post(
+        "auth/refresh",
+        {
+          body: refreshToken,
+        },
+        { withCredentials: true }
+      );
+      const data = response.data;
+
+      setAccessToken(data.accessToken);
+      setUser(data.user);
+      setLoading(false);
+      return true;
+    } catch (error) {
+      setLoading(false);
+      return false;
+    }
+  };
 
   const login = async (user: LoginValues) => {
     //Verificar se o usuário já possui o accessToken de acesso
@@ -73,7 +102,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (data) {
         setUser(data.user);
         setAccessToken(data.accessToken);
+        setRefreshToken(data.refreshToken);
         localStorage.setItem("highClassShop", data.accessToken);
+        localStorage.setItem("RefreshHCS", data.refreshToken);
         setLoading(false);
         return data;
       }
@@ -90,11 +121,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logout = () => {
     setUser(null);
     setAccessToken("");
+    setRefreshToken("");
     localStorage.removeItem("highClassShop");
+    localStorage.removeItem("RefreshHCS");
   };
 
   return (
-    <AuthContext.Provider value={{ accessToken, user, login, logout, loading }}>
+    <AuthContext.Provider value={{ accessToken, user, login, logout, loading, refreshUser, verifyToken }}>
       <>{children}</>
     </AuthContext.Provider>
   );

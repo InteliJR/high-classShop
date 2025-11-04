@@ -29,11 +29,11 @@ export default function Login() {
     password: "",
   });
   // Submissão das informações dos formulário
-  const onSubmit: SubmitHandler<LoginValues> = () => {
+  const onSubmit: SubmitHandler<LoginValues> = async() => {
     if (input !== null) {
       try {
-        auth.login(input);
-        navigate("/catalog/aircrafts");
+        await auth.login(input);
+        navigate("/catalog/cars");
         return
       } catch (error) {
         console.log("Ocorreu esse erro no login: ", error);
