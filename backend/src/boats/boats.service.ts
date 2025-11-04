@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -12,10 +12,28 @@ import {
 
 @Injectable()
 export class BoatsService {
-  constructor(private prismaService: PrismaService) {}
+  constructor(private prismaService: PrismaService) { }
 
-  create(createBoatDto: CreateBoatDto) {
-    return 'This action adds a new boat';
+  create(data: {
+    marca: string;
+    modelo: string;
+    valor: number;
+    estado: string;
+    ano: number;
+    fabricante: string;
+    tamanho: string;
+    estilo: string;
+    combustivel: string;
+    motor: string;
+    ano_motor: number;
+    tipo_embarcacao: string;
+    descricao_completa: string;
+    acessorios: string;
+    specialist_id?: string;
+
+  }) {
+
+    return this.prismaService.boat.create({ data: data });
   }
 
   async getAllBoats({
@@ -74,15 +92,44 @@ export class BoatsService {
     };
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} boat`;
+  async findOne(id: number) {
+
+    const boat = await this.prismaService.boat.findUnique({ where: { id } });
+    if (!boat) {
+      throw new NotFoundException('Boat not found');
+    }
+    return { ...boat };
   }
 
-  update(id: number, updateBoatDto: UpdateBoatDto) {
-    return `This action updates a #${id} boat`;
+  async update(
+    id: number,
+    data: Partial<{
+      marca: string;
+      modelo: string;
+      valor: number;
+      estado: string;
+      ano: number;
+      fabricante: string;
+      tamanho: string;
+      estilo: string;
+      combustivel: string;
+      motor: string;
+      ano_motor: number;
+      tipo_embarcacao: string;
+      descricao_completa: string;
+      acessorios: string;
+      specialist_id?: string;
+    }>,
+  ) {
+    await this.findOne(id);
+
+    return this.prismaService.boat.update({ where: { id }, data: data });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} boat`;
+
+  async remove(id: number) {
+    await this.findOne(id);
+    await this.prismaService.boat.delete({ where: { id } });
+    return { ok: true };
   }
 }

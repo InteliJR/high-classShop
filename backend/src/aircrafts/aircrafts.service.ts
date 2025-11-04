@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateAircraftDto } from './dto/create-aircraft.dto';
 import { UpdateAircraftDto } from './dto/update-aircraft.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -12,11 +12,30 @@ import {
 
 @Injectable()
 export class AircraftsService {
-  constructor(private prismaService: PrismaService) {}
+  constructor(private prismaService: PrismaService) { }
 
-  create(createAircraftDto: CreateAircraftDto) {
-    return 'This action adds a new aircraft';
+  create(data: {
+    categoria: string;
+    ano: number;
+    marca: string;
+    modelo: string;
+    assentos: number;
+    estado: string;
+    descricao: string;
+    valor: number;
+    tipo_aeronave: string;
+    specialist_id?: string; 
+    images?: string;
+  }) {
+
+    return this.prismaService.aircraft.create({ data: data });
   }
+
+
+  // async create(data: CreateAircraftDto) {
+
+  //   return this.prismaService.aircraft.create( {data});
+  // }
 
   async getAllAircrafts({
     page,
@@ -78,15 +97,43 @@ export class AircraftsService {
     };
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} aircraft`;
+  async findOne(id: number) {
+    const aircraft = await this.prismaService.aircraft.findUnique({ where: { id } });
+    if (!aircraft) {
+      throw new NotFoundException('Car not found');
+    }
+    return { ...aircraft };
   }
 
-  update(id: number, updateAircraftDto: UpdateAircraftDto) {
-    return `This action updates a #${id} aircraft`;
+
+  // update(id: number, updateAircraftDto: UpdateAircraftDto) {
+  //   return `This action updates a #${id} aircraft`;
+  // }
+
+  async update(
+    id: number,
+    data: Partial<{
+      categoria: string;
+      ano: number;
+      marca: string;
+      modelo: string;
+      assentos: number;
+      estado: string;
+      descricao: string;
+      valor: number;
+      tipo_aeronave: string
+      specialist_id?: any | null;
+      images?: string;
+    }>,
+  ) {
+    await this.findOne(id);
+
+    return this.prismaService.aircraft.update({ where: { id }, data: data });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} aircraft`;
+  async remove(id: number) {
+    await this.findOne(id);
+    await this.prismaService.aircraft.delete({ where: { id } });
+    return { ok: true };
   }
 }
