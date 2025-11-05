@@ -99,7 +99,7 @@ export class AuthService {
   }
 
   //Criação do accessToken a partir do refreshToken
-  async refresh(body: { refreshToken: string }) {
+  async refresh(body: { refresh_token: string }) {
     const payload = await this.verifyRefreshToken(body);
     return this.generateToken(payload);
   }
@@ -115,8 +115,8 @@ export class AuthService {
     return { accessToken: accessToken, user: payload };
   }
   // Verificar se o refreshToken é válido
-  private async verifyRefreshToken(body: { refreshToken: string }) {
-    const refreshToken = body.refreshToken;
+  private async verifyRefreshToken(body: { refresh_token: string }) {
+    const refreshToken = body.refresh_token;
 
     if (!refreshToken) {
       throw new BadRequestException('Token não fornecido');
