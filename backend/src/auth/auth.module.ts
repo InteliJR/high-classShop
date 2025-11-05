@@ -5,7 +5,6 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthGuard } from './auth.guard';
-import { jwtConstants } from './constants';
 
 @Module({
   imports: [

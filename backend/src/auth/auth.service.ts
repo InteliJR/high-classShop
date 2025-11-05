@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -42,11 +43,7 @@ export class AuthService {
     });
 
     return {
-      id: user.id,
-      name: user.name,
-      surname: user.surname,
-      email: user.email,
-      role: user.role,
+      user: user,
     };
   }
 
@@ -97,53 +94,45 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
+      user: user,  
     };
   }
 
-  async generateToken (payload: any) {
-    console.log()
-    const accessToken = this.jwtService.sign(
-      {email: payload.email},
-      {
-        secret: jwtConstants.access,
-        expiresIn: '15m',
-      }
-    )
-
-    return {acess_token: accessToken, user: payload};
-  }
-
-  async refresh(body: { refresh_token: string }) {
+  //Criação do accessToken a partir do refreshToken
+  async refresh(body: { refreshToken: string }) {
     const payload = await this.verifyRefreshToken(body);
     return this.generateToken(payload);
   }
-
-  private async verifyRefreshToken(body: { refresh_token: string }) {
-    const refreshToken = body.refresh_token;
+  // Criação do accessToken e do usuário
+  async generateToken(payload: any) {
+    const accessToken = this.jwtService.sign(
+      { email: payload.email },
+      {
+        secret: jwtConstants.access,
+        expiresIn: '15m',
+      },
+    );
+    return { accessToken: accessToken, user: payload };
+  }
+  // Verificar se o refreshToken é válido
+  private async verifyRefreshToken(body: { refreshToken: string }) {
+    const refreshToken = body.refreshToken;
 
     if (!refreshToken) {
-      throw new NotFoundException('Usário não encontrado');
+      throw new BadRequestException('Token não fornecido');
     }
 
-    const id = this.jwtService.decode(refreshToken)['id'];
-    const user = await this.prismaService.user.findUnique({
-      where: { id: id },
-    });
-
-    if (!user) {
-      throw new NotFoundException('Usuário não encontrado');
-    }
-
+    // Verifica a autenticidade do refreshToken e busca o usuário
     try {
-      this.jwtService.verify(refreshToken, {
+      const payload = this.jwtService.verify(refreshToken, {
         secret: jwtConstants.refresh,
       });
+      const user = await this.prismaService.user.findUnique({
+        where: { id: payload.id },
+      });
+      if (!user) {
+        throw new NotFoundException('Usuário não encontrado');
+      }
       return user;
     } catch (error) {
       if (error.name === 'JsonWebTokenError') {

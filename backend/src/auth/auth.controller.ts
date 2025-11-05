@@ -3,9 +3,6 @@ import {
   Get,
   Post,
   Body,
-  Patch,
-  Param,
-  Delete,
   UseGuards,
   Request,
 } from '@nestjs/common';
@@ -19,17 +16,43 @@ export class AuthController {
 
   @Post('register')
   async register(@Body() body: auth.UserRegisterDto) {
-    return await this.authService.register(body);
+    const { user } = await this.authService.register(body);
+    return {
+      sucess: true,
+      message: 'Conta criada com sucesso',
+      data: {
+        user: user,
+      },
+    };
   }
 
   @Post('login')
   async login(@Body() body: auth.LoginDto) {
-    return await this.authService.login(body);
+    const { accessToken, refreshToken, user } =
+      await this.authService.login(body);
+    return {
+      sucess: true,
+      message: 'Login realizado com sucesso',
+      data: {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_in: 900,
+        user: user,
+      },
+    };
   }
 
   @Post('refresh')
-  async refresh(@Body() body: {refresh_token: string}){
-    return this.authService.refresh(body);
+  async refresh(@Body() body: { refreshToken: string }) {
+    const {accessToken} = await this.authService.refresh(body);
+    return {
+      success: true,
+      message: "Token renovado com sucesso",
+      data: {
+        access_token: accessToken,
+        expires_in: 900
+      }
+    }
   }
 
   @UseGuards(AuthGuard)
