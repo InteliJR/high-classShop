@@ -45,7 +45,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         withCredentials: true,
       });
       const data = response.data;
-      console.log("Usuário que será setado: ", data);
       setUser(data);
       return true;
     } catch (error) {
@@ -70,7 +69,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         },
         { withCredentials: true }
       );
-      const data = response.data;
+      const data = response.data.data;
       setAccessToken(data.access_token);
       localStorage.setItem("AccessHCS", data.access_token);
       setUser(data.user);
@@ -97,14 +96,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         },
         { withCredentials: true }
       );
-      const data = response.data;
+      const data = response.data.data;
       // Guarda as informações de login no navegador
       if (data) {
         setUser(data.user);
-        setAccessToken(data.accessToken);
-        setRefreshToken(data.refreshToken);
-        localStorage.setItem("AccessHCS", data.accessToken);
-        localStorage.setItem("RefreshHCS", data.refreshToken);
+        setAccessToken(data.access_token);
+        setRefreshToken(data.refresh_token);
+        localStorage.setItem("AccessHCS", data.access_token);
+        localStorage.setItem("RefreshHCS", data.refresh_token);
         setLoading(false);
         return data;
       }

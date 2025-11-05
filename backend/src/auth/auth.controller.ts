@@ -44,13 +44,14 @@ export class AuthController {
 
   @Post('refresh')
   async refresh(@Body() body: { refresh_token: string }) {
-    const {accessToken} = await this.authService.refresh(body);
+    const {accessToken, user} = await this.authService.refresh(body);
     return {
       success: true,
       message: "Token renovado com sucesso",
       data: {
         access_token: accessToken,
-        expires_in: 900
+        expires_in: 900,
+        user: user,
       }
     }
   }

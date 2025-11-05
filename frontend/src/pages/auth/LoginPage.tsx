@@ -25,7 +25,6 @@ export default function Login() {
   });
   // Submissão das informações dos formulário
   const onSubmit: SubmitHandler<LoginValues> = async (data) => {
-    console.log("data: ", data);
     try {
       await auth.login(data);
       navigate("/catalog/cars");
