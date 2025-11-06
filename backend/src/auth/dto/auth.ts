@@ -37,24 +37,7 @@ export class UserRegisterDto {
   consultant_id?: string;
   company_id?: string;
 }
-
-export class User {
-  password_hash: string;
-  name: string;
-  surname: string;
-  email: string;
-  cpf: string;
-  rg: string;
-  role: UserRole;
-  civil_state?: CivilState;
-  speciality?: SpecialityType;
-  identification_number?: string;
-  address_id?: string;
-  consultant_id?: string;
-  company_id?: string;
-}
-
-export class LoginDto {
+ export class LoginDto {
   email: string;
   password: string;
 }

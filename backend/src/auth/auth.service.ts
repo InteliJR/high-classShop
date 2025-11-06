@@ -6,9 +6,10 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { ApiResponseDto, LoginDto, User, UserRegisterDto } from './dto/auth';
+import { ApiResponseDto, LoginDto, UserRegisterDto } from './dto/auth';
 import * as bcrypt from 'bcrypt';
 import { jwtConstants } from './constants';
+import { UserEntity } from './entities/user.entity';
 
 @Injectable()
 export class AuthService {
@@ -72,11 +73,10 @@ export class AuthService {
 
     // Criação do token de acesso
     const payloadAccess = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
+      sub: user.id,
+      email: user.email
     };
+
     const accessToken = await this.jwtService.signAsync(payloadAccess, {
       expiresIn: '15m',
       secret: jwtConstants.access,
@@ -84,7 +84,7 @@ export class AuthService {
 
     // Criação do refresh token
     const payloadRefresh = {
-      id: user.id,
+      sub: user.id,
     };
     const refreshToken = await this.jwtService.signAsync(payloadRefresh, {
       expiresIn: '7d',
@@ -94,7 +94,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: user,  
+      user: new UserEntity(user),  
     };
   }
 
@@ -119,7 +119,7 @@ export class AuthService {
     const refreshToken = body.refresh_token;
 
     if (!refreshToken) {
-      throw new BadRequestException('Token não fornecido');
+      throw new BadRequestException('Bad Request');
     }
 
     // Verifica a autenticidade do refreshToken e busca o usuário
@@ -131,15 +131,15 @@ export class AuthService {
         where: { id: payload.id },
       });
       if (!user) {
-        throw new NotFoundException('Usuário não encontrado');
+        throw new NotFoundException('Not found');
       }
       return user;
     } catch (error) {
       if (error.name === 'JsonWebTokenError') {
-        throw new UnauthorizedException('Assinatura inválida');
+        throw new UnauthorizedException('Unauthorized');
       }
       if (error.name === 'TokenExpiredError') {
-        throw new UnauthorizedException('Token expirado');
+        throw new UnauthorizedException('Unauthorized');
       }
       throw new UnauthorizedException(error.name);
     }
