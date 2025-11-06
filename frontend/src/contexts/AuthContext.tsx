@@ -27,12 +27,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
 
-    if (!token) {
-      refreshUser();
-      return;
-    }
+    const init = async () => {
+      if (!token) {
+        const refreshed = await refreshUser();
+        if(!refreshed){
+          setLoading(false);
+          return;
+        }
+      }
+      await verifyToken();
+      setLoading(false);
+    };
 
-    verifyToken();
+    init();
   }, []);
 
   // Validar o token
@@ -59,7 +66,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Criar o accessToken a partir do refreshToken
   const refreshUser = async () => {
     try {
-      const response = await api.post("auth/refresh", {}, { withCredentials: true });
+      const response = await api.post(
+        "auth/refresh",
+        {},
+        { withCredentials: true }
+      );
       const data = response.data.data;
       setAccessToken(data.access_token);
       localStorage.setItem("accessToken", data.access_token);
