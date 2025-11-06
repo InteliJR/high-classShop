@@ -34,6 +34,24 @@ export default function NewCompanyForm({ onSuccess, companyToEdit }: NewCompanyF
   }, [companyToEdit]);
 
   /**
+   * Converte um arquivo File para base64 string.
+   * Necessário para enviar a imagem do logo como JSON para o backend.
+   */
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove o prefixo "data:image/...;base64," para enviar apenas o base64
+        const base64String = result.split(',')[1];
+        resolve(base64String);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  /**
    * Função chamada quando o utilizador clica no botão "Salvar Escritório".
    * É responsável por validar, preparar e enviar os dados para a API.
    * Suporta tanto criação quanto edição de empresas.
@@ -53,9 +71,13 @@ export default function NewCompanyForm({ onSuccess, companyToEdit }: NewCompanyF
         // Modo de edição
         await updateCompany(companyToEdit.id, { name, cnpj });
       } else {
-        // Modo de criação - envia como JSON
-        console.log("Enviando dados:", { name, cnpj });
-        await createCompany({ name, cnpj });
+        // Modo de criação - converte logo para base64 se existir
+        let logoBase64: string | undefined;
+        if (logo) {
+          logoBase64 = await fileToBase64(logo);
+        }
+
+        await createCompany({ name, cnpj, logo: logoBase64 });
       }
       onSuccess();
     } catch (err) {

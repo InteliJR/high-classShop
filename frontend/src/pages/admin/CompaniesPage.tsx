@@ -109,9 +109,9 @@ export default function CompaniesPage() {
               className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6 rounded-lg shadow-sm bg-white"
             >
               <div className="flex items-center gap-3">
-                {company.logoUrl ? (
+                {company.logo ? (
                   <img
-                    src={company.logoUrl}
+                    src={`data:image/png;base64,${company.logo}`}
                     alt={company.name}
                     className="h-8 w-24 object-contain"
                   />
