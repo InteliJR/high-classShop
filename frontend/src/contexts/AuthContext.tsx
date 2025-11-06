@@ -19,19 +19,16 @@ export interface AuthContextProps {
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<UserProps | null>(null);
   const [accessToken, setAccessToken] = useState(
-    localStorage.getItem("AccessHCS") || ""
-  );
-  const [refreshToken, setRefreshToken] = useState(
-    localStorage.getItem("RefreshHCS") || ""
+    localStorage.getItem("acessToken") || ""
   );
   const [loading, setLoading] = useState<boolean>(true);
 
   // Verificar se há um token no navegador
   useEffect(() => {
-    const token = localStorage.getItem("AccessHCS");
+    const token = localStorage.getItem("accessToken");
 
-    if (!token && !refreshToken) {
-      setLoading(false);
+    if (!token) {
+      refreshUser();
       return;
     }
 
@@ -49,7 +46,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return true;
     } catch (error) {
       // Tentar conseguir o accessToken a partir do refreshToken caso ele exista
-      if (refreshToken) {
+      if (accessToken !== "") {
         return await refreshUser();
       }
       console.log("Ocorreu o seguinte erro na verificação do token: ", error);
@@ -62,16 +59,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Criar o accessToken a partir do refreshToken
   const refreshUser = async () => {
     try {
-      const response = await api.post(
-        "auth/refresh",
-        {
-          refresh_token: refreshToken,
-        },
-        { withCredentials: true }
-      );
+      const response = await api.post("auth/refresh", {}, { withCredentials: true });
       const data = response.data.data;
       setAccessToken(data.access_token);
-      localStorage.setItem("AccessHCS", data.access_token);
+      localStorage.setItem("accessToken", data.access_token);
       setUser(data.user);
       return true;
     } catch (error) {
@@ -101,9 +92,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (data) {
         setUser(data.user);
         setAccessToken(data.access_token);
-        setRefreshToken(data.refresh_token);
-        localStorage.setItem("AccessHCS", data.access_token);
-        localStorage.setItem("RefreshHCS", data.refresh_token);
+        localStorage.setItem("accessToken", data.access_token);
         setLoading(false);
         return data;
       }
@@ -120,9 +109,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logout = () => {
     setUser(null);
     setAccessToken("");
-    setRefreshToken("");
-    localStorage.removeItem("AccessHCS");
-    localStorage.removeItem("RefreshHCS");
+    localStorage.setItem("accessToken", "");
   };
 
   return (

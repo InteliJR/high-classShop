@@ -5,6 +5,7 @@ import Catalog from "../pages/Catalog";
 import Login from "../pages/auth/LoginPage";
 import { AuthProvider } from "../contexts/AuthContext";
 import ProtectedRoute from "./ProtectedRoute";
+import { CookiesProvider } from "react-cookie";
 
 export default function RouterApp() {
   const routerApp = createBrowserRouter([
@@ -13,22 +14,26 @@ export default function RouterApp() {
       path: "/catalog/:category",
       element: (
         <MainLayout>
-          <AuthProvider>
-            <ProtectedRoute>
-              {" "}
-              <Catalog />{" "}
-            </ProtectedRoute>
-          </AuthProvider>
+          <CookiesProvider>
+            <AuthProvider>
+              <ProtectedRoute>
+                {" "}
+                <Catalog />{" "}
+              </ProtectedRoute>
+            </AuthProvider>
+          </CookiesProvider>
         </MainLayout>
       ),
     },
     {
       path: "/login",
       element: (
-        <AuthProvider>
-          {" "}
-          <Login />{" "}
-        </AuthProvider>
+        <CookiesProvider>
+          <AuthProvider>
+            {" "}
+            <Login />{" "}
+          </AuthProvider>
+        </CookiesProvider>
       ),
     },
   ]);
