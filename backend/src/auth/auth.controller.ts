@@ -4,8 +4,9 @@ import {
   Post,
   Body,
   UseGuards,
-  Request,
   Res,
+  Req,
+  Request,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import * as auth from './dto/auth';
@@ -38,9 +39,9 @@ export class AuthController {
     
     response.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-      path: '/auth/refresh',
+      secure: true, // Trocar para true quando deployar
+      sameSite: 'strict', // Trocar para strict quando deployar
+      path: '/auth/refresh/',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
     });
 
@@ -55,21 +56,22 @@ export class AuthController {
   }
 
   @Post('refresh')
-  async refresh(@Body() body: { refresh_token: string }) {
-    const { accessToken, user } = await this.authService.refresh(body);
+  async refresh(@Req() request: express.Request) {
+    const refreshToken = request.cookies.refreshToken;
+    const accessToken = await this.authService.refresh(refreshToken);
+
     return {
       success: true,
       message: 'Token renovado com sucesso',
       data: {
         access_token: accessToken,
         expires_in: 900,
-        user: user,
       },
     };
   }
 
-  @UseGuards(AuthGuard)
   @Get('me')
+  @UseGuards(AuthGuard)
   async getUser(@Request() req: auth.RequestWithUser) {
     return req.user;
   }

@@ -71,21 +71,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Criação do token de acesso
-    const payloadAccess = {
-      sub: user.id,
-      email: user.email
-    };
-
-    const accessToken = await this.jwtService.signAsync(payloadAccess, {
-      expiresIn: '15m',
-      secret: jwtConstants.access,
-    });
+    // Criação do token de acesss
+    const accessToken = await this.generateAccessToken(user);
 
     // Criação do refresh token
     const payloadRefresh = {
       sub: user.id,
     };
+
     const refreshToken = await this.jwtService.signAsync(payloadRefresh, {
       expiresIn: '7d',
       secret: jwtConstants.refresh,
@@ -99,42 +92,50 @@ export class AuthService {
   }
 
   //Criação do accessToken a partir do refreshToken
-  async refresh(body: { refresh_token: string }) {
-    const payload = await this.verifyRefreshToken(body);
-    return this.generateToken(payload);
+  async refresh( refresh_token : string): Promise<string> {
+    const payload = await this.verifyRefreshToken(refresh_token);
+    return this.generateAccessToken(payload);
   }
+
   // Criação do accessToken e do usuário
-  async generateToken(payload: any) {
-    const accessToken = this.jwtService.sign(
-      { email: payload.email },
+  async generateAccessToken(user: UserEntity) {
+    const accessToken = this.jwtService.signAsync(
+      { sub: user.id , email: user.email },
       {
         secret: jwtConstants.access,
         expiresIn: '15m',
       },
     );
-    return { accessToken: accessToken, user: payload };
+
+    return accessToken;
   }
+
   // Verificar se o refreshToken é válido
-  private async verifyRefreshToken(body: { refresh_token: string }) {
-    const refreshToken = body.refresh_token;
+  private async verifyRefreshToken(refresh_token : string) {
+    const refreshToken = refresh_token;
 
     if (!refreshToken) {
-      throw new BadRequestException('Bad Request');
-    }
+       throw new UnauthorizedException('Unauthorized');
+     }
 
     // Verifica a autenticidade do refreshToken e busca o usuário
     try {
       const payload = this.jwtService.verify(refreshToken, {
         secret: jwtConstants.refresh,
       });
+
       const user = await this.prismaService.user.findUnique({
-        where: { id: payload.id },
+        where: { id: payload.sub },
       });
+
       if (!user) {
         throw new NotFoundException('Not found');
       }
+
       return user;
     } catch (error) {
+      console.error(error);
+
       if (error.name === 'JsonWebTokenError') {
         throw new UnauthorizedException('Unauthorized');
       }
