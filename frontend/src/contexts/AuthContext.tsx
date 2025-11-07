@@ -1,13 +1,14 @@
 import { createContext, useEffect, useState } from "react";
 import type { LoginValues, UserProps } from "../types/types";
 import api from "../services/api";
+import { useAuth } from "../store/authStateManager";
 
 export const AuthContext = createContext<AuthContextProps>(
   {} as AuthContextProps
 );
 
 export interface AuthContextProps {
-  accessToken: string;
+  accessToken: string | null;
   user: UserProps | null;
   login: (user: LoginValues) => void;
   logout: () => void;
@@ -17,20 +18,25 @@ export interface AuthContextProps {
 }
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<UserProps | null>(null);
-  const [accessToken, setAccessToken] = useState(
-    localStorage.getItem("acessToken") || ""
-  );
   const [loading, setLoading] = useState<boolean>(true);
+
+  const accessToken = useAuth((state) => state.accessToken);
+  const user = useAuth((state) => state.user);
+
+  const setAccessToken = useAuth((state) => state.setAccessToken);
+  const setUser = useAuth((state) => state.setUser);
+
+  const clearAccessToken = useAuth((state) => state.clearAccessToken);
+  const clearUser = useAuth((state) => state.clearUser);
+
 
   // Verificar se há um token no navegador
   useEffect(() => {
-    const token = localStorage.getItem("accessToken");
-
     const init = async () => {
+      const token = useAuth.getState().accessToken;
       if (!token) {
         const refreshed = await refreshUser();
-        if(!refreshed){
+        if (!refreshed) {
           setLoading(false);
           return;
         }
@@ -53,13 +59,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return true;
     } catch (error) {
       // Tentar conseguir o accessToken a partir do refreshToken caso ele exista
-      if (accessToken !== "") {
+      if (accessToken) {
         return await refreshUser();
       }
       console.log("Ocorreu o seguinte erro na verificação do token: ", error);
       return false;
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -73,7 +77,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       );
       const data = response.data.data;
       setAccessToken(data.access_token);
-      localStorage.setItem("accessToken", data.access_token);
       setUser(data.user);
       return true;
     } catch (error) {
@@ -83,11 +86,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Possibilitar o login na plataforma
   const login = async (user: LoginValues) => {
-    //Verificar se o usuário já possui o accessToken de acesso
-    if (accessToken !== "") {
-      setLoading(false);
-      return;
-    }
     try {
       // Realizar o login fazendo a req para o backend
       const response: any = await api.post(
@@ -103,24 +101,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (data) {
         setUser(data.user);
         setAccessToken(data.access_token);
-        localStorage.setItem("accessToken", data.access_token);
-        setLoading(false);
         return data;
       }
-      setLoading(false);
       throw new Error(response.statusText);
     } catch (error) {
-      setLoading(false);
       console.error("Ocorreu um erro durante o login: ", error);
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
   // Logout do usuário
   const logout = () => {
-    setUser(null);
-    setAccessToken("");
-    localStorage.setItem("accessToken", "");
+    clearAccessToken();
+    clearUser();
   };
 
   return (

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { useAuth } from "../store/authStateManager";
 
 // Instanciar a origem das rquisições para a api
 const api = axios.create({
@@ -9,7 +10,7 @@ const api = axios.create({
 
 // Adiciona token de acesso no header das requisições
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
+  const token = useAuth.getState().accessToken;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
