@@ -41,7 +41,7 @@ export class AuthController {
       httpOnly: true,
       secure: true, // Trocar para true quando deployar
       sameSite: 'strict', // Trocar para strict quando deployar
-      path: '/auth/refresh/',
+      path: '/auth/refresh',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
     });
 
