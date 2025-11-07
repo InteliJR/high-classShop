@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { UserProps } from "../types/types";
+import api from "../services/api";
 
 interface AuthState {
   accessToken: string | null;
@@ -8,6 +9,7 @@ interface AuthState {
   user: UserProps | null;
   setUser: (user: UserProps | null) => void;
   clearUser: () => void;
+  refresh: () => Promise<void>;
 }
 
 export const useAuth = create<AuthState>((set) => ({
@@ -29,5 +31,17 @@ export const useAuth = create<AuthState>((set) => ({
 
   clearUser: () => {
     set({ user: null });
+  },
+
+  refresh: async() => {
+    try{
+        const response = await api.post('auth/refresh', {}, {withCredentials: true});
+        const accessToken = response.data.data.access_token;
+        set({accessToken: accessToken});
+
+    } catch {
+        set({accessToken: null});
+
+    }
   },
 }));
