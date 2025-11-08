@@ -13,6 +13,8 @@ import * as auth from './dto/auth';
 import { AuthGuard } from './auth.guard';
 import express from 'express';
 import { Public } from 'src/utils/decorators/public.decorator';
+import { RateLimit } from 'src/utils/decorators/rate-limit.decorator';
+import { RateLimitGuard } from 'src/utils/guards/rate-limit.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -32,6 +34,8 @@ export class AuthController {
   }
 
   @Public()
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ windowMs: 900, max: 5 }) // 5 attempts per 15 minutes
   @Post('login')
   async login(
     @Body() body: auth.LoginDto,
