@@ -1,11 +1,14 @@
 import { useContext, useEffect } from "react";
 import { AuthContext } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
+import type { UserRole } from "../types/types";
 
 export default function ProtectedRoute({
   children,
+  allowedRoles,
 }: {
   children: React.ReactNode;
+  allowedRoles?: UserRole[];
 }) {
   const { user, loading } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -15,7 +18,11 @@ export default function ProtectedRoute({
     if (!user && !loading) {
       navigate("/login");
     }
-  }, [loading, user]);
+    // Verificar se o usuário tem permissão para acessar a rota
+    if (user && !loading && allowedRoles && !allowedRoles.includes(user.role)) {
+      navigate("/catalog/cars");
+    }
+  }, [loading, user, allowedRoles, navigate]);
 
   // Indicar visualmente que está carregando a página
   if (loading) {
@@ -24,6 +31,10 @@ export default function ProtectedRoute({
   // Indicar visualmente que está redirecionando a página
   if (!user && !loading) {
     return <div>Redirecionando...</div>;
+  }
+  // Verificar se o usuário tem permissão para acessar a rota
+  if (user && allowedRoles && !allowedRoles.includes(user.role)) {
+    return <div>Acesso negado...</div>;
   }
 
   // Retorna a página normalmente caso o usuário exista e não esteja carregando
