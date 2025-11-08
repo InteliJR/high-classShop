@@ -62,7 +62,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (accessToken) {
         return await refreshUser();
       }
-      console.log("Ocorreu o seguinte erro na verificação do token: ", error);
+
       return false;
     }
   };

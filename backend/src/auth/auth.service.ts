@@ -134,8 +134,6 @@ export class AuthService {
 
       return user;
     } catch (error) {
-      console.error(error);
-
       if (error.name === 'JsonWebTokenError') {
         throw new UnauthorizedException('Unauthorized');
       }

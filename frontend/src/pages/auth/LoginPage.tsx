@@ -24,7 +24,7 @@ export default function Login() {
     },
   });
   // Submissão das informações dos formulário
-  const onSubmit: SubmitHandler<LoginValues> = async (data) => {
+  const onSubmit: SubmitHandler<LoginValues> = async (data: LoginValues) => {
     try {
       await auth.login(data);
       navigate("/catalog/cars");
@@ -34,9 +34,9 @@ export default function Login() {
     }
     alert("Informações incorretas");
   };
+  
   // Lidar com os erros
-  const onError: SubmitErrorHandler<LoginValues> = (errors) =>
-    console.log(errors);
+  const onError: SubmitErrorHandler<LoginValues> = (errors: any) => console.log(errors);
 
   return (
     <div className=" sm:absolute w-screen h-screen flex flex-col sm:justify-between sm:items-center sm:flex-row-reverse">
