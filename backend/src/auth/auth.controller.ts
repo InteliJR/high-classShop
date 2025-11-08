@@ -63,9 +63,22 @@ export class AuthController {
   }
 
   @Post('refresh')
-  async refresh(@Req() request: express.Request) {
+  async refresh(
+    @Req() request: express.Request,
+    @Res({ passthrough: true }) response: express.Response,
+  ) {
     const refreshToken = request.cookies.refreshToken;
-    const { accessToken, user } = await this.authService.refresh(refreshToken);
+    const { accessToken, refreshToken: newRefreshToken, user } = 
+      await this.authService.refresh(refreshToken);
+
+    // Set new refresh token cookie
+    response.cookie('refreshToken', newRefreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      path: '/auth/refresh',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
+    });
 
     return {
       success: true,
@@ -82,5 +95,26 @@ export class AuthController {
   @UseGuards(AuthGuard)
   async getUser(@Request() req: auth.RequestWithUser) {
     return req.user;
+  }
+
+  @Post('logout')
+  @UseGuards(AuthGuard)
+  async logout(
+    @Req() request: express.Request,
+    @Res({ passthrough: true }) response: express.Response,
+  ) {
+    const refreshToken = request.cookies.refreshToken;
+    
+    if (refreshToken) {
+      await this.authService.logout(refreshToken);
+    }
+
+    // Clear cookie
+    response.clearCookie('refreshToken', { path: '/auth/refresh' });
+
+    return {
+      success: true,
+      message: 'Logout realizado com sucesso',
+    };
   }
 }

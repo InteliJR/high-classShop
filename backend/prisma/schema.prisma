@@ -78,6 +78,19 @@ model User {
   car_interests            Car_interest[]
   boat_interests           Boat_interest[]
   aircraft_interests       Aircraft_interest[]
+  refreshTokens            RefreshToken[]
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  token      String   @unique
+  user_id    String   @db.Uuid
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  @@index([user_id])
+  @@index([token])
 }
 
 model Address {

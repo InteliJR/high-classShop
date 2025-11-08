@@ -75,15 +75,8 @@ export class AuthService {
     // Criação do token de acesss
     const accessToken = await this.generateAccessToken(user);
 
-    // Criação do refresh token
-    const payloadRefresh = {
-      sub: user.id,
-    };
-
-    const refreshToken = await this.jwtService.signAsync(payloadRefresh, {
-      expiresIn: '7d',
-      secret: jwtConstants.refresh,
-    });
+    // Criação do refresh token com rotation
+    const refreshToken = await this.createRefreshToken(user.id);
 
     return {
       accessToken,
@@ -93,13 +86,49 @@ export class AuthService {
   }
 
   //Criação do accessToken a partir do refreshToken
-  async refresh( refresh_token : string): Promise<{ accessToken: string; user: UserEntity }> {
+  async refresh( refresh_token : string): Promise<{ accessToken: string; refreshToken: string; user: UserEntity }> {
     const user = await this.verifyRefreshToken(refresh_token);
+    
+    // Invalidate old refresh token
+    await this.prismaService.refreshToken.delete({
+      where: { token: refresh_token },
+    });
+
+    // Create new refresh token (rotation)
+    const newRefreshToken = await this.createRefreshToken(user.id);
     const accessToken = await this.generateAccessToken(user);
+    
     return {
       accessToken,
+      refreshToken: newRefreshToken,
       user: new UserEntity(user),
     };
+  }
+
+  // Criar refresh token e salvar no banco
+  private async createRefreshToken(userId: string): Promise<string> {
+    const payloadRefresh = {
+      sub: userId,
+    };
+
+    const refreshToken = await this.jwtService.signAsync(payloadRefresh, {
+      expiresIn: '7d',
+      secret: jwtConstants.refresh,
+    });
+
+    // Salvar no banco
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 dias
+
+    await this.prismaService.refreshToken.create({
+      data: {
+        token: refreshToken,
+        user_id: userId,
+        expires_at: expiresAt,
+      },
+    });
+
+    return refreshToken;
   }
 
   // Criação do accessToken e do usuário
@@ -129,6 +158,25 @@ export class AuthService {
         secret: jwtConstants.refresh,
       });
 
+      // Verificar se o token existe no banco
+      const tokenRecord = await this.prismaService.refreshToken.findUnique({
+        where: { token: refreshToken },
+        include: { user: true },
+      });
+
+      if (!tokenRecord) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      // Verificar se o token expirou
+      if (new Date() > tokenRecord.expires_at) {
+        // Remove token expirado
+        await this.prismaService.refreshToken.delete({
+          where: { token: refreshToken },
+        });
+        throw new UnauthorizedException('Refresh token expired');
+      }
+
       const user = await this.prismaService.user.findUnique({
         where: { id: payload.sub },
       });
@@ -146,6 +194,17 @@ export class AuthService {
         throw new UnauthorizedException('Unauthorized');
       }
       throw new UnauthorizedException(error.name);
+    }
+  }
+
+  // Logout - remover refresh token do banco
+  async logout(refreshToken: string): Promise<void> {
+    try {
+      await this.prismaService.refreshToken.delete({
+        where: { token: refreshToken },
+      });
+    } catch (error) {
+      // Token não encontrado, já foi removido ou inválido - não precisa fazer nada
     }
   }
 }
