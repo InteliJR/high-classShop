@@ -30,13 +30,14 @@ export default function Login() {
       navigate("/catalog/cars");
       return;
     } catch (error) {
-      console.log("Ocorreu esse erro no login: ", error);
+      alert("Informações incorretas");
     }
-    alert("Informações incorretas");
   };
-  
+
   // Lidar com os erros
-  const onError: SubmitErrorHandler<LoginValues> = (errors: any) => console.log(errors);
+  const onError: SubmitErrorHandler<LoginValues> = () => {
+    // Validation errors handled by react-hook-form
+  };
 
   return (
     <div className=" sm:absolute w-screen h-screen flex flex-col sm:justify-between sm:items-center sm:flex-row-reverse">
