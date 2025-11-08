@@ -35,13 +35,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const init = async () => {
       const token = useAuth.getState().accessToken;
       if (!token) {
-        const refreshed = await refreshUser();
-        if (!refreshed) {
-          setLoading(false);
-          return;
-        }
+        await refreshUser();
+      } else {
+        await verifyToken();
       }
-      await verifyToken();
       setLoading(false);
     };
 
