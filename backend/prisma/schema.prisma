@@ -22,7 +22,7 @@ enum CivilState {
   MARRIED @map("MARRIED")
   DIVORCED @map("DIVORCED")
   WIDOWED @map("WIDOWED")
-  SEPARATED @map("SEPARETED")
+  SEPARATED @map("SEPARATED")
   STABLE_UNION @map("STABLE_UNION")
 }
 
