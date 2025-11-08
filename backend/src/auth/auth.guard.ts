@@ -27,13 +27,15 @@ export class AuthGuard implements CanActivate {
       context.getClass()
     ])
 
+    if (isPublic) {
+      return true;
+    }
+
     const request = context.switchToHttp().getRequest<any>();
     const token = this.extractTokenFromHeader(request);
     if (!token) {
       throw new UnauthorizedException('Unauthorized');
     }
-
-    // TODO: Desenvolver uma maneira de caso não tenha accessToken ele verifique o refreshToken e atualize o token anterior
     
     try {
       const payload = await this.jwtService.verifyAsync(token, {
