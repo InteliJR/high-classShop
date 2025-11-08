@@ -95,7 +95,7 @@ export interface Product {
 
 // Usuários
 export type UserRole = 'CUSTOMER' |'CONSULTANT' |'SPECIALIST' |'ADMIN';
-export type CivilState = 'SINGLE' |'MARRIED' |'DIVORCIED' |'WIDOWED' |'SEPARETED' |'STABLE_UNION' ;
+export type CivilState = 'SINGLE' |'MARRIED' |'DIVORCED' |'WIDOWED' |'SEPARATED' |'STABLE_UNION' ;
 export type SpecialityType = 'CAR' |'BOAT' |'AIRCRAFT';
 
 export interface UserProps {
@@ -111,6 +111,8 @@ export interface UserProps {
   identification_number?: string;
   address_id?: string;
   consultant_id?: string;
+  company_id?: string;
+  created_at?: Date;
 }
 
 // Tipgem das informações de login
