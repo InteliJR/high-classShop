@@ -8,34 +8,43 @@ import {
   Param,
   HttpCode,
   HttpStatus,
-  Headers,
+  Request,
+  UseGuards,
 } from '@nestjs/common';
 import { ConsultantService } from './consultant.service';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SendInvitationDto } from './dto/send-invitation.dto';
 import { ApiResponseDto } from '../shared/dto/api-response.dto';
 import { ClientEntity } from './entity/client.entity';
+import { AuthGuard } from '../auth/auth.guard';
+import * as auth from '../auth/dto/auth';
 
 @Controller('consultant')
+@UseGuards(AuthGuard)
 export class ConsultantController {
   constructor(private readonly consultantService: ConsultantService) {}
 
   /**
+   * Helper method to validate UUID format
+   */
+  private isValidUUID(uuid: string): boolean {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuid);
+  }
+
+  /**
    * GET /api/consultant/clients
    * List all clients for the authenticated consultant
-   * 
-   * TODO: Replace x-consultant-id header with actual JWT authentication
-   * Once authentication is implemented, extract consultant_id from JWT token
    */
   @Get('clients')
-  async findAllClients(
-    @Headers('x-consultant-id') consultantId: string,
-  ): Promise<ApiResponseDto<ClientEntity[], any>> {
-    // TODO: Remove this validation once JWT is implemented
-    if (!consultantId) {
+  async findAllClients(@Request() req: auth.RequestWithUser): Promise<ApiResponseDto<ClientEntity[], any>> {
+    const consultantId = req.user.id;
+
+    // Validate UUID format
+    if (!this.isValidUUID(consultantId)) {
       return {
         sucess: false,
-        message: 'ID do assessor não fornecido. Use o header x-consultant-id temporariamente.',
+        message: 'ID do assessor inválido. Deve ser um UUID válido.',
         data: [],
       };
     }
@@ -52,20 +61,20 @@ export class ConsultantController {
   /**
    * POST /api/consultant/invite
    * Send a registration/referral link to a potential client
-   * 
-   * TODO: Replace x-consultant-id header with actual JWT authentication
    */
   @Post('invite')
   @HttpCode(HttpStatus.OK)
   async sendInvitation(
-    @Headers('x-consultant-id') consultantId: string,
+    @Request() req: auth.RequestWithUser,
     @Body() sendInvitationDto: SendInvitationDto,
   ): Promise<ApiResponseDto<any, any>> {
-    // TODO: Remove this validation once auth is implemented
-    if (!consultantId) {
+    const consultantId = req.user.id;
+
+    // Validate UUID format
+    if (!this.isValidUUID(consultantId)) {
       return {
         sucess: false,
-        message: 'ID do assessor não fornecido. Use o header x-consultant-id temporariamente.',
+        message: 'ID do assessor inválido. Deve ser um UUID válido.',
         data: null,
       };
     }
@@ -88,20 +97,28 @@ export class ConsultantController {
   /**
    * PUT /api/consultant/clients/:id
    * Update an existing client belonging to the authenticated consultant
-   * 
-   * TODO: Replace x-consultant-id header with actual JWT authentication
    */
   @Put('clients/:id')
   async updateClient(
-    @Headers('x-consultant-id') consultantId: string,
+    @Request() req: auth.RequestWithUser,
     @Param('id') clientId: string,
     @Body() updateClientDto: UpdateClientDto,
   ): Promise<ApiResponseDto<ClientEntity, any>> {
-    // TODO: Remove this validation once JWT is implemented
-    if (!consultantId) {
+    const consultantId = req.user.id;
+
+    // Validate UUID formats
+    if (!this.isValidUUID(consultantId)) {
       return {
         sucess: false,
-        message: 'ID do assessor não fornecido. Use o header x-consultant-id temporariamente.',
+        message: 'ID do assessor inválido. Deve ser um UUID válido.',
+        data: null as any,
+      };
+    }
+
+    if (!this.isValidUUID(clientId)) {
+      return {
+        sucess: false,
+        message: 'ID do cliente inválido. Deve ser um UUID válido.',
         data: null as any,
       };
     }
@@ -122,20 +139,28 @@ export class ConsultantController {
   /**
    * DELETE /api/consultant/clients/:id
    * Remove a client belonging to the authenticated consultant
-   * 
-   * TODO: Replace x-consultant-id header with actual JWT authentication
    */
   @Delete('clients/:id')
   @HttpCode(HttpStatus.OK)
   async removeClient(
-    @Headers('x-consultant-id') consultantId: string,
+    @Request() req: auth.RequestWithUser,
     @Param('id') clientId: string,
   ): Promise<ApiResponseDto<any, any>> {
-    // TODO: Remove this validation once JWT is implemented
-    if (!consultantId) {
+    const consultantId = req.user.id;
+
+    // Validate UUID formats
+    if (!this.isValidUUID(consultantId)) {
       return {
         sucess: false,
-        message: 'ID do assessor não fornecido. Use o header x-consultant-id temporariamente.',
+        message: 'ID do assessor inválido. Deve ser um UUID válido.',
+        data: null,
+      };
+    }
+
+    if (!this.isValidUUID(clientId)) {
+      return {
+        sucess: false,
+        message: 'ID do cliente inválido. Deve ser um UUID válido.',
         data: null,
       };
     }

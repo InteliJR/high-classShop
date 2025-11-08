@@ -1,6 +1,6 @@
 // Página de gestão de escritórios, com listagem, criação e exclusão.
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   getCompanies,
   deleteCompany,

@@ -9,6 +9,8 @@ import {
   Length,
   Matches
 } from 'class-validator';
+import { UserEntity } from '../entities/user.entity';
+import { $Enums } from '@prisma/client';
 
 // Tipos para login e registro de usuários
 export enum UserRole {
@@ -111,5 +113,5 @@ export class ApiResponseDto<D, M, ED> {
 
 // Retorno do AuthGuard
 export interface RequestWithUser extends Request {
-  user: UserRegisterDto;
+  user: UserEntity;
 }

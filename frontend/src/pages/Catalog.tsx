@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import ProductCard from "../components/ProductCard.tsx";
 import { useParams } from "react-router-dom";
 import { getCars } from "../services/cars.service.ts";
 import { getBoats } from "../services/boats.service.ts";
@@ -36,18 +35,17 @@ export default function Catalog() {
       try {
         let data: Product[] = [];
         let pagination: PaginationMeta | null = null;
-        let filters: FiltersMeta<FiltersCarMeta> | FiltersMeta<FiltersBoatsMeta> |  FiltersMeta<FiltersAircraftsMeta>| null = null;
         switch (category) {
           case "cars":
-            ({ cars: data, pagination, filters } = await getCars(page));
+            ({ cars: data, pagination } = await getCars(page));
             break;
 
           case "boats":
-            ({ boats: data, pagination, filters } = await getBoats(page));
+            ({ boats: data, pagination } = await getBoats(page));
             break;
 
           case "aircrafts":
-            ({ aircrafts: data, pagination, filters } = await getAircrafts(page));
+            ({ aircrafts: data, pagination } = await getAircrafts(page));
             break;
 
           default:
@@ -107,9 +105,9 @@ export default function Catalog() {
       {/* Apresentação dos produtos */}
       {products.length > 0 ? (
         <div className="grid grid-cols-4 gap-x-4 gap-y-10 min-h-screen">
-          {products.map((element) => (
-            <ProductCard key={element.id} {...element} />
-          ))}
+          {/* {products.map((element) => (
+            <ProductDetails key={element.id} {...element} />
+          ))} */}
         </div>
       ) : (
         <p className="min-h-screen">Nenhum produto encontrado.</p>
