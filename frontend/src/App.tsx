@@ -1,42 +1,19 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-
+import { CookiesProvider } from "react-cookie";
+import { AuthProvider } from "./contexts/AuthContext";
 import MainLayout from "./layouts/MainLayout";
-
 import CompaniesPage from "./pages/admin/CompaniesPage";
-import SchedulerPage from "./pages/SchedulerPage";
-// import ProductListPage from "./pages/ProductListPage"; // Página de listagem
-
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <MainLayout>
-              <CompaniesPage />
-            </MainLayout>
-          }
-        />
-        <Route
-          path="/companies"
-          element={
-            <MainLayout>
-              <CompaniesPage />
-            </MainLayout>
-          }
-        />
-        <Route
-          path="/:categoria/:id"
-          element={
-            <MainLayout>
-              <SchedulerPage />
-            </MainLayout>
-          }
-        />
-      </Routes>
-    </BrowserRouter>
+    <>
+      <CookiesProvider>
+        <AuthProvider>
+          <MainLayout>
+            <CompaniesPage />
+          </MainLayout>
+        </AuthProvider>
+      </CookiesProvider>
+    </>
   );
 }
 
