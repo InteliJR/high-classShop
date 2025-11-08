@@ -35,14 +35,16 @@ api.interceptors.response.use(
       try {
         await refresh();
         const token = useAuth.getState().accessToken;
-        if (token) {
-          original.headers.Authorization = `Bearer ${token}`;
-          return api(original);
+        if (!token) {
+          throw new Error('Failed to refresh token');
         }
-      } catch {
+        original.headers.Authorization = `Bearer ${token}`;
+        return api(original);
+      } catch (refreshError) {
         clearAccessToken();
         clearUser();
         window.location.href = "/login";
+        return Promise.reject(refreshError);
       }
     }
 
