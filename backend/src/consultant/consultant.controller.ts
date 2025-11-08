@@ -39,16 +39,6 @@ export class ConsultantController {
   @Get('clients')
   async findAllClients(@Request() req: auth.RequestWithUser): Promise<ApiResponseDto<ClientEntity[], any>> {
     const consultantId = req.user.id;
-
-    // Validate UUID format
-    if (!this.isValidUUID(consultantId)) {
-      return {
-        sucess: false,
-        message: 'ID do assessor inválido. Deve ser um UUID válido.',
-        data: [],
-      };
-    }
-
     const clients = await this.consultantService.findAllClients(consultantId);
 
     return {
@@ -69,16 +59,6 @@ export class ConsultantController {
     @Body() sendInvitationDto: SendInvitationDto,
   ): Promise<ApiResponseDto<any, any>> {
     const consultantId = req.user.id;
-
-    // Validate UUID format
-    if (!this.isValidUUID(consultantId)) {
-      return {
-        sucess: false,
-        message: 'ID do assessor inválido. Deve ser um UUID válido.',
-        data: null,
-      };
-    }
-
     const result = await this.consultantService.sendInvitation(
       consultantId,
       sendInvitationDto,
@@ -105,15 +85,6 @@ export class ConsultantController {
     @Body() updateClientDto: UpdateClientDto,
   ): Promise<ApiResponseDto<ClientEntity, any>> {
     const consultantId = req.user.id;
-
-    // Validate UUID formats
-    if (!this.isValidUUID(consultantId)) {
-      return {
-        sucess: false,
-        message: 'ID do assessor inválido. Deve ser um UUID válido.',
-        data: null as any,
-      };
-    }
 
     if (!this.isValidUUID(clientId)) {
       return {
@@ -147,15 +118,6 @@ export class ConsultantController {
     @Param('id') clientId: string,
   ): Promise<ApiResponseDto<any, any>> {
     const consultantId = req.user.id;
-
-    // Validate UUID formats
-    if (!this.isValidUUID(consultantId)) {
-      return {
-        sucess: false,
-        message: 'ID do assessor inválido. Deve ser um UUID válido.',
-        data: null,
-      };
-    }
 
     if (!this.isValidUUID(clientId)) {
       return {
