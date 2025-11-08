@@ -102,15 +102,13 @@ export interface UserProps {
   id: string;
   name: string;
   surname: string;
-  token: string;
   email: string;
   cpf: string;
   rg: string;
   role: UserRole;
-  password: string;
-  civilState?: CivilState;
+  civil_state?: CivilState;
   speciality?: SpecialityType;
-  identicationNumber?: string;
+  identification_number?: string;
   address_id?: string;
   consultant_id?: string;
 }
