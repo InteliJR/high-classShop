@@ -10,7 +10,7 @@ export const AuthContext = createContext<AuthContextProps>(
 export interface AuthContextProps {
   accessToken: string | null;
   user: UserProps | null;
-  login: (user: LoginValues) => void;
+  login: (user: LoginValues) => Promise<{ user: UserProps; access_token: string }>;
   logout: () => void;
   loading: boolean;
   refreshUser: () => Promise<boolean>;

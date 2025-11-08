@@ -9,6 +9,7 @@ import { AuthContext } from "../../contexts/AuthContext";
 import { useContext } from "react";
 import type { LoginValues } from "../../types/types";
 import { useNavigate } from "react-router-dom";
+import { getRoleBasedRoute } from "../../utils/roleUtils";
 
 export default function Login() {
   // Criação do contexto no navegador
@@ -26,8 +27,15 @@ export default function Login() {
   // Submissão das informações dos formulário
   const onSubmit: SubmitHandler<LoginValues> = async (data: LoginValues) => {
     try {
-      await auth.login(data);
-      navigate("/catalog/cars");
+      const result = await auth.login(data);
+      
+      // Redirect based on user role
+      if (result?.user?.role) {
+        const redirectPath = getRoleBasedRoute(result.user.role);
+        navigate(redirectPath);
+      } else {
+        navigate("/catalog/cars");
+      }
       return;
     } catch (error) {
       alert("Informações incorretas");
