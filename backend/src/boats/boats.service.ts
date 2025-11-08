@@ -2,13 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { QueryDto } from 'src/utils/dto/query.dto';
+import { QueryDto } from 'src/shared/dto/query.dto';
 import {
   ContainsBoatFilters,
   ExactBoatFilters,
   FiltersBoatMeta,
   RangeBoatFilters,
-} from 'src/utils/dto/filters.dto';
+} from 'src/shared/dto/filters.dto';
 
 @Injectable()
 export class BoatsService {

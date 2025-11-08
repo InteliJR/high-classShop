@@ -13,10 +13,10 @@ import {
 import { ConsultantService } from './consultant.service';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SendInvitationDto } from './dto/send-invitation.dto';
-import { ApiResponseDto } from '../utils/dto/api-response.dto';
+import { ApiResponseDto } from '../shared/dto/api-response.dto';
 import { ClientEntity } from './entity/client.entity';
 
-@Controller('api/consultant')
+@Controller('consultant')
 export class ConsultantController {
   constructor(private readonly consultantService: ConsultantService) {}
 

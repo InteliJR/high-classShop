@@ -12,9 +12,9 @@ import { AuthService } from './auth.service';
 import * as auth from './dto/auth';
 import { AuthGuard } from './auth.guard';
 import express from 'express';
-import { Public } from 'src/utils/decorators/public.decorator';
-import { RateLimit } from 'src/utils/decorators/rate-limit.decorator';
-import { RateLimitGuard } from 'src/utils/guards/rate-limit.guard';
+import { Public } from 'src/shared/decorators/public.decorator';
+import { RateLimit } from 'src/shared/decorators/rate-limit.decorator';
+import { RateLimitGuard } from 'src/shared/guards/rate-limit.guard';
 
 @Controller('auth')
 export class AuthController {

@@ -2,7 +2,7 @@ import { Injectable, InternalServerErrorException, Logger, BadRequestException }
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
-import { validateEmail } from '../utils/email-validator';
+import { validateEmail } from '../shared/email-validator';
 
 interface ReferralPayload {
     consultantId: string;
