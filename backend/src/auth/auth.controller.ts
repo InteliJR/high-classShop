@@ -61,13 +61,14 @@ export class AuthController {
   @Post('refresh')
   async refresh(@Req() request: express.Request) {
     const refreshToken = request.cookies.refreshToken;
-    const accessToken = await this.authService.refresh(refreshToken);
+    const { accessToken, user } = await this.authService.refresh(refreshToken);
 
     return {
       success: true,
       message: 'Token renovado com sucesso',
       data: {
         access_token: accessToken,
+        user: user,
         expires_in: 900,
       },
     };

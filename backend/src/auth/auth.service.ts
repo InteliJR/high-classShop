@@ -92,9 +92,13 @@ export class AuthService {
   }
 
   //Criação do accessToken a partir do refreshToken
-  async refresh( refresh_token : string): Promise<string> {
-    const payload = await this.verifyRefreshToken(refresh_token);
-    return this.generateAccessToken(payload);
+  async refresh( refresh_token : string): Promise<{ accessToken: string; user: UserEntity }> {
+    const user = await this.verifyRefreshToken(refresh_token);
+    const accessToken = await this.generateAccessToken(user);
+    return {
+      accessToken,
+      user: new UserEntity(user),
+    };
   }
 
   // Criação do accessToken e do usuário
