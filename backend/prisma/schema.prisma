@@ -18,25 +18,25 @@ datasource db {
 // =====================
 
 enum CivilState {
-  SINGLE
-  MARRIED
-  DIVORCED
-  WIDOWED
-  SEPARATED
-  STABLE_UNION
+  SINGLE @map("SINGLE")
+  MARRIED @map("MARRIED")
+  DIVORCED @map("DIVORCED")
+  WIDOWED @map("WIDOWED")
+  SEPARATED @map("SEPARATED")
+  STABLE_UNION @map("STABLE_UNION")
 }
 
 enum SpecialityType {
-  CAR
-  BOAT
-  AIRCRAFT
+  CAR @map("CAR")
+  BOAT @map("BOAT")
+  AIRCRAFT @map("AIRCRAFT")
 }
 
 enum UserRole {
-  CUSTOMER
-  CONSULTANT
-  SPECIALIST
-  ADMIN
+  CUSTOMER @map("CUSTOMER")
+  CONSULTANT @map("CONSULTANT")
+  SPECIALIST @map("SPECIALIST")
+  ADMIN @map("ADMIN")
 }
 
 // =====================
@@ -78,6 +78,19 @@ model User {
   car_interests            Car_interest[]
   boat_interests           Boat_interest[]
   aircraft_interests       Aircraft_interest[]
+  refreshTokens            RefreshToken[]
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  token      String   @unique
+  user_id    String   @db.Uuid
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  @@index([user_id])
+  @@index([token])
 }
 
 model Address {

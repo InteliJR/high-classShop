@@ -71,59 +71,59 @@ ALTER TABLE "public"."processes" DROP CONSTRAINT "processes_client_id_fkey";
 ALTER TABLE "public"."processes" DROP CONSTRAINT "processes_specialist_id_fkey";
 
 -- DropTable
-DROP TABLE "public"."admins";
+DROP TABLE "public"."admins" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."aircraft";
+DROP TABLE "public"."aircraft" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."aircraft_images";
+DROP TABLE "public"."aircraft_images" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."aircraft_interests";
+DROP TABLE "public"."aircraft_interests" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."appointments";
+DROP TABLE "public"."appointments" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."boat_images";
+DROP TABLE "public"."boat_images" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."boat_interests";
+DROP TABLE "public"."boat_interests" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."boats";
+DROP TABLE "public"."boats" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."car_images";
+DROP TABLE "public"."car_images" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."car_interests";
+DROP TABLE "public"."car_interests" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."cars";
+DROP TABLE "public"."cars" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."clients";
+DROP TABLE "public"."clients" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."companies";
+DROP TABLE "public"."companies" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."consultants";
+DROP TABLE "public"."consultants" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."documents";
+DROP TABLE "public"."documents" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."processes";
+DROP TABLE "public"."processes" CASCADE;
 
 -- DropTable
-DROP TABLE "public"."specialists";
+DROP TABLE "public"."specialists" CASCADE;
 
 -- CreateTable
 CREATE TABLE "User" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
     "surname" TEXT NOT NULL,
     "email" TEXT NOT NULL,
@@ -145,7 +145,7 @@ CREATE TABLE "User" (
 
 -- CreateTable
 CREATE TABLE "Address" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "street" TEXT NOT NULL,
     "number" TEXT NOT NULL,
     "neighborhood" TEXT NOT NULL,
@@ -159,7 +159,7 @@ CREATE TABLE "Address" (
 
 -- CreateTable
 CREATE TABLE "Company" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
     "cnpj" TEXT NOT NULL,
     "logo" TEXT,
@@ -173,7 +173,7 @@ CREATE TABLE "Company" (
 -- CreateTable
 CREATE TABLE "Car" (
     "id" SERIAL NOT NULL,
-    "specialist_id" TEXT,
+    "specialist_id" UUID,
     "marca" TEXT NOT NULL,
     "modelo" TEXT NOT NULL,
     "valor" DECIMAL(65,30) NOT NULL,
@@ -194,7 +194,7 @@ CREATE TABLE "Car" (
 -- CreateTable
 CREATE TABLE "Boat" (
     "id" SERIAL NOT NULL,
-    "specialist_id" TEXT,
+    "specialist_id" UUID,
     "marca" TEXT NOT NULL,
     "modelo" TEXT NOT NULL,
     "valor" DECIMAL(65,30) NOT NULL,
@@ -218,7 +218,7 @@ CREATE TABLE "Boat" (
 -- CreateTable
 CREATE TABLE "Aircraft" (
     "id" SERIAL NOT NULL,
-    "specialist_id" TEXT,
+    "specialist_id" UUID,
     "categoria" TEXT,
     "ano" INTEGER NOT NULL,
     "marca" TEXT NOT NULL,
@@ -270,8 +270,8 @@ CREATE TABLE "Aircraft_image" (
 -- CreateTable
 CREATE TABLE "Proccess" (
     "id" SERIAL NOT NULL,
-    "client_id" TEXT,
-    "specialist_id" TEXT,
+    "client_id" UUID,
+    "specialist_id" UUID,
     "product_type" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'agendamento',
     "notes" TEXT,
@@ -298,8 +298,8 @@ CREATE TABLE "Document" (
 -- CreateTable
 CREATE TABLE "Appointment" (
     "id" SERIAL NOT NULL,
-    "client_id" TEXT,
-    "specialist_id" TEXT,
+    "client_id" UUID,
+    "specialist_id" UUID,
     "product_type" TEXT NOT NULL,
     "date" TIMESTAMP(3) NOT NULL,
     "time" TIMESTAMP(3) NOT NULL,
@@ -314,7 +314,7 @@ CREATE TABLE "Appointment" (
 -- CreateTable
 CREATE TABLE "Car_interest" (
     "id" SERIAL NOT NULL,
-    "client_id" TEXT,
+    "client_id" UUID,
     "uso_principal" TEXT,
     "preferencia_foco" TEXT,
     "faixa_valor" TEXT,
@@ -338,7 +338,7 @@ CREATE TABLE "Car_interest" (
 -- CreateTable
 CREATE TABLE "Boat_interest" (
     "id" SERIAL NOT NULL,
-    "client_id" TEXT,
+    "client_id" UUID,
     "uso_principal" TEXT,
     "preferencia_foco" TEXT,
     "faixa_valor" TEXT,
@@ -364,7 +364,7 @@ CREATE TABLE "Boat_interest" (
 -- CreateTable
 CREATE TABLE "Aircraft_interest" (
     "id" SERIAL NOT NULL,
-    "client_id" TEXT,
+    "client_id" UUID,
     "uso_principal" TEXT,
     "preferencia_foco" TEXT,
     "faixa_valor" TEXT,
