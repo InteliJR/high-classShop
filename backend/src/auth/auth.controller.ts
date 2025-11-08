@@ -12,11 +12,13 @@ import { AuthService } from './auth.service';
 import * as auth from './dto/auth';
 import { AuthGuard } from './auth.guard';
 import express from 'express';
+import { Public } from 'src/utils/decorators/public.decorator';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Public()
   @Post('register')
   async register(@Body() body: auth.UserRegisterDto) {
     const { user } = await this.authService.register(body);
@@ -29,6 +31,7 @@ export class AuthController {
     };
   }
 
+  @Public()
   @Post('login')
   async login(
     @Body() body: auth.LoginDto,
