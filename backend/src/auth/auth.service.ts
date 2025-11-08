@@ -10,6 +10,7 @@ import { ApiResponseDto, LoginDto, UserRegisterDto } from './dto/auth';
 import * as bcrypt from 'bcrypt';
 import { jwtConstants } from './constants';
 import { UserEntity } from './entities/user.entity';
+import { UserRole } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -30,7 +31,7 @@ export class AuthService {
     }
 
     // Criar o role para registrar o usuário padrão
-    const registerRole = data.role ? data.role : 'CUSTOMER';
+    const registerRole = data.role ?? UserRole.CUSTOMER;
 
     // Separação da req
     const { password, ...dataSave } = data;
