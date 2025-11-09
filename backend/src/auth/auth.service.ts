@@ -31,7 +31,7 @@ export class AuthService {
     }
 
     // Criar o role para registrar o usuário padrão
-    const registerRole = data.role ?? UserRole.CUSTOMER;
+    const registerRole = UserRole.CUSTOMER;
 
     // Separação da req
     const { password, ...dataSave } = data;
@@ -45,7 +45,7 @@ export class AuthService {
     });
 
     return {
-      user: user,
+      user: UserEntity.fromPrisma(user),
     };
   }
 
@@ -81,7 +81,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: new UserEntity(user),  
+      user: UserEntity.fromPrisma(user),  
     };
   }
 
@@ -101,7 +101,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken: newRefreshToken,
-      user: new UserEntity(user),
+      user: UserEntity.fromPrisma(user),
     };
   }
 

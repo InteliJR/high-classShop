@@ -56,10 +56,6 @@ export class UserRegisterDto {
   @Matches(/^\d{10}$/, { message: 'RG must be 10 digits' })
   rg: string;
 
-  @IsOptional()
-  @IsEnum(UserRole)
-  role?: UserRole;
-
   @IsString()
   @MinLength(6)
   password: string;
@@ -73,20 +69,12 @@ export class UserRegisterDto {
   speciality?: SpecialityType;
 
   @IsOptional()
-  @IsString()
-  identification_number?: string;
-
-  @IsOptional()
   @IsUUID()
   address_id?: string;
 
   @IsOptional()
   @IsUUID()
   consultant_id?: string;
-
-  @IsOptional()
-  @IsUUID()
-  company_id?: string;
 }
 
 export class LoginDto {
