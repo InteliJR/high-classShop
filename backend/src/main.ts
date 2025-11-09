@@ -25,6 +25,12 @@ async function bootstrap() {
     }),
   );
 
+  // Interceptor para serialização de classes (remove campos com @Exclude())
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+
+  // Cookie parser middleware
+  app.use(cookieParser());
+
   // Prefixo global para APIs
   app.setGlobalPrefix('api');
 
