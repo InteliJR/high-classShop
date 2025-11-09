@@ -19,6 +19,7 @@ export interface AuthContextProps {
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState<boolean>(true);
+  const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
   const accessToken = useAuth((state) => state.accessToken);
   const user = useAuth((state) => state.user);
@@ -32,6 +33,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Verificar se há um token no navegador
   useEffect(() => {
+    if (isInitialized) return; // Evita múltiplas inicializações
+    
     const init = async () => {
       const token = useAuth.getState().accessToken;
       if (!token) {
@@ -40,10 +43,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         await verifyToken();
       }
       setLoading(false);
+      setIsInitialized(true);
     };
 
     init();
-  }, []);
+  }, [isInitialized]);
 
   // Validar o token
   const verifyToken = async () => {
