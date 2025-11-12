@@ -1,25 +1,65 @@
-import { TextAlignJustifyIcon, UserCircle2 } from "lucide-react";
+import { ChevronDown, TextAlignJustifyIcon, UserCircle2 } from "lucide-react";
 import Logo from "../assets/logo_brokerage.png";
 import { useState } from "react";
+import { useIsMobile } from "../hooks/use-is-mobile";
 
 export default function Header() {
   const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   return (
     <>
-      <header className="w-full flex h-24 bg-background-secondary text-white justify-end items-center px-6">
-        {/* Logo */}
-        <div className="flex w-full justify-between items-center">
-          <TextAlignJustifyIcon
-            size={35}
-            onClick={() => {
-              setOpen(!open);
-            }}
-          />
-          <img src={Logo} className="w-20 h-20" />
-        </div>
+      <header
+        className="w-full flex h-24 bg-background-secondary text-white
+          justify-end items-center px-6 sm:px-18"
+      >
+        <div
+          className={`flex ${
+            isMobile
+              ? "w-full justify-between"
+              : "flex-row-reverse justify-between w-full"
+          }  items-center`}
+        >
+          {isMobile ? (
+            // Abrir a sidebar do header em mobiles
+            <TextAlignJustifyIcon
+              size={35}
+              onClick={() => {
+                setOpen(!open);
+              }}
+            />
+          ) : (
+            <div className="flex justify-between items-center text-base w-full pl-12">
+              {/* Navegação nos links */}
+              <nav>
+                <ul className="flex gap-2">
+                  <li className="flex items-center p-2 gap-0.5">
+                    <a>Sobre nós</a>
+                    <ChevronDown size={20} />
+                  </li>
+                  <li className="flex items-center p-2 gap-0.5">
+                    <a>Aeronave</a>
+                    <ChevronDown size={20} />
+                  </li>
+                  <li className="flex items-center p-2 gap-0.5">
+                    <a>Barco</a>
+                    <ChevronDown size={20} />
+                  </li>
+                  <li className="flex items-center p-2 gap-0.5">
+                    <a>Carro</a>
+                    <ChevronDown size={20} />
+                  </li>
+                </ul>
+              </nav>
+              <button className="flex p-2 gap-3 bg-white text-black rounded-md">
+                <UserCircle2 size={25} />
+                Login
+              </button>
+            </div>
+          )}
 
-        {/* Navegáveis */}
+          <img src={Logo} className="w-25 sm:w-35 h-auto" />
+        </div>
       </header>
 
       <aside
@@ -34,8 +74,11 @@ export default function Header() {
               setOpen(!open);
             }}
           >
+            {/* Fechar a sidebar em mobiles*/}
             <TextAlignJustifyIcon size={27} />
           </button>
+
+          {/* Navegação nos links */}
           <nav className="pl-7 flex flex-col">
             <ul className="flex flex-col gap-2">
               <li>
@@ -53,6 +96,7 @@ export default function Header() {
             </ul>
           </nav>
         </div>
+
         <button className="flex justify-center m-7 gap-2 rounded-sm bg-background-secondary p-1 text-xs text-color-text-secondary">
           <UserCircle2 size={17} color="white" />
           Login
