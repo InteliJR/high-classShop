@@ -1,11 +1,18 @@
-import { ChevronDown, TextAlignJustifyIcon, UserCircle2 } from "lucide-react";
+import {
+  ChevronDown,
+  Search,
+  TextAlignJustifyIcon,
+  UserCircle2,
+} from "lucide-react";
 import Logo from "../assets/logo_brokerage.png";
 import { useState } from "react";
 import { useIsMobile } from "../hooks/use-is-mobile";
+import { useAuth } from "../store/authStateManager";
 
 export default function Header() {
   const [open, setOpen] = useState(false);
   const isMobile = useIsMobile();
+  const { user } = useAuth();
 
   return (
     <>
@@ -13,13 +20,7 @@ export default function Header() {
         className="w-full flex h-24 bg-background-secondary text-white
           justify-end items-center px-6 sm:px-18"
       >
-        <div
-          className={`flex ${
-            isMobile
-              ? "w-full justify-between"
-              : "flex-row-reverse justify-between w-full"
-          }  items-center`}
-        >
+        <div className="flex w-full justify-between sm:flex-row-reverse items-center">
           {isMobile ? (
             // Abrir a sidebar do header em mobiles
             <TextAlignJustifyIcon
@@ -58,7 +59,22 @@ export default function Header() {
             </div>
           )}
 
-          <img src={Logo} className="w-25 sm:w-35 h-auto" />
+          {user ? (
+            <>
+              <div className="relative flex justify-center items-center">
+                <Search size={18} className="absolute left-15  text-black" />
+                <input
+                  className="bg-white rounded-full mx-4 w-2/3 h-7 text-black px-10"
+                  type="text"
+                />
+              </div>
+              <button>
+                <UserCircle2 size={40} />
+              </button>
+            </>
+          ) : (
+            <img src={Logo} className="w-25 sm:w-35 h-auto" />
+          )}
         </div>
       </header>
 
