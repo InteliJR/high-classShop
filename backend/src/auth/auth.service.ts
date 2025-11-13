@@ -66,12 +66,24 @@ export class AuthService {
         throw new BadRequestException('Consultor não encontrado');
       }
 
+      // Verificar se já existe um usuário com este email
+      const existingUser = await this.prismaService.user.findUnique({
+        where: { email: payload.email },
+      });
+
+      if (existingUser) {
+        throw new BadRequestException('Já existe uma conta cadastrada com este email. Faça login para acessar sua conta.');
+      }
+
       return {
         consultantId: payload.consultantId,
         email: payload.email,
         consultantName: `${consultant.name} ${consultant.surname}`,
       };
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       throw new UnauthorizedException('Token de convite inválido ou expirado');
     }
   }

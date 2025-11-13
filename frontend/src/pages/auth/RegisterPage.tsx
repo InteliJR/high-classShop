@@ -77,8 +77,9 @@ export default function RegisterPage() {
         setValue("email", payload.email);
         setValue("consultant_id", payload.consultantId);
         setIsValidatingToken(false);
-      } catch (error) {
-        setTokenError("Link de convite inválido ou expirado. Entre em contato com seu consultor para receber um novo convite.");
+      } catch (error: any) {
+        const errorMessage = error?.response?.data?.message || error?.message || "Link de convite inválido ou expirado. Entre em contato com seu consultor para receber um novo convite.";
+        setTokenError(errorMessage);
         setIsValidatingToken(false);
       }
     };
@@ -137,22 +138,34 @@ export default function RegisterPage() {
   }
 
   if (tokenError) {
+    const isUserAlreadyExists = tokenError.includes("Já existe uma conta cadastrada");
+    
     return (
       <div className="w-screen h-screen flex items-center justify-center bg-linear-to-br from-gray-50 to-white p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
           <div className="flex flex-col items-center gap-4 text-center">
-            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center">
-              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
+              isUserAlreadyExists ? 'bg-blue-100' : 'bg-red-100'
+            }`}>
+              {isUserAlreadyExists ? (
+                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              ) : (
+                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              )}
             </div>
-            <h2 className="text-2xl font-bold text-gray-900">Convite Inválido ou Expirado</h2>
+            <h2 className="text-2xl font-bold text-gray-900">
+              {isUserAlreadyExists ? 'Conta Já Cadastrada' : 'Convite Inválido'}
+            </h2>
             <p className="text-gray-600 text-sm">{tokenError}</p>
             <button
               onClick={() => navigate("/login")}
               className="mt-4 px-6 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-black transition-all font-medium shadow-lg"
             >
-              Ir para Login
+              {isUserAlreadyExists ? 'Fazer Login' : 'Ir para Login'}
             </button>
           </div>
         </div>
