@@ -27,7 +27,7 @@ export default function InviteClientForm({ onSuccess }: InviteClientFormProps) {
    */
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    
+
     if (!email) {
       setError("Email é obrigatório.");
       return;
@@ -48,17 +48,17 @@ export default function InviteClientForm({ onSuccess }: InviteClientFormProps) {
 
     try {
       const response = await inviteClient(email);
-      
+
       // Set the invite link from the API response
       if (response.registrationLink) {
         setInviteLink(response.registrationLink);
       }
-      
+
       // Check if there's a warning (email not sent)
       if (response.warning) {
         setWarning(response.warning);
       }
-      
+
       // Don't close the modal - let user copy the link first
     } catch (err) {
       setError(
@@ -78,7 +78,7 @@ export default function InviteClientForm({ onSuccess }: InviteClientFormProps) {
     try {
       await navigator.clipboard.writeText(inviteLink);
       setLinkCopied(true);
-      
+
       // Reset the "copied" state after 3 seconds
       setTimeout(() => {
         setLinkCopied(false);
@@ -145,11 +145,8 @@ export default function InviteClientForm({ onSuccess }: InviteClientFormProps) {
           {warning ? (
             // Warning quando email não foi enviado
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="text-yellow-800 font-medium">
-                ⚠️ {warning}
-              </p>
               <p className="text-yellow-700 text-sm mt-1">
-                O link foi gerado, mas não conseguimos enviar por email. Compartilhe-o manualmente com <strong>{email}</strong>.
+                {warning}
               </p>
             </div>
           ) : (

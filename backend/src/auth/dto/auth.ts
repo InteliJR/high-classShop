@@ -11,6 +11,7 @@ import {
 } from 'class-validator';
 import { UserEntity } from '../entities/user.entity';
 import { $Enums } from '@prisma/client';
+import { IsValidCPF } from '../../shared/validators/cpf.validator';
 
 // Tipos para login e registro de usuários
 export enum UserRole {
@@ -47,8 +48,9 @@ export class UserRegisterDto {
   email: string;
 
   @IsString()
-  @Length(11, 11)
-  @Matches(/^\d{11}$/, { message: 'CPF must be 11 digits' })
+  @Length(11, 11, { message: 'CPF deve ter 11 dígitos' })
+  @Matches(/^\d{11}$/, { message: 'CPF deve conter apenas números' })
+  @IsValidCPF()
   cpf: string;
 
   @IsString()

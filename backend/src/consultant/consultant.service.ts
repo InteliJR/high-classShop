@@ -93,7 +93,7 @@ export class ConsultantService {
           message: 'Link de convite gerado com sucesso',
           email: sendInvitationDto.email,
           registrationLink,
-          warning: 'Não foi possível enviar o email para o usuário. Compartilhe o link manualmente.',
+          warning: 'O link foi gerado, mas não conseguimos enviar por email. Compartilhe-o manualmente com ' + sendInvitationDto.email,
         };
       }
 
@@ -116,7 +116,7 @@ export class ConsultantService {
         message: 'Link de convite gerado com sucesso',
         email: sendInvitationDto.email,
         registrationLink,
-        warning: 'Não foi possível enviar o email para o usuário. Compartilhe o link manualmente.',
+        warning: 'O link foi gerado, mas não conseguimos enviar por email. Compartilhe-o manualmente com ' + sendInvitationDto.email,
       };
     }
   }
