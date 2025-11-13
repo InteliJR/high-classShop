@@ -49,10 +49,15 @@ export const useAuth = create<AuthState>((set, get) => ({
     const refreshPromise = (async () => {
       try {
         const response = await api.post('auth/refresh', {}, {withCredentials: true});
-        const accessToken = response.data.data.access_token;
-        set({ accessToken, isRefreshing: false, refreshPromise: null });
+        const data = response.data.data;
+        set({ 
+          accessToken: data.access_token, 
+          user: data.user,
+          isRefreshing: false, 
+          refreshPromise: null 
+        });
       } catch {
-        set({ accessToken: null, isRefreshing: false, refreshPromise: null });
+        set({ accessToken: null, user: null, isRefreshing: false, refreshPromise: null });
       }
     })();
 
