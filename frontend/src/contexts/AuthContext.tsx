@@ -59,11 +59,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(data);
       return true;
     } catch (error) {
-      // Tentar conseguir o accessToken a partir do refreshToken caso ele exista
-      if (accessToken) {
-        return await refreshUser();
-      }
-
+      // Se falhou, não tenta refresh aqui - o interceptor já vai fazer isso
+      // Apenas retorna false
       return false;
     }
   };
