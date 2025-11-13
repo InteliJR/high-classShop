@@ -18,7 +18,8 @@ export default function RegisterPage() {
   const [isValidatingToken, setIsValidatingToken] = useState(true);
   const [tokenError, setTokenError] = useState<string>("");
 
-  const { register, handleSubmit, setValue } = useForm<RegisterValues>({
+  const { register, handleSubmit, setValue, formState: { errors }, watch } = useForm<RegisterValues>({
+    mode: "onChange",
     defaultValues: {
       name: "",
       surname: "",
@@ -30,6 +31,34 @@ export default function RegisterPage() {
       consultant_id: undefined,
     },
   });
+
+  const watchedCpf = watch("cpf");
+  const watchedPassword = watch("password");
+
+  const validateCPF = (cpf: string): boolean => {
+    const cleaned = cpf.replace(/\D/g, "");
+    if (cleaned.length !== 11) return false;
+    
+    if (/^(\d)\1{10}$/.test(cleaned)) return false;
+    
+    let sum = 0;
+    for (let i = 0; i < 9; i++) {
+      sum += parseInt(cleaned.charAt(i)) * (10 - i);
+    }
+    let digit = 11 - (sum % 11);
+    if (digit >= 10) digit = 0;
+    if (digit !== parseInt(cleaned.charAt(9))) return false;
+    
+    sum = 0;
+    for (let i = 0; i < 10; i++) {
+      sum += parseInt(cleaned.charAt(i)) * (11 - i);
+    }
+    digit = 11 - (sum % 11);
+    if (digit >= 10) digit = 0;
+    if (digit !== parseInt(cleaned.charAt(10))) return false;
+    
+    return true;
+  };
 
   useEffect(() => {
     const validateToken = async () => {
@@ -117,7 +146,7 @@ export default function RegisterPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900">Convite Inválido</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Convite Inválido ou Expirado</h2>
             <p className="text-gray-600 text-sm">{tokenError}</p>
             <button
               onClick={() => navigate("/login")}
@@ -166,9 +195,19 @@ export default function RegisterPage() {
                     id="name"
                     type="text"
                     placeholder="João"
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
-                    {...register("name", { required: true, minLength: 2 })}
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 transition-all ${
+                      errors.name 
+                        ? 'border-red-500 focus:ring-red-500' 
+                        : watch("name") && watch("name").length >= 2
+                        ? 'border-green-500 focus:ring-green-500'
+                        : 'border-gray-300 focus:ring-gray-900 focus:border-transparent'
+                    }`}
+                    {...register("name", { 
+                      required: "Nome é obrigatório", 
+                      minLength: { value: 2, message: "Mínimo 2 caracteres" } 
+                    })}
                   />
+                  {errors.name && <p className="text-xs text-red-600 mt-1">{errors.name.message}</p>}
                 </div>
                 <div>
                   <label htmlFor="surname" className="block text-xs font-medium text-gray-700 mb-1">
@@ -178,9 +217,19 @@ export default function RegisterPage() {
                     id="surname"
                     type="text"
                     placeholder="Silva"
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
-                    {...register("surname", { required: true, minLength: 2 })}
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 transition-all ${
+                      errors.surname 
+                        ? 'border-red-500 focus:ring-red-500' 
+                        : watch("surname") && watch("surname").length >= 2
+                        ? 'border-green-500 focus:ring-green-500'
+                        : 'border-gray-300 focus:ring-gray-900 focus:border-transparent'
+                    }`}
+                    {...register("surname", { 
+                      required: "Sobrenome é obrigatório", 
+                      minLength: { value: 2, message: "Mínimo 2 caracteres" } 
+                    })}
                   />
+                  {errors.surname && <p className="text-xs text-red-600 mt-1">{errors.surname.message}</p>}
                 </div>
               </div>
 
@@ -209,14 +258,22 @@ export default function RegisterPage() {
                     type="text"
                     placeholder="000.000.000-00"
                     maxLength={14}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 transition-all ${
+                      errors.cpf 
+                        ? 'border-red-500 focus:ring-red-500' 
+                        : watchedCpf && validateCPF(watchedCpf)
+                        ? 'border-green-500 focus:ring-green-500'
+                        : 'border-gray-300 focus:ring-gray-900 focus:border-transparent'
+                    }`}
                     {...register("cpf", { 
-                      required: true,
+                      required: "CPF é obrigatório",
+                      validate: (value) => validateCPF(value) || "CPF inválido",
                       onChange: (e) => {
                         e.target.value = formatCPF(e.target.value);
                       }
                     })}
                   />
+                  {errors.cpf && <p className="text-xs text-red-600 mt-1">{errors.cpf.message}</p>}
                 </div>
                 <div>
                   <label htmlFor="rg" className="block text-xs font-medium text-gray-700 mb-1">
@@ -227,14 +284,22 @@ export default function RegisterPage() {
                     type="text"
                     placeholder="0000000000"
                     maxLength={10}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 transition-all ${
+                      errors.rg 
+                        ? 'border-red-500 focus:ring-red-500' 
+                        : watch("rg") && watch("rg").replace(/\D/g, "").length === 10
+                        ? 'border-green-500 focus:ring-green-500'
+                        : 'border-gray-300 focus:ring-gray-900 focus:border-transparent'
+                    }`}
                     {...register("rg", { 
-                      required: true,
+                      required: "RG é obrigatório",
+                      validate: (value) => value.replace(/\D/g, "").length === 10 || "RG deve ter 10 dígitos",
                       onChange: (e) => {
                         e.target.value = formatRG(e.target.value);
                       }
                     })}
                   />
+                  {errors.rg && <p className="text-xs text-red-600 mt-1">{errors.rg.message}</p>}
                 </div>
               </div>
 
@@ -248,9 +313,22 @@ export default function RegisterPage() {
                     id="password"
                     type="password"
                     placeholder="Min. 6 caracteres"
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
-                    {...register("password", { required: true, minLength: 6 })}
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 transition-all ${
+                      errors.password 
+                        ? 'border-red-500 focus:ring-red-500' 
+                        : watchedPassword && watchedPassword.length >= 6
+                        ? 'border-green-500 focus:ring-green-500'
+                        : 'border-gray-300 focus:ring-gray-900 focus:border-transparent'
+                    }`}
+                    {...register("password", { 
+                      required: "Senha é obrigatória", 
+                      minLength: { value: 6, message: "Mínimo 6 caracteres" } 
+                    })}
                   />
+                  {errors.password && <p className="text-xs text-red-600 mt-1">{errors.password.message}</p>}
+                  {watchedPassword && watchedPassword.length > 0 && watchedPassword.length < 6 && (
+                    <p className="text-xs text-amber-600 mt-1">Senha muito curta</p>
+                  )}
                 </div>
                 <div>
                   <label htmlFor="civil_state" className="block text-xs font-medium text-gray-700 mb-1">
@@ -299,13 +377,7 @@ export default function RegisterPage() {
           src={LoginImageDesktop}
           className="w-full h-full object-cover"
           alt="Luxury car"
-        />
-        <div className="absolute inset-0 bg-linear-to-r from-black/50 to-transparent flex items-center justify-center">
-          <div className="text-white text-center p-8">
-            <h2 className="text-4xl font-bold mb-4">High-class Shop</h2>
-            <p className="text-lg opacity-90">Luxo e exclusividade em um só lugar</p>
-          </div>
-        </div>
+        />        
       </div>
     </div>
   );
