@@ -1,4 +1,3 @@
-import LoginImageMobile from "../../assets/loginCarMobile.png";
 import LoginImageDesktop from "../../assets/loginCarDesktop.png";
 import {
   useForm,
@@ -99,10 +98,10 @@ export default function RegisterPage() {
 
   if (isValidatingToken) {
     return (
-      <div className="w-screen h-screen flex items-center justify-center bg-background">
+      <div className="w-screen h-screen flex items-center justify-center bg-linear-to-br from-gray-50 to-white">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
-          <p className="text-gray-600">Validando convite...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-gray-200 border-t-gray-900"></div>
+          <p className="text-gray-700 font-medium">Validando convite...</p>
         </div>
       </div>
     );
@@ -110,17 +109,19 @@ export default function RegisterPage() {
 
   if (tokenError) {
     return (
-      <div className="w-screen h-screen flex items-center justify-center bg-background">
-        <div className="max-w-md mx-4 p-8 bg-white rounded-2xl shadow-lg">
+      <div className="w-screen h-screen flex items-center justify-center bg-linear-to-br from-gray-50 to-white p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
           <div className="flex flex-col items-center gap-4 text-center">
-            <svg className="w-16 h-16 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <h2 className="text-2xl font-semibold text-gray-900">Convite Inválido</h2>
-            <p className="text-gray-600">{tokenError}</p>
+            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center">
+              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900">Convite Inválido</h2>
+            <p className="text-gray-600 text-sm">{tokenError}</p>
             <button
               onClick={() => navigate("/login")}
-              className="mt-4 px-6 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors"
+              className="mt-4 px-6 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-black transition-all font-medium shadow-lg"
             >
               Ir para Login
             </button>
@@ -131,165 +132,180 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="sm:absolute w-screen h-screen flex flex-col sm:justify-between sm:items-center sm:flex-row-reverse">
-      {/* Imagem */}
-      <div className="h-1/3 shrink-0 sm:h-full w-full sm:w-4/7">
-        <img
-          srcSet={`${LoginImageMobile} 393w, ${LoginImageDesktop} 644w`}
-          sizes="(max-width: 393px) 393px, 644px"
-          src={LoginImageMobile}
-          className="min-w-full h-full object-cover sm:object-cover"
-          alt="Imagem de fundo"
-        />
+    <div className="w-screen h-screen flex">
+      {/* Coluna Esquerda - Formulário */}
+      <div className="w-full lg:w-1/2 h-full overflow-y-auto bg-linear-to-br from-gray-50 to-white">
+        <div className="min-h-full flex items-center justify-center p-4 sm:p-6 lg:p-8">
+          <div className="w-full max-w-md">
+            {/* Header */}
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-linear-to-br from-gray-700 to-gray-900 mb-4">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                </svg>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+                Criar Conta
+              </h1>
+              {consultantName && (
+                <p className="text-sm text-gray-600">
+                  <span className="font-semibold text-gray-900">{consultantName}</span> convidou você
+                </p>
+              )}
+            </div>
+
+            {/* Formulário Compacto */}
+            <form onSubmit={handleSubmit(onSubmit, onError)} className="space-y-3">
+              {/* Nome e Sobrenome - Lado a lado */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">
+                    Nome
+                  </label>
+                  <input
+                    id="name"
+                    type="text"
+                    placeholder="João"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
+                    {...register("name", { required: true, minLength: 2 })}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="surname" className="block text-xs font-medium text-gray-700 mb-1">
+                    Sobrenome
+                  </label>
+                  <input
+                    id="surname"
+                    type="text"
+                    placeholder="Silva"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
+                    {...register("surname", { required: true, minLength: 2 })}
+                  />
+                </div>
+              </div>
+
+              {/* E-mail */}
+              <div>
+                <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">
+                  E-mail <span className="text-gray-500 font-normal">(vinculado ao convite)</span>
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                  disabled
+                  {...register("email", { required: true })}
+                />
+              </div>
+
+              {/* CPF e RG - Lado a lado */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="cpf" className="block text-xs font-medium text-gray-700 mb-1">
+                    CPF
+                  </label>
+                  <input
+                    id="cpf"
+                    type="text"
+                    placeholder="000.000.000-00"
+                    maxLength={14}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
+                    {...register("cpf", { 
+                      required: true,
+                      onChange: (e) => {
+                        e.target.value = formatCPF(e.target.value);
+                      }
+                    })}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="rg" className="block text-xs font-medium text-gray-700 mb-1">
+                    RG
+                  </label>
+                  <input
+                    id="rg"
+                    type="text"
+                    placeholder="0000000000"
+                    maxLength={10}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
+                    {...register("rg", { 
+                      required: true,
+                      onChange: (e) => {
+                        e.target.value = formatRG(e.target.value);
+                      }
+                    })}
+                  />
+                </div>
+              </div>
+
+              {/* Senha e Estado Civil - Lado a lado */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">
+                    Senha
+                  </label>
+                  <input
+                    id="password"
+                    type="password"
+                    placeholder="Min. 6 caracteres"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
+                    {...register("password", { required: true, minLength: 6 })}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="civil_state" className="block text-xs font-medium text-gray-700 mb-1">
+                    Estado Civil
+                  </label>
+                  <select
+                    id="civil_state"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
+                    {...register("civil_state")}
+                  >
+                    <option value="">Selecione</option>
+                    <option value="SINGLE">Solteiro(a)</option>
+                    <option value="MARRIED">Casado(a)</option>
+                    <option value="DIVORCED">Divorciado(a)</option>
+                    <option value="WIDOWED">Viúvo(a)</option>
+                    <option value="SEPARATED">Separado(a)</option>
+                    <option value="STABLE_UNION">União Estável</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Botões */}
+              <div className="pt-4 space-y-3">
+                <button
+                  type="submit"
+                  className="w-full bg-linear-to-r from-gray-700 to-gray-900 text-white py-2.5 rounded-lg font-medium hover:from-gray-800 hover:to-black transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                >
+                  Criar Conta
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/login")}
+                  className="w-full text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                >
+                  Já tem uma conta? <span className="font-semibold">Faça login</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       </div>
 
-      {/* Formulário de Registro */}
-      <div className="sm:relative sm:left-8 flex flex-col gap-7 mx-13 sm:mx-0 sm:rounded-4xl sm:flex-col sm:w-1/2 sm:h-full sm:justify-center sm:gap-23 sm:px-36 sm:inset-y-0 sm:z-10 bg-background overflow-y-auto py-8">
-        {/* Título da página */}
-        <div className="sm:relative sm:right-8 flex flex-col justify-center items-center gap-3 sm:items-center sm:gap-8">
-          <h1 className="text-2xl font-semibold sm:text-center sm:text-6xl">
-            Bem-vindo!
-          </h1>
-          <p className="text-sm text-center font-light sm:text-2xl px-4">
-            {consultantName && (
-              <span className="block mb-2">
-                <strong>{consultantName}</strong> te convidou para se cadastrar
-              </span>
-            )}
-            Preencha suas informações para criar sua conta
-          </p>
+      {/* Coluna Direita - Imagem */}
+      <div className="hidden lg:block lg:w-1/2 h-full relative">
+        <img
+          src={LoginImageDesktop}
+          className="w-full h-full object-cover"
+          alt="Luxury car"
+        />
+        <div className="absolute inset-0 bg-linear-to-r from-black/50 to-transparent flex items-center justify-center">
+          <div className="text-white text-center p-8">
+            <h2 className="text-4xl font-bold mb-4">High-class Shop</h2>
+            <p className="text-lg opacity-90">Luxo e exclusividade em um só lugar</p>
+          </div>
         </div>
-
-        {/* Formulário */}
-        <form
-          className="sm:relative sm:right-8"
-          onSubmit={handleSubmit(onSubmit, onError)}
-        >
-          <div className="flex flex-col gap-6 text-sm sm:text-2xl sm:gap-8">
-            {/* Nome */}
-            <div className="flex flex-col gap-1 sm:gap-2">
-              <label htmlFor="name">Nome</label>
-              <input
-                id="name"
-                type="text"
-                placeholder="Insira seu nome"
-                className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl sm:text-xl"
-                {...register("name", { required: true, minLength: 2 })}
-              />
-            </div>
-
-            {/* Sobrenome */}
-            <div className="flex flex-col gap-1 sm:gap-2">
-              <label htmlFor="surname">Sobrenome</label>
-              <input
-                id="surname"
-                type="text"
-                placeholder="Insira seu sobrenome"
-                className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl sm:text-xl"
-                {...register("surname", { required: true, minLength: 2 })}
-              />
-            </div>
-
-            {/* E-mail */}
-            <div className="flex flex-col gap-1 sm:gap-2">
-              <label htmlFor="email">E-mail</label>
-              <input
-                id="email"
-                type="email"
-                placeholder="Insira seu e-mail"
-                className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl sm:text-xl"
-                disabled
-                {...register("email", { required: true })}
-              />
-              <p className="text-xs text-gray-500 sm:text-sm">
-                E-mail vinculado ao convite
-              </p>
-            </div>
-
-            {/* CPF */}
-            <div className="flex flex-col gap-1 sm:gap-2">
-              <label htmlFor="cpf">CPF</label>
-              <input
-                id="cpf"
-                type="text"
-                placeholder="000.000.000-00"
-                maxLength={14}
-                className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl sm:text-xl"
-                {...register("cpf", { 
-                  required: true,
-                  onChange: (e) => {
-                    e.target.value = formatCPF(e.target.value);
-                  }
-                })}
-              />
-            </div>
-
-            {/* RG */}
-            <div className="flex flex-col gap-1 sm:gap-2">
-              <label htmlFor="rg">RG</label>
-              <input
-                id="rg"
-                type="text"
-                placeholder="0000000000"
-                maxLength={10}
-                className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl sm:text-xl"
-                {...register("rg", { 
-                  required: true,
-                  onChange: (e) => {
-                    e.target.value = formatRG(e.target.value);
-                  }
-                })}
-              />
-            </div>
-
-            {/* Senha */}
-            <div className="flex flex-col gap-1 sm:gap-2">
-              <label htmlFor="password">Senha</label>
-              <input
-                id="password"
-                type="password"
-                placeholder="Mínimo 6 caracteres"
-                className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl sm:text-xl"
-                {...register("password", { required: true, minLength: 6 })}
-              />
-            </div>
-
-            {/* Estado Civil (Opcional) */}
-            <div className="flex flex-col gap-1 sm:gap-2">
-              <label htmlFor="civil_state">Estado Civil (Opcional)</label>
-              <select
-                id="civil_state"
-                className="text-xs p-2 sm:p-4 bg bg-color-input rounded-md sm:rounded-xl sm:text-xl"
-                {...register("civil_state")}
-              >
-                <option value="">Selecione</option>
-                <option value="SINGLE">Solteiro(a)</option>
-                <option value="MARRIED">Casado(a)</option>
-                <option value="DIVORCED">Divorciado(a)</option>
-                <option value="WIDOWED">Viúvo(a)</option>
-                <option value="SEPARATED">Separado(a)</option>
-                <option value="STABLE_UNION">União Estável</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Botão de ações */}
-          <div className="flex flex-col justify-center items-center gap-4 text-color-a sm:gap-8 sm:pt-8 pt-4">
-            <button
-              type="submit"
-              className="text-sm bg-gray-700 p-2 w-full text-white rounded-md sm:text-2xl sm:rounded-lg hover:bg-gray-800 transition-colors"
-            >
-              Cadastrar
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/login")}
-              className="text-xs text-gray-600 sm:text-base hover:text-gray-900"
-            >
-              Já tem uma conta? Faça login
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   );

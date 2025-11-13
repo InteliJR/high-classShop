@@ -53,7 +53,7 @@ export class AuthService {
   async validateReferralToken(token: string) {
     try {
       const payload = this.jwtService.verify(token, {
-        secret: jwtConstants.access,
+        secret: jwtConstants.referral,
       });
 
       // Buscar o consultor para retornar o nome completo
