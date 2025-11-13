@@ -121,13 +121,21 @@ export class SesService {
                 messageId: response.MessageId,
             };
         } catch (error) {
+            // Re-throw BadRequestException (invalid email)
+            if (error instanceof BadRequestException) {
+                throw error;
+            }
+
+            // For SES errors, log and return error instead of throwing
             this.logger.error(
                 `Failed to send registration email to ${recipientEmail}`,
                 error,
             );
-            throw new InternalServerErrorException(
-                `Failed to send registration email: ${error instanceof Error ? error.message : 'Unknown error'}`,
-            );
+
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            };
         }
     }
 
