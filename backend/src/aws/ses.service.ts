@@ -46,7 +46,7 @@ export class SesService {
 
         // Token expires in 7 days
         return this.jwtService.sign(payload, {
-            secret: this.configService.getOrThrow('JWT_SECRET'),
+            secret: this.configService.getOrThrow('JWT_SECRET_REFERRAL'),
             expiresIn: '7d',
         });
     }

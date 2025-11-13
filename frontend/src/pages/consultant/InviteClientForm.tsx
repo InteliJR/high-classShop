@@ -17,6 +17,8 @@ export default function InviteClientForm({ onSuccess }: InviteClientFormProps) {
   const [error, setError] = useState<string | null>(null);
   // Guarda o link de convite retornado pela API
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  // Guarda a mensagem de warning se o email não foi enviado
+  const [warning, setWarning] = useState<string | null>(null);
   // Controla se o link foi copiado
   const [linkCopied, setLinkCopied] = useState(false);
 
@@ -41,29 +43,23 @@ export default function InviteClientForm({ onSuccess }: InviteClientFormProps) {
     setIsSubmitting(true);
     setError(null);
     setInviteLink(null);
+    setWarning(null);
     setLinkCopied(false);
 
     try {
-      // TODO: Call POST /api/consultant/invite
       const response = await inviteClient(email);
       
-      // TODO: Handle the case where the email is already registered on the platform
-      // Business logic concern: What should happen if the user already exists?
-      // Options:
-      // 1. Show error message and ask consultant to contact admin
-      // 2. Allow re-sending invitation
-      // 3. Automatically link existing user to consultant
-      // For now, we'll just show the success message
+      // Set the invite link from the API response
+      if (response.registrationLink) {
+        setInviteLink(response.registrationLink);
+      }
       
-      // Extract invite link from response
-      // The backend should return the invite link in the response
-      // For now, we'll construct it based on the expected format
-      // TODO: Update this once backend confirms the exact response format
-      const baseUrl = window.location.origin;
-      const link = `${baseUrl}/register?ref=${response.email}`; // Placeholder
-      setInviteLink(link);
+      // Check if there's a warning (email not sent)
+      if (response.warning) {
+        setWarning(response.warning);
+      }
       
-      // Don't close the modal immediately - let user copy the link first
+      // Don't close the modal - let user copy the link first
     } catch (err) {
       setError(
         (err as Error).message || "Falha ao enviar convite. Tente novamente."
@@ -98,6 +94,7 @@ export default function InviteClientForm({ onSuccess }: InviteClientFormProps) {
   const handleClose = () => {
     setEmail("");
     setInviteLink(null);
+    setWarning(null);
     setLinkCopied(false);
     setError(null);
     onSuccess();
@@ -145,14 +142,27 @@ export default function InviteClientForm({ onSuccess }: InviteClientFormProps) {
       ) : (
         // Tela de sucesso com link de convite
         <div className="space-y-6">
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <p className="text-green-800 font-medium">
-              ✓ Convite enviado com sucesso!
-            </p>
-            <p className="text-green-700 text-sm mt-1">
-              Um email foi enviado para <strong>{email}</strong> com o link de cadastro.
-            </p>
-          </div>
+          {warning ? (
+            // Warning quando email não foi enviado
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-yellow-800 font-medium">
+                ⚠️ {warning}
+              </p>
+              <p className="text-yellow-700 text-sm mt-1">
+                O link foi gerado, mas não conseguimos enviar por email. Compartilhe-o manualmente com <strong>{email}</strong>.
+              </p>
+            </div>
+          ) : (
+            // Sucesso quando email foi enviado
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <p className="text-green-800 font-medium">
+                ✓ Convite enviado com sucesso!
+              </p>
+              <p className="text-green-700 text-sm mt-1">
+                Um email foi enviado para <strong>{email}</strong> com o link de cadastro.
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-2">

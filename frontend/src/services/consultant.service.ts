@@ -22,6 +22,8 @@ export type InviteResponse = {
   success: boolean;
   message: string;
   email: string;
+  registrationLink?: string;
+  warning?: string;
   messageId?: string;
 };
 

@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SendInvitationDto } from './dto/send-invitation.dto';
@@ -9,6 +10,7 @@ export class ConsultantService {
   constructor(
     private prismaService: PrismaService,
     private sesService: SesService,
+    private jwtService: JwtService,
   ) {}
 
   /**
@@ -45,7 +47,7 @@ export class ConsultantService {
    * @param sendInvitationDto - Email of the potential client
    * @throws NotFoundException if consultant not found
    * @throws BadRequestException if email is invalid or disposable
-   * @throws InternalServerErrorException if email sending fails
+   * @returns Object with success status, registration link, and optional warning
    */
   async sendInvitation(
     consultantId: string,
@@ -68,9 +70,16 @@ export class ConsultantService {
 
     const consultantFullName = `${consultant.name} ${consultant.surname}`;
 
+    // Generate the registration link (same logic as SES service)
+    const referralToken = this.generateReferralToken(
+      consultantId,
+      sendInvitationDto.email,
+    );
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const registrationLink = `${frontendUrl}/register?ref=${referralToken}`;
+
     try {
-      // Send the registration email with JWT token in referral parameter
-      // This will throw BadRequestException if email is invalid
+      // Try to send the registration email
       const result = await this.sesService.sendRegistrationEmail(
         sendInvitationDto.email,
         consultantId,
@@ -78,15 +87,21 @@ export class ConsultantService {
       );
 
       if (!result.success) {
-        throw new InternalServerErrorException(
-          result.error || 'Falha ao enviar email de convite',
-        );
+        // Email failed but we still return the link
+        return {
+          success: true,
+          message: 'Link de convite gerado com sucesso',
+          email: sendInvitationDto.email,
+          registrationLink,
+          warning: 'Não foi possível enviar o email para o usuário. Compartilhe o link manualmente.',
+        };
       }
 
       return {
         success: true,
         message: 'Convite enviado com sucesso',
         email: sendInvitationDto.email,
+        registrationLink,
         messageId: result.messageId,
       };
     } catch (error) {
@@ -95,11 +110,35 @@ export class ConsultantService {
         throw error;
       }
 
-      // Log and throw other errors
-      throw new InternalServerErrorException(
-        'Erro ao enviar convite. Tente novamente mais tarde.',
-      );
+      // For SES errors, return the link with a warning instead of throwing
+      return {
+        success: true,
+        message: 'Link de convite gerado com sucesso',
+        email: sendInvitationDto.email,
+        registrationLink,
+        warning: 'Não foi possível enviar o email para o usuário. Compartilhe o link manualmente.',
+      };
     }
+  }
+
+  /**
+   * Generate a JWT token for referral link
+   * @param consultantId - ID of the consultant
+   * @param email - Email of the potential client
+   * @returns JWT token
+   */
+  private generateReferralToken(
+    consultantId: string,
+    email: string,
+  ): string {
+    const payload = {
+      consultantId,
+      email,
+    };
+
+    return this.jwtService.sign(payload, {
+      expiresIn: '7d',
+    });
   }
 
   /**
