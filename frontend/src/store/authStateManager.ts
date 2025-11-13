@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import type { UserProps } from "../types/types";
 import api from "../services/api";
 
@@ -14,10 +15,12 @@ interface AuthState {
   refreshPromise: Promise<void> | null;
 }
 
-export const useAuth = create<AuthState>((set, get) => ({
-  accessToken: null,
-  isRefreshing: false,
-  refreshPromise: null,
+export const useAuth = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      accessToken: null,
+      isRefreshing: false,
+      refreshPromise: null,
 
   setAccessToken: (token) => {
     set({ accessToken: token });
@@ -64,4 +67,14 @@ export const useAuth = create<AuthState>((set, get) => ({
     set({ isRefreshing: true, refreshPromise });
     return refreshPromise;
   },
-}));
+    }),
+    {
+      name: 'auth-storage',
+      partialize: (state) => ({
+        accessToken: state.accessToken,
+        user: state.user,
+        // Não persiste isRefreshing e refreshPromise
+      }),
+    }
+  )
+);
