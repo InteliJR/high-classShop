@@ -21,14 +21,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
-  const accessToken = useAuth((state) => state.accessToken);
-  const user = useAuth((state) => state.user);
-
-  const setAccessToken = useAuth((state) => state.setAccessToken);
-  const setUser = useAuth((state) => state.setUser);
-
-  const clearAccessToken = useAuth((state) => state.clearAccessToken);
-  const clearUser = useAuth((state) => state.clearUser);
+  // Não subscrevemos ao state aqui para evitar re-renders desnecessários
+  // Os componentes que precisam de user/accessToken pegam direto do useAuth
+  const { setAccessToken, setUser, clearAccessToken, clearUser } = useAuth.getState();
 
 
   // Verificar se há um token no navegador
@@ -128,8 +123,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <AuthContext.Provider
       value={{
-        accessToken,
-        user,
+        accessToken: useAuth.getState().accessToken,
+        user: useAuth.getState().user,
         login,
         logout,
         loading,

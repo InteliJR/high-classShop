@@ -1,6 +1,7 @@
 import { useContext, useEffect } from "react";
 import { AuthContext } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../store/authStateManager";
 import type { UserRole } from "../types/types";
 
 export default function ProtectedRoute({
@@ -10,7 +11,8 @@ export default function ProtectedRoute({
   children: React.ReactNode;
   allowedRoles?: UserRole[];
 }) {
-  const { user, loading } = useContext(AuthContext);
+  const { loading } = useContext(AuthContext);
+  const user = useAuth((state) => state.user);
   const navigate = useNavigate();
 
   // Gerenciador da lógica de redirecionar a página
