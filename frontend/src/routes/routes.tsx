@@ -3,6 +3,7 @@ import App from "../App";
 import MainLayout from "../layouts/MainLayout";
 import Catalog from "../pages/Catalog";
 import Login from "../pages/auth/LoginPage";
+import RegisterPage from "../pages/auth/RegisterPage";
 import ProtectedRoute from "./ProtectedRoute";
 import ConsultantDashboard from "../pages/consultant/ConsultantDashboard";
 import CompaniesPage from "../pages/admin/CompaniesPage";
@@ -23,6 +24,10 @@ export default function RouterApp() {
     {
       path: "/login",
       element: <Login />,
+    },
+    {
+      path: "/register",
+      element: <RegisterPage />,
     },
     {
       path: "/consultant/dashboard",

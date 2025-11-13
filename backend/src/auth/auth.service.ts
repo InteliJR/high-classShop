@@ -50,6 +50,32 @@ export class AuthService {
     };
   }
 
+  async validateReferralToken(token: string) {
+    try {
+      const payload = this.jwtService.verify(token, {
+        secret: jwtConstants.access,
+      });
+
+      // Buscar o consultor para retornar o nome completo
+      const consultant = await this.prismaService.user.findUnique({
+        where: { id: payload.consultantId },
+        select: { name: true, surname: true },
+      });
+
+      if (!consultant) {
+        throw new BadRequestException('Consultor não encontrado');
+      }
+
+      return {
+        consultantId: payload.consultantId,
+        email: payload.email,
+        consultantName: `${consultant.name} ${consultant.surname}`,
+      };
+    } catch (error) {
+      throw new UnauthorizedException('Token de convite inválido ou expirado');
+    }
+  }
+
   async login(data: LoginDto) {
     // Procurar o usuário pelo e-mail
     const user = await this.prismaService.user.findUnique({

@@ -120,3 +120,22 @@ export interface LoginValues {
   email: string;
   password: string;
 }
+
+// Tipagem das informações de registro
+export interface RegisterValues {
+  name: string;
+  surname: string;
+  email: string;
+  cpf: string;
+  rg: string;
+  password: string;
+  civil_state?: CivilState;
+  consultant_id?: string;
+}
+
+// Payload decodificado do token de referral
+export interface ReferralTokenPayload {
+  consultantId: string;
+  email: string;
+  consultantName?: string;
+}

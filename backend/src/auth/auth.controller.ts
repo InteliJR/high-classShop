@@ -34,6 +34,17 @@ export class AuthController {
   }
 
   @Public()
+  @Post('validate-referral')
+  async validateReferralToken(@Body() body: { token: string }) {
+    const payload = await this.authService.validateReferralToken(body.token);
+    return {
+      success: true,
+      message: 'Token válido',
+      data: payload,
+    };
+  }
+
+  @Public()
   @UseGuards(RateLimitGuard)
   @RateLimit({ windowMs: 900, max: 5 }) // 5 attempts per 15 minutes
   @Post('login')
