@@ -13,6 +13,13 @@ import Modal from "../../components/ui/Modal";
 import InviteClientForm from "./InviteClientForm";
 import EditClientForm from "./EditClientForm";
 
+function formatCPF(cpf: string | null): string {
+  if (!cpf) return "-";
+  const cleaned = cpf.replace(/\D/g, "");
+  if (cleaned.length !== 11) return cpf;
+  return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+}
+
 export default function ConsultantDashboard() {
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,64 +93,65 @@ export default function ConsultantDashboard() {
       </div>
 
       {/* --- TABELA DE CLIENTES --- */}
-      <div className="p-6 rounded-lg shadow bg-brand-container bg-bg-container">
+      <div className="p-6 rounded-lg shadow bg-white">
         <h2 className="h2-style">Clientes</h2>
-        <p className="text-base mb-8 mt-2">
+        <p className="text-base mb-6 mt-2 text-gray-600">
           Lista completa de clientes vinculados a você
         </p>
 
-        {/* Cabeçalho da Lista */}
-        <div className="grid grid-cols-[minmax(150px,1fr)_minmax(200px,2fr)_140px_140px_100px] gap-4 px-4 py-2 text-sm font-semibold text-left text-gray-600">
-          <div>Nome</div>
-          <div>Email</div>
-          <div>CPF</div>
-          <div>Data de Cadastro</div>
-          <div className="text-right">Ações</div>
-        </div>
-
-        {/* Corpo da Lista */}
-        <div className="mt-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto p-2">
-          {clients.length === 0 ? (
-            <div className="text-center py-8 text-text-secondary">
-              Nenhum cliente cadastrado ainda. Clique em "Convidar Cliente" para começar.
-            </div>
-          ) : (
-            clients.map((client) => (
-              <div
-                key={client.id}
-                className="grid grid-cols-[minmax(150px,1fr)_minmax(200px,2fr)_140px_140px_100px] gap-4 items-center bg-white p-6 rounded-lg shadow-sm border border-gray-200"
-              >
-                <div className="font-normal">
-                  {client.name} {client.surname}
-                </div>
-                <div>{client.email}</div>
-                <div>{client.cpf || "-"}</div>
-                <div>
-                  {client.created_at 
-                    ? new Date(client.created_at).toLocaleDateString("pt-BR")
-                    : "-"}
-                </div>
-                <div className="flex justify-end items-center gap-4 text-gray-400">
-                  <button onClick={() => setClientToEdit(client)}>
-                    <img
-                      src={EditIcon}
-                      alt="Editar"
-                      className="h-6 w-6 cursor-pointer"
-                    />
-                  </button>
-
-                  <button onClick={() => setClientToDelete(client)}>
-                    <img
-                      src={TrashIcon}
-                      alt="Remover"
-                      className="h-5 w-5 cursor-pointer"
-                    />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        {clients.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            Nenhum cliente cadastrado ainda. Clique em "Convidar Cliente" para começar.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 font-semibold text-sm text-gray-700">Nome</th>
+                  <th className="text-left py-3 px-4 font-semibold text-sm text-gray-700">Email</th>
+                  <th className="text-left py-3 px-4 font-semibold text-sm text-gray-700">CPF</th>
+                  <th className="text-left py-3 px-4 font-semibold text-sm text-gray-700">Data de Cadastro</th>
+                  <th className="text-right py-3 px-4 font-semibold text-sm text-gray-700">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clients.map((client) => (
+                  <tr key={client.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                    <td className="py-4 px-4">
+                      {client.name} {client.surname}
+                    </td>
+                    <td className="py-4 px-4 text-gray-600">{client.email}</td>
+                    <td className="py-4 px-4 text-gray-600">{formatCPF(client.cpf)}</td>
+                    <td className="py-4 px-4 text-gray-600">
+                      {client.created_at 
+                        ? new Date(client.created_at).toLocaleDateString("pt-BR")
+                        : "-"}
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex justify-end items-center gap-3">
+                        <button 
+                          onClick={() => setClientToEdit(client)}
+                          className="p-2 hover:bg-gray-200 rounded transition-colors"
+                          title="Editar"
+                        >
+                          <img src={EditIcon} alt="Editar" className="h-5 w-5" />
+                        </button>
+                        <button 
+                          onClick={() => setClientToDelete(client)}
+                          className="p-2 hover:bg-red-100 rounded transition-colors"
+                          title="Remover"
+                        >
+                          <img src={TrashIcon} alt="Remover" className="h-5 w-5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* --- MODAIS --- */}
