@@ -62,8 +62,8 @@ model User {
   company_id    String? @db.Uuid
 
   address    Address? @relation(fields: [address_id], references: [id])
-  consultant User?    @relation("ConsultantUsers", fields: [consultant_id], references: [id])
-  clients    User[]   @relation("ConsultantUsers")
+  consultant User?    @relation("ClientToConsultant", fields: [consultant_id], references: [id], onDelete: SetNull)
+  clients    User[]   @relation("ClientToConsultant")
   company    Company? @relation(fields: [company_id], references: [id])
 
   created_at               DateTime            @default(now())
