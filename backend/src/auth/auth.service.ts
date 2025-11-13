@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ApiResponseDto, LoginDto, UserRegisterDto } from './dto/auth';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { jwtConstants } from './constants';
 import { UserEntity } from './entities/user.entity';
 import { UserRole } from '@prisma/client';
@@ -114,8 +115,12 @@ export class AuthService {
 
   // Criar refresh token e salvar no banco
   private async createRefreshToken(userId: string): Promise<string> {
+    // Gerar um ID único para garantir que tokens sejam diferentes mesmo em milissegundos consecutivos
+    const jti = crypto.randomUUID();
+    
     const payloadRefresh = {
       sub: userId,
+      jti, // JWT ID único
     };
 
     const refreshToken = await this.jwtService.signAsync(payloadRefresh, {
