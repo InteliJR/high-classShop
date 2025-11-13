@@ -30,48 +30,56 @@ export default function Header() {
               }}
             />
           ) : (
-            <div className="flex justify-between items-center text-base w-full pl-12">
-              {/* Navegação nos links */}
-              <nav>
-                <ul className="flex gap-2">
-                  <li className="flex items-center p-2 gap-0.5">
-                    <a>Sobre nós</a>
-                    <ChevronDown size={20} />
-                  </li>
-                  <li className="flex items-center p-2 gap-0.5">
-                    <a>Aeronave</a>
-                    <ChevronDown size={20} />
-                  </li>
-                  <li className="flex items-center p-2 gap-0.5">
-                    <a>Barco</a>
-                    <ChevronDown size={20} />
-                  </li>
-                  <li className="flex items-center p-2 gap-0.5">
-                    <a>Carro</a>
-                    <ChevronDown size={20} />
-                  </li>
-                </ul>
-              </nav>
-              <button className="flex p-2 gap-3 bg-white text-black rounded-md">
-                <UserCircle2 size={25} />
-                Login
-              </button>
-            </div>
+            !user && (
+              <div className="flex justify-between items-center text-base w-full pl-12">
+                {/* Navegação nos links */}
+                <nav>
+                  <ul className="flex gap-2">
+                    <li className="flex items-center p-2 gap-0.5">
+                      <a>Sobre nós</a>
+                      <ChevronDown size={20} />
+                    </li>
+                    <li className="flex items-center p-2 gap-0.5">
+                      <a>Aeronave</a>
+                      <ChevronDown size={20} />
+                    </li>
+                    <li className="flex items-center p-2 gap-0.5">
+                      <a>Barco</a>
+                      <ChevronDown size={20} />
+                    </li>
+                    <li className="flex items-center p-2 gap-0.5">
+                      <a>Carro</a>
+                      <ChevronDown size={20} />
+                    </li>
+                  </ul>
+                </nav>
+                <button className="flex p-2 gap-3 bg-white text-black rounded-md">
+                  <UserCircle2 size={25} />
+                  Login
+                </button>
+              </div>
+            )
           )}
 
+          {/* Barra de pesquisa para quando tiver um usuário logado */}
           {user ? (
-            <>
-              <div className="relative flex justify-center items-center">
-                <Search size={18} className="absolute left-15  text-black" />
+            <div className="flex sm:justify-around sm:w-full">
+              <div className="flex justify-center items-center sm:w-full">
+                <div className="relative flex items-center">
+                  <Search
+                    size={18}
+                    className="absolute translate-x-3 text-black"
+                  />
+                </div>
                 <input
-                  className="bg-white rounded-full mx-4 w-2/3 h-7 text-black px-10"
+                  className=" bg-white rounded-full w-2/3 h-10 text-black px-10"
                   type="text"
                 />
               </div>
               <button>
                 <UserCircle2 size={40} />
               </button>
-            </>
+            </div>
           ) : (
             <img src={Logo} className="w-25 sm:w-35 h-auto" />
           )}
