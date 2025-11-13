@@ -93,7 +93,7 @@ export default function ConsultantDashboard() {
         </p>
 
         {/* Cabeçalho da Lista */}
-        <div className="grid grid-cols-[2fr_2fr_1fr_1fr_auto] gap-5 px-4 py-2 text-base font-normal text-left text-text-secondary">
+        <div className="grid grid-cols-[minmax(150px,1fr)_minmax(200px,2fr)_140px_140px_100px] gap-4 px-4 py-2 text-sm font-semibold text-left text-gray-600">
           <div>Nome</div>
           <div>Email</div>
           <div>CPF</div>
@@ -111,7 +111,7 @@ export default function ConsultantDashboard() {
             clients.map((client) => (
               <div
                 key={client.id}
-                className="grid grid-cols-[2fr_2fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6 rounded-lg shadow-sm bg-white"
+                className="grid grid-cols-[minmax(150px,1fr)_minmax(200px,2fr)_140px_140px_100px] gap-4 items-center bg-white p-6 rounded-lg shadow-sm border border-gray-200"
               >
                 <div className="font-normal">
                   {client.name} {client.surname}
