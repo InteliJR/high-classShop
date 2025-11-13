@@ -1,4 +1,4 @@
-import { createContext, useEffect, useState } from "react";
+import { createContext, useEffect, useRef, useState } from "react";
 import type { LoginValues, UserProps } from "../types/types";
 import api from "../services/api";
 import { useAuth } from "../store/authStateManager";
@@ -19,7 +19,7 @@ export interface AuthContextProps {
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState<boolean>(true);
-  const [isInitialized, setIsInitialized] = useState<boolean>(false);
+  const isInitialized = useRef(false);
 
   // Não subscrevemos ao state aqui para evitar re-renders desnecessários
   // Os componentes que precisam de user/accessToken pegam direto do useAuth
@@ -28,7 +28,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Verificar se há um token no navegador
   useEffect(() => {
-    if (isInitialized) return; // Evita múltiplas inicializações
+    if (isInitialized.current) return; // Evita múltiplas inicializações (StrictMode)
+    isInitialized.current = true;
     
     const init = async () => {
       // Sempre tenta verificar o token primeiro
@@ -43,11 +44,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
       
       setLoading(false);
-      setIsInitialized(true);
     };
 
     init();
-  }, [isInitialized]);
+  }, []);
 
   // Validar o token
   const verifyToken = async () => {

@@ -1,6 +1,6 @@
 // Página principal do painel do Assessor (Consultant)
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   getClients,
   removeClient,
@@ -20,6 +20,7 @@ export default function ConsultantDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   // Armazena mensagens de erro para exibir ao utilizador se a API falhar
   const [error, setError] = useState<string | null>(null);
+  const hasFetched = useRef(false);
 
   // Controla a visibilidade do modal de convite de novo cliente
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -72,6 +73,8 @@ export default function ConsultantDashboard() {
   };
 
   useEffect(() => {
+    if (hasFetched.current) return; // Evita dupla chamada com StrictMode
+    hasFetched.current = true;
     fetchData();
   }, []);
 
