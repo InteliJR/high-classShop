@@ -89,10 +89,17 @@ export class AuthService {
   async refresh( refresh_token : string): Promise<{ accessToken: string; refreshToken: string; user: UserEntity }> {
     const user = await this.verifyRefreshToken(refresh_token);
     
-    // Invalidate old refresh token
-    await this.prismaService.refreshToken.delete({
-      where: { token: refresh_token },
-    });
+    // Invalidate old refresh token (ignore if already deleted - race condition)
+    try {
+      await this.prismaService.refreshToken.delete({
+        where: { token: refresh_token },
+      });
+    } catch (error) {
+      // Token já foi deletado por outra requisição - não é um erro crítico
+      if (error.code !== 'P2025') {
+        throw error;
+      }
+    }
 
     // Create new refresh token (rotation)
     const newRefreshToken = await this.createRefreshToken(user.id);

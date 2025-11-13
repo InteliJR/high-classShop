@@ -10,10 +10,14 @@ interface AuthState {
   setUser: (user: UserProps | null) => void;
   clearUser: () => void;
   refresh: () => Promise<void>;
+  isRefreshing: boolean;
+  refreshPromise: Promise<void> | null;
 }
 
-export const useAuth = create<AuthState>((set) => ({
+export const useAuth = create<AuthState>((set, get) => ({
   accessToken: null,
+  isRefreshing: false,
+  refreshPromise: null,
 
   setAccessToken: (token) => {
     set({ accessToken: token });
@@ -34,14 +38,25 @@ export const useAuth = create<AuthState>((set) => ({
   },
 
   refresh: async() => {
-    try{
+    const state = get();
+    
+    // Se já está fazendo refresh, aguarda a promessa existente
+    if (state.isRefreshing && state.refreshPromise) {
+      return state.refreshPromise;
+    }
+
+    // Marca como refreshing e cria nova promessa
+    const refreshPromise = (async () => {
+      try {
         const response = await api.post('auth/refresh', {}, {withCredentials: true});
         const accessToken = response.data.data.access_token;
-        set({accessToken: accessToken});
+        set({ accessToken, isRefreshing: false, refreshPromise: null });
+      } catch {
+        set({ accessToken: null, isRefreshing: false, refreshPromise: null });
+      }
+    })();
 
-    } catch {
-        set({accessToken: null});
-
-    }
+    set({ isRefreshing: true, refreshPromise });
+    return refreshPromise;
   },
 }));
