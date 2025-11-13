@@ -10,7 +10,6 @@ import {
   Matches
 } from 'class-validator';
 import { UserEntity } from '../entities/user.entity';
-import { $Enums } from '@prisma/client';
 import { IsValidCPF } from '../../shared/validators/cpf.validator';
 
 // Tipos para login e registro de usuários

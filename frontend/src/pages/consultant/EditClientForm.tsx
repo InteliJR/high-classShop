@@ -10,19 +10,12 @@ interface EditClientFormProps {
 }
 
 export default function EditClientForm({ client, onSuccess }: EditClientFormProps) {
-  // Guarda os valores dos campos do formulário
   const [name, setName] = useState(client.name);
   const [surname, setSurname] = useState(client.surname);
   const [email, setEmail] = useState(client.email);
-  
-  // Controla se o formulário está a ser enviado
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Guarda qualquer mensagem de erro que ocorra durante a validação ou o envio
   const [error, setError] = useState<string | null>(null);
 
-  /**
-   * Função chamada quando o utilizador clica no botão "Salvar Alterações"
-   */
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     
@@ -42,7 +35,6 @@ export default function EditClientForm({ client, onSuccess }: EditClientFormProp
     setError(null);
 
     try {
-      // TODO: Call PUT /api/consultant/clients/:id
       await updateClient(client.id, {
         name,
         surname,

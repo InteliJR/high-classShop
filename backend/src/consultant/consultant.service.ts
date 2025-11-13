@@ -21,7 +21,7 @@ export class ConsultantService {
     const clients = await this.prismaService.user.findMany({
       where: {
         consultant_id: consultantId,
-        role: 'CUSTOMER', // Only customers can be clients
+        role: 'CUSTOMER',
       },
       select: {
         id: true,
@@ -70,7 +70,6 @@ export class ConsultantService {
 
     const consultantFullName = `${consultant.name} ${consultant.surname}`;
 
-    // Generate the registration link (same logic as SES service)
     const referralToken = this.generateReferralToken(
       consultantId,
       sendInvitationDto.email,
@@ -79,7 +78,6 @@ export class ConsultantService {
     const registrationLink = `${frontendUrl}/register?ref=${referralToken}`;
 
     try {
-      // Try to send the registration email
       const result = await this.sesService.sendRegistrationEmail(
         sendInvitationDto.email,
         consultantId,
@@ -87,7 +85,6 @@ export class ConsultantService {
       );
 
       if (!result.success) {
-        // Email failed but we still return the link
         return {
           success: true,
           message: 'Link de convite gerado com sucesso',
@@ -105,12 +102,10 @@ export class ConsultantService {
         messageId: result.messageId,
       };
     } catch (error) {
-      // Re-throw BadRequestException from email validation
       if (error instanceof BadRequestException) {
         throw error;
       }
 
-      // For SES errors, return the link with a warning instead of throwing
       return {
         success: true,
         message: 'Link de convite gerado com sucesso',
@@ -152,7 +147,6 @@ export class ConsultantService {
     clientId: string,
     updateClientDto: UpdateClientDto,
   ) {
-    // First, verify the client exists and belongs to this consultant
     const existingClient = await this.prismaService.user.findFirst({
       where: {
         id: clientId,
@@ -167,7 +161,6 @@ export class ConsultantService {
       );
     }
 
-    // Update the client
     const updatedClient = await this.prismaService.user.update({
       where: {
         id: clientId,

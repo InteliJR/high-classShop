@@ -14,22 +14,15 @@ import InviteClientForm from "./InviteClientForm";
 import EditClientForm from "./EditClientForm";
 
 export default function ConsultantDashboard() {
-  // Guarda os dados dos clientes da API
   const [clients, setClients] = useState<Client[]>([]);
-  // Controla a exibição de mensagens de 'loading' enquanto os dados são buscados
   const [isLoading, setIsLoading] = useState(true);
-  // Armazena mensagens de erro para exibir ao utilizador se a API falhar
   const [error, setError] = useState<string | null>(null);
   const hasFetched = useRef(false);
 
-  // Controla a visibilidade do modal de convite de novo cliente
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-  // Controla a visibilidade do modal de edição de cliente
   const [clientToEdit, setClientToEdit] = useState<Client | null>(null);
-  // Guarda o objeto do cliente que está prestes a ser removido
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
 
-  // Busca os dados mais recentes da API e atualiza o estado da página
   async function fetchData() {
     try {
       setIsLoading(true);
@@ -45,23 +38,19 @@ export default function ConsultantDashboard() {
     }
   }
 
-  // Função chamada quando o formulário de convite é submetido com sucesso
   const handleInviteSuccess = () => {
     setIsInviteModalOpen(false);
     fetchData();
   };
 
-  // Função chamada quando o formulário de edição é submetido com sucesso
   const handleEditSuccess = () => {
     setClientToEdit(null);
     fetchData();
   };
 
-  // Função chamada pelo modal de confirmação para remover um cliente
   const handleConfirmDelete = async () => {
     if (!clientToDelete) return;
     try {
-      // TODO: Call DELETE /api/consultant/clients/:id
       await removeClient(clientToDelete.id);
       fetchData();
     } catch (err) {
@@ -78,12 +67,10 @@ export default function ConsultantDashboard() {
     fetchData();
   }, []);
 
-  // Exibe uma mensagem de 'loading' enquanto os dados não chegam
   if (isLoading) {
     return <p>Carregando...</p>;
   }
 
-  // Exibe uma mensagem de erro se a busca de dados falhar
   if (error) {
     return <p className="text-red-500">{error}</p>;
   }

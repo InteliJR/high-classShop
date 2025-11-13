@@ -9,22 +9,13 @@ interface InviteClientFormProps {
 }
 
 export default function InviteClientForm({ onSuccess }: InviteClientFormProps) {
-  // Guarda o valor do campo "Email"
   const [email, setEmail] = useState("");
-  // Controla se o formulário está a ser enviado
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Guarda qualquer mensagem de erro que ocorra durante a validação ou o envio
   const [error, setError] = useState<string | null>(null);
-  // Guarda o link de convite retornado pela API
   const [inviteLink, setInviteLink] = useState<string | null>(null);
-  // Guarda a mensagem de warning se o email não foi enviado
   const [warning, setWarning] = useState<string | null>(null);
-  // Controla se o link foi copiado
   const [linkCopied, setLinkCopied] = useState(false);
 
-  /**
-   * Função chamada quando o utilizador clica no botão "Enviar Convite"
-   */
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
@@ -49,17 +40,13 @@ export default function InviteClientForm({ onSuccess }: InviteClientFormProps) {
     try {
       const response = await inviteClient(email);
 
-      // Set the invite link from the API response
       if (response.registrationLink) {
         setInviteLink(response.registrationLink);
       }
 
-      // Check if there's a warning (email not sent)
       if (response.warning) {
         setWarning(response.warning);
       }
-
-      // Don't close the modal - let user copy the link first
     } catch (err) {
       setError(
         (err as Error).message || "Falha ao enviar convite. Tente novamente."
@@ -69,9 +56,6 @@ export default function InviteClientForm({ onSuccess }: InviteClientFormProps) {
     }
   };
 
-  /**
-   * Função para copiar o link de convite para a área de transferência
-   */
   const handleCopyLink = async () => {
     if (!inviteLink) return;
 
@@ -79,7 +63,6 @@ export default function InviteClientForm({ onSuccess }: InviteClientFormProps) {
       await navigator.clipboard.writeText(inviteLink);
       setLinkCopied(true);
 
-      // Reset the "copied" state after 3 seconds
       setTimeout(() => {
         setLinkCopied(false);
       }, 3000);
@@ -88,9 +71,6 @@ export default function InviteClientForm({ onSuccess }: InviteClientFormProps) {
     }
   };
 
-  /**
-   * Função para fechar o modal após o convite ser enviado
-   */
   const handleClose = () => {
     setEmail("");
     setInviteLink(null);

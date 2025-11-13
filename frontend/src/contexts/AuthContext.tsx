@@ -21,24 +21,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const isInitialized = useRef(false);
 
-  // Não subscrevemos ao state aqui para evitar re-renders desnecessários
-  // Os componentes que precisam de user/accessToken pegam direto do useAuth
   const { setAccessToken, setUser, clearAccessToken, clearUser } = useAuth.getState();
 
-
-  // Verificar se há um token no navegador
   useEffect(() => {
-    if (isInitialized.current) return; // Evita múltiplas inicializações (StrictMode)
+    if (isInitialized.current) return;
     isInitialized.current = true;
     
     const init = async () => {
-      // Sempre tenta verificar o token primeiro
-      // Se não tiver accessToken, o /auth/me vai dar 401 e o interceptor faz refresh
       const isValid = await verifyToken();
       
       if (!isValid) {
-        // Se verifyToken falhou e não conseguiu recuperar via interceptor,
-        // limpa os dados
         clearAccessToken();
         clearUser();
       }
@@ -49,7 +41,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     init();
   }, []);
 
-  // Validar o token
   const verifyToken = async () => {
     try {
       const response = await api.get<UserProps>("auth/me", {
@@ -59,18 +50,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(data);
       return true;
     } catch (error) {
-      // Se o interceptor fez refresh com sucesso, o user já está no store
       const currentUser = useAuth.getState().user;
       if (currentUser) {
         setUser(currentUser);
         return true;
       }
-      // Se realmente falhou, retorna false
       return false;
     }
   };
 
-  // Criar o accessToken a partir do refreshToken
   const refreshUser = async () => {
     try {
       const response = await api.post(
@@ -87,10 +75,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // Possibilitar o login na plataforma
   const login = async (user: LoginValues) => {
     try {
-      // Realizar o login fazendo a req para o backend
       const response: any = await api.post(
         "auth/login",
         {
@@ -100,7 +86,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         { withCredentials: true }
       );
       const data = response.data.data;
-      // Guarda as informações de login no navegador
       if (data) {
         setUser(data.user);
         setAccessToken(data.access_token);
@@ -114,7 +99,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // Logout do usuário
   const logout = () => {
     clearAccessToken();
     clearUser();

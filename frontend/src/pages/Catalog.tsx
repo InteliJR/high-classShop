@@ -133,7 +133,6 @@ export default function Catalog() {
       )}
 
       {/* Modal de filtros */}
-      {/* TODO: Construir um components com o Modal de filtros */}
       <Modal isOpen={filterModal} onClose={ () =>
          {
           setFilters(filter);
