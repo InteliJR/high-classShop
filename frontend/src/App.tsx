@@ -1,15 +1,20 @@
-import { useNavigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { CookiesProvider } from "react-cookie";
+import { AuthProvider } from "./contexts/AuthContext";
+import MainLayout from "./layouts/MainLayout";
+import CompaniesPage from "./pages/admin/CompaniesPage";
 
 function App() {
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    // Redireciona para a dashboard por padrão
-    navigate('/admin/dashboard')
-  }, [navigate])
-
-  return null
+  return (
+    <>
+      <CookiesProvider>
+        <AuthProvider>
+          <MainLayout>
+            <CompaniesPage />
+          </MainLayout>
+        </AuthProvider>
+      </CookiesProvider>
+    </>
+  );
 }
 
-export default App
+export default App;
