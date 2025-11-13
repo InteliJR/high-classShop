@@ -36,12 +36,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (isInitialized) return; // Evita múltiplas inicializações
     
     const init = async () => {
-      const token = useAuth.getState().accessToken;
-      if (!token) {
-        await refreshUser();
-      } else {
-        await verifyToken();
+      // Sempre tenta verificar o token primeiro
+      // Se não tiver accessToken, o /auth/me vai dar 401 e o interceptor faz refresh
+      const isValid = await verifyToken();
+      
+      if (!isValid) {
+        // Se verifyToken falhou e não conseguiu recuperar via interceptor,
+        // limpa os dados
+        clearAccessToken();
+        clearUser();
       }
+      
       setLoading(false);
       setIsInitialized(true);
     };
@@ -59,8 +64,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(data);
       return true;
     } catch (error) {
-      // Se falhou, não tenta refresh aqui - o interceptor já vai fazer isso
-      // Apenas retorna false
+      // Se o interceptor fez refresh com sucesso, o user já está no store
+      const currentUser = useAuth.getState().user;
+      if (currentUser) {
+        setUser(currentUser);
+        return true;
+      }
+      // Se realmente falhou, retorna false
       return false;
     }
   };
