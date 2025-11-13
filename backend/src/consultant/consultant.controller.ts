@@ -69,6 +69,8 @@ export class ConsultantController {
       message: result.message,
       data: {
         email: result.email,
+        registrationLink: result.registrationLink,
+        warning: result.warning,
         messageId: result.messageId,
       },
     };

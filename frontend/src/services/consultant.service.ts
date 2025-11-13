@@ -18,14 +18,14 @@ export type ApiResponse<T> = {
   data: T;
 };
 
-export type InviteResponse = {
-  success: boolean;
-  message: string;
+export type InviteResponseData = {
   email: string;
   registrationLink?: string;
   warning?: string;
   messageId?: string;
 };
+
+export type InviteResponse = ApiResponse<InviteResponseData>;
 
 /**
  * Get all clients for the authenticated consultant
@@ -43,13 +43,13 @@ export async function getClients(): Promise<Client[]> {
  * @param email - Email address of the potential client
  * @returns Invitation response with invite link
  */
-export async function inviteClient(email: string): Promise<InviteResponse> {
+export async function inviteClient(email: string): Promise<InviteResponseData> {
   const response = await api.post<InviteResponse>(
     '/consultant/invite',
     { email },
     { withCredentials: true }
   );
-  return response.data;
+  return response.data.data;
 }
 
 /**
