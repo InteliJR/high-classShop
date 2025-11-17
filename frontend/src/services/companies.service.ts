@@ -3,7 +3,7 @@
 const API = "http://localhost:3000";
 
 export type Company = {
-  id: number;
+  id: string;
   name: string;
   cnpj: string;
   logo?: string | null;
@@ -18,16 +18,23 @@ export async function getCompanies(): Promise<Company[]> {
 }
 
 // Cria uma nova empresa enviando os dados para a API.
-export async function createCompany(formData: FormData): Promise<Company> {
+export async function createCompany(data: {
+  name: string;
+  cnpj: string;
+  logo?: string;
+}): Promise<Company> {
   const API_URL = "http://localhost:3000";
 
   const response = await fetch(`${API_URL}/companies`, {
     method: "POST",
-    body: formData,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
   });
 
   if (!response.ok) {
-    throw new Error("Falha ao criar o escritório.");
+    const errorData = await response.json();
+    console.error("Erro ao criar empresa:", errorData);
+    throw new Error(errorData.message || "Falha ao criar o escritório.");
   }
 
   return response.json();
@@ -35,7 +42,7 @@ export async function createCompany(formData: FormData): Promise<Company> {
 
 // Atualiza os dados de uma empresa existente.
 export async function updateCompany(
-  id: number,
+  id: string,
   data: Partial<Company>
 ): Promise<Company> {
   const res = await fetch(`${API}/companies/${id}`, {
@@ -47,6 +54,6 @@ export async function updateCompany(
 }
 
 // Apaga uma empresa pelo seu ID.
-export async function deleteCompany(id: number): Promise<void> {
+export async function deleteCompany(id: string): Promise<void> {
   await fetch(`${API}/companies/${id}`, { method: "DELETE" });
 }

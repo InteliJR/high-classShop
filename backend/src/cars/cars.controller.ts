@@ -11,9 +11,9 @@ import {
 import { CarsService } from './cars.service';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
-import { QueryDto } from 'src/utils/dto/query.dto';
-import { PaginationDto } from 'src/utils/dto/pagination.dto';
-import { FiltersCarMeta } from 'src/utils/dto/filters.dto';
+import { QueryDto } from 'src/shared/dto/query.dto';
+import { PaginationDto } from 'src/shared/dto/pagination.dto';
+import { FiltersCarMeta } from 'src/shared/dto/filters.dto';
 
 @Controller('cars')
 export class CarsController {

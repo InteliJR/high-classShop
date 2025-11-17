@@ -1,6 +1,6 @@
 // Página de gestão de escritórios, com listagem, criação e exclusão.
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   getCompanies,
   deleteCompany,
@@ -22,6 +22,8 @@ export default function CompaniesPage() {
 
   // Controla a visibilidade do modal de criação de um novo escritório.
   const [isNewCompanyModalOpen, setIsNewCompanyModalOpen] = useState(false);
+  // Guarda a empresa que está sendo editada, ou null se estiver criando uma nova.
+  const [companyToEdit, setCompanyToEdit] = useState<Company | null>(null);
   // Guarda o objeto da empresa que está prestes a ser apagada, controlando também o modal de confirmação.
   const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null);
 
@@ -39,9 +41,10 @@ export default function CompaniesPage() {
     }
   }
 
-  // Função chamada quando o formulário de novo escritório é submetido com sucesso.
+  // Função chamada quando o formulário de novo/edição de escritório é submetido com sucesso.
   const handleFormSuccess = () => {
     setIsNewCompanyModalOpen(false);
+    setCompanyToEdit(null);
     fetchData();
   };
 
@@ -106,9 +109,9 @@ export default function CompaniesPage() {
               className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6 rounded-lg shadow-sm bg-white"
             >
               <div className="flex items-center gap-3">
-                {company.logoUrl ? (
+                {company.logo ? (
                   <img
-                    src={company.logoUrl}
+                    src={`data:image/png;base64,${company.logo}`}
                     alt={company.name}
                     className="h-8 w-24 object-contain"
                   />
@@ -127,11 +130,11 @@ export default function CompaniesPage() {
               </div>
               <div>-</div>
               <div className="flex justify-end items-center gap-4 text-gray-400">
-                <button>
+                <button onClick={() => setCompanyToEdit(company)}>
                   <img
                     src={EditIcon}
                     alt="Editar"
-                    className="h-6 w-6 cursor-pointer"
+                    className="h-6 w-6 cursor-pointer hover:text-gray-600"
                   />
                 </button>
 
@@ -139,7 +142,7 @@ export default function CompaniesPage() {
                   <img
                     src={TrashIcon}
                     alt="Deletar"
-                    className="h-5 w-5 cursor-pointer"
+                    className="h-5 w-5 cursor-pointer hover:text-gray-600"
                   />
                 </button>
               </div>
@@ -150,12 +153,18 @@ export default function CompaniesPage() {
 
       {/* --- MODAIS --- */}
 
-      {/* Modal para criar novo escritório */}
+      {/* Modal para criar novo escritório ou editar existente */}
       <Modal
-        isOpen={isNewCompanyModalOpen}
-        onClose={() => setIsNewCompanyModalOpen(false)}
+        isOpen={isNewCompanyModalOpen || !!companyToEdit}
+        onClose={() => {
+          setIsNewCompanyModalOpen(false);
+          setCompanyToEdit(null);
+        }}
       >
-        <NewCompanyForm onSuccess={handleFormSuccess} />
+        <NewCompanyForm
+          onSuccess={handleFormSuccess}
+          companyToEdit={companyToEdit}
+        />
       </Modal>
 
       {/* --- NOVO MODAL PARA CONFIRMAÇÃO DE EXCLUSÃO --- */}
