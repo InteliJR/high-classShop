@@ -5,6 +5,8 @@ import { BoatsModule } from './boats/boats.module';
 import { CarsModule } from './cars/cars.module';
 import { PrismaService } from './prisma/prisma.service';
 import { CompaniesModule } from './features/companies/companies.module';
+import { ConsultantsModule } from './features/consultants/consultants.module';
+import { SpecialistsModule } from './features/specialists/specialists.module';
 import { AuthModule } from './auth/auth.module';
 import { ConsultantModule } from './consultant/consultant.module';
 import { RolesGuard } from './shared/guards/roles.guard';
@@ -16,6 +18,8 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ConsultantsModule,
+    SpecialistsModule,
     CompaniesModule,
     CarsModule,
     BoatsModule,

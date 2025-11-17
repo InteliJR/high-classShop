@@ -1,3 +1,4 @@
+
 import { NestFactory, Reflector } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ClassSerializerInterceptor, Logger, ValidationPipe } from '@nestjs/common';
@@ -14,6 +15,10 @@ async function bootstrap() {
     origin: process.env.FRONTEND_URL || 'http://localhost:3001',
     credentials: true,
   });
+  // Aumenta o limite de tamanho do payload JSON para aceitar imagens em base64
+  app.use(require('express').json({ limit: '50mb' }));
+  app.use(require('express').urlencoded({ limit: '50mb', extended: true }));
+  app.useGlobalPipes(new ValidationPipe({ transform: true }));
 
   // Pipe de validação global
   app.useGlobalPipes(

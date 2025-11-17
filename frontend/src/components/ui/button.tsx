@@ -21,9 +21,9 @@ export default function Button({
 
   const variantStyles = { 
     solid: `
-      bg-gray-700 text-white
-      hover:bg-gray-800
-      focus:ring-gray-700`, 
+      bg-button-solid text-white
+      hover:bg-[--color-button-solid-hover]
+      focus:ring-[--color-button-solid]`, 
     light: `
       bg-white text-gray-900 border border-gray-300
       hover:bg-gray-100
