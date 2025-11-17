@@ -1,5 +1,5 @@
-import { createContext, useEffect, useState } from "react";
-import type { LoginValues, UserProps } from "../types/types";
+import { createContext, useEffect, useRef, useState } from "react";
+import type { LoginValues, RegisterValues, ReferralTokenPayload, UserProps } from "../types/types";
 import api from "../services/api";
 import { useAuth } from "../store/authStateManager";
 
@@ -11,6 +11,8 @@ export interface AuthContextProps {
   accessToken: string | null;
   user: UserProps | null;
   login: (user: LoginValues) => Promise<{ user: UserProps; access_token: string }>;
+  register: (data: RegisterValues) => Promise<{ user: UserProps }>;
+  validateReferralToken: (token: string) => Promise<ReferralTokenPayload>;
   logout: () => void;
   loading: boolean;
   refreshUser: () => Promise<boolean>;
@@ -19,33 +21,28 @@ export interface AuthContextProps {
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState<boolean>(true);
+  const isInitialized = useRef(false);
 
-  const accessToken = useAuth((state) => state.accessToken);
-  const user = useAuth((state) => state.user);
+  const { setAccessToken, setUser, clearAccessToken, clearUser } = useAuth.getState();
 
-  const setAccessToken = useAuth((state) => state.setAccessToken);
-  const setUser = useAuth((state) => state.setUser);
-
-  const clearAccessToken = useAuth((state) => state.clearAccessToken);
-  const clearUser = useAuth((state) => state.clearUser);
-
-
-  // Verificar se há um token no navegador
   useEffect(() => {
+    if (isInitialized.current) return;
+    isInitialized.current = true;
+    
     const init = async () => {
-      const token = useAuth.getState().accessToken;
-      if (!token) {
-        await refreshUser();
-      } else {
-        await verifyToken();
+      const isValid = await verifyToken();
+      
+      if (!isValid) {
+        clearAccessToken();
+        clearUser();
       }
+      
       setLoading(false);
     };
 
     init();
   }, []);
 
-  // Validar o token
   const verifyToken = async () => {
     try {
       const response = await api.get<UserProps>("auth/me", {
@@ -55,16 +52,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(data);
       return true;
     } catch (error) {
-      // Tentar conseguir o accessToken a partir do refreshToken caso ele exista
-      if (accessToken) {
-        return await refreshUser();
+      const currentUser = useAuth.getState().user;
+      if (currentUser) {
+        setUser(currentUser);
+        return true;
       }
-
       return false;
     }
   };
 
-  // Criar o accessToken a partir do refreshToken
   const refreshUser = async () => {
     try {
       const response = await api.post(
@@ -81,10 +77,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // Possibilitar o login na plataforma
   const login = async (user: LoginValues) => {
     try {
-      // Realizar o login fazendo a req para o backend
       const response: any = await api.post(
         "auth/login",
         {
@@ -94,7 +88,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         { withCredentials: true }
       );
       const data = response.data.data;
-      // Guarda as informações de login no navegador
       if (data) {
         setUser(data.user);
         setAccessToken(data.access_token);
@@ -108,7 +101,35 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // Logout do usuário
+  const register = async (data: RegisterValues) => {
+    try {
+      const response: any = await api.post(
+        "auth/register",
+        data,
+        { withCredentials: true }
+      );
+      const responseData = response.data.data;
+      if (responseData?.user) {
+        return { user: responseData.user };
+      }
+      throw new Error(response.statusText);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const validateReferralToken = async (token: string): Promise<ReferralTokenPayload> => {
+    try {
+      const response = await api.post<{ data: ReferralTokenPayload }>(
+        "auth/validate-referral",
+        { token }
+      );
+      return response.data.data;
+    } catch (error) {
+      throw new Error("Token de convite inválido ou expirado");
+    }
+  };
+
   const logout = () => {
     clearAccessToken();
     clearUser();
@@ -117,9 +138,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <AuthContext.Provider
       value={{
-        accessToken,
-        user,
+        accessToken: useAuth.getState().accessToken,
+        user: useAuth.getState().user,
         login,
+        register,
+        validateReferralToken,
         logout,
         loading,
         refreshUser,

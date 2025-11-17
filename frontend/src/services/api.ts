@@ -3,7 +3,7 @@ import { useAuth } from "../store/authStateManager";
 
 // Instanciar a origem das rquisições para a api
 const api = axios.create({
-  baseURL: "http://localhost:3000",
+  baseURL: "http://localhost:3000/api/",
 });
 
 // Adiciona token de acesso no header das requisições

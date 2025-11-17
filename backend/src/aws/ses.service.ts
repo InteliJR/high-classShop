@@ -2,7 +2,7 @@ import { Injectable, InternalServerErrorException, Logger, BadRequestException }
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
-import { validateEmail } from '../utils/email-validator';
+import { validateEmail } from '../shared/email-validator';
 
 interface ReferralPayload {
     consultantId: string;
@@ -46,7 +46,7 @@ export class SesService {
 
         // Token expires in 7 days
         return this.jwtService.sign(payload, {
-            secret: this.configService.getOrThrow('JWT_SECRET'),
+            secret: this.configService.getOrThrow('JWT_SECRET_REFERRAL'),
             expiresIn: '7d',
         });
     }
@@ -121,13 +121,21 @@ export class SesService {
                 messageId: response.MessageId,
             };
         } catch (error) {
+            // Re-throw BadRequestException (invalid email)
+            if (error instanceof BadRequestException) {
+                throw error;
+            }
+
+            // For SES errors, log and return error instead of throwing
             this.logger.error(
                 `Failed to send registration email to ${recipientEmail}`,
                 error,
             );
-            throw new InternalServerErrorException(
-                `Failed to send registration email: ${error instanceof Error ? error.message : 'Unknown error'}`,
-            );
+
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            };
         }
     }
 

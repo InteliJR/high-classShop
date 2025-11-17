@@ -1,22 +1,18 @@
 
 import { NestFactory, Reflector } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
+import { ClassSerializerInterceptor, Logger, ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
+
+  const logger = new Logger('Bootstrap');
+
   const app = await NestFactory.create(AppModule);
 
-app.useGlobalPipes(
-  new ValidationPipe({
-    transform: true,
-  }),
-);
-
-app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
-
+  // Configuração de CORS
   app.enableCors({
-    origin: 'http://localhost:5173',
+    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
     credentials: true,
   });
   // Aumenta o limite de tamanho do payload JSON para aceitar imagens em base64
@@ -24,7 +20,35 @@ app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
   app.use(require('express').urlencoded({ limit: '50mb', extended: true }));
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
 
+  // Pipe de validação global
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      disableErrorMessages: process.env.NODE_ENV === 'production',
+    }),
+  );
+
+  // Interceptor para serialização de classes (remove campos com @Exclude())
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+
+  // Cookie parser middleware
   app.use(cookieParser());
-  await app.listen(3000);
+
+  // Prefixo global para APIs
+  app.setGlobalPrefix('api');
+
+  const port = process.env.PORT ?? 3000;
+  await app.listen(port);
+
+  logger.log(`Aplicação rodando na porta ${port}`);
+  logger.log(`Ambiente: ${process.env.NODE_ENV || 'development'}`);
 }
-bootstrap();
+
+bootstrap().catch((error) => {
+  const logger = new Logger('Bootstrap');
+  logger.error('❌ Erro ao inicializar aplicação:', error);
+  process.exit(1);
+});
+

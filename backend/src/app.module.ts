@@ -1,16 +1,17 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { AircraftsModule } from './aircrafts/aircrafts.module';
 import { BoatsModule } from './boats/boats.module';
 import { CarsModule } from './cars/cars.module';
+import { PrismaService } from './prisma/prisma.service';
+import { CompaniesModule } from './features/companies/companies.module';
 import { ConsultantsModule } from './features/consultants/consultants.module';
 import { SpecialistsModule } from './features/specialists/specialists.module';
 import { AuthModule } from './auth/auth.module';
-import { CompaniesModule } from './companies/companies.module';
 import { ConsultantModule } from './consultant/consultant.module';
-import { PrismaService } from './prisma/prisma.service';
+import { RolesGuard } from './shared/guards/roles.guard';
+import { PrismaExceptionFilter } from './shared/filters/prisma-exception.filter';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -26,7 +27,15 @@ import { PrismaService } from './prisma/prisma.service';
     AuthModule,
     ConsultantModule,
   ],
-  controllers: [AppController],
-  providers: [AppService, PrismaService],
+  providers: [
+    PrismaService,
+    {
+      provide: APP_FILTER,
+      useClass: PrismaExceptionFilter,
+    }, {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    }
+  ],
 })
-export class AppModule {}
+export class AppModule { }

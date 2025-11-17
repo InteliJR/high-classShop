@@ -9,6 +9,8 @@ import {
   Length,
   Matches
 } from 'class-validator';
+import { UserEntity } from '../entities/user.entity';
+import { IsValidCPF } from '../../shared/validators/cpf.validator';
 
 // Tipos para login e registro de usuários
 export enum UserRole {
@@ -45,18 +47,15 @@ export class UserRegisterDto {
   email: string;
 
   @IsString()
-  @Length(11, 11)
-  @Matches(/^\d{11}$/, { message: 'CPF must be 11 digits' })
+  @Length(11, 11, { message: 'CPF deve ter 11 dígitos' })
+  @Matches(/^\d{11}$/, { message: 'CPF deve conter apenas números' })
+  @IsValidCPF()
   cpf: string;
 
   @IsString()
   @Length(10, 10)
   @Matches(/^\d{10}$/, { message: 'RG must be 10 digits' })
   rg: string;
-
-  @IsOptional()
-  @IsEnum(UserRole)
-  role?: UserRole;
 
   @IsString()
   @MinLength(6)
@@ -71,20 +70,12 @@ export class UserRegisterDto {
   speciality?: SpecialityType;
 
   @IsOptional()
-  @IsString()
-  identification_number?: string;
-
-  @IsOptional()
   @IsUUID()
   address_id?: string;
 
   @IsOptional()
   @IsUUID()
   consultant_id?: string;
-
-  @IsOptional()
-  @IsUUID()
-  company_id?: string;
 }
 
 export class LoginDto {
@@ -111,5 +102,5 @@ export class ApiResponseDto<D, M, ED> {
 
 // Retorno do AuthGuard
 export interface RequestWithUser extends Request {
-  user: UserRegisterDto;
+  user: UserEntity;
 }

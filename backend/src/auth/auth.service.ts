@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ApiResponseDto, LoginDto, UserRegisterDto } from './dto/auth';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { jwtConstants } from './constants';
 import { UserEntity } from './entities/user.entity';
 import { UserRole } from '@prisma/client';
@@ -31,7 +32,7 @@ export class AuthService {
     }
 
     // Criar o role para registrar o usuário padrão
-    const registerRole = data.role ?? UserRole.CUSTOMER;
+    const registerRole = UserRole.CUSTOMER;
 
     // Separação da req
     const { password, ...dataSave } = data;
@@ -45,8 +46,46 @@ export class AuthService {
     });
 
     return {
-      user: user,
+      user: UserEntity.fromPrisma(user),
     };
+  }
+
+  async validateReferralToken(token: string) {
+    try {
+      const payload = this.jwtService.verify(token, {
+        secret: jwtConstants.referral,
+      });
+
+      // Buscar o consultor para retornar o nome completo
+      const consultant = await this.prismaService.user.findUnique({
+        where: { id: payload.consultantId },
+        select: { name: true, surname: true },
+      });
+
+      if (!consultant) {
+        throw new BadRequestException('Consultor não encontrado');
+      }
+
+      // Verificar se já existe um usuário com este email
+      const existingUser = await this.prismaService.user.findUnique({
+        where: { email: payload.email },
+      });
+
+      if (existingUser) {
+        throw new BadRequestException('Já existe uma conta cadastrada com este email. Faça login para acessar sua conta.');
+      }
+
+      return {
+        consultantId: payload.consultantId,
+        email: payload.email,
+        consultantName: `${consultant.name} ${consultant.surname}`,
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new UnauthorizedException('Token de convite inválido ou expirado');
+    }
   }
 
   async login(data: LoginDto) {
@@ -81,7 +120,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: new UserEntity(user),  
+      user: UserEntity.fromPrisma(user),  
     };
   }
 
@@ -89,10 +128,17 @@ export class AuthService {
   async refresh( refresh_token : string): Promise<{ accessToken: string; refreshToken: string; user: UserEntity }> {
     const user = await this.verifyRefreshToken(refresh_token);
     
-    // Invalidate old refresh token
-    await this.prismaService.refreshToken.delete({
-      where: { token: refresh_token },
-    });
+    // Invalidate old refresh token (ignore if already deleted - race condition)
+    try {
+      await this.prismaService.refreshToken.delete({
+        where: { token: refresh_token },
+      });
+    } catch (error) {
+      // Token já foi deletado por outra requisição - não é um erro crítico
+      if (error.code !== 'P2025') {
+        throw error;
+      }
+    }
 
     // Create new refresh token (rotation)
     const newRefreshToken = await this.createRefreshToken(user.id);
@@ -101,14 +147,18 @@ export class AuthService {
     return {
       accessToken,
       refreshToken: newRefreshToken,
-      user: new UserEntity(user),
+      user: UserEntity.fromPrisma(user),
     };
   }
 
   // Criar refresh token e salvar no banco
   private async createRefreshToken(userId: string): Promise<string> {
+    // Gerar um ID único para garantir que tokens sejam diferentes mesmo em milissegundos consecutivos
+    const jti = crypto.randomUUID();
+    
     const payloadRefresh = {
       sub: userId,
+      jti, // JWT ID único
     };
 
     const refreshToken = await this.jwtService.signAsync(payloadRefresh, {

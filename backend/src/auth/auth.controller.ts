@@ -12,9 +12,9 @@ import { AuthService } from './auth.service';
 import * as auth from './dto/auth';
 import { AuthGuard } from './auth.guard';
 import express from 'express';
-import { Public } from 'src/utils/decorators/public.decorator';
-import { RateLimit } from 'src/utils/decorators/rate-limit.decorator';
-import { RateLimitGuard } from 'src/utils/guards/rate-limit.guard';
+import { Public } from 'src/shared/decorators/public.decorator';
+import { RateLimit } from 'src/shared/decorators/rate-limit.decorator';
+import { RateLimitGuard } from 'src/shared/guards/rate-limit.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -34,6 +34,17 @@ export class AuthController {
   }
 
   @Public()
+  @Post('validate-referral')
+  async validateReferralToken(@Body() body: { token: string }) {
+    const payload = await this.authService.validateReferralToken(body.token);
+    return {
+      success: true,
+      message: 'Token válido',
+      data: payload,
+    };
+  }
+
+  @Public()
   @UseGuards(RateLimitGuard)
   @RateLimit({ windowMs: 900, max: 5 }) // 5 attempts per 15 minutes
   @Post('login')
@@ -48,7 +59,7 @@ export class AuthController {
       httpOnly: true,
       secure: true, // Trocar para true quando deployar
       sameSite: 'strict', // Trocar para strict quando deployar
-      path: '/auth/refresh',
+      path: '/api/auth/refresh',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
     });
 
@@ -76,7 +87,7 @@ export class AuthController {
       httpOnly: true,
       secure: true,
       sameSite: 'strict',
-      path: '/auth/refresh',
+      path: '/api/auth/refresh',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
     });
 

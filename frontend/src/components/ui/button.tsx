@@ -25,13 +25,13 @@ export default function Button({
       hover:bg-[--color-button-solid-hover]
       focus:ring-[--color-button-solid]`, 
     light: `
-      bg-[--color-button-light] text-[--color-text-dark] border border-gray-300
+      bg-white text-gray-900 border border-gray-300
       hover:bg-gray-100
-      focus:ring-[--color-secondary]`, 
+      focus:ring-gray-400`, 
     muted: `
-      bg-[--color-button-muted] text-[--color-text-dark]
-      hover:bg-opacity-80
-      focus:ring-[--color-button-muted]`,
+      bg-gray-300 text-gray-900
+      hover:bg-gray-400
+      focus:ring-gray-300`,
   };
 
   return (

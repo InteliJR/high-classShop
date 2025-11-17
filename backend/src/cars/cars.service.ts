@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { QueryDto } from 'src/utils/dto/query.dto';
-import { ContainsCarFilters, ExactCarFilters, FiltersCarMeta, RangeCarFilters } from 'src/utils/dto/filters.dto';
+import { QueryDto } from 'src/shared/dto/query.dto';
+import { ContainsCarFilters, ExactCarFilters, FiltersCarMeta, RangeCarFilters } from 'src/shared/dto/filters.dto';
 
 @Injectable()
 export class CarsService {

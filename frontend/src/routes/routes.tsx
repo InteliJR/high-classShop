@@ -3,8 +3,9 @@ import App from "../App";
 import MainLayout from "../layouts/MainLayout";
 import Catalog from "../pages/Catalog";
 import Login from "../pages/auth/LoginPage";
-import { AuthProvider } from "../contexts/AuthContext";
+import RegisterPage from "../pages/auth/RegisterPage";
 import ProtectedRoute from "./ProtectedRoute";
+import ConsultantDashboard from "../pages/consultant/ConsultantDashboard";
 import { CookiesProvider } from "react-cookie";
 import DashboardPage from "../pages/admin/DashboardPage";
 import CompaniesPage from "../pages/admin/CompaniesPage";
@@ -18,26 +19,48 @@ export default function RouterApp() {
       path: "/catalog/:category",
       element: (
         <MainLayout>
-          <CookiesProvider>
-            <AuthProvider>
-              <ProtectedRoute>
-                {" "}
-                <Catalog />{" "}
-              </ProtectedRoute>
-            </AuthProvider>
-          </CookiesProvider>
+          <ProtectedRoute>
+            <Catalog />
+          </ProtectedRoute>
         </MainLayout>
       ),
     },
     {
       path: "/login",
+      element: <Login />,
+    },
+    {
+      path: "/register",
+      element: <RegisterPage />,
+    },
+    {
+      path: "/consultant/dashboard",
       element: (
-        <CookiesProvider>
-          <AuthProvider>
-            {" "}
-            <Login />{" "}
-          </AuthProvider>
-        </CookiesProvider>
+        <MainLayout>
+          <ProtectedRoute allowedRoles={['CONSULTANT']}>
+            <ConsultantDashboard />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/admin/dashboard",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <CompaniesPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/specialist/dashboard",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={['SPECIALIST']}>
+            <Catalog />
+          </ProtectedRoute>
+        </MainLayout>
       ),
     },
     {
