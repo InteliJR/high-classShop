@@ -2,13 +2,13 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateAircraftDto } from './dto/create-aircraft.dto';
 import { UpdateAircraftDto } from './dto/update-aircraft.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { QueryDto } from 'src/utils/dto/query.dto';
+import { QueryDto } from 'src/shared/dto/query.dto';
 import {
   ContainsAircraftFilters,
   ExactAircraftFilters,
   FiltersAircraftMeta,
   RangeAircraftFilters,
-} from 'src/utils/dto/filters.dto';
+} from 'src/shared/dto/filters.dto';
 
 @Injectable()
 export class AircraftsService {

@@ -7,15 +7,20 @@ import {
   Param,
   Delete,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { AircraftsService } from './aircrafts.service';
 import { CreateAircraftDto } from './dto/create-aircraft.dto';
 import { UpdateAircraftDto } from './dto/update-aircraft.dto';
-import { QueryDto } from 'src/utils/dto/query.dto';
-import { PaginationDto } from 'src/utils/dto/pagination.dto';
-import { FiltersAircraftMeta } from 'src/utils/dto/filters.dto';
+import { QueryDto } from 'src/shared/dto/query.dto';
+import { PaginationDto } from 'src/shared/dto/pagination.dto';
+import { FiltersAircraftMeta } from 'src/shared/dto/filters.dto';
+import { AuthGuard } from 'src/auth/auth.guard';
+import { UserRole } from '@prisma/client';
+import { Roles } from 'src/shared/decorators/roles.decorator';
 
 @Controller('aircrafts')
+@UseGuards(AuthGuard)
 export class AircraftsController {
   constructor(private readonly aircraftsService: AircraftsService) {}
 
@@ -25,6 +30,7 @@ export class AircraftsController {
   }
 
   @Get()
+  @Roles(UserRole.CONSULTANT, UserRole.ADMIN)
   async getAllAircrafts(
     @Query() { page, perPage, appliedFilters }: QueryDto<FiltersAircraftMeta>,
   ) {

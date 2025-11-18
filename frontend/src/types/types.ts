@@ -1,15 +1,15 @@
 // Substituto do tipo ENUM nos postgres
 // Carro
-export type estadoValues = ['novo', 'seminovo', 'colecao'];
-export type tipoCategoriaCarValues = ['SUV', 'sedan', 'coupe', 'conversivel', 'esportivo', 'supercarro'];
-export type cambioCarValues = ['manual', 'automatico', 'cvt'];
-export type combustivelCarValues = ['gasolina', 'alcool', 'flex', 'diesel', 'eletrico', 'hibrido'];
+export type estadoValues = 'novo'| 'seminovo'| 'colecao';
+export type tipoCategoriaCarValues = 'SUV'| 'sedan'| 'coupe'| 'conversivel'| 'esportivo'| 'supercarro';
+export type cambioCarValues = 'manual'| 'automatico'| 'cvt';
+export type combustivelCarValues = 'gasolina'| 'alcool'| 'flex'| 'diesel'| 'eletrico'| 'hibrido';
 // Barco
-export type combustivelBoatsValues = ['diesel', 'gasolina', 'eletrico', 'hibrido'];
-export type tipoEmbarcacaoBoatsValues = ['iate', 'lancha', 'catamara', 'veleiro', 'jet_boat', 'outro'];
-export type tamanhoBoatsValues = ['ate_30_pes','30_50_pes','acima_50_pes'];
+export type combustivelBoatsValues = 'diesel'| 'gasolina'| 'eletrico'| 'hibrido';
+export type tipoEmbarcacaoBoatsValues = 'iate'| 'lancha'| 'catamara'| 'veleiro'| 'jet_boat'| 'outro';
+export type tamanhoBoatsValues = 'ate_30_pes'|'30_50_pes'|'acima_50_pes';
 // Aeronave
-export type tipoAeronaveValues = ['VLJ', 'executivo_medio', 'intercontinental', 'turbohelice', 'helicoptero']
+export type tipoAeronaveValues = 'VLJ'| 'executivo_medio'| 'intercontinental'| 'turbohelice'| 'helicoptero'
 
 // Filtros
 // Carro
@@ -91,4 +91,51 @@ export interface Product {
   descricao: string;
   valor: number;
   imageUrl: string;
+}
+
+// Usuários
+export type UserRole = 'CUSTOMER' |'CONSULTANT' |'SPECIALIST' |'ADMIN';
+export type CivilState = 'SINGLE' |'MARRIED' |'DIVORCED' |'WIDOWED' |'SEPARATED' |'STABLE_UNION' ;
+export type SpecialityType = 'CAR' |'BOAT' |'AIRCRAFT';
+
+export interface UserProps {
+  id: string;
+  name: string;
+  surname: string;
+  email: string;
+  cpf: string;
+  rg: string;
+  role: UserRole;
+  civil_state?: CivilState;
+  speciality?: SpecialityType;
+  identification_number?: string;
+  address_id?: string;
+  consultant_id?: string;
+  company_id?: string;
+  created_at?: Date;
+}
+
+// Tipgem das informações de login
+export interface LoginValues {
+  email: string;
+  password: string;
+}
+
+// Tipagem das informações de registro
+export interface RegisterValues {
+  name: string;
+  surname: string;
+  email: string;
+  cpf: string;
+  rg: string;
+  password: string;
+  civil_state?: CivilState;
+  consultant_id?: string;
+}
+
+// Payload decodificado do token de referral
+export interface ReferralTokenPayload {
+  consultantId: string;
+  email: string;
+  consultantName?: string;
 }

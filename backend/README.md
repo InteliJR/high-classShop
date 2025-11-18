@@ -44,6 +44,25 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
+## Database Seed
+
+Populate the database with mock data (luxury cars, boats, and aircrafts):
+
+```bash
+# Run seed script
+$ npm run seed
+
+# Or using Prisma
+$ npx prisma db seed
+```
+
+The seed will create:
+- 10 luxury cars (Porsche, Lamborghini, Ferrari, etc.)
+- 10 boats (Yachts, speedboats, sailboats)
+- 10 aircrafts (Executive jets from Embraer, Gulfstream, etc.)
+
+Each product includes multiple images and detailed specifications. See [SEED_README.md](./SEED_README.md) for more details.
+
 ## Run tests
 
 ```bash
