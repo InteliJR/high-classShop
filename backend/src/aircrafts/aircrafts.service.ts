@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateAircraftDto } from './dto/create-aircraft.dto';
 import { UpdateAircraftDto } from './dto/update-aircraft.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -9,14 +9,36 @@ import {
   FiltersAircraftMeta,
   RangeAircraftFilters,
 } from 'src/shared/dto/filters.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class AircraftsService {
-  constructor(private prismaService: PrismaService) {}
+  constructor(private prismaService: PrismaService) { }
 
-  create(createAircraftDto: CreateAircraftDto) {
-    return 'This action adds a new aircraft';
+  async create(data: CreateAircraftDto) {
+    const { specialist_id, images, ...aircraftData } = data;
+
+    const payload: Prisma.AircraftUncheckedCreateInput = {
+      categoria: aircraftData.categoria,
+      ano: aircraftData.ano,
+      marca: aircraftData.marca,
+      modelo: aircraftData.modelo,
+      assentos: aircraftData.assentos,
+      estado: aircraftData.estado,
+      descricao: aircraftData.descricao,
+      valor: aircraftData.valor,
+      tipo_aeronave: aircraftData.tipo_aeronave,
+      specialist_id: specialist_id ?? null,
+    };
+
+    return this.prismaService.aircraft.create({ data: payload });
   }
+
+
+  // async create(data: CreateAircraftDto) {
+
+  //   return this.prismaService.aircraft.create( {data});
+  // }
 
   async getAllAircrafts({
     page,
@@ -78,15 +100,62 @@ export class AircraftsService {
     };
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} aircraft`;
+  async findOne(id: number) {
+    const aircraft = await this.prismaService.aircraft.findUnique({ where: { id } });
+    if (!aircraft) {
+      throw new NotFoundException('Car not found');
+    }
+    return { ...aircraft };
   }
 
-  update(id: number, updateAircraftDto: UpdateAircraftDto) {
-    return `This action updates a #${id} aircraft`;
+
+  // update(id: number, updateAircraftDto: UpdateAircraftDto) {
+  //   return `This action updates a #${id} aircraft`;
+  // }
+
+  async update(id: number, data: UpdateAircraftDto) {
+    await this.findOne(id);
+
+    const { specialist_id, images, ...aircraftData } = data;
+    const payload: Prisma.AircraftUncheckedUpdateInput = {};
+
+    if (aircraftData.categoria !== undefined) {
+      payload.categoria = aircraftData.categoria;
+    }
+    if (aircraftData.ano !== undefined) {
+      payload.ano = aircraftData.ano;
+    }
+    if (aircraftData.marca !== undefined) {
+      payload.marca = aircraftData.marca;
+    }
+    if (aircraftData.modelo !== undefined) {
+      payload.modelo = aircraftData.modelo;
+    }
+    if (aircraftData.assentos !== undefined) {
+      payload.assentos = aircraftData.assentos;
+    }
+    if (aircraftData.estado !== undefined) {
+      payload.estado = aircraftData.estado;
+    }
+    if (aircraftData.descricao !== undefined) {
+      payload.descricao = aircraftData.descricao;
+    }
+    if (aircraftData.valor !== undefined) {
+      payload.valor = aircraftData.valor;
+    }
+    if (aircraftData.tipo_aeronave !== undefined) {
+      payload.tipo_aeronave = aircraftData.tipo_aeronave;
+    }
+    if (specialist_id !== undefined) {
+      payload.specialist_id = specialist_id ?? null;
+    }
+
+    return this.prismaService.aircraft.update({ where: { id }, data: payload });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} aircraft`;
+  async remove(id: number) {
+    await this.findOne(id);
+    await this.prismaService.aircraft.delete({ where: { id } });
+    return { ok: true };
   }
 }
