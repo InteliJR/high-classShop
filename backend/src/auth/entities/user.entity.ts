@@ -36,7 +36,7 @@ export class UserEntity
   cpf: string;
   identification_number: string | null;
   rg: string;
-  speciality: $Enums.SpecialityType | null;
+  speciality: $Enums.ProductType | null;
   surname: string;
   
   constructor(partial: Partial<PrismaUser>) {
