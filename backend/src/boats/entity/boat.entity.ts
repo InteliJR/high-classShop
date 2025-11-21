@@ -1,5 +1,5 @@
-import { User } from '@prisma/client';
 import { BoatImage } from './boat-image.entity';
+import { UserEntity } from 'src/auth/entities/user.entity';
 
 export class Boat {
   id: number;
@@ -21,6 +21,6 @@ export class Boat {
   created_at: Date;
   updated_at: Date;
 
-  specialist?: User | null;
+  specialist?: UserEntity | null;
   images?: BoatImage[];
 }

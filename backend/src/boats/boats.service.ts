@@ -10,6 +10,7 @@ import {
   RangeBoatFilters,
 } from 'src/shared/dto/filters.dto';
 import { Boat } from './entity/boat.entity';
+import { UserEntity } from 'src/auth/entities/user.entity';
 
 @Injectable()
 export class BoatsService {
@@ -115,6 +116,9 @@ export class BoatsService {
       descricao: boat.descricao_completa,
       valor: boat.valor.toNumber(),
       images: boat.images || [],
+      specialist: boat.specialist
+        ? UserEntity.fromPrisma(boat.specialist)
+        : null,
     }));
 
     return {

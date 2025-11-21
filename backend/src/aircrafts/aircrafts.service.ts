@@ -11,10 +11,11 @@ import {
 } from 'src/shared/dto/filters.dto';
 import { Prisma } from '@prisma/client';
 import { Aircraft } from './entity/aircraft.entity';
+import { UserEntity } from 'src/auth/entities/user.entity';
 
 @Injectable()
 export class AircraftsService {
-  constructor(private prismaService: PrismaService) { }
+  constructor(private prismaService: PrismaService) {}
 
   async create(data: CreateAircraftDto) {
     const { specialist_id, images, ...aircraftData } = data;
@@ -35,7 +36,6 @@ export class AircraftsService {
     return this.prismaService.aircraft.create({ data: payload });
   }
 
-
   // async create(data: CreateAircraftDto) {
 
   //   return this.prismaService.aircraft.create( {data});
@@ -49,7 +49,7 @@ export class AircraftsService {
     // Cálculo das variáveis que serão utilizadas
     const take = perPage;
     const skip = page && take ? (page - 1) * take : 0;
-    
+
     // Separação dos filtros
     const where: any = {};
 
@@ -59,8 +59,8 @@ export class AircraftsService {
       tipo_aeronave: appliedFilters?.tipo_aeronave,
     };
     // Insere a filtragem na variável where
-    for( const [key, value] of Object.entries(exacts)){
-      if (value !== undefined && value !== null){
+    for (const [key, value] of Object.entries(exacts)) {
+      if (value !== undefined && value !== null) {
         where[key] = value;
       }
     }
@@ -73,7 +73,7 @@ export class AircraftsService {
     };
     // Insere a filtragem a variável where
     for (const [key, value] of Object.entries(contains)) {
-      if(value !== undefined && value !== null){
+      if (value !== undefined && value !== null) {
         where[key] = { contains: value, mode: 'insensitive' };
       }
     }
@@ -95,7 +95,7 @@ export class AircraftsService {
     for (const [key, { gte, lte }] of Object.entries(rangeMap)) {
       const hasGte = gte !== undefined && gte !== null;
       const hasLte = lte !== undefined && lte !== null;
-      if (hasGte || hasLte){
+      if (hasGte || hasLte) {
         where[key] = {};
         if (hasGte) where[key].gte = gte;
         if (hasLte) where[key].lte = lte;
@@ -111,16 +111,19 @@ export class AircraftsService {
         include: {
           images: true,
           specialist: true,
-        }
+        },
       }),
       this.prismaService.aircraft.count(),
     ]);
 
-    const aircraftsEntities: Aircraft[] = aircrafts.map( aircraft => ({
+    const aircraftsEntities: Aircraft[] = aircrafts.map((aircraft) => ({
       ...aircraft,
       valor: aircraft.valor.toNumber(),
       images: aircraft.images || [],
-    }))
+      specialist: aircraft.specialist
+        ? UserEntity.fromPrisma(aircraft.specialist)
+        : null,
+    }));
 
     return {
       data: aircraftsEntities,
@@ -130,13 +133,14 @@ export class AircraftsService {
   }
 
   async findOne(id: number) {
-    const aircraft = await this.prismaService.aircraft.findUnique({ where: { id } });
+    const aircraft = await this.prismaService.aircraft.findUnique({
+      where: { id },
+    });
     if (!aircraft) {
       throw new NotFoundException('Car not found');
     }
     return { ...aircraft };
   }
-
 
   // update(id: number, updateAircraftDto: UpdateAircraftDto) {
   //   return `This action updates a #${id} aircraft`;
