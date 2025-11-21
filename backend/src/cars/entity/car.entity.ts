@@ -1,18 +1,23 @@
+import { User } from "@prisma/client";
+import { CarImage } from "./car-image.entity";
 export class Car {
-    id: String;
-    marca: String;
-    modelo: String;
+    id: number;
+    specialist_id: string | null;
+    marca: string;
+    modelo: string;
     valor: number;
-    estado: String;
+    estado: string;
     ano: number;
-    cor: String;
-    km: number;
-    cambio: String;
-    combustivel: String;
-    tipo_categoria: String;
-    descricao: String;
-    specialist: string; //Fix
-    images: string; //Fix
+    cor: string | null;
+    km: number | null;
+    cambio: string | null;
+    combustivel: string | null;
+    tipo_categoria: string | null;
+    descricao: string | null;
     created_at: Date;
     updated_at: Date;
+
+    specialist?: User | null;
+
+    images?: CarImage[] | null;
 }
