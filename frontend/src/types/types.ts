@@ -90,7 +90,7 @@ export interface Product {
   modelo: string;
   descricao: string;
   valor: number;
-  imageUrl: string;
+  imageUrl?: string;
 }
 
 // Usuários
