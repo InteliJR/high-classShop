@@ -10,7 +10,7 @@ import { Request } from 'express';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { UserEntity } from './entities/user.entity';
 import { Reflector } from '@nestjs/core';
-import { IS_PUBLIC_KEY } from 'src/utils/decorators/public.decorator';
+import { IS_PUBLIC_KEY } from 'src/shared/decorators/public.decorator';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -27,13 +27,15 @@ export class AuthGuard implements CanActivate {
       context.getClass()
     ])
 
+    if (isPublic) {
+      return true;
+    }
+
     const request = context.switchToHttp().getRequest<any>();
     const token = this.extractTokenFromHeader(request);
     if (!token) {
       throw new UnauthorizedException('Unauthorized');
     }
-
-    // TODO: Desenvolver uma maneira de caso não tenha accessToken ele verifique o refreshToken e atualize o token anterior
     
     try {
       const payload = await this.jwtService.verifyAsync(token, {

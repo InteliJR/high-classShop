@@ -8,8 +8,10 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ApiResponseDto, LoginDto, UserRegisterDto } from './dto/auth';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { jwtConstants } from './constants';
 import { UserEntity } from './entities/user.entity';
+import { UserRole } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -30,7 +32,7 @@ export class AuthService {
     }
 
     // Criar o role para registrar o usuário padrão
-    const registerRole = data.role ? data.role : 'CUSTOMER';
+    const registerRole = UserRole.CUSTOMER;
 
     // Separação da req
     const { password, ...dataSave } = data;
@@ -44,8 +46,46 @@ export class AuthService {
     });
 
     return {
-      user: user,
+      user: UserEntity.fromPrisma(user),
     };
+  }
+
+  async validateReferralToken(token: string) {
+    try {
+      const payload = this.jwtService.verify(token, {
+        secret: jwtConstants.referral,
+      });
+
+      // Buscar o consultor para retornar o nome completo
+      const consultant = await this.prismaService.user.findUnique({
+        where: { id: payload.consultantId },
+        select: { name: true, surname: true },
+      });
+
+      if (!consultant) {
+        throw new BadRequestException('Consultor não encontrado');
+      }
+
+      // Verificar se já existe um usuário com este email
+      const existingUser = await this.prismaService.user.findUnique({
+        where: { email: payload.email },
+      });
+
+      if (existingUser) {
+        throw new BadRequestException('Já existe uma conta cadastrada com este email. Faça login para acessar sua conta.');
+      }
+
+      return {
+        consultantId: payload.consultantId,
+        email: payload.email,
+        consultantName: `${consultant.name} ${consultant.surname}`,
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new UnauthorizedException('Token de convite inválido ou expirado');
+    }
   }
 
   async login(data: LoginDto) {
@@ -74,9 +114,51 @@ export class AuthService {
     // Criação do token de acesss
     const accessToken = await this.generateAccessToken(user);
 
-    // Criação do refresh token
+    // Criação do refresh token com rotation
+    const refreshToken = await this.createRefreshToken(user.id);
+
+    return {
+      accessToken,
+      refreshToken,
+      user: UserEntity.fromPrisma(user),  
+    };
+  }
+
+  //Criação do accessToken a partir do refreshToken
+  async refresh( refresh_token : string): Promise<{ accessToken: string; refreshToken: string; user: UserEntity }> {
+    const user = await this.verifyRefreshToken(refresh_token);
+    
+    // Invalidate old refresh token (ignore if already deleted - race condition)
+    try {
+      await this.prismaService.refreshToken.delete({
+        where: { token: refresh_token },
+      });
+    } catch (error) {
+      // Token já foi deletado por outra requisição - não é um erro crítico
+      if (error.code !== 'P2025') {
+        throw error;
+      }
+    }
+
+    // Create new refresh token (rotation)
+    const newRefreshToken = await this.createRefreshToken(user.id);
+    const accessToken = await this.generateAccessToken(user);
+    
+    return {
+      accessToken,
+      refreshToken: newRefreshToken,
+      user: UserEntity.fromPrisma(user),
+    };
+  }
+
+  // Criar refresh token e salvar no banco
+  private async createRefreshToken(userId: string): Promise<string> {
+    // Gerar um ID único para garantir que tokens sejam diferentes mesmo em milissegundos consecutivos
+    const jti = crypto.randomUUID();
+    
     const payloadRefresh = {
-      sub: user.id,
+      sub: userId,
+      jti, // JWT ID único
     };
 
     const refreshToken = await this.jwtService.signAsync(payloadRefresh, {
@@ -84,17 +166,19 @@ export class AuthService {
       secret: jwtConstants.refresh,
     });
 
-    return {
-      accessToken,
-      refreshToken,
-      user: new UserEntity(user),  
-    };
-  }
+    // Salvar no banco
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 dias
 
-  //Criação do accessToken a partir do refreshToken
-  async refresh( refresh_token : string): Promise<string> {
-    const payload = await this.verifyRefreshToken(refresh_token);
-    return this.generateAccessToken(payload);
+    await this.prismaService.refreshToken.create({
+      data: {
+        token: refreshToken,
+        user_id: userId,
+        expires_at: expiresAt,
+      },
+    });
+
+    return refreshToken;
   }
 
   // Criação do accessToken e do usuário
@@ -124,6 +208,25 @@ export class AuthService {
         secret: jwtConstants.refresh,
       });
 
+      // Verificar se o token existe no banco
+      const tokenRecord = await this.prismaService.refreshToken.findUnique({
+        where: { token: refreshToken },
+        include: { user: true },
+      });
+
+      if (!tokenRecord) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      // Verificar se o token expirou
+      if (new Date() > tokenRecord.expires_at) {
+        // Remove token expirado
+        await this.prismaService.refreshToken.delete({
+          where: { token: refreshToken },
+        });
+        throw new UnauthorizedException('Refresh token expired');
+      }
+
       const user = await this.prismaService.user.findUnique({
         where: { id: payload.sub },
       });
@@ -134,8 +237,6 @@ export class AuthService {
 
       return user;
     } catch (error) {
-      console.error(error);
-
       if (error.name === 'JsonWebTokenError') {
         throw new UnauthorizedException('Unauthorized');
       }
@@ -143,6 +244,17 @@ export class AuthService {
         throw new UnauthorizedException('Unauthorized');
       }
       throw new UnauthorizedException(error.name);
+    }
+  }
+
+  // Logout - remover refresh token do banco
+  async logout(refreshToken: string): Promise<void> {
+    try {
+      await this.prismaService.refreshToken.delete({
+        where: { token: refreshToken },
+      });
+    } catch (error) {
+      // Token não encontrado, já foi removido ou inválido - não precisa fazer nada
     }
   }
 }

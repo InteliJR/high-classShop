@@ -1,14 +1,15 @@
 // Fotmulário para criar um novo escritório dentro do modal
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Button from "../../components/ui/button";
-import { createCompany } from "../../services/companies.service";
+import { createCompany, updateCompany, type Company } from "../../services/companies.service";
 
 interface NewCompanyFormProps {
   onSuccess: () => void;
+  companyToEdit?: Company | null;
 }
 
-export default function NewCompanyForm({ onSuccess }: NewCompanyFormProps) {
+export default function NewCompanyForm({ onSuccess, companyToEdit }: NewCompanyFormProps) {
   // Guarda o valor do campo "Nome do Escritório".
   const [name, setName] = useState("");
   // Guarda o valor do campo "CNPJ".
@@ -20,9 +21,40 @@ export default function NewCompanyForm({ onSuccess }: NewCompanyFormProps) {
   // Guarda qualquer mensagem de erro que ocorra durante a validação ou o envio.
   const [error, setError] = useState<string | null>(null);
 
+  // Preenche o formulário com os dados da empresa sendo editada
+  useEffect(() => {
+    if (companyToEdit) {
+      setName(companyToEdit.name);
+      setCnpj(companyToEdit.cnpj);
+    } else {
+      setName("");
+      setCnpj("");
+      setLogo(null);
+    }
+  }, [companyToEdit]);
+
+  /**
+   * Converte um arquivo File para base64 string.
+   * Necessário para enviar a imagem do logo como JSON para o backend.
+   */
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove o prefixo "data:image/...;base64," para enviar apenas o base64
+        const base64String = result.split(',')[1];
+        resolve(base64String);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
   /**
    * Função chamada quando o utilizador clica no botão "Salvar Escritório".
    * É responsável por validar, preparar e enviar os dados para a API.
+   * Suporta tanto criação quanto edição de empresas.
    */
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -34,19 +66,24 @@ export default function NewCompanyForm({ onSuccess }: NewCompanyFormProps) {
     setIsSubmitting(true);
     setError(null);
 
-    const formData = new FormData();
-    formData.append("name", name);
-    formData.append("cnpj", cnpj);
-    if (logo) {
-      formData.append("logo", logo);
-    }
-
     try {
-      await createCompany(formData);
+      if (companyToEdit) {
+        // Modo de edição
+        await updateCompany(companyToEdit.id, { name, cnpj });
+      } else {
+        // Modo de criação - converte logo para base64 se existir
+        let logoBase64: string | undefined;
+        if (logo) {
+          logoBase64 = await fileToBase64(logo);
+        }
+
+        await createCompany({ name, cnpj, logo: logoBase64 });
+      }
       onSuccess();
     } catch (err) {
+      console.error("Erro capturado:", err);
       setError(
-        (err as Error).message || "Falha ao criar a empresa. Tente novamente."
+        (err as Error).message || "Falha ao salvar a empresa. Tente novamente."
       );
     } finally {
       setIsSubmitting(false);
@@ -55,7 +92,9 @@ export default function NewCompanyForm({ onSuccess }: NewCompanyFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <h2 className="h2-style">Novo Escritório</h2>
+      <h2 className="h2-style">
+        {companyToEdit ? "Editar Escritório" : "Novo Escritório"}
+      </h2>
 
       <div>
         {/* --- CAMPO NOME --- */}
@@ -120,7 +159,12 @@ export default function NewCompanyForm({ onSuccess }: NewCompanyFormProps) {
       {/* --- BOTÃO DE SUBMISSÃO --- */}
       <div className="flex justify-end pt-4">
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Salvando..." : "Salvar Escritório"}
+          {isSubmitting
+            ? "Salvando..."
+            : companyToEdit
+              ? "Atualizar Escritório"
+              : "Salvar Escritório"
+          }
         </Button>
       </div>
     </form>

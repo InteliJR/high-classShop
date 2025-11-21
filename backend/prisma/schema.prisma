@@ -18,25 +18,37 @@ datasource db {
 // =====================
 
 enum CivilState {
-  SINGLE @map("SINGLE")
-  MARRIED @map("MARRIED")
-  DIVORCED @map("DIVORCED")
-  WIDOWED @map("WIDOWED")
-  SEPARATED @map("SEPARETED")
+  SINGLE       @map("SINGLE")
+  MARRIED      @map("MARRIED")
+  DIVORCED     @map("DIVORCED")
+  WIDOWED      @map("WIDOWED")
+  SEPARATED    @map("SEPARATED")
   STABLE_UNION @map("STABLE_UNION")
 }
 
-enum SpecialityType {
-  CAR @map("CAR")
-  BOAT @map("BOAT")
+enum ProductType {
+  CAR      @map("CAR")
+  BOAT     @map("BOAT")
   AIRCRAFT @map("AIRCRAFT")
 }
 
 enum UserRole {
-  CUSTOMER @map("CUSTOMER")
+  CUSTOMER   @map("CUSTOMER")
   CONSULTANT @map("CONSULTANT")
   SPECIALIST @map("SPECIALIST")
-  ADMIN @map("ADMIN")
+  ADMIN      @map("ADMIN")
+}
+
+enum ProcessStatus {
+  SCHEDULING    @map("SCHEDULING")
+  NEGOTIATION   @map("NEGOTIATION")
+  DOCUMENTATION @map("DOCUMENTATION")
+  COMPLETED     @map("COMPLETED")
+}
+
+enum ContractStatus {
+  PENDING @map("PENDING")
+  SIGNED  @map("SIGNED")
 }
 
 // =====================
@@ -54,30 +66,43 @@ model User {
   password_hash String
 
   civil_state           CivilState?
-  speciality            SpecialityType?
-  identification_number String?         @unique @db.VarChar(50)
+  speciality            ProductType?
+  identification_number String?      @unique @db.VarChar(50)
 
   address_id    String? @db.Uuid
   consultant_id String? @db.Uuid
   company_id    String? @db.Uuid
 
   address    Address? @relation(fields: [address_id], references: [id])
-  consultant User?    @relation("ConsultantUsers", fields: [consultant_id], references: [id])
-  clients    User[]   @relation("ConsultantUsers")
+  consultant User?    @relation("ClientToConsultant", fields: [consultant_id], references: [id], onDelete: SetNull)
+  clients    User[]   @relation("ClientToConsultant")
   company    Company? @relation(fields: [company_id], references: [id])
 
   created_at               DateTime            @default(now())
-  updated_at               DateTime            @default(now())
+  updated_at               DateTime            @updatedAt
   cars                     Car[]
   boats                    Boat[]
   aircraft                 Aircraft[]
-  processesAsClient        Proccess[]          @relation("proccess_as_client")
-  processesAsSpecialist    Proccess[]          @relation("proccess_as_specialist")
+  processesAsClient        Process[]           @relation("process_as_client")
+  processesAsSpecialist    Process[]           @relation("process_as_specialist")
   appointmentsAsClient     Appointment[]       @relation("appointment_as_client")
   appointmentsAsSpecialist Appointment[]       @relation("appointment_as_specialist")
   car_interests            Car_interest[]
   boat_interests           Boat_interest[]
   aircraft_interests       Aircraft_interest[]
+  refreshTokens            RefreshToken[]
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  token      String   @unique
+  user_id    String   @db.Uuid
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  @@index([user_id])
+  @@index([token])
 }
 
 model Address {
@@ -100,7 +125,7 @@ model Company {
   logo        String?
   description String?
   created_at  DateTime @default(now())
-  updated_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
 
   consultants User[]
 }
@@ -120,11 +145,10 @@ model Car {
   combustivel    String?
   tipo_categoria String?
   created_at     DateTime @default(now())
-  updated_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
 
-  specialist User? @relation(fields: [specialist_id], references: [id])
-  images        Car_image[]
-
+  specialist User?       @relation(fields: [specialist_id], references: [id])
+  images     Car_image[]
 }
 
 model Boat {
@@ -145,11 +169,10 @@ model Boat {
   estado             String
   tipo_embarcacao    String?
   created_at         DateTime @default(now())
-  updated_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
 
-  specialist User? @relation(fields: [specialist_id], references: [id])
-  images        Boat_image[]
-
+  specialist User?        @relation(fields: [specialist_id], references: [id])
+  images     Boat_image[]
 }
 
 model Aircraft {
@@ -165,11 +188,10 @@ model Aircraft {
   valor         Decimal
   tipo_aeronave String?
   created_at    DateTime @default(now())
-  updated_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
 
-  specialist User? @relation(fields: [specialist_id], references: [id])
-  images        Aircraft_image[]
-
+  specialist User?            @relation(fields: [specialist_id], references: [id])
+  images     Aircraft_image[]
 }
 
 model Car_image {
@@ -179,9 +201,9 @@ model Car_image {
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
 
-    // relation to specific car (nullable to avoid breaking existing data)
-  car_id       Int?
-  car          Car?    @relation(fields: [car_id], references: [id])
+  // relation to specific car (nullable to avoid breaking existing data)
+  car_id Int?
+  car    Car? @relation(fields: [car_id], references: [id])
 }
 
 model Boat_image {
@@ -191,9 +213,8 @@ model Boat_image {
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
 
-  boat_id      Int?
-  boat         Boat?   @relation(fields: [boat_id], references: [id])
-
+  boat_id Int?
+  boat    Boat? @relation(fields: [boat_id], references: [id])
 }
 
 model Aircraft_image {
@@ -203,50 +224,49 @@ model Aircraft_image {
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
 
-  aircraft_id  Int?
-  aircraft     Aircraft? @relation(fields: [aircraft_id], references: [id])
-
+  aircraft_id Int?
+  aircraft    Aircraft? @relation(fields: [aircraft_id], references: [id])
 }
 
-model Proccess {
-  id            Int      @id @default(autoincrement())
-  client_id     String?  @db.Uuid
-  specialist_id String?  @db.Uuid
-  product_type  String
-  status        String   @default("agendamento")
+model Process {
+  id            String        @id @default(uuid()) @db.Uuid
+  client_id     String?       @db.Uuid
+  specialist_id String?       @db.Uuid
+  product_type  ProductType
+  status        ProcessStatus @default(SCHEDULING)
   notes         String?
-  created_at    DateTime @default(now())
-  updated_at    DateTime @default(now())
+  created_at    DateTime      @default(now())
+  updated_at    DateTime      @updatedAt
 
-  client     User?      @relation("proccess_as_client", fields: [client_id], references: [id], map: "fk_proccess_as_client")
-  specialist User?      @relation("proccess_as_specialist", fields: [specialist_id], references: [id], map: "fk_proccess_as_specialist")
-  documents  Document[]
+  client     User?      @relation("process_as_client", fields: [client_id], references: [id], map: "fk_process_as_client")
+  specialist User?      @relation("process_as_specialist", fields: [specialist_id], references: [id], map: "fk_process_as_specialist")
+  contracts  Contract[]
 }
 
-model Document {
-  id               Int      @id @default(autoincrement())
-  process_id       Int?
-  file_name        String
-  file_path        String
-  file_type        String?
-  uploaded_by      Int
-  uploaded_by_type String
-  created_at       DateTime @default(now())
-
-  process Proccess? @relation(fields: [process_id], references: [id])
+model Contract {
+  id               String         @id @default(uuid()) @db.Uuid
+  process_id       String         @db.Uuid
+  external_token   String         @unique
+  status           ContractStatus @default(PENDING)
+  original_pdf_url String
+  signed_pdf_url   String?
+  signer_link      String
+  created_at       DateTime       @default(now())
+  updated_at       DateTime       @updatedAt
+  process          Process        @relation(fields: [process_id], references: [id])
 }
 
 model Appointment {
-  id            Int      @id @default(autoincrement())
-  client_id     String?  @db.Uuid
-  specialist_id String?  @db.Uuid
-  product_type  String
+  id            Int         @id @default(autoincrement())
+  client_id     String?     @db.Uuid
+  specialist_id String?     @db.Uuid
+  product_type  ProductType
   date          DateTime
   time          DateTime
-  status        String   @default("scheduled")
+  status        String      @default("scheduled")
   notes         String?
-  created_at    DateTime @default(now())
-  updated_at    DateTime @default(now())
+  created_at    DateTime    @default(now())
+  updated_at    DateTime    @updatedAt
 
   client     User? @relation("appointment_as_client", fields: [client_id], references: [id], map: "fk_appointment_as_client")
   specialist User? @relation("appointment_as_specialist", fields: [specialist_id], references: [id], map: "fk_appointment_as_specialist")
@@ -270,7 +290,7 @@ model Car_interest {
   mensagem_imagem         String?
   prazo_aquisicao         String?
   created_at              DateTime @default(now())
-  updated_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
 
   client User? @relation(fields: [client_id], references: [id])
 }
@@ -295,7 +315,7 @@ model Boat_interest {
   recursos_indispensaveis String?
   prazo_aquisicao         String?
   created_at              DateTime @default(now())
-  updated_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
 
   client User? @relation(fields: [client_id], references: [id])
 }
@@ -319,7 +339,7 @@ model Aircraft_interest {
   recursos_indispensaveis String?
   prazo_aquisicao         String?
   created_at              DateTime @default(now())
-  updated_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
 
   client User? @relation(fields: [client_id], references: [id])
 }
@@ -372,19 +392,6 @@ enum TipoProdutoProcesso {
   CAR      @map("car")
   BOAT     @map("boat")
   AIRCRAFT @map("aircraft")
-}
-
-enum StatusProcesso {
-  AGENDAMENTO  @map("agendamento")
-  NEGOCIACAO   @map("negociacao")
-  DOCUMENTACAO @map("documentacao")
-  CONCLUIDO    @map("concluido")
-}
-
-// ---------- Documentos ----------
-enum UploadTypeDocumento {
-  CLIENTE      @map("client")
-  ESPECIALISTA @map("specialist")
 }
 
 // ---------- Agendamentos ----------

@@ -11,9 +11,9 @@ import {
 import { BoatsService } from './boats.service';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
-import { QueryDto } from 'src/utils/dto/query.dto';
-import { PaginationDto } from 'src/utils/dto/pagination.dto';
-import { FiltersBoatMeta } from 'src/utils/dto/filters.dto';
+import { QueryDto } from 'src/shared/dto/query.dto';
+import { PaginationDto } from 'src/shared/dto/pagination.dto';
+import { FiltersBoatMeta } from 'src/shared/dto/filters.dto';
 
 @Controller('boats')
 export class BoatsController {

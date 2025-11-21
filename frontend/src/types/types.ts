@@ -90,33 +90,52 @@ export interface Product {
   modelo: string;
   descricao: string;
   valor: number;
-  imageUrl: string;
+  imageUrl?: string;
 }
 
 // Usuários
 export type UserRole = 'CUSTOMER' |'CONSULTANT' |'SPECIALIST' |'ADMIN';
-export type CivilState = 'SINGLE' |'MARRIED' |'DIVORCIED' |'WIDOWED' |'SEPARETED' |'STABLE_UNION' ;
+export type CivilState = 'SINGLE' |'MARRIED' |'DIVORCED' |'WIDOWED' |'SEPARATED' |'STABLE_UNION' ;
 export type SpecialityType = 'CAR' |'BOAT' |'AIRCRAFT';
 
 export interface UserProps {
   id: string;
   name: string;
   surname: string;
-  token: string;
   email: string;
   cpf: string;
   rg: string;
   role: UserRole;
-  password: string;
-  civilState?: CivilState;
+  civil_state?: CivilState;
   speciality?: SpecialityType;
-  identicationNumber?: string;
+  identification_number?: string;
   address_id?: string;
   consultant_id?: string;
+  company_id?: string;
+  created_at?: Date;
 }
 
 // Tipgem das informações de login
 export interface LoginValues {
   email: string;
   password: string;
+}
+
+// Tipagem das informações de registro
+export interface RegisterValues {
+  name: string;
+  surname: string;
+  email: string;
+  cpf: string;
+  rg: string;
+  password: string;
+  civil_state?: CivilState;
+  consultant_id?: string;
+}
+
+// Payload decodificado do token de referral
+export interface ReferralTokenPayload {
+  consultantId: string;
+  email: string;
+  consultantName?: string;
 }

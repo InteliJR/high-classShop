@@ -3,7 +3,7 @@ import { useAuth } from "../store/authStateManager";
 
 // Instanciar a origem das rquisições para a api
 const api = axios.create({
-  baseURL: "http://localhost:3000",
+  baseURL: "http://localhost:3000/api/",
 });
 
 // Adiciona token de acesso no header das requisições
@@ -31,18 +31,21 @@ api.interceptors.response.use(
     ) {
       original._retry = true;
 
-      // Pega o token caso tenha o refreshToken.
+      // Verifica se existe o refreshToken
       try {
+        // Se existir ele carrega o novo accessToken
         await refresh();
         const token = useAuth.getState().accessToken;
-        if (token) {
-          original.headers.Authorization = `Bearer ${token}`;
-          return api(original);
+        if (!token) {
+          throw new Error('Failed to refresh token');
         }
-      } catch {
+        original.headers.Authorization = `Bearer ${token}`;
+        return api(original);
+      } catch (refreshError) {
+        // Em caso de erro, ele manda para o AuthContext informando a falha
         clearAccessToken();
         clearUser();
-        window.location.href = "/login";
+        return Promise.reject(refreshError);
       }
     }
 

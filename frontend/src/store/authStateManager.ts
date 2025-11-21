@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import type { UserProps } from "../types/types";
 import api from "../services/api";
 
@@ -10,10 +11,16 @@ interface AuthState {
   setUser: (user: UserProps | null) => void;
   clearUser: () => void;
   refresh: () => Promise<void>;
+  isRefreshing: boolean;
+  refreshPromise: Promise<void> | null;
 }
 
-export const useAuth = create<AuthState>((set) => ({
-  accessToken: null,
+export const useAuth = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      accessToken: null,
+      isRefreshing: false,
+      refreshPromise: null,
 
   setAccessToken: (token) => {
     set({ accessToken: token });
@@ -34,14 +41,40 @@ export const useAuth = create<AuthState>((set) => ({
   },
 
   refresh: async() => {
-    try{
-        const response = await api.post('auth/refresh', {}, {withCredentials: true});
-        const accessToken = response.data.data.access_token;
-        set({accessToken: accessToken});
-
-    } catch {
-        set({accessToken: null});
-
+    const state = get();
+    
+    // Se já está fazendo refresh, aguarda a promessa existente
+    if (state.isRefreshing && state.refreshPromise) {
+      return state.refreshPromise;
     }
+
+    // Marca como refreshing e cria nova promessa
+    const refreshPromise = (async () => {
+      try {
+        const response = await api.post('auth/refresh', {}, {withCredentials: true});
+        const data = response.data.data;
+        set({ 
+          accessToken: data.access_token, 
+          user: data.user,
+          isRefreshing: false, 
+          refreshPromise: null 
+        });
+      } catch {
+        set({ accessToken: null, user: null, isRefreshing: false, refreshPromise: null });
+      }
+    })();
+
+    set({ isRefreshing: true, refreshPromise });
+    return refreshPromise;
   },
-}));
+    }),
+    {
+      name: 'auth-storage',
+      partialize: (state) => ({
+        accessToken: state.accessToken,
+        user: state.user,
+        // Não persiste isRefreshing e refreshPromise
+      }),
+    }
+  )
+);

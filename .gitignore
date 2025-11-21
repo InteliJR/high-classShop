@@ -127,3 +127,4 @@ logs/
 # Docker
 .dockerignore
 Dockerfile.prod
+.github/copilot-instructions.md
