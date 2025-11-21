@@ -126,7 +126,7 @@ export default function Catalog() {
 
       {/* Apresentação dos produtos */}
       {products.length > 0 ? (
-        <div className="grid grid-cols-4 gap-x-4 gap-y-10 min-h-screen">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-10 min-h-screen">
           {products.map((element) => (
             <ProductCard key={element.id} {...element} />
           ))}

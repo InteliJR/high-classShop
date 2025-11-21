@@ -55,7 +55,6 @@ export async function getCars(
 
     //Extrai a respota da api
     const rawCars: RawCar[] = response.data.data;
-    console.log(rawCars);
     const pagination: PaginationMeta = response.data.meta.pagination;
     const filters: FiltersMeta<FiltersCarMeta> = response.data.meta.filters;
 

@@ -16,7 +16,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       </AppProvider>
       <div className="flex justify-center">
         {/* <aside className="w-31 bg-black h-screen"></aside> */}
-        <main className="flex flex-col flex-1 mx-34 my-8">{children}</main>
+        <main className="flex flex-col flex-1 mx-4 sm:mx-34 my-8">{children}</main>
       </div>
     </>
   );
