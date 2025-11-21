@@ -1,21 +1,24 @@
+import { BoatImage } from './boat-image.entity';
+
 export class Boat {
-    id: String;
-    marca: String;
-    modelo: String;
-    valor: number;
-    estado: String;
-    ano: number;
-    fabricante: String;
-    tamanho: String;
-    estilo: String;
-    combustivel: String;
-    motor: String;
-    ano_motor: String;
-    tipo_embarcacao: String
-    descricao: String;
-    acessorios: String;
-    specialist: string; //Fix
-    images: string; //Fix
-    created_at: Date;
-    updated_at: Date;
+  id: number;
+  marca: string;
+  modelo: string;
+  valor: number;
+  estado: string;
+  ano: number;
+  fabricante: string | null;
+  tamanho: string | null;
+  estilo: string | null;
+  combustivel: string | null;
+  motor: string | null;
+  ano_motor: number | null;
+  tipo_embarcacao: string | null;
+  descricao: string | null;
+  acessorios: string | null;
+  specialist_id: string | null;
+  created_at: Date;
+  updated_at: Date;
+
+  images?: BoatImage[];
 }
