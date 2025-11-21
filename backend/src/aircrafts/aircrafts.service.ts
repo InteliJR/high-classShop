@@ -10,6 +10,7 @@ import {
   RangeAircraftFilters,
 } from 'src/shared/dto/filters.dto';
 import { Prisma } from '@prisma/client';
+import { Aircraft } from './entity/aircraft.entity';
 
 @Injectable()
 export class AircraftsService {
@@ -47,28 +48,41 @@ export class AircraftsService {
   }: QueryDto<FiltersAircraftMeta>) {
     // Cálculo das variáveis que serão utilizadas
     const take = perPage;
-    const skip = (page - 1) * perPage;
-
+    const skip = page && take ? (page - 1) * take : 0;
+    
     // Separação dos filtros
     const where: any = {};
+
     // Exact
-    const exactFilter: ExactAircraftFilters = {
-      ...appliedFilters,
+    const exacts: ExactAircraftFilters = {
+      estado: appliedFilters?.estado,
+      tipo_aeronave: appliedFilters?.tipo_aeronave,
     };
-    Object.assign(where, exactFilter);
+    // Insere a filtragem na variável where
+    for( const [key, value] of Object.entries(exacts)){
+      if (value !== undefined && value !== null){
+        where[key] = value;
+      }
+    }
 
     // Contains
-    const containsFilter: ContainsAircraftFilters = {
-      ...appliedFilters,
+    const contains: ContainsAircraftFilters = {
+      categoria: appliedFilters?.categoria,
+      marca: appliedFilters?.marca,
+      modelo: appliedFilters?.modelo,
     };
-    for (const [key, value] of Object.entries(containsFilter)) {
-      where[key] = { contains: value, mode: 'insensitive' };
+    // Insere a filtragem a variável where
+    for (const [key, value] of Object.entries(contains)) {
+      if(value !== undefined && value !== null){
+        where[key] = { contains: value, mode: 'insensitive' };
+      }
     }
 
     // Range
     const rangeFilters: RangeAircraftFilters = {
       ...appliedFilters,
     };
+    // Objeto para orientar o where wu utiliza gte e lte
     const rangeMap = {
       ano: { gte: rangeFilters?.ano_max, lte: rangeFilters?.ano_min },
       preco: { gte: rangeFilters?.preco_max, lte: rangeFilters?.preco_min },
@@ -77,10 +91,15 @@ export class AircraftsService {
         lte: rangeFilters?.assentos_min,
       },
     };
+    // Insere a filtragem como um intervalo na variável where
     for (const [key, { gte, lte }] of Object.entries(rangeMap)) {
-      if (gte !== undefined && lte !== undefined) where[key] = {};
-      if (gte !== undefined) where.gte = gte;
-      if (lte !== undefined) where.lte = lte;
+      const hasGte = gte !== undefined && gte !== null;
+      const hasLte = lte !== undefined && lte !== null;
+      if (hasGte || hasLte){
+        where[key] = {};
+        if (hasGte) where[key].gte = gte;
+        if (hasLte) where[key].lte = lte;
+      }
     }
 
     //Agrupamento das operações que serão realizadas no banco de dados
@@ -89,12 +108,22 @@ export class AircraftsService {
         skip: skip,
         take: take,
         where: where,
+        include: {
+          images: true,
+          specialist: true,
+        }
       }),
       this.prismaService.aircraft.count(),
     ]);
 
+    const aircraftsEntities: Aircraft[] = aircrafts.map( aircraft => ({
+      ...aircraft,
+      valor: aircraft.valor.toNumber(),
+      images: aircraft.images || [],
+    }))
+
     return {
-      data: aircrafts,
+      data: aircraftsEntities,
       count: total,
       filters: appliedFilters,
     };
