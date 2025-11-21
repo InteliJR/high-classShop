@@ -9,10 +9,12 @@ import {
   FiltersBoatMeta,
   RangeBoatFilters,
 } from 'src/shared/dto/filters.dto';
+import { Boat } from './entity/boat.entity';
+import { UserEntity } from 'src/auth/entities/user.entity';
 
 @Injectable()
 export class BoatsService {
-  constructor(private prismaService: PrismaService) { }
+  constructor(private prismaService: PrismaService) {}
 
   create(data: {
     marca: string;
@@ -30,9 +32,7 @@ export class BoatsService {
     descricao_completa: string;
     acessorios: string;
     specialist_id?: string;
-
   }) {
-
     return this.prismaService.boat.create({ data: data });
   }
 
@@ -43,36 +43,58 @@ export class BoatsService {
   }: QueryDto<FiltersBoatMeta>) {
     // Cálculo das variáveis que serão utilizadas na requisição ao banco de dados
     const take = perPage;
-    const skip = (page - 1) * perPage;
+    const skip = page && take ? (page - 1) * take : 0;
 
     //Exact
     const where: any = {};
-    const exactFilter: ExactBoatFilters = {
+    const exacts: ExactBoatFilters = {
       estado: appliedFilters?.estado,
       tipo_embarcacao: appliedFilters?.tipo_embarcacao,
+      combustivel: appliedFilters?.combustivel,
+      tamanho: appliedFilters?.tamanho,
     };
-    Object.assign(where, exactFilter);
+    // Insere a filtragem na variável where
+    for (const [key, value] of Object.entries(exacts)) {
+      if (value !== undefined && value !== null) {
+        where[key] = value;
+      }
+    }
 
     //Contains
-    const containsFilter: ContainsBoatFilters = {
-      ...appliedFilters,
+    const contains: ContainsBoatFilters = {
+      fabricante: appliedFilters?.fabricante,
+      marca: appliedFilters?.marca,
+      modelo: appliedFilters?.modelo,
+      motor: appliedFilters?.motor,
     };
-    for (const [key, value] of Object.entries(containsFilter)) {
-      where[key] = { contains: value, mode: 'insensitive' };
+    // Insere a filtragem na variǘel where
+    for (const [key, value] of Object.entries(contains)) {
+      if (value !== undefined && value !== null) {
+        where[key] = { contains: value, mode: 'insensitive' };
+      }
     }
 
     // Range
     const rangeFilter: RangeBoatFilters = {
-      ...appliedFilters,
+      ano_max: appliedFilters?.ano_max,
+      ano_min: appliedFilters?.ano_min,
+      preco_max: appliedFilters?.preco_max,
+      preco_min: appliedFilters?.preco_min,
     };
+    // Objeto para orientar o where que utiliza gte e lte
     const rangeMap = {
       ano: { gte: rangeFilter.ano_max, lte: rangeFilter.ano_min },
       preco: { gte: rangeFilter.preco_max, lte: rangeFilter.preco_min },
     };
+    // Insere a filtragem como um intervalo na variável where
     for (const [key, { gte, lte }] of Object.entries(rangeMap)) {
-      if (gte && lte !== undefined) where[key] = {};
-      if (gte !== undefined) where[key].gte = gte;
-      if (lte !== undefined) where[key].lte = lte;
+      const hasGte = gte !== undefined && gte !== null;
+      const hasLte = lte !== undefined && lte !== null;
+      if (hasGte || hasLte) {
+        where[key] = {};
+        if (hasGte) where[key].gte = gte;
+        if (hasLte) where[key].lte = lte;
+      }
     }
 
     // Agrupamento das operções para serem realizadas no banco de dados
@@ -81,19 +103,32 @@ export class BoatsService {
         skip: skip,
         take: take,
         where: where,
+        include: {
+          images: true,
+          specialist: true,
+        },
       }),
       this.prismaService.boat.count(),
     ]);
 
+    const boatEntities: Boat[] = boats.map((boat) => ({
+      ...boat,
+      descricao: boat.descricao_completa,
+      valor: boat.valor.toNumber(),
+      images: boat.images || [],
+      specialist: boat.specialist
+        ? UserEntity.fromPrisma(boat.specialist)
+        : null,
+    }));
+
     return {
-      data: boats,
+      data: boatEntities,
       count: total,
       filters: appliedFilters,
     };
   }
 
   async findOne(id: number) {
-
     const boat = await this.prismaService.boat.findUnique({ where: { id } });
     if (!boat) {
       throw new NotFoundException('Boat not found');
@@ -125,7 +160,6 @@ export class BoatsService {
 
     return this.prismaService.boat.update({ where: { id }, data: data });
   }
-
 
   async remove(id: number) {
     await this.findOne(id);

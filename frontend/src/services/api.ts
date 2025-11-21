@@ -31,8 +31,9 @@ api.interceptors.response.use(
     ) {
       original._retry = true;
 
-      // Pega o token caso tenha o refreshToken.
+      // Verifica se existe o refreshToken
       try {
+        // Se existir ele carrega o novo accessToken
         await refresh();
         const token = useAuth.getState().accessToken;
         if (!token) {
@@ -41,9 +42,9 @@ api.interceptors.response.use(
         original.headers.Authorization = `Bearer ${token}`;
         return api(original);
       } catch (refreshError) {
+        // Em caso de erro, ele manda para o AuthContext informando a falha
         clearAccessToken();
         clearUser();
-        window.location.href = "/login";
         return Promise.reject(refreshError);
       }
     }

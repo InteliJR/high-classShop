@@ -27,7 +27,7 @@ export class CreateConsultantDto {
 
   @IsString()
   @IsNotEmpty({ message: 'Senha é obrigatória' })
-  password_hash: string;
+  password: string;
 
   @IsUUID()
   @IsNotEmpty({ message: 'Company ID é obrigatório' })

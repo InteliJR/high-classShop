@@ -1,6 +1,5 @@
 // frontend/src/services/companies.service.ts
-
-const API = "http://localhost:3000";
+import api from "./api";
 
 export type Company = {
   id: string;
@@ -11,33 +10,24 @@ export type Company = {
   logoUrl?: string | null;
 };
 
-// Busca a lista completa de empresas na API.
-export async function getCompanies(): Promise<Company[]> {
-  const res = await fetch(`${API}/companies`);
-  return res.json();
-}
-
-// Cria uma nova empresa enviando os dados para a API.
-export async function createCompany(data: {
+// Tipo auxiliar para criação (geralmente não enviamos ID ou logoUrl na criação)
+type CreateCompanyDto = {
   name: string;
   cnpj: string;
   logo?: string;
-}): Promise<Company> {
-  const API_URL = "http://localhost:3000";
+};
 
-  const response = await fetch(`${API_URL}/companies`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
+// Busca a lista completa de empresas.
+export async function getCompanies(): Promise<Company[]> {
+  const { data } = await api.get<Company[]>("/companies");
+  return data;
+}
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    console.error("Erro ao criar empresa:", errorData);
-    throw new Error(errorData.message || "Falha ao criar o escritório.");
-  }
-
-  return response.json();
+// Cria uma nova empresa.
+export async function createCompany(data: CreateCompanyDto): Promise<Company> {
+  // O Axios já converte o body para JSON automaticamente e injeta o Content-Type
+  const { data: newCompany } = await api.post<Company>("/companies", data);
+  return newCompany;
 }
 
 // Atualiza os dados de uma empresa existente.
@@ -45,15 +35,11 @@ export async function updateCompany(
   id: string,
   data: Partial<Company>
 ): Promise<Company> {
-  const res = await fetch(`${API}/companies/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  const { data: updatedCompany } = await api.put<Company>(`/companies/${id}`, data);
+  return updatedCompany;
 }
 
 // Apaga uma empresa pelo seu ID.
 export async function deleteCompany(id: string): Promise<void> {
-  await fetch(`${API}/companies/${id}`, { method: "DELETE" });
+  await api.delete(`/companies/${id}`);
 }

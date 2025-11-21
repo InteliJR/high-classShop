@@ -30,7 +30,6 @@ export class AircraftsController {
   }
 
   @Get()
-  @Roles(UserRole.CONSULTANT, UserRole.ADMIN)
   async getAllAircrafts(
     @Query() { page, perPage, appliedFilters }: QueryDto<FiltersAircraftMeta>,
   ) {

@@ -3,7 +3,14 @@ import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { QueryDto } from 'src/shared/dto/query.dto';
-import { ContainsCarFilters, ExactCarFilters, FiltersCarMeta, RangeCarFilters } from 'src/shared/dto/filters.dto';
+import {
+  ContainsCarFilters,
+  ExactCarFilters,
+  FiltersCarMeta,
+  RangeCarFilters,
+} from 'src/shared/dto/filters.dto';
+import { Car } from './entity/car.entity';
+import { UserEntity } from 'src/auth/entities/user.entity';
 
 @Injectable()
 export class CarsService {
@@ -13,42 +20,69 @@ export class CarsService {
     return 'This action adds a new car';
   }
 
-  async getAllCars({ page, perPage, appliedFilters }: QueryDto<FiltersCarMeta>) {
+  async getAllCars({
+    page,
+    perPage,
+    appliedFilters,
+  }: QueryDto<FiltersCarMeta>) {
     // Cálculo das variáveis usadas na requisição ao banco de dados
     const take = perPage;
-    const skip = (page - 1) * take;
+    const skip = page && take ? (page - 1) * take : 0;
 
     // Separação dos filtros
-    const where: any = {}
+    const where: any = {};
+
     // Exact
-    const exactFilter:ExactCarFilters = {
-      ...appliedFilters
-    } ;
-    Object.assign(where, exactFilter); // Insere a filtragem exata na variavel where
+    const exacts: ExactCarFilters = {
+      cambio: appliedFilters?.cambio,
+      combustivel: appliedFilters?.combustivel,
+      estado: appliedFilters?.estado,
+      tipo_categoria: appliedFilters?.tipo_categoria,
+    };
+    // Insere a filtragem exata na variavel where
+    for (const [key, value] of Object.entries(exacts)) {
+      if (value !== undefined && value !== null) {
+        where[key] = value;
+      }
+    }
 
     // Contains
-    const containsFilter:ContainsCarFilters = {
-      ...appliedFilters
+    const contains: ContainsCarFilters = {
+      cor: appliedFilters?.cor,
+      marca: appliedFilters?.marca,
+      modelo: appliedFilters?.modelo,
     };
     // Insere a filtragem que usam contains na variável where
-    for( const [key, value] of Object.entries(containsFilter)) {
-      where[key] = { contains: value, mode: 'insensitive'};
+    for (const [key, value] of Object.entries(contains)) {
+      if (value !== undefined && value !== null) {
+        where[key] = { contains: value, mode: 'insensitive' };
+      }
     }
 
     // Range
-    const rangeFilters:RangeCarFilters = {
-      ...appliedFilters
-    }
+    const rangeFilters: RangeCarFilters = {
+      ano_max: appliedFilters?.ano_max,
+      ano_min: appliedFilters?.ano_min,
+      km_max: appliedFilters?.km_max,
+      preco_max: appliedFilters?.preco_max,
+      preco_min: appliedFilters?.preco_min,
+    };
+    // Cria um objeto para orientar um where que usa gte e lte
     const rangeMap = {
-      "preco": { gte: rangeFilters.preco_min, lte: rangeFilters.preco_max},
-      "ano": {gte: rangeFilters.ano_min, lte: rangeFilters.ano_max},
-      "km": {gte: undefined, lte: rangeFilters.km_max},
-    }
+      preco: { gte: rangeFilters.preco_min, lte: rangeFilters.preco_max },
+      ano: { gte: rangeFilters.ano_min, lte: rangeFilters.ano_max },
+      km: { gte: undefined, lte: rangeFilters.km_max },
+    };
     // Insere a filtragem que são um intervalo na variável where
-    for ( const [key, {gte, lte}] of Object.entries(rangeMap)) {
-      if( gte && lte != undefined) where[key] = {};
-      if(gte != undefined || null) where[key].gte = gte;
-      if(lte != undefined || null ) where[key].lte = lte;
+    for (const [key, { gte, lte }] of Object.entries(rangeMap)) {
+      const hasGte = gte !== undefined && gte !== null;
+      const hasLte = lte !== undefined && lte !== null;
+      // Crie o objeto caso tenha lte ou gte
+      if (hasGte || hasLte) {
+        where[key] = {};
+        if (hasGte) where[key].gte = gte;
+        if (hasLte) where[key].lte = lte;
+      }
     }
 
     // Agrupamento de operações para serem realizadas no banco de dados
@@ -57,12 +91,22 @@ export class CarsService {
         skip: skip,
         take: take,
         where: where,
+        include: {
+          images: true,
+          specialist: true,
+        },
       }),
       this.prismaService.car.count(),
     ]);
 
+    const carEntities: Car[] = cars.map((car) => ({
+      ...car,
+      valor: car.valor.toNumber(),
+      images: car.images || [],
+      specialist: car.specialist ? UserEntity.fromPrisma(car.specialist) : null,
+    }));
     return {
-      data: cars,
+      data: carEntities,
       count: total,
       filters: appliedFilters,
     };

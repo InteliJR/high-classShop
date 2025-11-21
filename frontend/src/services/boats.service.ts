@@ -1,4 +1,10 @@
-import type { FiltersBoatsMeta, FiltersMeta, PaginationMeta, Product, ResponseAPI } from "../types/types";
+import type {
+  FiltersBoatsMeta,
+  FiltersMeta,
+  PaginationMeta,
+  Product,
+  ResponseAPI,
+} from "../types/types";
 import api from "./api";
 
 interface RawBoats {
@@ -23,21 +29,32 @@ interface RawBoats {
     email: string;
     especialidade: string;
   };
-  images:{
-      id: number;
-      image_url: string;
-      is_primary: boolean;
-    }[];
+  images: {
+    id: number;
+    image_url: string;
+    is_primary: boolean;
+  }[];
   created_at: string;
   updated_at: string;
 }
 
 // Get /boats
-export async function getBoats( page = 1, perPage = 20, appliedFilters = [] ): Promise<{boats: Product[], pagination: PaginationMeta, filters: FiltersMeta<FiltersBoatsMeta>}> {
+export async function getBoats(
+  page = 1,
+  perPage = 20,
+  appliedFilters = []
+): Promise<{
+  boats: Product[];
+  pagination: PaginationMeta;
+  filters: FiltersMeta<FiltersBoatsMeta>;
+}> {
   try {
-    const response = await api.get<ResponseAPI<RawBoats, FiltersBoatsMeta>>("/boats", {
-      params: {page, perPage, appliedFilters },
-    });
+    const response = await api.get<ResponseAPI<RawBoats, FiltersBoatsMeta>>(
+      "/boats",
+      {
+        params: { page, perPage, appliedFilters },
+      }
+    );
 
     //Extrai a respota da api
     const rawBoats: RawBoats[] = response.data.data;
@@ -46,20 +63,20 @@ export async function getBoats( page = 1, perPage = 20, appliedFilters = [] ): P
 
     //Realiza o processo de formatação do array com as informações necessárias
     const boats: Product[] = rawBoats.map((rawBoats) => {
-      const primaryImage = rawBoats.images.find((imageUrl) => imageUrl.is_primary === true)
-          ?.image_url
+      const primaryImage =
+        rawBoats.images?.find((imageUrl) => imageUrl.is_primary === true)
+          ?.image_url ?? "";
 
       return {
         id: rawBoats.id,
         marca: rawBoats.marca,
         modelo: rawBoats.modelo,
         descricao: rawBoats.descricao,
-        imageUrl:primaryImage ?? "",
+        imageUrl: primaryImage ?? "",
         valor: rawBoats.valor,
       };
     });
-    return { boats, pagination, filters};
-
+    return { boats, pagination, filters };
   } catch (error) {
     console.error("Ocorreu um erro na busca dos barcos: ", error);
     throw error;
