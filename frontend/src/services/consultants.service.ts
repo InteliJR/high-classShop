@@ -1,6 +1,5 @@
 // frontend/src/services/consultants.service.ts
-
-const API = "http://localhost:3000";
+import api from "./api";
 
 export type Consultant = {
   id: string;
@@ -9,41 +8,33 @@ export type Consultant = {
   email: string;
   cpf: string;
   rg: string;
-  password_hash: string;
+  password: string; // Geralmente o backend não retorna a hash por segurança, mas mantive conforme seu código
   company_id: string;
 };
 
-// Busca a lista completa de consultores na API.
-export async function getConsultants(): Promise<Consultant[]> {
-  const res = await fetch(`${API}/consultants`);
-  return res.json();
-}
-
-// Cria um novo consultor enviando os dados para a API.
-export async function createConsultant(data: {
+// Tipo para os dados de criação (DTO)
+export type CreateConsultantData = {
   name: string;
   surname: string;
   email: string;
   cpf: string;
   rg: string;
-  password_hash: string;
+  password: string;
   company_id?: string;
-}): Promise<Consultant> {
-  const API_URL = "http://localhost:3000";
+};
 
-  const response = await fetch(`${API_URL}/consultants`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
+// Busca a lista completa de consultores na API.
+export async function getConsultants(): Promise<Consultant[]> {
+  const { data } = await api.get<Consultant[]>("/consultants");
+  return data;
+}
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    console.error("Erro ao criar consultor:", errorData);
-    throw new Error(errorData.message || "Falha ao criar o consultor.");
-  }
-
-  return response.json();
+// Cria um novo consultor enviando os dados para a API.
+export async function createConsultant(data: CreateConsultantData): Promise<Consultant> {
+  console.log("No front rota de criar consultor")
+  // O Axios converte o objeto data para JSON automaticamente
+  const { data: newConsultant } = await api.post<Consultant>("/consultants", data);
+  return newConsultant;
 }
 
 // Atualiza os dados de um consultor existente.
@@ -51,16 +42,14 @@ export async function updateConsultant(
   id: string,
   data: Partial<Consultant>
 ): Promise<Consultant> {
-  const res = await fetch(`${API}/consultants/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  const { data: updatedConsultant } = await api.put<Consultant>(
+    `/consultants/${id}`,
+    data
+  );
+  return updatedConsultant;
 }
 
 // Apaga um consultor pelo seu ID.
 export async function deleteConsultant(id: string): Promise<void> {
-  await fetch(`${API}/consultants/${id}`, { method: "DELETE" });
+  await api.delete(`/consultants/${id}`);
 }
-

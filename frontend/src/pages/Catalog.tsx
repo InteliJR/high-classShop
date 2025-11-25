@@ -3,10 +3,24 @@ import { useParams } from "react-router-dom";
 import { getCars } from "../services/cars.service.ts";
 import { getBoats } from "../services/boats.service.ts";
 import { getAircrafts } from "../services/aircrafts.service.ts";
-import type { FiltersAircraftsMeta, FiltersBoatsMeta, FiltersCarMeta, FiltersMeta, PaginationMeta, Product } from "../types/types.ts";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FunnelIcon } from "lucide-react";
+import type {
+  FiltersAircraftsMeta,
+  FiltersBoatsMeta,
+  FiltersCarMeta,
+  FiltersMeta,
+  PaginationMeta,
+  Product,
+} from "../types/types.ts";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  FunnelIcon,
+} from "lucide-react";
 import Button from "../components/ui/button.tsx";
 import Modal from "../components/ui/Modal.tsx";
+import ProductCard from "../components/ProductCard.tsx";
 
 // Mapeamento dos títulos de acordo com a rota passada
 const titles: { [key: string]: string } = {
@@ -24,7 +38,12 @@ export default function Catalog() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
-  const [filter, setFilters] = useState< FiltersMeta<FiltersCarMeta> | FiltersMeta<FiltersBoatsMeta> |  FiltersMeta<FiltersAircraftsMeta > | null>(null);
+  const [filter, setFilters] = useState<
+    | FiltersMeta<FiltersCarMeta>
+    | FiltersMeta<FiltersBoatsMeta>
+    | FiltersMeta<FiltersAircraftsMeta>
+    | null
+  >(null);
   const [filterModal, setFilterModal] = useState(false);
 
   //Consumir a api
@@ -96,7 +115,10 @@ export default function Catalog() {
     <div className="flex flex-col gap-8 mx-auto w-full">
       <div className="flex justify-between">
         <h1 className="text-4xl">{title}</h1>
-        <Button className="bg-secondary text-white rounded-sm px-4 py-1 flex justify-center items-center text-base gap-2" onClick={() => setFilterModal(true)}>
+        <Button
+          className="bg-secondary text-white rounded-sm px-4 py-1 flex justify-center items-center text-base gap-2"
+          onClick={() => setFilterModal(true)}
+        >
           <FunnelIcon fill="#FFFFFF" />
           Filtro
         </Button>
@@ -105,9 +127,9 @@ export default function Catalog() {
       {/* Apresentação dos produtos */}
       {products.length > 0 ? (
         <div className="grid grid-cols-4 gap-x-4 gap-y-10 min-h-screen">
-          {/* {products.map((element) => (
-            <ProductDetails key={element.id} {...element} />
-          ))} */}
+          {products.map((element) => (
+            <ProductCard key={element.id} {...element} />
+          ))}
         </div>
       ) : (
         <p className="min-h-screen">Nenhum produto encontrado.</p>
@@ -118,27 +140,37 @@ export default function Catalog() {
         <div className="w-full h-full flex flex-row justify-center items-center gap-2">
           {pagination?.has_prev && (
             <>
-              <button onClick={goFirstPage}><ChevronsLeft/></button>
-              <button onClick={goPrevPage}><ChevronLeft/></button>
+              <button onClick={goFirstPage}>
+                <ChevronsLeft />
+              </button>
+              <button onClick={goPrevPage}>
+                <ChevronLeft />
+              </button>
             </>
           )}
           <span>{page}</span>
           {pagination?.has_next && (
             <>
-              <button onClick={goNextPage}><ChevronRight/></button>
-              <button onClick={goLastPage}><ChevronsRight/></button>
+              <button onClick={goNextPage}>
+                <ChevronRight />
+              </button>
+              <button onClick={goLastPage}>
+                <ChevronsRight />
+              </button>
             </>
           )}
         </div>
       )}
 
       {/* Modal de filtros */}
-      <Modal isOpen={filterModal} onClose={ () =>
-         {
+      <Modal
+        isOpen={filterModal}
+        onClose={() => {
           setFilters(filter);
           setFilterModal(false);
-         } }>
-          Inserir informações
+        }}
+      >
+        Inserir informações
       </Modal>
     </div>
   );

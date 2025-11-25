@@ -2,7 +2,11 @@
 
 import React, { useState, useEffect } from "react";
 import Button from "../../components/ui/button";
-import { createConsultant, updateConsultant, type Consultant } from "../../services/consultants.service";
+import {
+  createConsultant,
+  updateConsultant,
+  type Consultant,
+} from "../../services/consultants.service";
 import { getCompanies, type Company } from "../../services/companies.service";
 
 interface NewConsultantFormProps {
@@ -10,7 +14,10 @@ interface NewConsultantFormProps {
   consultantToEdit?: Consultant | null;
 }
 
-export default function NewConsultantForm({ onSuccess, consultantToEdit }: NewConsultantFormProps) {
+export default function NewConsultantForm({
+  onSuccess,
+  consultantToEdit,
+}: NewConsultantFormProps) {
   // Guarda o valor do campo "Nome".
   const [name, setName] = useState("");
   // Guarda o valor do campo "Sobrenome".
@@ -22,7 +29,7 @@ export default function NewConsultantForm({ onSuccess, consultantToEdit }: NewCo
   // Guarda o valor do campo "RG".
   const [rg, setRg] = useState("");
   // Guarda o valor do campo "Senha".
-  const [password_hash, setPasswordHash] = useState("");
+  const [password, setPassword] = useState("");
   // Guarda o valor do campo "Empresa" (company_id).
   const [company_id, setCompanyId] = useState("");
   // Guarda a lista de empresas para o select.
@@ -53,7 +60,7 @@ export default function NewConsultantForm({ onSuccess, consultantToEdit }: NewCo
       setEmail(consultantToEdit.email);
       setCpf(consultantToEdit.cpf);
       setRg(consultantToEdit.rg);
-      setPasswordHash(consultantToEdit.password_hash);
+      setPassword(consultantToEdit.password);
       setCompanyId(consultantToEdit.company_id);
     } else {
       setName("");
@@ -61,7 +68,7 @@ export default function NewConsultantForm({ onSuccess, consultantToEdit }: NewCo
       setEmail("");
       setCpf("");
       setRg("");
-      setPasswordHash("");
+      setPassword("");
       setCompanyId("");
     }
   }, [consultantToEdit]);
@@ -73,7 +80,15 @@ export default function NewConsultantForm({ onSuccess, consultantToEdit }: NewCo
    */
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!name || !surname || !email || !cpf || !rg || !password_hash || !company_id) {
+    if (
+      !name ||
+      !surname ||
+      !email ||
+      !cpf ||
+      !rg ||
+      !password ||
+      !company_id
+    ) {
       setError("Todos os campos são obrigatórios.");
       return;
     }
@@ -84,17 +99,42 @@ export default function NewConsultantForm({ onSuccess, consultantToEdit }: NewCo
     try {
       if (consultantToEdit) {
         // Modo de edição
-        await updateConsultant(consultantToEdit.id, { name, surname, email, cpf, rg, password_hash, company_id });
+        await updateConsultant(consultantToEdit.id, {
+          name,
+          surname,
+          email,
+          cpf,
+          rg,
+          password,
+          company_id,
+        });
       } else {
         // Modo de criação - envia como JSON
-        console.log("Enviando dados:", { name, surname, email, cpf, rg, password_hash, company_id });
-        await createConsultant({ name, surname, email, cpf, rg, password_hash, company_id });
+        console.log("Enviando dados:", {
+          name,
+          surname,
+          email,
+          cpf,
+          rg,
+          password,
+          company_id,
+        });
+        await createConsultant({
+          name,
+          surname,
+          email,
+          cpf,
+          rg,
+          password,
+          company_id,
+        });
       }
       onSuccess();
     } catch (err) {
       console.error("Erro capturado:", err);
       setError(
-        (err as Error).message || "Falha ao salvar o consultor. Tente novamente."
+        (err as Error).message ||
+          "Falha ao salvar o consultor. Tente novamente."
       );
     } finally {
       setIsSubmitting(false);
@@ -200,16 +240,16 @@ export default function NewConsultantForm({ onSuccess, consultantToEdit }: NewCo
       <div>
         {/* --- CAMPO SENHA --- */}
         <label
-          htmlFor="password_hash"
+          htmlFor="password"
           className="block text-sm font-medium text-text-secondary"
         >
           Senha
         </label>
         <input
-          id="password_hash"
+          id="password"
           type="password"
-          value={password_hash}
-          onChange={(e) => setPasswordHash(e.target.value)}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
           className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
           required
         />
@@ -248,12 +288,10 @@ export default function NewConsultantForm({ onSuccess, consultantToEdit }: NewCo
           {isSubmitting
             ? "Salvando..."
             : consultantToEdit
-              ? "Atualizar Consultor"
-              : "Salvar Consultor"
-          }
+            ? "Atualizar Consultor"
+            : "Salvar Consultor"}
         </Button>
       </div>
     </form>
   );
 }
-

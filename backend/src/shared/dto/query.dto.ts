@@ -1,7 +1,19 @@
+import { Type } from 'class-transformer';
+import { IsNumber, IsOptional, IsObject } from 'class-validator';
+
 export class QueryDto<T> {
-    page: number;
 
-    perPage: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  page?: number;
 
-    appliedFilters?: T;
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  perPage?: number;
+
+  @IsOptional()
+  @IsObject()
+  appliedFilters?: T;
 }
