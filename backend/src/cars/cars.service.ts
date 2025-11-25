@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -14,10 +14,24 @@ import { UserEntity } from 'src/auth/entities/user.entity';
 
 @Injectable()
 export class CarsService {
-  constructor(private prismaService: PrismaService) {}
+  constructor(private prismaService: PrismaService) { }
 
-  create(createCarDto: CreateCarDto) {
-    return 'This action adds a new car';
+  create(data: {
+    specialist?: any;
+    marca: string;
+    modelo: string;
+    valor: number;
+    estado: string;
+    ano: number;
+    descricao: string;
+    cor: string;
+    km: number;
+    cambio: string;
+    combustivel: string;
+    tipo_categoria: string;
+  }) {
+
+    return this.prismaService.car.create({ data: data });
   }
 
   async getAllCars({
@@ -112,15 +126,46 @@ export class CarsService {
     };
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} car`;
+  async findOne(id: number) {
+    const car = await this.prismaService.car.findUnique({ where: { id } });
+    if (!car) {
+      throw new NotFoundException('Car not found');
+    }
+    return { ...car };
   }
 
-  update(id: number, updateCarDto: UpdateCarDto) {
-    return `This action updates a #${id} car`;
+  async update(
+    id: number,
+    data: Partial<{
+      specialist: any;
+      marca: string;
+      modelo: string;
+      valor: number;
+      estado: string;
+      ano: number;
+      descricao: string;
+      cor: string;
+      km: number;
+      cambio: string;
+      combustivel: string;
+      tipo_categoria: string;
+    }>,
+  ) {
+   await this.findOne(id);
+
+
+    if (data.specialist) {
+      data.specialist = { connect: { id: data.specialist } };
+    } else {
+      data.specialist = { disconnect: true };
+    }
+
+    return this.prismaService.car.update({ where: { id }, data: data  });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} car`;
+  async remove(id: number) {
+    await this.findOne(id);
+    await this.prismaService.car.delete({ where: { id } });
+    return { ok: true };
   }
 }
