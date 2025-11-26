@@ -18,7 +18,7 @@ export class AircraftsService {
   constructor(private prismaService: PrismaService) {}
 
   async create(data: CreateAircraftDto) {
-    const { specialist_id, images, ...aircraftData } = data;
+    const { specialist_id, ...aircraftData } = data;
 
     const payload: Prisma.AircraftUncheckedCreateInput = {
       categoria: aircraftData.categoria,
@@ -33,7 +33,11 @@ export class AircraftsService {
       specialist_id: specialist_id ?? null,
     };
 
-    return this.prismaService.aircraft.create({ data: payload });
+    try {
+      return await this.prismaService.aircraft.create({ data: payload });
+    } catch (error) {
+      throw new Error(`Erro ao criar aeronave: ${error.message}`);
+    }
   }
 
   // async create(data: CreateAircraftDto) {
@@ -149,7 +153,7 @@ export class AircraftsService {
   async update(id: number, data: UpdateAircraftDto) {
     await this.findOne(id);
 
-    const { specialist_id, images, ...aircraftData } = data;
+    const { specialist_id, ...aircraftData } = data;
     const payload: Prisma.AircraftUncheckedUpdateInput = {};
 
     if (aircraftData.categoria !== undefined) {
@@ -183,12 +187,21 @@ export class AircraftsService {
       payload.specialist_id = specialist_id ?? null;
     }
 
-    return this.prismaService.aircraft.update({ where: { id }, data: payload });
+    try {
+      return await this.prismaService.aircraft.update({ where: { id }, data: payload });
+    } catch (error) {
+      throw new Error(`Erro ao atualizar aeronave: ${error.message}`);
+    }
   }
 
   async remove(id: number) {
     await this.findOne(id);
-    await this.prismaService.aircraft.delete({ where: { id } });
-    return { ok: true };
+
+    try {
+      await this.prismaService.aircraft.delete({ where: { id } });
+      return { ok: true };
+    } catch (error) {
+      throw new Error(`Erro ao deletar aeronave: ${error.message}`);
+    }
   }
 }

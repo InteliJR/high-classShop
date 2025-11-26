@@ -1,52 +1,63 @@
 import type { FiltersAircraftsMeta, FiltersMeta, PaginationMeta, Product, ResponseAPI } from "../types/types";
 import api from "./api";
 
-interface RawAircrafts {
+export interface RawAircraft {
   id: number;
   marca: string;
   modelo: string;
   valor: number;
   estado: string;
   ano: number;
-  fabricante: string;
-  tamanho: string;
-  estilo: string;
-  combustivel: string;
-  motor: string;
-  ano_motor: string;
-  tipo_embarcacao: string;
-  descricao: string;
-  acessorios: string;
-  specialist: {
+  categoria?: string;
+  assentos?: number;
+  tipo_aeronave?: string;
+  descricao?: string;
+  specialist_id?: string;
+  specialist?: {
     id: number;
     name: string;
     email: string;
     especialidade: string;
   };
-  images: {
+  images?: {
       id: number;
       image_url: string;
       is_primary: boolean;
     }[];
-  created_at: number;
-  updated_at: number;
+  created_at: string;
+  updated_at: string;
 }
+
+export interface CreateAircraftDto {
+  marca: string;
+  modelo: string;
+  valor: number;
+  estado: string;
+  ano: number;
+  categoria?: string;
+  assentos?: number;
+  tipo_aeronave?: string;
+  descricao?: string;
+  specialist_id?: string;
+}
+
+export interface UpdateAircraftDto extends Partial<CreateAircraftDto> {}
 
 // Get /aircrafts
 export async function getAircrafts(page = 1, perPage = 20, appliedFilters = []): Promise<{ aircrafts: Product[], pagination: PaginationMeta, filters: FiltersMeta<FiltersAircraftsMeta>}> {
   try {
-    const response = await api.get<ResponseAPI<RawAircrafts, FiltersAircraftsMeta>>("/aircrafts", {
+    const response = await api.get<ResponseAPI<RawAircraft, FiltersAircraftsMeta>>("/aircrafts", {
       params: {page, perPage, appliedFilters},
     });
 
     //Extrai a respota da api
-    const rawAircrafts: RawAircrafts[] = response.data.data;
+    const rawAircrafts: RawAircraft[] = response.data.data;
     const pagination: PaginationMeta = response.data.meta.pagination;
     const filters: FiltersMeta<FiltersAircraftsMeta> = response.data.meta.filters;
 
     //Realiza o processo de formatação do array com as informações necessárias
     const aircrafts: Product[] = rawAircrafts.map((rawAircraft) => {
-      const primaryImage = rawAircraft.images.find(
+      const primaryImage = rawAircraft.images?.find(
           (imageUrl) => imageUrl.is_primary === true
         )?.image_url
 
@@ -54,7 +65,7 @@ export async function getAircrafts(page = 1, perPage = 20, appliedFilters = []):
         id: rawAircraft.id,
         marca: rawAircraft.marca,
         modelo: rawAircraft.modelo,
-        descricao: rawAircraft.descricao,
+        descricao: rawAircraft.descricao || "",
         imageUrl: primaryImage ?? "",
         valor: rawAircraft.valor,
       };
@@ -63,6 +74,49 @@ export async function getAircrafts(page = 1, perPage = 20, appliedFilters = []):
 
   } catch (error) {
     console.error("Ocorreu um erro na busca das aeronaves: ", error);
+    throw error;
+  }
+}
+
+// Get /aircrafts/:id
+export async function getAircraftById(id: number): Promise<RawAircraft> {
+  try {
+    const response = await api.get<RawAircraft>(`/aircrafts/${id}`);
+    return response.data;
+  } catch (error) {
+    console.error("Erro ao buscar aeronave:", error);
+    throw error;
+  }
+}
+
+// Post /aircrafts
+export async function createAircraft(data: CreateAircraftDto): Promise<RawAircraft> {
+  try {
+    const response = await api.post<RawAircraft>("/aircrafts", data);
+    return response.data;
+  } catch (error: any) {
+    console.error("Erro ao criar aeronave:", error);
+    throw error;
+  }
+}
+
+// Patch /aircrafts/:id
+export async function updateAircraft(id: number, data: UpdateAircraftDto): Promise<RawAircraft> {
+  try {
+    const response = await api.patch<RawAircraft>(`/aircrafts/${id}`, data);
+    return response.data;
+  } catch (error) {
+    console.error("Erro ao atualizar aeronave:", error);
+    throw error;
+  }
+}
+
+// Delete /aircrafts/:id
+export async function deleteAircraft(id: number): Promise<void> {
+  try {
+    await api.delete(`/aircrafts/${id}`);
+  } catch (error) {
+    console.error("Erro ao deletar aeronave:", error);
     throw error;
   }
 }

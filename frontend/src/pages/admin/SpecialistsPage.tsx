@@ -95,52 +95,54 @@ export default function SpecialistsPage() {
         {/* Cabeçalho da Lista */}
         <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 px-4 py-2 text-base font-normal text-left text-text-secondary">
           <div>Nome</div>
-          <div>Email</div>
           <div>Especialidade</div>
-          <div>Status</div>
+          <div>Processos Abertos</div>
+          <div>Taxa de Conversão</div>
           <div className="text-right">Ações</div>
         </div>
 
         {/* Corpo da Lista */}
         <div className="mt-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto p-2">
-          {specialists.map((specialist) => (
-            <div
-              key={specialist.id}
-              className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6 rounded-lg shadow-sm bg-white"
-            >
-              <div className="flex items-center gap-3">
-                <span className="font-normal">{specialist.name} {specialist.surname}</span>
-              </div>
-              <div>{specialist.email}</div>
-              <div>
-                <span className="bg-blue-100 text-blue-800 text-base px-2.5 py-0.5 rounded-full">
-                  {specialist.speciality}
-                </span>
-              </div>
-              <div>
-                <span className="bg-status-active-bg text-status-active-text text-base px-2.5 py-0.5 rounded-full">
-                  Ativo
-                </span>
-              </div>
-              <div className="flex justify-end items-center gap-4 text-gray-400">
-                <button onClick={() => setSpecialistToEdit(specialist)}>
-                  <img
-                    src={EditIcon}
-                    alt="Editar"
-                    className="h-6 w-6 cursor-pointer hover:text-gray-600"
-                  />
-                </button>
+          {specialists.map((specialist, index) => {
+            // Mock data para processos abertos e taxa de conversão
+            const mockOpenProcesses = [12, 8, 15, 6, 10][index % 5];
+            const mockConversionRate = ['68%', '72%', '65%', '80%', '75%'][index % 5];
 
-                <button onClick={() => setSpecialistToDelete(specialist)}>
-                  <img
-                    src={TrashIcon}
-                    alt="Deletar"
-                    className="h-5 w-5 cursor-pointer hover:text-gray-600"
-                  />
-                </button>
+            return (
+              <div
+                key={specialist.id}
+                className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6 rounded-lg shadow-sm bg-white"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="font-normal">{specialist.name} {specialist.surname}</span>
+                </div>
+                <div>
+                  <span className="bg-blue-100 text-blue-800 text-base px-2.5 py-0.5 rounded-full">
+                    {specialist.speciality}
+                  </span>
+                </div>
+                <div>{mockOpenProcesses}</div>
+                <div>{mockConversionRate}</div>
+                <div className="flex justify-end items-center gap-4 text-gray-400">
+                  <button onClick={() => setSpecialistToEdit(specialist)}>
+                    <img
+                      src={EditIcon}
+                      alt="Editar"
+                      className="h-6 w-6 cursor-pointer hover:text-gray-600"
+                    />
+                  </button>
+
+                  <button onClick={() => setSpecialistToDelete(specialist)}>
+                    <img
+                      src={TrashIcon}
+                      alt="Deletar"
+                      className="h-5 w-5 cursor-pointer hover:text-gray-600"
+                    />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

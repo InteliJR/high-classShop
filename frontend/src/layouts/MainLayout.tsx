@@ -1,4 +1,5 @@
 import React from "react";
+import Sidebar from "../components/Sidebar";
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -9,7 +10,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
     <>
       <header className="w-full flex justify-center h-24 bg-background-secondary"></header>
       <div className="flex justify-center">
-        <aside className="w-31 bg-black h-screen"></aside>
+        <Sidebar />
         <main className="flex flex-col flex-1 mx-34 my-8">
           {/* <h1>Context</h1>
                     <p>{user?.name}</p>
