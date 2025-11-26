@@ -248,7 +248,7 @@ model Process {
 
   car     Car?      @relation(fields: [car_id], references: [id])
   boat    Boat?     @relation(fields: [boat_id], references: [id])
-  aicraft Aircraft? @relation(fields: [aircraft_id], references: [id])
+  aircraft Aircraft? @relation(fields: [aircraft_id], references: [id])
 
   client     User @relation("process_as_client", fields: [client_id], references: [id], map: "fk_process_as_client")
   specialist User @relation("process_as_specialist", fields: [specialist_id], references: [id], map: "fk_process_as_specialist")
@@ -256,6 +256,8 @@ model Process {
   active_contract Contract? @relation("process_active_contract", fields: [active_contract_id], references: [id])
 
   contracts Contract[] @relation("process_contracts")
+
+  @@unique([client_id, specialist_id, car_id, boat_id, aircraft_id], name: "unique_active_product")
 }
 
 model Contract {
