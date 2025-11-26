@@ -59,6 +59,7 @@ export class ProcessesService {
     // Atribuir o produto correto passado pela req
     const fieldName = productMap[createProcessDto.product_type];
 
+    // TODO: Trocar para string quando o id for colocado como UUID
     // Construção do where usando computed property
     const whereClause: {
       client_id: string;
@@ -88,6 +89,7 @@ export class ProcessesService {
       car: false,
       boat: false,
     };
+    // TODO: trocar para string quando for trocado para UUID
     const finalProduct: {
       aircraft_id: number | null;
       boat_id: number | null;

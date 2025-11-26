@@ -6,7 +6,7 @@ export class CreateProcessDTO {
   @IsNotEmpty()
   client_id: string;
 
-  @IsUUID()
+  // TODO: trocar para string e adicionar verificação se é um UUID quando for refatorado
   @IsNotEmpty()
   product_id: number;
 

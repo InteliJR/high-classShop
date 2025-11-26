@@ -19,6 +19,7 @@ export class ProcessResponse {
   created_at: Date;
 }
 
+// TODO: trocar para string quando for trocado para UUID
 export class Product {
   id: number;
   marca: string;
