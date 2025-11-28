@@ -16,7 +16,10 @@ export class ProcessResponse {
   };
   product: Product | null;
   notes: string | null;
+  document_count?: number;
+  last_activity?: Date;
   created_at: Date;
+  updated_at?: Date;
 }
 
 // TODO: trocar para string quando for trocado para UUID

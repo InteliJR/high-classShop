@@ -6,6 +6,9 @@ import {
   ProcessWithProducts,
   Product,
 } from './entity/process.entity';
+import { QueryDto } from 'src/shared/dto/query.dto';
+import { ProcessStatus } from '@prisma/client';
+import { ProcessesByStatus, ProcessSummary } from 'src/shared/dto/summary.dto';
 
 @Injectable()
 export class ProcessesService {
@@ -14,8 +17,8 @@ export class ProcessesService {
   /**
    * Cria um objeto "product" de acordo com o processo enviado
    *
-   * @param {ProcessWithProducts} process
-   * @returns  {Product | null}
+   * @param {ProcessWithProducts} process - processo com o produto car, boats ou aircraft
+   * @returns  {Product | null} - retorna o produto específico
    */
   private buildProduct(process: ProcessWithProducts): Product | null {
     // Mapa de acordo com o tipo de produtos existente
@@ -43,8 +46,8 @@ export class ProcessesService {
   /**
    * Cria um processo, normalmente no status de agendamento
    *
-   * @param {CreateProcessDTO} data
-   * @returns {Promise<ProcessResponse>}
+   * @param {CreateProcessDTO} createProcessDto - Dto para criar o processo
+   * @returns {Promise<ProcessResponse>} - Entidade do processo
    */
   async create(createProcessDto: CreateProcessDTO): Promise<ProcessResponse> {
     const { product_id, client_id, specialist_id, ...dataToSave } =
@@ -77,7 +80,7 @@ export class ProcessesService {
     const processAlreadyExists = await this.prismaService.process.findFirst({
       where: whereClause,
     });
-    if(processAlreadyExists){
+    if (processAlreadyExists) {
       throw new BadRequestException();
     }
 
@@ -138,6 +141,92 @@ export class ProcessesService {
       product: this.buildProduct(processCreated),
       created_at: processCreated.created_at,
       notes: processCreated.notes,
+    };
+  }
+
+  /**
+   * Retorna os processos de com a contagem total de elementos no banco de dados
+   *
+   * @param {QueryDto} - Parâmetros de paginação
+   * @returns {Promise<{
+   *  count: number,
+   *  processes: ProcessResponse[],
+   *  byStatus: Record<ProcessStatus, number>
+   * }>} - Objeto com numero total de elementos, array de processos e contagem de processos por status
+   */
+  async getAll({ page, perPage }: QueryDto): Promise<{
+    count: number;
+    processes: ProcessResponse[];
+    byStatus: Record<ProcessStatus, number>;
+  }> {
+    // Criação pde variáveis para a paginação de get
+    const take = perPage;
+    const skip = page && take ? (page - 1) * take : 0;
+
+    console.log(take);
+
+    // Buscar os processos, a quantidade total e a quantidade por status de processo
+    const [processes, count, rawStatusCount] =
+      await this.prismaService.$transaction([
+        this.prismaService.process.findMany({
+          skip,
+          take,
+          include: {
+            client: true,
+            aircraft: true,
+            boat: true,
+            car: true,
+            specialist: true,
+          },
+        }),
+        this.prismaService.process.count(),
+        this.prismaService.process.groupBy({
+          by: ['status'],
+          take,
+          skip,
+          orderBy: {
+            status: 'asc',
+          },
+          _count: {
+            id: true,
+          },
+        }),
+      ]);
+
+    //Adequar a contagem de status na tipagem correta
+    // Deixa ela mais curta
+    const statusCount = rawStatusCount.reduce((acc: any, item: any) => {
+      const id = item._count?.id ?? 0;
+      acc[item.status] = id;
+      return acc;
+    }, {} as ProcessesByStatus);
+
+    // Adequa a resposta de acordo com a tipagem
+    const processEntities: ProcessResponse[] = processes.map(
+      (process: any) => ({
+        id: process.id,
+        status: process.status,
+        product_type: process.product_type,
+        client: {
+          id: process.client_id,
+          email: process.client?.email,
+          name: process.client?.name,
+        },
+        specialist: {
+          especialidade: process.specialist.speciality,
+          id: process.specialist.id,
+          name: process.specialist.name,
+        },
+        product: this.buildProduct(process),
+        created_at: process.created_at,
+        notes: process.notes,
+      }),
+    );
+
+    return {
+      count,
+      processes: processEntities,
+      byStatus: statusCount,
     };
   }
 }
