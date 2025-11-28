@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsNumber, IsOptional, IsObject } from 'class-validator';
 
-export class QueryDto<T> {
+export class QueryDto<T = unknown> {
 
   @IsOptional()
   @Type(() => Number)
