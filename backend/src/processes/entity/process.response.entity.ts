@@ -1,4 +1,4 @@
-import { $Enums, Prisma,} from '@prisma/client';
+import { $Enums, Prisma } from '@prisma/client';
 
 export class ProcessResponse {
   id: string;
@@ -34,7 +34,8 @@ const ProcessWithProducts = Prisma.validator<Prisma.ProcessDefaultArgs>()({
     aircraft: true,
     boat: true,
     car: true,
-  }
-})
-export type ProcessWithProducts = Prisma.ProcessGetPayload<typeof ProcessWithProducts>
-
+  },
+});
+export type ProcessWithProducts = Prisma.ProcessGetPayload<
+  typeof ProcessWithProducts
+>;

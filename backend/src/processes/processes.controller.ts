@@ -1,11 +1,24 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { ProcessesService } from './processes.service';
 import { CreateProcessDTO } from './dto/create-process.dto';
 import { ApiResponseDto } from 'src/shared/dto/api-response.dto';
-import { ProcessResponse } from './entity/process.entity';
+import { ProcessResponse } from './entity/process.response.entity';
 import { QueryDto } from 'src/shared/dto/query.dto';
 import { ProcessSummary } from 'src/shared/dto/summary.dto';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
+import { UpdateProcessDto } from './dto/update-process.dto';
+import { ProcessWithHistory } from './entity/process-history.response';
 
 @Controller('processes')
 export class ProcessesController {
@@ -72,6 +85,34 @@ export class ProcessesController {
           by_status: byStatus,
         },
       },
+    };
+  }
+
+  /**
+   * PATCH /api/processes/:id/status
+   * Atualiza status do processo
+   *
+   * @param {string} processId - Id do processo obtido nos parametros
+   * @param {UpdateProcessDto} updateProcessDto - Parâmetros obtidos do body da request para atualizar os status de um processo
+   * @returns {Promise<ApiResponseDto<ProcessWithHistory>>}
+   * @throws {BadRequestException} - Request errada
+   * @throws {NotFoundException} - Não existe nenhum processo com o id passado
+   * @throws {InternalServerErrorException} - Erro desconhecido
+   */
+  @Patch(':id/status')
+  async update(
+    @Param('id', new ParseUUIDPipe()) processId: string,
+    @Body() updateProcessDto: UpdateProcessDto,
+  ): Promise<ApiResponseDto<ProcessWithHistory>> {
+    const updatedProcess = await this.processesService.update(
+      processId,
+      updateProcessDto,
+    );
+
+    return {
+      sucess: true,
+      message: 'Status do processo atualizado com sucesso',
+      data: updatedProcess,
     };
   }
 }

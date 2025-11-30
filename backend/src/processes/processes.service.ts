@@ -1,14 +1,21 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProcessDTO } from './dto/create-process.dto';
 import {
   ProcessResponse,
   ProcessWithProducts,
   Product,
-} from './entity/process.entity';
+} from './entity/process.response.entity';
 import { QueryDto } from 'src/shared/dto/query.dto';
 import { ProcessStatus } from '@prisma/client';
-import { ProcessesByStatus, ProcessSummary } from 'src/shared/dto/summary.dto';
+import { ProcessesByStatus } from 'src/shared/dto/summary.dto';
+import { UpdateProcessDto } from './dto/update-process.dto';
+import { ProcessWithHistory } from './entity/process-history.response';
 
 @Injectable()
 export class ProcessesService {
@@ -119,9 +126,22 @@ export class ProcessesService {
         break;
     }
 
-    const processCreated = await this.prismaService.process.create({
-      data: { specialist_id, client_id, ...dataToSave, ...finalProduct },
-      include,
+    // Criar o processo e adiciona os status inicial dele na tabela de histórico
+    const processCreated = await this.prismaService.$transaction(async (tx) => {
+      const process = await tx.process.create({
+        data: { specialist_id, client_id, ...dataToSave, ...finalProduct },
+        include,
+      });
+
+      await tx.processStatusHistory.create({
+        data: {
+          processId: process.id,
+          status: process.status,
+          changed_at: new Date(),
+        },
+      });
+
+      return process;
     });
 
     return {
@@ -162,8 +182,6 @@ export class ProcessesService {
     // Criação pde variáveis para a paginação de get
     const take = perPage;
     const skip = page && take ? (page - 1) * take : 0;
-
-    console.log(take);
 
     // Buscar os processos, a quantidade total e a quantidade por status de processo
     const [processes, count, rawStatusCount] =
@@ -228,5 +246,74 @@ export class ProcessesService {
       processes: processEntities,
       byStatus: statusCount,
     };
+  }
+
+  /**
+   * Atualiza os status de um processo
+   *
+   * @param {string} processId - id do processo para ser atualizado
+   * @param {UpdateProcessDto} updateProcessDto - dto para atualizar os status de um process
+   * @returns {Promise<ProcessWithHistory>} - Processo com o histórico
+   * @throws {NotFoundException} - Não existe nenhum processo com o id passado
+   * @throws {BadRequestException} - Request com status já aplicado
+   * @throws {InternalServerErrorException} - Erro desconhecido
+   */
+  async update(
+    processId: string,
+    updateProcessDto: UpdateProcessDto,
+  ): Promise<ProcessWithHistory> {
+    try {
+      // Transction para atualizar o processo, adicionar mais uma linha sobre o histórico de status do processo, e obter o histórico atualizado
+      const [updatedProcess, updatedStatusHistory] =
+        await this.prismaService.$transaction(async (tx) => {
+          // Verificar se o processo realmente existe
+          const existingProcess = await tx.process.findUniqueOrThrow({
+            where: { id: processId },
+          });
+          //Verificar se ele já está com o status atualizado
+          if (existingProcess.status === updateProcessDto.status) {
+            throw new BadRequestException();
+          }
+          const process = await tx.process.update({
+            data: {
+              status: updateProcessDto.status,
+              notes: updateProcessDto.notes,
+              updated_at: new Date(),
+            },
+            where: {
+              id: processId,
+            },
+          });
+          await tx.processStatusHistory.create({
+            data: {
+              processId,
+              status: updateProcessDto.status,
+              changed_at: process.updated_at,
+            },
+          });
+          const statusHistory = await tx.processStatusHistory.findMany({
+            where: { processId },
+          });
+          return [process, statusHistory];
+        });
+
+      // Formar o response
+      return {
+        id: updatedProcess.id,
+        notes: updatedProcess.notes,
+        status: updatedProcess.status,
+        updated_at: updatedProcess.updated_at,
+        status_history: updatedStatusHistory,
+      };
+    // Tratamento de erros
+    } catch (err) {
+      if (err.code === 'P2002') {
+        throw new NotFoundException();
+      }
+      if (err.status === 400) {
+        throw new BadRequestException();
+      }
+      throw new InternalServerErrorException();
+    }
   }
 }

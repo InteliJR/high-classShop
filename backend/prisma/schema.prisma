@@ -234,8 +234,8 @@ model Aircraft_image {
 
 model Process {
   id                 String        @id @default(uuid()) @db.Uuid
-  client_id          String       @db.Uuid
-  specialist_id      String       @db.Uuid
+  client_id          String        @db.Uuid
+  specialist_id      String        @db.Uuid
   car_id             Int?
   aircraft_id        Int?
   boat_id            Int?
@@ -246,8 +246,8 @@ model Process {
   created_at         DateTime      @default(now())
   updated_at         DateTime      @updatedAt
 
-  car     Car?      @relation(fields: [car_id], references: [id])
-  boat    Boat?     @relation(fields: [boat_id], references: [id])
+  car      Car?      @relation(fields: [car_id], references: [id])
+  boat     Boat?     @relation(fields: [boat_id], references: [id])
   aircraft Aircraft? @relation(fields: [aircraft_id], references: [id])
 
   client     User @relation("process_as_client", fields: [client_id], references: [id], map: "fk_process_as_client")
@@ -255,7 +255,8 @@ model Process {
 
   active_contract Contract? @relation("process_active_contract", fields: [active_contract_id], references: [id])
 
-  contracts Contract[] @relation("process_contracts")
+  contracts            Contract[]             @relation("process_contracts")
+  ProcessStatusHistoty ProcessStatusHistory[]
 
   @@unique([client_id, specialist_id, car_id, boat_id, aircraft_id], name: "unique_active_product")
 }
@@ -291,6 +292,14 @@ model Appointment {
 
   client     User? @relation("appointment_as_client", fields: [client_id], references: [id], map: "fk_appointment_as_client")
   specialist User? @relation("appointment_as_specialist", fields: [specialist_id], references: [id], map: "fk_appointment_as_specialist")
+}
+
+model ProcessStatusHistory {
+  id         String        @id @default(uuid())
+  process    Process       @relation(fields: [processId], references: [id])
+  processId  String        @db.Uuid
+  status     ProcessStatus @default(SCHEDULING)
+  changed_at DateTime      @default(now())
 }
 
 model Car_interest {
