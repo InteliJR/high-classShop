@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { mockCars } from '../src/mocks/car.mock';
 import { mockBoats } from '../src/mocks/boat.mock';
 import { mockAircrafts } from '../src/mocks/aircrafts.mock';
+import { mockUsers } from '../src/mocks/user.mock';
 
 const prisma = new PrismaClient();
 
@@ -17,6 +18,30 @@ async function main() {
   await prisma.boat.deleteMany();
   await prisma.aircraft.deleteMany();
 
+console.log("👥 Seeding users...");
+for (const userMock of mockUsers) {
+  const user = await prisma.user.create({
+    data: {
+      name: userMock.name,
+      surname: userMock.surname,
+      email: userMock.email,
+      cpf: userMock.cpf,
+      rg: userMock.rg,
+      role: userMock.role,
+      password_hash: userMock.password_hash,
+
+      civil_state: userMock.civil_state ?? null,
+      speciality: userMock.speciality ?? null,
+      identification_number: userMock.identification_number ?? null,
+
+      address_id: userMock.address_id ?? null,
+      consultant_id: userMock.consultant_id ?? null,
+      company_id: userMock.company_id ?? null,
+    },
+  });
+
+  console.log(`➡️ Created user: ${user.email}`);
+}
   // Seed Cars
   console.log('🚗 Seeding cars...');
   for (const carMock of mockCars) {
