@@ -92,6 +92,8 @@ model User {
   boat_interests           Boat_interest[]
   aircraft_interests       Aircraft_interest[]
   refreshTokens            RefreshToken[]
+  created_contracts        Contract[]          @relation("contract_created_by")
+  signed_contracts         Contract[]          @relation("contract_signed_by")
 }
 
 model RefreshToken {
@@ -262,20 +264,46 @@ model Process {
 }
 
 model Contract {
-  id                String         @id @default(uuid()) @db.Uuid
-  process_id        String         @db.Uuid
-  zapsign_token     String         @unique
-  status            ContractStatus @default(PENDING)
-  original_pdf_url  String
-  signed_pdf_url    String?
-  signer_link       String
-  rejected_reason   String?
-  created_at        DateTime       @default(now())
-  updated_at        DateTime       @updatedAt
-  active_of_process Process?       @relation("process_active_contract")
-  process           Process        @relation("process_contracts", fields: [process_id], references: [id])
+  id          String  @id @default(uuid()) @db.Uuid
+  // Informações passadas na requisição
+  process_id  String  @db.Uuid
+  description String?
+
+  // Integração com o ZapSign
+  zapsign_token  String? @unique
+  signer_link    String?
+  signed_pdf_url String?
+
+  // Informações do arquivo
+  file_name        String
+  file_path        String
+  file_type        String
+  file_size        Int
+  original_pdf_url String
+
+  // Característica do contrato
+  status          ContractStatus @default(PENDING)
+  rejected_reason String?
+
+  // Conexão com os processos
+  active_of_process Process? @relation("process_active_contract")
+  process           Process  @relation("process_contracts", fields: [process_id], references: [id])
+
+  // Quem fez o upload
+  uploaded_by_id   String   @db.Uuid
+  uploaded_by_type UserRole
+  uploaded_by      User     @relation("contract_created_by", fields: [uploaded_by_id], references: [id])
+
+  // Quem vai assinar
+  signed_by_id String? @db.Uuid
+  signed_by    User?   @relation("contract_signed_by", fields: [signed_by_id], references: [id])
+
+  // TimeStamp
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   @@index([process_id])
+  @@index([uploaded_by_id])
 }
 
 model Appointment {
