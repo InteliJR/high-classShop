@@ -13,6 +13,7 @@ import { RolesGuard } from './shared/guards/roles.guard';
 import { PrismaExceptionFilter } from './shared/filters/prisma-exception.filter';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ProcessesModule } from './processes/processes.module';
+import { ContractsModule } from './contracts/contracts.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { ProcessesModule } from './processes/processes.module';
     AuthModule,
     ConsultantModule,
     ProcessesModule,
+    ContractsModule,
   ],
   providers: [
     PrismaService,
