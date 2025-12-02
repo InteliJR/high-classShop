@@ -6,7 +6,6 @@ import Login from "../pages/auth/LoginPage";
 import RegisterPage from "../pages/auth/RegisterPage";
 import ProtectedRoute from "./ProtectedRoute";
 import ConsultantDashboard from "../pages/consultant/ConsultantDashboard";
-import { CookiesProvider } from "react-cookie";
 import DashboardPage from "../pages/admin/DashboardPage";
 import CompaniesPage from "../pages/admin/CompaniesPage";
 import SpecialistsPage from "../pages/admin/SpecialistsPage";
@@ -19,9 +18,7 @@ export default function RouterApp() {
       path: "/catalog/:category",
       element: (
         <MainLayout>
-          <ProtectedRoute>
             <Catalog />
-          </ProtectedRoute>
         </MainLayout>
       ),
     },
