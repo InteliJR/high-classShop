@@ -20,9 +20,7 @@ export default function RouterApp() {
       path: "/catalog/:category",
       element: (
         <MainLayout>
-          <ProtectedRoute>
             <Catalog />
-          </ProtectedRoute>
         </MainLayout>
       ),
     },

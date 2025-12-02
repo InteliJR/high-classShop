@@ -47,8 +47,9 @@ enum ProcessStatus {
 }
 
 enum ContractStatus {
-  PENDING @map("PENDING")
-  SIGNED  @map("SIGNED")
+  PENDING  @map("PENDING")
+  REJECTED @map("REJECTED")
+  SIGNED   @map("SIGNED")
 }
 
 // =====================
@@ -91,6 +92,8 @@ model User {
   boat_interests           Boat_interest[]
   aircraft_interests       Aircraft_interest[]
   refreshTokens            RefreshToken[]
+  created_contracts        Contract[]          @relation("contract_created_by")
+  signed_contracts         Contract[]          @relation("contract_signed_by")
 }
 
 model RefreshToken {
@@ -149,6 +152,7 @@ model Car {
 
   specialist User?       @relation(fields: [specialist_id], references: [id])
   images     Car_image[]
+  processes  Process[]
 }
 
 model Boat {
@@ -173,6 +177,7 @@ model Boat {
 
   specialist User?        @relation(fields: [specialist_id], references: [id])
   images     Boat_image[]
+  processes  Process[]
 }
 
 model Aircraft {
@@ -192,6 +197,7 @@ model Aircraft {
 
   specialist User?            @relation(fields: [specialist_id], references: [id])
   images     Aircraft_image[]
+  processes  Process[]
 }
 
 model Car_image {
@@ -229,31 +235,75 @@ model Aircraft_image {
 }
 
 model Process {
-  id            String        @id @default(uuid()) @db.Uuid
-  client_id     String?       @db.Uuid
-  specialist_id String?       @db.Uuid
-  product_type  ProductType
-  status        ProcessStatus @default(SCHEDULING)
-  notes         String?
-  created_at    DateTime      @default(now())
-  updated_at    DateTime      @updatedAt
+  id                 String        @id @default(uuid()) @db.Uuid
+  client_id          String        @db.Uuid
+  specialist_id      String        @db.Uuid
+  car_id             Int?
+  aircraft_id        Int?
+  boat_id            Int?
+  active_contract_id String?       @unique @db.Uuid
+  product_type       ProductType
+  status             ProcessStatus @default(SCHEDULING)
+  notes              String?
+  created_at         DateTime      @default(now())
+  updated_at         DateTime      @updatedAt
 
-  client     User?      @relation("process_as_client", fields: [client_id], references: [id], map: "fk_process_as_client")
-  specialist User?      @relation("process_as_specialist", fields: [specialist_id], references: [id], map: "fk_process_as_specialist")
-  contracts  Contract[]
+  car      Car?      @relation(fields: [car_id], references: [id])
+  boat     Boat?     @relation(fields: [boat_id], references: [id])
+  aircraft Aircraft? @relation(fields: [aircraft_id], references: [id])
+
+  client     User @relation("process_as_client", fields: [client_id], references: [id], map: "fk_process_as_client")
+  specialist User @relation("process_as_specialist", fields: [specialist_id], references: [id], map: "fk_process_as_specialist")
+
+  active_contract Contract? @relation("process_active_contract", fields: [active_contract_id], references: [id])
+
+  contracts            Contract[]             @relation("process_contracts")
+  ProcessStatusHistoty ProcessStatusHistory[]
+
+  @@unique([client_id, specialist_id, car_id, boat_id, aircraft_id], name: "unique_active_product")
 }
 
 model Contract {
-  id               String         @id @default(uuid()) @db.Uuid
-  process_id       String         @db.Uuid
-  external_token   String         @unique
-  status           ContractStatus @default(PENDING)
+  id          String  @id @default(uuid()) @db.Uuid
+  // Informações passadas na requisição
+  process_id  String  @db.Uuid
+  description String?
+
+  // Integração com o ZapSign
+  zapsign_token  String? @unique
+  signer_link    String?
+  signed_pdf_url String?
+
+  // Informações do arquivo
+  file_name        String
+  file_path        String
+  file_type        String
+  file_size        Int
   original_pdf_url String
-  signed_pdf_url   String?
-  signer_link      String
-  created_at       DateTime       @default(now())
-  updated_at       DateTime       @updatedAt
-  process          Process        @relation(fields: [process_id], references: [id])
+
+  // Característica do contrato
+  status          ContractStatus @default(PENDING)
+  rejected_reason String?
+
+  // Conexão com os processos
+  active_of_process Process? @relation("process_active_contract")
+  process           Process  @relation("process_contracts", fields: [process_id], references: [id])
+
+  // Quem fez o upload
+  uploaded_by_id   String   @db.Uuid
+  uploaded_by_type UserRole
+  uploaded_by      User     @relation("contract_created_by", fields: [uploaded_by_id], references: [id])
+
+  // Quem vai assinar
+  signed_by_id String? @db.Uuid
+  signed_by    User?   @relation("contract_signed_by", fields: [signed_by_id], references: [id])
+
+  // TimeStamp
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([process_id])
+  @@index([uploaded_by_id])
 }
 
 model Appointment {
@@ -270,6 +320,14 @@ model Appointment {
 
   client     User? @relation("appointment_as_client", fields: [client_id], references: [id], map: "fk_appointment_as_client")
   specialist User? @relation("appointment_as_specialist", fields: [specialist_id], references: [id], map: "fk_appointment_as_specialist")
+}
+
+model ProcessStatusHistory {
+  id         String        @id @default(uuid())
+  process    Process       @relation(fields: [processId], references: [id])
+  processId  String        @db.Uuid
+  status     ProcessStatus @default(SCHEDULING)
+  changed_at DateTime      @default(now())
 }
 
 model Car_interest {
