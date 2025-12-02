@@ -1,14 +1,14 @@
-import { TextAlignJustifyIcon } from "lucide-react";
+import { TextAlignJustifyIcon, LayoutDashboard, Building2, Users, UserCog } from "lucide-react";
 import { useContext } from "react";
 import { AppContext } from "../contexts/AppContext";
 import Logo from "../assets/logo_brokerage.png";
-import StatusIcon from "../assets/icons/fluent_data-line-16-regular.svg";
-import StockageIcon from "../assets/icons/ix_product-catalog.svg";
 import { useIsMobile } from "../hooks/use-is-mobile";
+import { Link, useLocation } from "react-router-dom";
 
 export default function Sidebar() {
   const { isSidebarCollapsed, setSidebarCollapsed } = useContext(AppContext);
   const isMobile = useIsMobile();
+  const location = useLocation();
   return (
     // Sidebar com controle de caso ela esteja colapsada
     <aside
@@ -42,20 +42,59 @@ export default function Sidebar() {
       </div>
 
       {/* Botões navegáveis */}
-      <div className="px-6 flex flex-col gap-6 text-sm">
-        <div className=" w-full">
-          <a className="w-full flex gap-2 ">
-            <img src={StatusIcon} />
-            <p>Status</p>
-          </a>
-        </div>
-        <div className="">
-          <a className="w-full flex gap-2">
-            <img src={StockageIcon} />
-            <p>Estoque</p>
-          </a>
-        </div>
-      </div>
+      <nav className="px-6 flex flex-col gap-4 text-sm mt-8">
+        {/* Dashboard */}
+        <Link
+          to="/admin/dashboard"
+          className={`w-full flex gap-3 items-center p-3 rounded-md transition-colors ${
+            location.pathname === '/admin/dashboard'
+              ? 'bg-white/20 text-white'
+              : 'text-gray-300 hover:bg-white/10 hover:text-white'
+          }`}
+        >
+          <LayoutDashboard size={20} />
+          <p>Dashboard</p>
+        </Link>
+
+        {/* Companies */}
+        <Link
+          to="/admin/companies"
+          className={`w-full flex gap-3 items-center p-3 rounded-md transition-colors ${
+            location.pathname === '/admin/companies'
+              ? 'bg-white/20 text-white'
+              : 'text-gray-300 hover:bg-white/10 hover:text-white'
+          }`}
+        >
+          <Building2 size={20} />
+          <p>Companies</p>
+        </Link>
+
+        {/* Consultants */}
+        <Link
+          to="/admin/consultants"
+          className={`w-full flex gap-3 items-center p-3 rounded-md transition-colors ${
+            location.pathname === '/admin/consultants'
+              ? 'bg-white/20 text-white'
+              : 'text-gray-300 hover:bg-white/10 hover:text-white'
+          }`}
+        >
+          <Users size={20} />
+          <p>Consultants</p>
+        </Link>
+
+        {/* Specialists */}
+        <Link
+          to="/admin/specialists"
+          className={`w-full flex gap-3 items-center p-3 rounded-md transition-colors ${
+            location.pathname === '/admin/specialists'
+              ? 'bg-white/20 text-white'
+              : 'text-gray-300 hover:bg-white/10 hover:text-white'
+          }`}
+        >
+          <UserCog size={20} />
+          <p>Specialists</p>
+        </Link>
+      </nav>
     </aside>
   );
 }

@@ -21,7 +21,7 @@ export class CreateConsultantDto {
 
   @IsString()
   @IsNotEmpty({ message: 'RG é obrigatório' })
-  @Length(10, 10, { message: 'RG deve ter exatamente 10 dígitos' })
+  @Length(9, 9, { message: 'RG deve ter exatamente 9 dígitos' })
   @Matches(/^\d+$/, { message: 'RG deve conter apenas números' })
   rg: string;
 

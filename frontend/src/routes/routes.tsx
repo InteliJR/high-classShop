@@ -1,5 +1,4 @@
 import { createBrowserRouter } from "react-router-dom";
-import App from "../App";
 import MainLayout from "../layouts/MainLayout";
 import Catalog from "../pages/Catalog";
 import Login from "../pages/auth/LoginPage";
@@ -13,7 +12,7 @@ import ConsultantsPage from "../pages/admin/ConsultantsPage";
 
 export default function RouterApp() {
   const routerApp = createBrowserRouter([
-    { path: "/", element: <App /> },
+    { path: "/", element: <Login /> },
     {
       path: "/catalog/:category",
       element: (
@@ -45,7 +44,7 @@ export default function RouterApp() {
       element: (
         <MainLayout>
           <ProtectedRoute allowedRoles={['ADMIN']}>
-            <CompaniesPage />
+            <DashboardPage />
           </ProtectedRoute>
         </MainLayout>
       ),
@@ -57,15 +56,6 @@ export default function RouterApp() {
           <ProtectedRoute allowedRoles={['SPECIALIST']}>
             <Catalog />
           </ProtectedRoute>
-        </MainLayout>
-      ),
-    },
-    {
-      path: "/admin/dashboard",
-      element: (
-        <MainLayout>
-          {" "}
-          <DashboardPage />{" "}
         </MainLayout>
       ),
     },
