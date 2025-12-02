@@ -45,7 +45,7 @@ export const mockUsers: UserMock[] = [
     rg: '11223344',
     role: 'ADMIN',
     password_hash:
-      '$2b$10$ZLDFP8oPZxC0vNNPJBWl9O8D6hxkNfo0Rm4G5M5mA4q0O5F3ZRQda',
+      '$2b$10$G5Fi09tfetziWflHWuLtkOgbUc15mBydifUFagWQcH31OMYYQlVgi',
   },
   {
     name: 'Marcos',
@@ -55,7 +55,7 @@ export const mockUsers: UserMock[] = [
     rg: '22334455',
     role: 'CONSULTANT',
     password_hash:
-      '$2b$10$ZLDFP8oPZxC0vNNPJBWl9O8D6hxkNfo0Rm4G5M5mA4q0O5F3ZRQda',
+      '$2b$10$G5Fi09tfetziWflHWuLtkOgbUc15mBydifUFagWQcH31OMYYQlVgi',
   },
   {
     name: 'Carlos',
@@ -66,7 +66,7 @@ export const mockUsers: UserMock[] = [
     role: 'SPECIALIST',
     speciality: 'CAR',
     password_hash:
-      '$2b$10$ZLDFP8oPZxC0vNNPJBWl9O8D6hxkNfo0Rm4G5M5mA4q0O5F3ZRQda',
+      '$2b$10$G5Fi09tfetziWflHWuLtkOgbUc15mBydifUFagWQcH31OMYYQlVgi',
   },
   {
     name: 'João',
@@ -76,6 +76,6 @@ export const mockUsers: UserMock[] = [
     rg: '77889900',
     role: 'CUSTOMER',
     password_hash:
-      '$2b$10$ZLDFP8oPZxC0vNNPJBWl9O8D6hxkNfo0Rm4G5M5mA4q0O5F3ZRQda',
+      '$2b$10$G5Fi09tfetziWflHWuLtkOgbUc15mBydifUFagWQcH31OMYYQlVgi',
   },
 ];
