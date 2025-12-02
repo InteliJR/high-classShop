@@ -30,6 +30,12 @@ export class SpecialistsController {
     return this.specialistsService.findAll();
   }
 
+  // Rota para buscar especialistas agrupados por categoria.
+  @Get('grouped-by-category')
+  findAllGroupedByCategory() {
+    return this.specialistsService.findAllGroupedByCategory();
+  }
+
   // Rota para criar um novo especialista.
   @Post()
   create(@Body() body: CreateSpecialistDto) {
