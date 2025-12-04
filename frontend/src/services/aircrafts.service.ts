@@ -68,6 +68,8 @@ export async function getAircrafts(page = 1, perPage = 20, appliedFilters = []):
         descricao: rawAircraft.descricao || "",
         imageUrl: primaryImage ?? "",
         valor: rawAircraft.valor,
+        ano: rawAircraft.ano,
+        estado: rawAircraft.estado,
       };
     });
     return {aircrafts, pagination, filters};

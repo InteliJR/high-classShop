@@ -18,7 +18,7 @@ export default function BoatFields({ register, errors }: BoatFieldsProps) {
           type="text"
           {...register("fabricante")}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Ex: Azimut, Ferretti"
+          placeholder="Ex: Azimut Yachts, Ferretti Group, Sunseeker"
         />
         {errors.fabricante && (
           <span className="text-sm text-red-500">{errors.fabricante.message as string}</span>
@@ -50,13 +50,19 @@ export default function BoatFields({ register, errors }: BoatFieldsProps) {
         <label htmlFor="estilo" className="text-sm font-medium text-text-primary">
           Estilo
         </label>
-        <input
+        <select
           id="estilo"
-          type="text"
           {...register("estilo")}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Ex: Esportivo, Clássico"
-        />
+        >
+          <option value="">Selecione o estilo</option>
+          <option value="Esportivo">Esportivo</option>
+          <option value="Clássico">Clássico</option>
+          <option value="Moderno">Moderno</option>
+          <option value="Luxo">Luxo</option>
+          <option value="Pesca">Pesca</option>
+          <option value="Cruzeiro">Cruzeiro</option>
+        </select>
         {errors.estilo && (
           <span className="text-sm text-red-500">{errors.estilo.message as string}</span>
         )}
@@ -93,7 +99,7 @@ export default function BoatFields({ register, errors }: BoatFieldsProps) {
           type="text"
           {...register("motor")}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Ex: Volvo Penta D6-400"
+          placeholder="Ex: 2x Volvo Penta D6-400 (800hp total)"
         />
         {errors.motor && (
           <span className="text-sm text-red-500">{errors.motor.message as string}</span>
@@ -153,7 +159,7 @@ export default function BoatFields({ register, errors }: BoatFieldsProps) {
           {...register("descricao_completa")}
           rows={4}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Descreva as características e diferenciais da embarcação..."
+          placeholder="Ex: Iate de luxo com 3 cabines, flybridge espaçoso, casco em fibra de vidro reforçada. Equipado com sistema de navegação GPS, radar, piloto automático. Acabamento em madeira nobre..."
         />
         {errors.descricao_completa && (
           <span className="text-sm text-red-500">{errors.descricao_completa.message as string}</span>
@@ -170,7 +176,7 @@ export default function BoatFields({ register, errors }: BoatFieldsProps) {
           {...register("acessorios")}
           rows={3}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Liste os acessórios inclusos..."
+          placeholder="Ex: Ar-condicionado, gerador, dessalinizador, tender com motor, jet ski, equipamento de mergulho, sistema de som Bose, TV 55 polegadas..."
         />
         {errors.acessorios && (
           <span className="text-sm text-red-500">{errors.acessorios.message as string}</span>

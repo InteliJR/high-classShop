@@ -12,6 +12,7 @@ import SpecialistsPage from "../pages/admin/SpecialistsPage";
 import ConsultantsPage from "../pages/admin/ConsultantsPage";
 import ProductsPage from "../pages/specialist/ProductsPage";
 import ProductFormPage from "../pages/specialist/ProductFormPage";
+import SpecialistDashboard from "../pages/specialist/SpecialistDashboard";
 
 export default function RouterApp() {
   const routerApp = createBrowserRouter([
@@ -57,7 +58,7 @@ export default function RouterApp() {
       element: (
         <MainLayout>
           <ProtectedRoute allowedRoles={['SPECIALIST']}>
-            <Catalog />
+            <SpecialistDashboard />
           </ProtectedRoute>
         </MainLayout>
       ),

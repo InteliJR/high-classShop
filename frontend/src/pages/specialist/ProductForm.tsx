@@ -1,6 +1,7 @@
 import { useForm } from "react-hook-form";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../store/authStateManager";
 import CommonProductFields from "./CommonProductFields";
 import CarFields from "./CarFields";
 import BoatFields from "./BoatFields";
@@ -8,6 +9,7 @@ import AircraftFields from "./AircraftFields";
 import { createCar, updateCar, type RawCar } from "../../services/cars.service";
 import { createBoat, updateBoat, type RawBoat } from "../../services/boats.service";
 import { createAircraft, updateAircraft, type RawAircraft } from "../../services/aircrafts.service";
+import type { SpecialityType } from "../../types/types";
 
 type ProductType = "CAR" | "BOAT" | "AIRCRAFT";
 
@@ -29,7 +31,13 @@ interface ProductFormProps {
 
 export default function ProductForm({ mode, productType: initialProductType, productData, productId }: ProductFormProps) {
   const navigate = useNavigate();
-  const [productType, setProductType] = useState<ProductType>(initialProductType || "CAR");
+  const user = useAuth((state) => state.user);
+  const userSpeciality = user?.speciality as SpecialityType;
+
+  // Define o tipo de produto baseado na especialidade do usuário
+  const [productType, setProductType] = useState<ProductType>(
+    initialProductType || userSpeciality || "CAR"
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
@@ -135,8 +143,8 @@ export default function ProductForm({ mode, productType: initialProductType, pro
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
-      {/* Seletor de Tipo de Produto (apenas no modo criar) */}
-      {mode === "create" && (
+      {/* Seletor de Tipo de Produto (apenas no modo criar e se não tiver especialidade) */}
+      {mode === "create" && !userSpeciality && (
         <div className="flex flex-col gap-2">
           <label htmlFor="productType" className="text-lg font-semibold text-text-primary">
             Tipo de Produto *
@@ -154,9 +162,21 @@ export default function ProductForm({ mode, productType: initialProductType, pro
         </div>
       )}
 
+      {/* Mostra a especialidade do usuário (se tiver) */}
+      {mode === "create" && userSpeciality && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-800">
+            <span className="font-semibold">Categoria:</span>{" "}
+            {productType === "CAR" && "Carros de Alto Padrão"}
+            {productType === "BOAT" && "Lanchas e Embarcações"}
+            {productType === "AIRCRAFT" && "Aeronaves Executivas"}
+          </p>
+        </div>
+      )}
+
       {/* Campos Comuns */}
       <div className="grid grid-cols-2 gap-4">
-        <CommonProductFields register={register} errors={errors} />
+        <CommonProductFields register={register} errors={errors} productType={productType} />
       </div>
 
       {/* Campos Específicos por Tipo */}

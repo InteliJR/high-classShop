@@ -88,6 +88,8 @@ export async function getCars(
         descricao: rawCar.descricao,
         imageUrl: primaryImage ?? "",
         valor: rawCar.valor,
+        ano: rawCar.ano,
+        estado: rawCar.estado,
       };
     });
     return { cars, pagination, filters };

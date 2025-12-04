@@ -13,13 +13,24 @@ export default function CarFields({ register, errors }: CarFieldsProps) {
         <label htmlFor="cor" className="text-sm font-medium text-text-primary">
           Cor
         </label>
-        <input
+        <select
           id="cor"
-          type="text"
           {...register("cor")}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Ex: Vermelho, Preto, Branco"
-        />
+        >
+          <option value="">Selecione a cor</option>
+          <option value="Preto">Preto</option>
+          <option value="Branco">Branco</option>
+          <option value="Prata">Prata</option>
+          <option value="Cinza">Cinza</option>
+          <option value="Vermelho">Vermelho</option>
+          <option value="Azul">Azul</option>
+          <option value="Amarelo">Amarelo</option>
+          <option value="Verde">Verde</option>
+          <option value="Laranja">Laranja</option>
+          <option value="Dourado">Dourado</option>
+          <option value="Outro">Outro</option>
+        </select>
         {errors.cor && (
           <span className="text-sm text-red-500">{errors.cor.message as string}</span>
         )}
@@ -37,7 +48,7 @@ export default function CarFields({ register, errors }: CarFieldsProps) {
             min: { value: 0, message: "Quilometragem não pode ser negativa" },
           })}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Ex: 15000"
+          placeholder="Ex: 5000 (digite 0 para veículos novos)"
         />
         {errors.km && (
           <span className="text-sm text-red-500">{errors.km.message as string}</span>
@@ -120,7 +131,7 @@ export default function CarFields({ register, errors }: CarFieldsProps) {
           {...register("descricao")}
           rows={4}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Descreva as características e diferenciais do veículo..."
+          placeholder="Ex: Motor V8 biturbo de 720cv, 0-100 em 2.9s. Interior em couro Nappa, sistema de som premium, teto solar panorâmico, rodas de liga leve 21 polegadas..."
         />
         {errors.descricao && (
           <span className="text-sm text-red-500">{errors.descricao.message as string}</span>

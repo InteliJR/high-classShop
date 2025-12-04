@@ -17,8 +17,9 @@ async function main() {
   await prisma.car.deleteMany();
   await prisma.boat.deleteMany();
   await prisma.aircraft.deleteMany();
+  await prisma.user.deleteMany();
 
-console.log("👥 Seeding users...");
+  console.log("👥 Seeding users...");
 for (const userMock of mockUsers) {
   const user = await prisma.user.create({
     data: {

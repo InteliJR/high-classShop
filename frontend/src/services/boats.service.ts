@@ -95,6 +95,8 @@ export async function getBoats(
         descricao: rawBoat.descricao_completa || "",
         imageUrl: primaryImage ?? "",
         valor: rawBoat.valor,
+        ano: rawBoat.ano,
+        estado: rawBoat.estado,
       };
     });
     return { boats, pagination, filters };

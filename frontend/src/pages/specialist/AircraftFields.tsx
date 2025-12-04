@@ -13,13 +13,17 @@ export default function AircraftFields({ register, errors }: AircraftFieldsProps
         <label htmlFor="categoria" className="text-sm font-medium text-text-primary">
           Categoria
         </label>
-        <input
+        <select
           id="categoria"
-          type="text"
           {...register("categoria")}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Ex: Executivo, Particular"
-        />
+        >
+          <option value="">Selecione a categoria</option>
+          <option value="Executivo">Executivo</option>
+          <option value="Particular">Particular</option>
+          <option value="Comercial">Comercial</option>
+          <option value="Utilitário">Utilitário</option>
+        </select>
         {errors.categoria && (
           <span className="text-sm text-red-500">{errors.categoria.message as string}</span>
         )}
@@ -37,7 +41,7 @@ export default function AircraftFields({ register, errors }: AircraftFieldsProps
             min: { value: 1, message: "Deve ter pelo menos 1 assento" },
           })}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Ex: 8"
+          placeholder="Ex: 8 passageiros"
         />
         {errors.assentos && (
           <span className="text-sm text-red-500">{errors.assentos.message as string}</span>
@@ -76,7 +80,7 @@ export default function AircraftFields({ register, errors }: AircraftFieldsProps
           {...register("descricao")}
           rows={4}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Descreva as características e diferenciais da aeronave..."
+          placeholder="Ex: Jato executivo com autonomia de 3.650 km, velocidade de cruzeiro de 839 km/h. Cabine pressurizada com 8 assentos em couro, sistema de entretenimento completo, banheiro privativo, galley equipada..."
         />
         {errors.descricao && (
           <span className="text-sm text-red-500">{errors.descricao.message as string}</span>
