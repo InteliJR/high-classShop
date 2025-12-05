@@ -14,6 +14,7 @@ import { PrismaExceptionFilter } from './shared/filters/prisma-exception.filter'
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ProcessesModule } from './processes/processes.module';
 import { ContractsModule } from './contracts/contracts.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { ContractsModule } from './contracts/contracts.module';
     ConsultantModule,
     ProcessesModule,
     ContractsModule,
+    DashboardModule,
   ],
   providers: [
     PrismaService,
