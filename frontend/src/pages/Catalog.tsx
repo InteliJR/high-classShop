@@ -25,7 +25,7 @@ import ProductCard from "../components/ProductCard.tsx";
 // Mapeamento dos títulos de acordo com a rota passada
 const titles: { [key: string]: string } = {
   cars: "Carros",
-  boats: "Barcos",
+  boats: "Embarcações",
   aircrafts: "Aeronaves",
 };
 
