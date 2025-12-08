@@ -15,30 +15,51 @@ export default function ProtectedRoute({
   const user = useAuth((state) => state.user);
   const navigate = useNavigate();
 
-  // Gerenciador da lógica de redirecionar a página
-  useEffect(() => {
-    if (!user && !loading) {
-      navigate("/login");
+  // Função que define para onde o usuário deve ser redirecionado
+  const redirectByRole = (role: UserRole) => {
+    switch (role) {
+      case "CUSTOMER":
+        return "/catalog/cars";
+      case "CONSULTANT":
+        return "/consultant/dashboard";
+      case "SPECIALIST":
+        return "/specialist/dashboard";
+      case "ADMIN":
+        return "/admin/dashboard";
+      default:
+        return "/login";
     }
-    // Verificar se o usuário tem permissão para acessar a rota
-    if (user && !loading && allowedRoles && !allowedRoles.includes(user.role)) {
-      navigate("/catalog/cars");
+  };
+
+  useEffect(() => {
+    if (!loading) {
+      // Usuário não está logado
+      if (!user) {
+        navigate("/login");
+        return;
+      }
+
+      // Usuário logado mas não tem permissão
+      if (allowedRoles && !allowedRoles.includes(user.role)) {
+        navigate(redirectByRole(user.role));
+      }
     }
   }, [loading, user, allowedRoles, navigate]);
 
-  // Indicar visualmente que está carregando a página
+  // Tela de carregamento
   if (loading) {
     return <div>Carregando...</div>;
   }
-  // Indicar visualmente que está redirecionando a página
-  if (!user && !loading) {
+
+  // Ainda sem usuário (após loading) → já está redirecionando, mostrar visual
+  if (!user) {
     return <div>Redirecionando...</div>;
   }
-  // Verificar se o usuário tem permissão para acessar a rota
-  if (user && allowedRoles && !allowedRoles.includes(user.role)) {
-    return <div>Acesso negado...</div>;
+
+  // Se não tem permissão, não renderiza nada (o useEffect já redirecionou)
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return null;
   }
 
-  // Retorna a página normalmente caso o usuário exista e não esteja carregando
   return children;
 }

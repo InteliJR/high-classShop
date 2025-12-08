@@ -10,6 +10,9 @@ import { useIsMobile } from "../hooks/use-is-mobile";
 import { useAuth } from "../store/authStateManager";
 import { AppContext } from "../contexts/AppContext";
 import { useLocation } from "react-router-dom";
+import { useSearch } from "../contexts/SearchContext";
+import { useNavigate } from "react-router-dom";
+import { AuthContext } from "../contexts/AuthContext";
 
 export default function Header() {
   const { isSidebarCollapsed, setSidebarCollapsed, searchTerm, setSearchTerm } = useContext(AppContext);
@@ -21,11 +24,16 @@ export default function Header() {
   const isFormPage = location.pathname.includes('/products/new') ||
                      location.pathname.includes('/products/edit');
   
+  const { logout } = useContext(AuthContext);
+  const navigate = useNavigate();
+
   return (
     <>
       <header
         className={`w-full sticky flex h-24 bg-background-secondary text-white
-          justify-end items-center px-6 sm:px-18 ${!isMobile && !isSidebarCollapsed && ""}`}
+          justify-end items-center px-6 sm:px-18 ${
+            !isMobile && !isSidebarCollapsed && ""
+          }`}
       >
         <div className="flex w-full justify-between sm:flex-row-reverse items-center">
           {isMobile && (
@@ -70,24 +78,30 @@ export default function Header() {
           {/* Barra de pesquisa para quando tiver um usuário logado */}
           {user ? (
             <div className="flex sm:justify-around sm:w-full">
-              {!isFormPage && (
-                <div className="flex justify-center items-center sm:w-full">
-                  <div className="relative flex items-center">
-                    <Search
-                      size={18}
-                      className="absolute translate-x-3 text-black"
-                    />
-                  </div>
-                  <input
-                    className=" bg-white rounded-full w-2/3 h-10 text-black px-10"
-                    type="text"
-                    placeholder="Pesquisar..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+              {/* Mostra a barra de pesquisa apenas se NÃO estiver na dashboard */}
+
+              <div className="flex justify-center items-center sm:w-full">
+                <div className="relative flex items-center">
+                  <Search
+                    size={18}
+                    className="absolute translate-x-3 text-black"
                   />
                 </div>
-              )}
-              <button>
+                <input
+                  className=" bg-white rounded-full w-2/3 h-10 text-black px-10"
+                  type="text"
+                  placeholder="Buscar..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              <button
+                onClick={async () => {
+                  await logout(); // limpa user e accessToken
+                  navigate("/login"); // redireciona para a tela de login
+                }}
+              >
                 <UserCircle2 size={40} />
               </button>
             </div>

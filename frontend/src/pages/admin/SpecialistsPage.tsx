@@ -1,5 +1,3 @@
-// Página de gestão de especialistas, com listagem, criação e exclusão.
-
 import React, { useEffect, useState } from "react";
 import {
   getSpecialists,
@@ -11,23 +9,29 @@ import EditIcon from "../../assets/icons/edit.svg";
 import TrashIcon from "../../assets/icons/trash.svg";
 import Modal from "../../components/ui/Modal";
 import NewSpecialistForm from "./NewSpecialistForm";
+import { useSearch } from "../../contexts/SearchContext";
 
 export default function SpecialistsPage() {
-  // Guarda os dados da API para serem renderizados na tabela.
   const [specialists, setSpecialists] = useState<Specialist[]>([]);
-  // Controla a exibição de mensagens de 'loading' enquanto os dados são buscados.
   const [isLoading, setIsLoading] = useState(true);
-  // Armazena mensagens de erro para exibir ao utilizador se a API falhar.
   const [error, setError] = useState<string | null>(null);
 
-  // Controla a visibilidade do modal de criação de um novo especialista.
   const [isNewSpecialistModalOpen, setIsNewSpecialistModalOpen] = useState(false);
-  // Guarda o especialista que está sendo editado, ou null se estiver criando um novo.
   const [specialistToEdit, setSpecialistToEdit] = useState<Specialist | null>(null);
-  // Guarda o objeto do especialista que está prestes a ser apagado, controlando também o modal de confirmação.
   const [specialistToDelete, setSpecialistToDelete] = useState<Specialist | null>(null);
 
-  // Busca os dados mais recentes da API e atualiza o estado da página.
+  const { searchTerm } = useSearch();
+
+  const filteredSpecialists = specialists.filter((specialist) => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      specialist.name.toLowerCase().includes(searchLower) ||
+      specialist.surname.toLowerCase().includes(searchLower) ||
+      specialist.email.toLowerCase().includes(searchLower) ||
+      specialist.speciality.toLowerCase().includes(searchLower)
+    );
+  });
+
   async function fetchData() {
     try {
       setIsLoading(true);
@@ -41,21 +45,20 @@ export default function SpecialistsPage() {
     }
   }
 
-  // Função chamada quando o formulário de novo/edição de especialista é submetido com sucesso.
   const handleFormSuccess = () => {
     setIsNewSpecialistModalOpen(false);
     setSpecialistToEdit(null);
     fetchData();
   };
 
-  // Função chamada pelo modal de confirmação para apagar um especialista.
   const handleConfirmDelete = async () => {
     if (!specialistToDelete) return;
     try {
       await deleteSpecialist(specialistToDelete.id);
       fetchData();
     } catch (err) {
-      alert("Erro ao apagar o especialista. Tente novamente.");
+      const errorMessage = (err as Error).message || "Erro ao apagar o especialista. Tente novamente.";
+      alert(errorMessage);
     } finally {
       setSpecialistToDelete(null);
     }
@@ -65,19 +68,12 @@ export default function SpecialistsPage() {
     fetchData();
   }, []);
 
-  // Exibe uma mensagem de 'loading' enquanto os dados não chegam.
-  if (isLoading) {
-    return <p>Carregando...</p>;
-  }
-
-  // Exibe uma mensagem de erro se a busca de dados falhar.
-  if (error) {
-    return <p className="text-red-500">{error}</p>;
-  }
+  if (isLoading) return <p>Carregando...</p>;
+  if (error) return <p className="text-red-500">{error}</p>;
 
   return (
     <div className="text-text-main w-full">
-      {/* --- CABEÇALHO DA PÁGINA --- */}
+      {/* Cabeçalho */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="h1-style">Gestão de Especialistas</h1>
         <Button type="button" onClick={() => setIsNewSpecialistModalOpen(true)}>
@@ -85,14 +81,12 @@ export default function SpecialistsPage() {
         </Button>
       </div>
 
-      {/* --- TABELA DE ESPECIALISTAS --- */}
+      {/* Tabela */}
       <div className="p-6 rounded-lg shadow bg-brand-container bg-bg-container">
         <h2 className="h2-style">Especialistas</h2>
-        <p className="text-base mb-8 mt-2">
-          Lista completa de especialistas
-        </p>
+        <p className="text-base mb-8 mt-2">Lista completa de especialistas</p>
 
-        {/* Cabeçalho da Lista */}
+        {/* Cabeçalho da lista */}
         <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 px-4 py-2 text-base font-normal text-left text-text-secondary">
           <div>Nome</div>
           <div>Especialidade</div>
@@ -101,54 +95,61 @@ export default function SpecialistsPage() {
           <div className="text-right">Ações</div>
         </div>
 
-        {/* Corpo da Lista */}
+        {/* Corpo da lista */}
         <div className="mt-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto p-2">
-          {specialists.map((specialist, index) => {
-            // Mock data para processos abertos e taxa de conversão
-            const mockOpenProcesses = [12, 8, 15, 6, 10][index % 5];
-            const mockConversionRate = ['68%', '72%', '65%', '80%', '75%'][index % 5];
+          {filteredSpecialists.length === 0 ? (
+            <p className="text-center text-gray-500 py-8">
+              {searchTerm
+                ? "Nenhum especialista encontrado com esse termo de busca."
+                : "Nenhum especialista cadastrado."}
+            </p>
+          ) : (
+            filteredSpecialists.map((specialist, index) => {
+              const mockOpenProcesses = [12, 8, 15, 6, 10][index % 5];
+              const mockConversionRate = ['68%', '72%', '65%', '80%', '75%'][index % 5];
 
-            return (
-              <div
-                key={specialist.id}
-                className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6 rounded-lg shadow-sm bg-white"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-normal">{specialist.name} {specialist.surname}</span>
-                </div>
-                <div>
-                  <span className="bg-blue-100 text-blue-800 text-base px-2.5 py-0.5 rounded-full">
-                    {specialist.speciality}
-                  </span>
-                </div>
-                <div>{mockOpenProcesses}</div>
-                <div>{mockConversionRate}</div>
-                <div className="flex justify-end items-center gap-4 text-gray-400">
-                  <button onClick={() => setSpecialistToEdit(specialist)}>
-                    <img
-                      src={EditIcon}
-                      alt="Editar"
-                      className="h-6 w-6 cursor-pointer hover:text-gray-600"
-                    />
-                  </button>
+              return (
+                <div
+                  key={specialist.id}
+                  className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6 rounded-lg shadow-sm bg-white"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-normal">
+                      {specialist.name} {specialist.surname}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="bg-blue-100 text-blue-800 text-base px-2.5 py-0.5 rounded-full">
+                      {specialist.speciality ?? "-"}
+                    </span>
+                  </div>
+                  <div>{mockOpenProcesses}</div>
+                  <div>{mockConversionRate}</div>
+                  <div className="flex justify-end items-center gap-4 text-gray-400">
+                    <button onClick={() => setSpecialistToEdit(specialist)}>
+                      <img
+                        src={EditIcon}
+                        alt="Editar"
+                        className="h-6 w-6 cursor-pointer hover:text-gray-600"
+                      />
+                    </button>
 
-                  <button onClick={() => setSpecialistToDelete(specialist)}>
-                    <img
-                      src={TrashIcon}
-                      alt="Deletar"
-                      className="h-5 w-5 cursor-pointer hover:text-gray-600"
-                    />
-                  </button>
+                    <button onClick={() => setSpecialistToDelete(specialist)}>
+                      <img
+                        src={TrashIcon}
+                        alt="Deletar"
+                        className="h-5 w-5 cursor-pointer hover:text-gray-600"
+                      />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
 
-      {/* --- MODAIS --- */}
-
-      {/* Modal para criar novo especialista ou editar existente */}
+      {/* Modal criação/edição */}
       <Modal
         isOpen={isNewSpecialistModalOpen || !!specialistToEdit}
         onClose={() => {
@@ -162,7 +163,7 @@ export default function SpecialistsPage() {
         />
       </Modal>
 
-      {/* --- NOVO MODAL PARA CONFIRMAÇÃO DE EXCLUSÃO --- */}
+      {/* Modal exclusão */}
       <Modal
         isOpen={!!specialistToDelete}
         onClose={() => setSpecialistToDelete(null)}
@@ -183,4 +184,3 @@ export default function SpecialistsPage() {
     </div>
   );
 }
-
