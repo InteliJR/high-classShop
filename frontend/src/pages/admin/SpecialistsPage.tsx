@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   getSpecialists,
   deleteSpecialist,
@@ -16,9 +16,13 @@ export default function SpecialistsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [isNewSpecialistModalOpen, setIsNewSpecialistModalOpen] = useState(false);
-  const [specialistToEdit, setSpecialistToEdit] = useState<Specialist | null>(null);
-  const [specialistToDelete, setSpecialistToDelete] = useState<Specialist | null>(null);
+  const [isNewSpecialistModalOpen, setIsNewSpecialistModalOpen] =
+    useState(false);
+  const [specialistToEdit, setSpecialistToEdit] = useState<Specialist | null>(
+    null
+  );
+  const [specialistToDelete, setSpecialistToDelete] =
+    useState<Specialist | null>(null);
 
   const { searchTerm } = useSearch();
 
@@ -57,7 +61,9 @@ export default function SpecialistsPage() {
       await deleteSpecialist(specialistToDelete.id);
       fetchData();
     } catch (err) {
-      const errorMessage = (err as Error).message || "Erro ao apagar o especialista. Tente novamente.";
+      const errorMessage =
+        (err as Error).message ||
+        "Erro ao apagar o especialista. Tente novamente.";
       alert(errorMessage);
     } finally {
       setSpecialistToDelete(null);
@@ -106,7 +112,9 @@ export default function SpecialistsPage() {
           ) : (
             filteredSpecialists.map((specialist, index) => {
               const mockOpenProcesses = [12, 8, 15, 6, 10][index % 5];
-              const mockConversionRate = ['68%', '72%', '65%', '80%', '75%'][index % 5];
+              const mockConversionRate = ["68%", "72%", "65%", "80%", "75%"][
+                index % 5
+              ];
 
               return (
                 <div
@@ -176,7 +184,9 @@ export default function SpecialistsPage() {
             ação não pode ser desfeita.
           </p>
           <div className="flex justify-center gap-4">
-            <Button onClick={() => setSpecialistToDelete(null)}>Cancelar</Button>
+            <Button onClick={() => setSpecialistToDelete(null)}>
+              Cancelar
+            </Button>
             <Button onClick={handleConfirmDelete}>Confirmar Exclusão</Button>
           </div>
         </div>

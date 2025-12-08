@@ -9,21 +9,14 @@ import { useContext } from "react";
 import { useIsMobile } from "../hooks/use-is-mobile";
 import { useAuth } from "../store/authStateManager";
 import { AppContext } from "../contexts/AppContext";
-import { useLocation } from "react-router-dom";
-import { useSearch } from "../contexts/SearchContext";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../contexts/AuthContext";
 
 export default function Header() {
-  const { isSidebarCollapsed, setSidebarCollapsed, searchTerm, setSearchTerm } = useContext(AppContext);
+  const { isSidebarCollapsed, setSidebarCollapsed, searchTerm, setSearchTerm } =
+    useContext(AppContext);
   const isMobile = useIsMobile();
-  const { user} = useAuth();
-  const location = useLocation();
-
-  // Esconde a barra de pesquisa nas páginas de formulário
-  const isFormPage = location.pathname.includes('/products/new') ||
-                     location.pathname.includes('/products/edit');
-  
+  const { user } = useAuth();
   const { logout } = useContext(AuthContext);
   const navigate = useNavigate();
 
@@ -78,8 +71,6 @@ export default function Header() {
           {/* Barra de pesquisa para quando tiver um usuário logado */}
           {user ? (
             <div className="flex sm:justify-around sm:w-full">
-              {/* Mostra a barra de pesquisa apenas se NÃO estiver na dashboard */}
-
               <div className="flex justify-center items-center sm:w-full">
                 <div className="relative flex items-center">
                   <Search
