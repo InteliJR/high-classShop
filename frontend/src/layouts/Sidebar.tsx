@@ -4,7 +4,9 @@ import {
   Building2,
   Users,
   UserCog,
-  ShoppingCart,
+  Car,
+  Ship,
+  Plane,
 } from "lucide-react";
 import { useContext } from "react";
 import { AppContext } from "../contexts/AppContext";
@@ -25,11 +27,23 @@ export default function Sidebar() {
   if (user) {
     switch (user.role) {
       case "CUSTOMER":
-        links.push({
-          to: "/catalog/cars",
-          label: "Catálogo",
-          icon: <ShoppingCart size={20} />,
-        });
+        links.push(
+          {
+            to: "/catalog/cars",
+            label: "Carros",
+            icon: <Car size={20} />,
+          },
+          {
+            to: "/catalog/boats",
+            label: "Embarcações",
+            icon: <Ship size={20} />,
+          },
+          {
+            to: "/catalog/aircrafts",
+            label: "Aviões",
+            icon: <Plane size={20} />,
+          }
+        );
         break;
       case "CONSULTANT":
         links.push({

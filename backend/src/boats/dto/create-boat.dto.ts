@@ -1,22 +1,58 @@
-import { UUID } from "crypto";
+import { IsString, IsNumber, IsOptional, IsUUID } from 'class-validator';
 
 export class CreateBoatDto {
-    id: string;
+    @IsString()
     marca: string;
+
+    @IsString()
     modelo: string;
+
+    @IsNumber()
     valor: number;
+
+    @IsString()
     estado: string;
+
+    @IsNumber()
     ano: number;
-    fabricante: string;
-    tamanho: string;
-    estilo: string;
-    combustivel: string;
-    motor: string;
-    ano_motor: number;
-    tipo_embarcacao: string;
-    descricao_completa: string;
-    acessorios: string;
-    specialist_id?: string; //Fix
-    created_at: Date;
-    updated_at: Date;
+
+    @IsOptional()
+    @IsString()
+    fabricante?: string;
+
+    @IsOptional()
+    @IsString()
+    tamanho?: string;
+
+    @IsOptional()
+    @IsString()
+    estilo?: string;
+
+    @IsOptional()
+    @IsString()
+    combustivel?: string;
+
+    @IsOptional()
+    @IsString()
+    motor?: string;
+
+    @IsOptional()
+    @IsNumber()
+    ano_motor?: number;
+
+    @IsOptional()
+    @IsString()
+    tipo_embarcacao?: string;
+
+    @IsOptional()
+    @IsString()
+    descricao_completa?: string;
+
+    @IsOptional()
+    @IsString()
+    acessorios?: string;
+
+    @IsOptional()
+    @IsUUID()
+    specialist_id?: string;
 }

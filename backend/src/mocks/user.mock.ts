@@ -69,6 +69,28 @@ export const mockUsers: UserMock[] = [
       '$2b$10$G5Fi09tfetziWflHWuLtkOgbUc15mBydifUFagWQcH31OMYYQlVgi',
   },
   {
+    name: 'Marina',
+    surname: 'Navegante',
+    email: 'marina.boat@example.com',
+    cpf: '55566677788',
+    rg: '55667788',
+    role: 'SPECIALIST',
+    speciality: 'BOAT',
+    password_hash:
+      '$2b$10$G5Fi09tfetziWflHWuLtkOgbUc15mBydifUFagWQcH31OMYYQlVgi',
+  },
+  {
+    name: 'Pedro',
+    surname: 'Aviador',
+    email: 'pedro.aircraft@example.com',
+    cpf: '66677788899',
+    rg: '66778899',
+    role: 'SPECIALIST',
+    speciality: 'AIRCRAFT',
+    password_hash:
+      '$2b$10$G5Fi09tfetziWflHWuLtkOgbUc15mBydifUFagWQcH31OMYYQlVgi',
+  },
+  {
     name: 'João',
     surname: 'Silva',
     email: 'joao.cliente@example.com',

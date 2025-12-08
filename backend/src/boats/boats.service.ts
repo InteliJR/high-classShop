@@ -16,24 +16,28 @@ import { UserEntity } from 'src/auth/entities/user.entity';
 export class BoatsService {
   constructor(private prismaService: PrismaService) {}
 
-  create(data: {
+  async create(data: {
     marca: string;
     modelo: string;
     valor: number;
     estado: string;
     ano: number;
-    fabricante: string;
-    tamanho: string;
-    estilo: string;
-    combustivel: string;
-    motor: string;
-    ano_motor: number;
-    tipo_embarcacao: string;
-    descricao_completa: string;
-    acessorios: string;
+    fabricante?: string;
+    tamanho?: string;
+    estilo?: string;
+    combustivel?: string;
+    motor?: string;
+    ano_motor?: number;
+    tipo_embarcacao?: string;
+    descricao_completa?: string;
+    acessorios?: string;
     specialist_id?: string;
   }) {
-    return this.prismaService.boat.create({ data: data });
+    try {
+      return await this.prismaService.boat.create({ data: data });
+    } catch (error) {
+      throw new Error(`Erro ao criar lancha: ${error.message}`);
+    }
   }
 
   async getAllBoats({
@@ -158,12 +162,21 @@ export class BoatsService {
   ) {
     await this.findOne(id);
 
-    return this.prismaService.boat.update({ where: { id }, data: data });
+    try {
+      return await this.prismaService.boat.update({ where: { id }, data: data });
+    } catch (error) {
+      throw new Error(`Erro ao atualizar lancha: ${error.message}`);
+    }
   }
 
   async remove(id: number) {
     await this.findOne(id);
-    await this.prismaService.boat.delete({ where: { id } });
-    return { ok: true };
+
+    try {
+      await this.prismaService.boat.delete({ where: { id } });
+      return { ok: true };
+    } catch (error) {
+      throw new Error(`Erro ao deletar lancha: ${error.message}`);
+    }
   }
 }

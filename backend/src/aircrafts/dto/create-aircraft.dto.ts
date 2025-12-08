@@ -1,18 +1,38 @@
-import { UUID } from "crypto";
+import { IsString, IsNumber, IsOptional, IsUUID } from 'class-validator';
 
 export class CreateAircraftDto {
-    id: string;
-    categoria: string;
-    ano: number;
+    @IsString()
     marca: string;
+
+    @IsString()
     modelo: string;
-    assentos: number;
-    estado: string;
-    descricao: string;
+
+    @IsNumber()
     valor: number;
-    tipo_aeronave: string
+
+    @IsString()
+    estado: string;
+
+    @IsNumber()
+    ano: number;
+
+    @IsOptional()
+    @IsString()
+    categoria?: string;
+
+    @IsOptional()
+    @IsNumber()
+    assentos?: number;
+
+    @IsOptional()
+    @IsString()
+    tipo_aeronave?: string;
+
+    @IsOptional()
+    @IsString()
+    descricao?: string;
+
+    @IsOptional()
+    @IsUUID()
     specialist_id?: string;
-    images?: string; //Fix
-    created_at: Date;
-    updated_at: Date;
 }
