@@ -52,14 +52,29 @@ export default function NewCompanyForm({ onSuccess, companyToEdit }: NewCompanyF
   };
 
   /**
+   * Valida o formato do CNPJ (apenas números, 14 dígitos)
+   */
+  const validateCNPJ = (cnpj: string): boolean => {
+    const cleanCNPJ = cnpj.replace(/\D/g, '');
+    return cleanCNPJ.length === 14;
+  };
+
+  /**
    * Função chamada quando o utilizador clica no botão "Salvar Escritório".
    * É responsável por validar, preparar e enviar os dados para a API.
    * Suporta tanto criação quanto edição de empresas.
    */
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+
+    // Validações
     if (!name || !cnpj) {
       setError("Nome e CNPJ são obrigatórios.");
+      return;
+    }
+
+    if (!validateCNPJ(cnpj)) {
+      setError("CNPJ deve conter exatamente 14 dígitos numéricos.");
       return;
     }
 
@@ -67,9 +82,12 @@ export default function NewCompanyForm({ onSuccess, companyToEdit }: NewCompanyF
     setError(null);
 
     try {
+      // Remove formatação do CNPJ antes de enviar
+      const cleanCNPJ = cnpj.replace(/\D/g, '');
+
       if (companyToEdit) {
         // Modo de edição
-        await updateCompany(companyToEdit.id, { name, cnpj });
+        await updateCompany(companyToEdit.id, { name, cnpj: cleanCNPJ });
       } else {
         // Modo de criação - converte logo para base64 se existir
         let logoBase64: string | undefined;
@@ -77,7 +95,7 @@ export default function NewCompanyForm({ onSuccess, companyToEdit }: NewCompanyF
           logoBase64 = await fileToBase64(logo);
         }
 
-        await createCompany({ name, cnpj, logo: logoBase64 });
+        await createCompany({ name, cnpj: cleanCNPJ, logo: logoBase64 });
       }
       onSuccess();
     } catch (err) {
@@ -120,16 +138,19 @@ export default function NewCompanyForm({ onSuccess, companyToEdit }: NewCompanyF
           htmlFor="cnpj"
           className="block text-sm font-medium text-text-secondary"
         >
-          CNPJ
+          CNPJ (apenas números)
         </label>
         <input
           id="cnpj"
           type="text"
           value={cnpj}
           onChange={(e) => setCnpj(e.target.value)}
+          placeholder="12345678901234"
+          maxLength={18}
           className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
           required
         />
+        <p className="text-xs text-gray-500 mt-1">Digite 14 dígitos numéricos</p>
       </div>
 
       <div>

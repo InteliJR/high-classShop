@@ -11,6 +11,7 @@ import EditIcon from "../../assets/icons/edit.svg";
 import TrashIcon from "../../assets/icons/trash.svg";
 import Modal from "../../components/ui/Modal";
 import NewSpecialistForm from "./NewSpecialistForm";
+import { useSearch } from "../../contexts/SearchContext";
 
 export default function SpecialistsPage() {
   // Guarda os dados da API para serem renderizados na tabela.
@@ -26,6 +27,20 @@ export default function SpecialistsPage() {
   const [specialistToEdit, setSpecialistToEdit] = useState<Specialist | null>(null);
   // Guarda o objeto do especialista que está prestes a ser apagado, controlando também o modal de confirmação.
   const [specialistToDelete, setSpecialistToDelete] = useState<Specialist | null>(null);
+
+  // Usa o contexto de busca global
+  const { searchTerm } = useSearch();
+
+  // Filtra os especialistas com base no termo de busca
+  const filteredSpecialists = specialists.filter((specialist) => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      specialist.name.toLowerCase().includes(searchLower) ||
+      specialist.surname.toLowerCase().includes(searchLower) ||
+      specialist.email.toLowerCase().includes(searchLower) ||
+      specialist.speciality.toLowerCase().includes(searchLower)
+    );
+  });
 
   // Busca os dados mais recentes da API e atualiza o estado da página.
   async function fetchData() {
@@ -55,7 +70,8 @@ export default function SpecialistsPage() {
       await deleteSpecialist(specialistToDelete.id);
       fetchData();
     } catch (err) {
-      alert("Erro ao apagar o especialista. Tente novamente.");
+      const errorMessage = (err as Error).message || "Erro ao apagar o especialista. Tente novamente.";
+      alert(errorMessage);
     } finally {
       setSpecialistToDelete(null);
     }
@@ -103,7 +119,12 @@ export default function SpecialistsPage() {
 
         {/* Corpo da Lista */}
         <div className="mt-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto p-2">
-          {specialists.map((specialist) => (
+          {filteredSpecialists.length === 0 ? (
+            <p className="text-center text-gray-500 py-8">
+              {searchTerm ? "Nenhum especialista encontrado com esse termo de busca." : "Nenhum especialista cadastrado."}
+            </p>
+          ) : (
+            filteredSpecialists.map((specialist) => (
             <div
               key={specialist.id}
               className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6 rounded-lg shadow-sm bg-white"
@@ -140,7 +161,8 @@ export default function SpecialistsPage() {
                 </button>
               </div>
             </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 

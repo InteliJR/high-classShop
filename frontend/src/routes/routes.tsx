@@ -1,5 +1,4 @@
 import { createBrowserRouter } from "react-router-dom";
-import App from "../App";
 import MainLayout from "../layouts/MainLayout";
 import Catalog from "../pages/Catalog";
 import Login from "../pages/auth/LoginPage";
@@ -13,12 +12,12 @@ import ConsultantsPage from "../pages/admin/ConsultantsPage";
 
 export default function RouterApp() {
   const routerApp = createBrowserRouter([
-    { path: "/", element: <App /> },
+    { path: "/", element: <Login /> },
     {
       path: "/catalog/:category",
       element: (
         <MainLayout>
-            <Catalog />
+          <Catalog />
         </MainLayout>
       ),
     },
@@ -34,7 +33,7 @@ export default function RouterApp() {
       path: "/consultant/dashboard",
       element: (
         <MainLayout>
-          <ProtectedRoute allowedRoles={['CONSULTANT']}>
+          <ProtectedRoute allowedRoles={["CONSULTANT"]}>
             <ConsultantDashboard />
           </ProtectedRoute>
         </MainLayout>
@@ -44,8 +43,8 @@ export default function RouterApp() {
       path: "/admin/dashboard",
       element: (
         <MainLayout>
-          <ProtectedRoute allowedRoles={['ADMIN']}>
-            <CompaniesPage />
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <DashboardPage />
           </ProtectedRoute>
         </MainLayout>
       ),
@@ -54,18 +53,9 @@ export default function RouterApp() {
       path: "/specialist/dashboard",
       element: (
         <MainLayout>
-          <ProtectedRoute allowedRoles={['SPECIALIST']}>
+          <ProtectedRoute allowedRoles={["SPECIALIST"]}>
             <Catalog />
           </ProtectedRoute>
-        </MainLayout>
-      ),
-    },
-    {
-      path: "/admin/dashboard",
-      element: (
-        <MainLayout>
-          {" "}
-          <DashboardPage />{" "}
         </MainLayout>
       ),
     },
@@ -73,8 +63,9 @@ export default function RouterApp() {
       path: "/admin/companies",
       element: (
         <MainLayout>
-          {" "}
-          <CompaniesPage />{" "}
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <CompaniesPage />
+          </ProtectedRoute>
         </MainLayout>
       ),
     },
@@ -82,8 +73,9 @@ export default function RouterApp() {
       path: "/admin/specialists",
       element: (
         <MainLayout>
-          {" "}
-          <SpecialistsPage />{" "}
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <SpecialistsPage />
+          </ProtectedRoute>
         </MainLayout>
       ),
     },
@@ -91,8 +83,9 @@ export default function RouterApp() {
       path: "/admin/consultants",
       element: (
         <MainLayout>
-          {" "}
-          <ConsultantsPage />{" "}
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <ConsultantsPage />
+          </ProtectedRoute>
         </MainLayout>
       ),
     },
