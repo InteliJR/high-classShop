@@ -7,9 +7,9 @@ export default function CustomerHomePage() {
   const { user } = useAuth();
 
   return (
-    <div className="flex flex-col gap-8 w-full max-w-6xl mx-auto py-8 px-4">
+    <div className="flex flex-col w-full max-w-6xl mx-auto py-8 px-4">
       {/* Welcome Section */}
-      <div className="text-center space-y-4">
+      <div className="text-center space-y-2">
         <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">
           Bem-vindo{user?.name ? `, ${user.name}` : ''}!
         </h1>

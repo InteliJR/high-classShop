@@ -12,6 +12,8 @@ import ConsultantsPage from "../pages/admin/ConsultantsPage";
 import ProductsPage from "../pages/specialist/ProductsPage";
 import ProductFormPage from "../pages/specialist/ProductFormPage";
 import SpecialistDashboard from "../pages/specialist/SpecialistDashboard";
+import CustomerHomePage from "../pages/customer/CustomerHomePage";
+import ConsultoriaPage from "../pages/customer/ConsultoriaPage";
 
 export default function RouterApp() {
   const routerApp = createBrowserRouter([
