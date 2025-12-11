@@ -1,6 +1,26 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { useEffect, useState } from 'react';
+import { getDashboardStats, type DashboardStats } from '../../services/dashboard.service';
 
 export default function DashboardPage() {
+  // Estado para armazenar as estatísticas reais
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Buscar estatísticas ao carregar a página
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const data = await getDashboardStats();
+        setStats(data);
+      } catch (error) {
+        console.error('Erro ao carregar estatísticas:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchStats();
+  }, []);
   // Mock data para gráfico de vendas
   const vendidosData = [
     { month: 'Jan', vendidos: 400, naoVendidos: 240 },
@@ -50,28 +70,46 @@ export default function DashboardPage() {
 
       {/* Cards de Estatísticas */}
       <div className="grid grid-cols-4 gap-6 mb-8">
-        {/* Card 1: Processos Ativos */}
+        {/* Card 1: Processos Ativos - DADOS REAIS */}
         <div className="bg-gray-300 rounded-lg p-6">
           <p className="text-gray-700 font-semibold mb-2">Processos Ativos</p>
-          <p className="text-4xl font-bold text-gray-900 mb-2">165</p>
-          <p className="text-sm text-gray-600">+15% vs mês anterior</p>
+          {isLoading ? (
+            <p className="text-2xl font-bold text-gray-900 mb-2">Carregando...</p>
+          ) : (
+            <>
+              <p className="text-4xl font-bold text-gray-900 mb-2">{stats?.activeProcesses || 0}</p>
+              <p className="text-sm text-gray-600">Processos em andamento</p>
+            </>
+          )}
         </div>
 
-        {/* Card 2: Taxa de Conversão */}
+        {/* Card 2: Taxa de Conversão - DADOS REAIS */}
         <div className="bg-gray-300 rounded-lg p-6">
           <p className="text-gray-700 font-semibold mb-2">Taxa de Conversão</p>
-          <p className="text-4xl font-bold text-gray-900 mb-2">69%</p>
-          <p className="text-sm text-gray-600">Meta 80%</p>
+          {isLoading ? (
+            <p className="text-2xl font-bold text-gray-900 mb-2">Carregando...</p>
+          ) : (
+            <>
+              <p className="text-4xl font-bold text-gray-900 mb-2">{stats?.conversionRate || 0}%</p>
+              <p className="text-sm text-gray-600">Meta 80%</p>
+            </>
+          )}
         </div>
 
-        {/* Card 3: Escritórios Ativos */}
+        {/* Card 3: Escritórios Ativos - DADOS REAIS */}
         <div className="bg-gray-300 rounded-lg p-6">
           <p className="text-gray-700 font-semibold mb-2">Escritórios Ativos</p>
-          <p className="text-4xl font-bold text-gray-900 mb-2">12</p>
-          <p className="text-sm text-gray-600">2 novos neste mês</p>
+          {isLoading ? (
+            <p className="text-2xl font-bold text-gray-900 mb-2">Carregando...</p>
+          ) : (
+            <>
+              <p className="text-4xl font-bold text-gray-900 mb-2">{stats?.activeCompanies || 0}</p>
+              <p className="text-sm text-gray-600">Empresas parceiras</p>
+            </>
+          )}
         </div>
 
-        {/* Card 4: Nível de Satisfação (NPS) */}
+        {/* Card 4: Nível de Satisfação (NPS) - MOCKADO */}
         <div className="bg-gray-300 rounded-lg p-6">
           <p className="text-gray-700 font-semibold mb-2">Nível de Satisfação (NPS)</p>
           <p className="text-4xl font-bold text-gray-900 mb-2">4.5</p>

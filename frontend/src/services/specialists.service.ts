@@ -1,5 +1,6 @@
 // frontend/src/services/specialists.service.ts
 import api from "./api";
+import axios from "axios";
 
 export type Specialist = {
   id: string;
@@ -30,10 +31,32 @@ export type CreateSpecialistData = {
   speciality: "CAR" | "BOAT" | "AIRCRAFT";
 };
 
+// Função auxiliar para extrair mensagem de erro
+function getErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    // Erro de resposta da API
+    if (error.response?.data?.message) {
+      if (Array.isArray(error.response.data.message)) {
+        return error.response.data.message.join(', ');
+      }
+      return error.response.data.message;
+    }
+    // Erro de rede
+    if (error.message) {
+      return error.message;
+    }
+  }
+  return 'Erro desconhecido. Tente novamente.';
+}
+
 // Busca a lista completa de especialistas na API.
 export async function getSpecialists(): Promise<Specialist[]> {
-  const { data } = await api.get<Specialist[]>("/specialists");
-  return data;
+  try {
+    const { data } = await api.get<Specialist[]>("/specialists");
+    return data;
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
 }
 
 // Busca especialistas agrupados por categoria.
@@ -44,9 +67,12 @@ export async function getSpecialistsGroupedByCategory(): Promise<GroupedSpeciali
 
 // Cria um novo especialista enviando os dados para a API.
 export async function createSpecialist(data: CreateSpecialistData): Promise<Specialist> {
-  // Axios gerencia automaticamente o JSON.stringify e os headers
-  const { data: newSpecialist } = await api.post<Specialist>("/specialists", data);
-  return newSpecialist;
+  try {
+    const { data: newSpecialist } = await api.post<Specialist>("/specialists", data);
+    return newSpecialist;
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
 }
 
 // Atualiza os dados de um especialista existente.
@@ -54,14 +80,22 @@ export async function updateSpecialist(
   id: string,
   data: Partial<Specialist>
 ): Promise<Specialist> {
-  const { data: updatedSpecialist } = await api.put<Specialist>(
-    `/specialists/${id}`,
-    data
-  );
-  return updatedSpecialist;
+  try {
+    const { data: updatedSpecialist } = await api.put<Specialist>(
+      `/specialists/${id}`,
+      data
+    );
+    return updatedSpecialist;
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
 }
 
 // Apaga um especialista pelo seu ID.
 export async function deleteSpecialist(id: string): Promise<void> {
-  await api.delete(`/specialists/${id}`);
+  try {
+    await api.delete(`/specialists/${id}`);
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
 }

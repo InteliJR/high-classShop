@@ -11,6 +11,7 @@ import EditIcon from "../../assets/icons/edit.svg";
 import TrashIcon from "../../assets/icons/trash.svg";
 import Modal from "../../components/ui/Modal";
 import NewCompanyForm from "./NewCompanyForm";
+import { useSearch } from "../../contexts/SearchContext";
 
 export default function CompaniesPage() {
   // Guarda os dados da API para serem renderizados na tabela.
@@ -26,6 +27,18 @@ export default function CompaniesPage() {
   const [companyToEdit, setCompanyToEdit] = useState<Company | null>(null);
   // Guarda o objeto da empresa que está prestes a ser apagada, controlando também o modal de confirmação.
   const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null);
+
+  // Usa o contexto de busca global
+  const { searchTerm } = useSearch();
+
+  // Filtra as empresas com base no termo de busca
+  const filteredCompanies = companies.filter((company) => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      company.name.toLowerCase().includes(searchLower) ||
+      company.cnpj.toLowerCase().includes(searchLower)
+    );
+  });
 
   // Busca os dados mais recentes da API e atualiza o estado da página.
   async function fetchData() {
@@ -55,7 +68,8 @@ export default function CompaniesPage() {
       await deleteCompany(companyToDelete.id);
       fetchData();
     } catch (err) {
-      alert("Erro ao apagar o escritório. Tente novamente.");
+      const errorMessage = (err as Error).message || "Erro ao apagar o escritório. Tente novamente.";
+      alert(errorMessage);
     } finally {
       setCompanyToDelete(null);
     }
@@ -103,7 +117,12 @@ export default function CompaniesPage() {
 
         {/* Corpo da Lista */}
         <div className="mt-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto p-2">
-          {companies.map((company) => (
+          {filteredCompanies.length === 0 ? (
+            <p className="text-center text-gray-500 py-8">
+              {searchTerm ? "Nenhuma empresa encontrada com esse termo de busca." : "Nenhuma empresa cadastrada."}
+            </p>
+          ) : (
+            filteredCompanies.map((company) => (
             <div
               key={company.id}
               className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6 rounded-lg shadow-sm bg-white"
@@ -147,7 +166,8 @@ export default function CompaniesPage() {
                 </button>
               </div>
             </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 

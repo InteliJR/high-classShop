@@ -51,14 +51,60 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
   }, [specialistToEdit]);
 
   /**
+   * Valida o formato do CPF (apenas números, 11 dígitos)
+   */
+  const validateCPF = (cpf: string): boolean => {
+    const cleanCPF = cpf.replace(/\D/g, '');
+    return cleanCPF.length === 11;
+  };
+
+  /**
+   * Valida o formato do RG (apenas números, 9 dígitos)
+   */
+  const validateRG = (rg: string): boolean => {
+    const cleanRG = rg.replace(/\D/g, '');
+    return cleanRG.length === 9;
+  };
+
+  /**
+   * Valida o formato do email
+   */
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  /**
    * Função chamada quando o utilizador clica no botão "Salvar Especialista".
    * É responsável por validar, preparar e enviar os dados para a API.
    * Suporta tanto criação quanto edição de especialistas.
    */
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+
+    // Validações
     if (!name || !surname || !email || !cpf || !rg || !password_hash) {
       setError("Todos os campos são obrigatórios.");
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      setError("Email inválido.");
+      return;
+    }
+
+    if (!validateCPF(cpf)) {
+      setError("CPF deve conter exatamente 11 dígitos numéricos.");
+      return;
+    }
+
+    if (!validateRG(rg)) {
+      setError("RG deve conter exatamente 9 dígitos numéricos.");
+      return;
+    }
+
+    if (password_hash.length < 6) {
+      setError("A senha deve ter no mínimo 6 caracteres.");
       return;
     }
 
@@ -66,13 +112,32 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
     setError(null);
 
     try {
+      // Remove formatação do CPF e RG antes de enviar
+      const cleanCPF = cpf.replace(/\D/g, '');
+      const cleanRG = rg.replace(/\D/g, '');
+
       if (specialistToEdit) {
         // Modo de edição
-        await updateSpecialist(specialistToEdit.id, { name, surname, email, cpf, rg, password_hash, speciality });
+        await updateSpecialist(specialistToEdit.id, {
+          name,
+          surname,
+          email,
+          cpf: cleanCPF,
+          rg: cleanRG,
+          password_hash,
+          speciality
+        });
       } else {
-        // Modo de criação - envia como JSON
-        console.log("Enviando dados:", { name, surname, email, cpf, rg, password_hash, speciality });
-        await createSpecialist({ name, surname, email, cpf, rg, password_hash, speciality });
+        // Modo de criação
+        await createSpecialist({
+          name,
+          surname,
+          email,
+          cpf: cleanCPF,
+          rg: cleanRG,
+          password_hash,
+          speciality
+        });
       }
       onSuccess();
     } catch (err) {
@@ -151,16 +216,19 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
           htmlFor="cpf"
           className="block text-sm font-medium text-text-secondary"
         >
-          CPF
+          CPF (apenas números)
         </label>
         <input
           id="cpf"
           type="text"
           value={cpf}
           onChange={(e) => setCpf(e.target.value)}
+          placeholder="12345678901"
+          maxLength={14}
           className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
           required
         />
+        <p className="text-xs text-gray-500 mt-1">Digite 11 dígitos numéricos</p>
       </div>
 
       <div>
@@ -169,16 +237,19 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
           htmlFor="rg"
           className="block text-sm font-medium text-text-secondary"
         >
-          RG
+          RG (apenas números)
         </label>
         <input
           id="rg"
           type="text"
           value={rg}
           onChange={(e) => setRg(e.target.value)}
+          placeholder="123456789"
+          maxLength={9}
           className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
           required
         />
+        <p className="text-xs text-gray-500 mt-1">Digite 9 dígitos numéricos</p>
       </div>
 
       <div>
@@ -194,9 +265,11 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
           type="password"
           value={password_hash}
           onChange={(e) => setPasswordHash(e.target.value)}
+          minLength={6}
           className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
           required
         />
+        <p className="text-xs text-gray-500 mt-1">Mínimo de 6 caracteres</p>
       </div>
 
       <div>

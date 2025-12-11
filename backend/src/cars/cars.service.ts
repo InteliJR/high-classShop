@@ -16,22 +16,25 @@ import { UserEntity } from 'src/auth/entities/user.entity';
 export class CarsService {
   constructor(private prismaService: PrismaService) { }
 
-  create(data: {
-    specialist?: any;
+  async create(data: {
+    specialist_id?: string;
     marca: string;
     modelo: string;
     valor: number;
     estado: string;
     ano: number;
-    descricao: string;
-    cor: string;
-    km: number;
-    cambio: string;
-    combustivel: string;
-    tipo_categoria: string;
+    descricao?: string;
+    cor?: string;
+    km?: number;
+    cambio?: string;
+    combustivel?: string;
+    tipo_categoria?: string;
   }) {
-
-    return this.prismaService.car.create({ data: data });
+    try {
+      return await this.prismaService.car.create({ data: data });
+    } catch (error) {
+      throw new Error(`Erro ao criar carro: ${error.message}`);
+    }
   }
 
   async getAllCars({
@@ -151,21 +154,29 @@ export class CarsService {
       tipo_categoria: string;
     }>,
   ) {
-   await this.findOne(id);
+    await this.findOne(id);
 
+    try {
+      if (data.specialist) {
+        data.specialist = { connect: { id: data.specialist } };
+      } else {
+        data.specialist = { disconnect: true };
+      }
 
-    if (data.specialist) {
-      data.specialist = { connect: { id: data.specialist } };
-    } else {
-      data.specialist = { disconnect: true };
+      return await this.prismaService.car.update({ where: { id }, data: data });
+    } catch (error) {
+      throw new Error(`Erro ao atualizar carro: ${error.message}`);
     }
-
-    return this.prismaService.car.update({ where: { id }, data: data  });
   }
 
   async remove(id: number) {
     await this.findOne(id);
-    await this.prismaService.car.delete({ where: { id } });
-    return { ok: true };
+
+    try {
+      await this.prismaService.car.delete({ where: { id } });
+      return { ok: true };
+    } catch (error) {
+      throw new Error(`Erro ao deletar carro: ${error.message}`);
+    }
   }
 }

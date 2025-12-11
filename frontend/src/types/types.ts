@@ -91,6 +91,8 @@ export interface Product {
   descricao: string;
   valor: number;
   imageUrl?: string;
+  ano?: number;
+  estado?: string;
 }
 
 // Usuários

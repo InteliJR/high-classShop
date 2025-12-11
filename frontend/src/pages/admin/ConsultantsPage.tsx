@@ -11,6 +11,7 @@ import EditIcon from "../../assets/icons/edit.svg";
 import TrashIcon from "../../assets/icons/trash.svg";
 import Modal from "../../components/ui/Modal";
 import NewConsultantForm from "./NewConsultantForm";
+import { useSearch } from "../../contexts/SearchContext";
 
 export default function ConsultantsPage() {
   // Guarda os dados da API para serem renderizados na tabela.
@@ -26,6 +27,19 @@ export default function ConsultantsPage() {
   const [consultantToEdit, setConsultantToEdit] = useState<Consultant | null>(null);
   // Guarda o objeto do consultor que está prestes a ser apagado, controlando também o modal de confirmação.
   const [consultantToDelete, setConsultantToDelete] = useState<Consultant | null>(null);
+
+  // Usa o contexto de busca global
+  const { searchTerm } = useSearch();
+
+  // Filtra os consultores com base no termo de busca
+  const filteredConsultants = consultants.filter((consultant) => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      consultant.name.toLowerCase().includes(searchLower) ||
+      consultant.surname.toLowerCase().includes(searchLower) ||
+      consultant.email.toLowerCase().includes(searchLower)
+    );
+  });
 
   // Busca os dados mais recentes da API e atualiza o estado da página.
   async function fetchData() {
@@ -55,7 +69,8 @@ export default function ConsultantsPage() {
       await deleteConsultant(consultantToDelete.id);
       fetchData();
     } catch (err) {
-      alert("Erro ao apagar o consultor. Tente novamente.");
+      const errorMessage = (err as Error).message || "Erro ao apagar o consultor. Tente novamente.";
+      alert(errorMessage);
     } finally {
       setConsultantToDelete(null);
     }
@@ -103,7 +118,12 @@ export default function ConsultantsPage() {
 
         {/* Corpo da Lista */}
         <div className="mt-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto p-2">
-          {consultants.map((consultant) => (
+          {filteredConsultants.length === 0 ? (
+            <p className="text-center text-gray-500 py-8">
+              {searchTerm ? "Nenhum consultor encontrado com esse termo de busca." : "Nenhum consultor cadastrado."}
+            </p>
+          ) : (
+            filteredConsultants.map((consultant) => (
             <div
               key={consultant.id}
               className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6 rounded-lg shadow-sm bg-white"
@@ -136,7 +156,8 @@ export default function ConsultantsPage() {
                 </button>
               </div>
             </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 

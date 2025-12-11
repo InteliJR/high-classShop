@@ -1,7 +1,7 @@
 import { CookiesProvider } from "react-cookie";
 import { AuthProvider } from "./contexts/AuthContext";
 import MainLayout from "./layouts/MainLayout";
-import CompaniesPage from "./pages/admin/CompaniesPage";
+import DashboardPage from "./pages/admin/DashboardPage";
 
 function App() {
   return (
@@ -9,7 +9,7 @@ function App() {
       <CookiesProvider>
         <AuthProvider>
           <MainLayout>
-            <CompaniesPage />
+            <DashboardPage />
           </MainLayout>
         </AuthProvider>
       </CookiesProvider>

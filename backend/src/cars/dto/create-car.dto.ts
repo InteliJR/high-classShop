@@ -1,26 +1,46 @@
-import { UUID } from "crypto";
+import { IsString, IsNumber, IsOptional, IsUUID } from 'class-validator';
 
 export class CreateCarDto {
-    id: string;
+    @IsString()
     marca: string;
+
+    @IsString()
     modelo: string;
+
+    @IsNumber()
     valor: number;
+
+    @IsString()
     estado: string;
+
+    @IsNumber()
     ano: number;
-    cor: string;
-    km: number;
-    cambio: string;
-    combustivel: string;
-    tipo_categoria: string;
-    descricao: string;
-    specialist: UUID;
-    images: [
-        {
-            id: UUID;
-            image_url: string;
-            is_primary: string;
-        },
-    ];
-    created_at: Date;
-    updated_at: Date; 
+
+    @IsOptional()
+    @IsString()
+    cor?: string;
+
+    @IsOptional()
+    @IsNumber()
+    km?: number;
+
+    @IsOptional()
+    @IsString()
+    cambio?: string;
+
+    @IsOptional()
+    @IsString()
+    combustivel?: string;
+
+    @IsOptional()
+    @IsString()
+    tipo_categoria?: string;
+
+    @IsOptional()
+    @IsString()
+    descricao?: string;
+
+    @IsOptional()
+    @IsUUID()
+    specialist_id?: string;
 }

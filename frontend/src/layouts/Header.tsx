@@ -9,17 +9,24 @@ import { useContext } from "react";
 import { useIsMobile } from "../hooks/use-is-mobile";
 import { useAuth } from "../store/authStateManager";
 import { AppContext } from "../contexts/AppContext";
+import { useNavigate } from "react-router-dom";
+import { AuthContext } from "../contexts/AuthContext";
 
 export default function Header() {
-  const { isSidebarCollapsed, setSidebarCollapsed } = useContext(AppContext);
+  const { isSidebarCollapsed, setSidebarCollapsed, searchTerm, setSearchTerm } =
+    useContext(AppContext);
   const isMobile = useIsMobile();
-  const { user} = useAuth();
-  
+  const { user } = useAuth();
+  const { logout } = useContext(AuthContext);
+  const navigate = useNavigate();
+
   return (
     <>
       <header
         className={`w-full sticky flex h-24 bg-background-secondary text-white
-          justify-end items-center px-6 sm:px-18 ${!isMobile && !isSidebarCollapsed && ""}`}
+          justify-end items-center px-6 sm:px-18 ${
+            !isMobile && !isSidebarCollapsed && ""
+          }`}
       >
         <div className="flex w-full justify-between sm:flex-row-reverse items-center">
           {isMobile && (
@@ -74,9 +81,18 @@ export default function Header() {
                 <input
                   className=" bg-white rounded-full w-2/3 h-10 text-black px-10"
                   type="text"
+                  placeholder="Buscar..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              <button>
+
+              <button
+                onClick={async () => {
+                  await logout(); // limpa user e accessToken
+                  navigate("/login"); // redireciona para a tela de login
+                }}
+              >
                 <UserCircle2 size={40} />
               </button>
             </div>
