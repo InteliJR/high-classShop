@@ -176,7 +176,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     <AuthContext.Provider value={contextValues}>
       {loading ? (
         <div className="h-screen w-screen flex items-center justify-center">
-          Carregando...
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-16 h-16 border-4 border-gray-200 border-t-primary rounded-full animate-spin" />
+            <p className="text-lg text-gray-600">Carregando...</p>
+          </div>
         </div>
       ) : (
         children

@@ -74,7 +74,16 @@ export default function SpecialistsPage() {
     fetchData();
   }, []);
 
-  if (isLoading) return <p>Carregando...</p>;
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-3 border-gray-200 border-t-primary rounded-full animate-spin" />
+          <p className="text-gray-600">Carregando especialistas...</p>
+        </div>
+      </div>
+    );
+  }
   if (error) return <p className="text-red-500">{error}</p>;
 
   return (
