@@ -20,7 +20,7 @@ export interface AuthContextProps {
   ) => Promise<{ user: UserProps; access_token: string }>;
   register: (data: RegisterValues) => Promise<{ user: UserProps }>;
   validateReferralToken: (token: string) => Promise<ReferralTokenPayload>;
-  logout: () => void;
+  logout: () => Promise<void>;
   loading: boolean;
   refreshUser: () => Promise<boolean>;
   verifyToken: () => Promise<boolean>;
@@ -147,7 +147,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Desloga o usuário da plataforma
   const logout = async () => {
     try {
-      await api.post("auth/logout");
+      await api.post("auth/logout", {}, {withCredentials: true});
     } catch (error) {
       throw error;
     } finally {
