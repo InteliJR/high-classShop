@@ -121,7 +121,7 @@ export class AuthController {
     }
 
     // Clear cookie
-    response.clearCookie('refreshToken', { path: '/auth/refresh' });
+    response.clearCookie('refreshToken', { path: '/api/auth/refresh' });
 
     return {
       success: true,
