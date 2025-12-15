@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSpecialistDto } from './dto/create-specialist.dto';
 import { UpdateSpecialistDto } from './dto/update-specialist.dto';
 import { Prisma } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class SpecialistsService {
@@ -36,6 +37,9 @@ export class SpecialistsService {
         throw new ConflictException('Já existe um usuário cadastrado com este CPF');
       }
 
+      // Hash da senha antes de salvar no banco de dados
+      const hashedPassword = await bcrypt.hash(data.password_hash, 10);
+
       return await this.prisma.user.create({
         data: {
           name: data.name,
@@ -43,7 +47,7 @@ export class SpecialistsService {
           email: data.email,
           cpf: data.cpf,
           rg: data.rg,
-          password_hash: data.password_hash,
+          password_hash: hashedPassword,
           speciality: data.speciality,
           role: 'SPECIALIST',
         },
@@ -115,9 +119,15 @@ export class SpecialistsService {
         }
       }
 
+      // Se está atualizando a senha, hashear antes de salvar
+      const updateData = { ...data };
+      if (data.password_hash) {
+        updateData.password_hash = await bcrypt.hash(data.password_hash, 10);
+      }
+
       return await this.prisma.user.update({
         where: { id },
-        data,
+        data: updateData,
       });
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof ConflictException) {

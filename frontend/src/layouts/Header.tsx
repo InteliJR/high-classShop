@@ -9,7 +9,7 @@ import { useContext } from "react";
 import { useIsMobile } from "../hooks/use-is-mobile";
 import { useAuth } from "../store/authStateManager";
 import { AppContext } from "../contexts/AppContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { AuthContext } from "../contexts/AuthContext";
 
 export default function Header() {
@@ -19,6 +19,10 @@ export default function Header() {
   const { user } = useAuth();
   const { logout } = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Verifica se está na dashboard (admin ou specialist)
+  const isDashboardPage = location.pathname === '/admin/dashboard' || location.pathname === '/specialist/dashboard';
 
   return (
     <>
@@ -71,21 +75,23 @@ export default function Header() {
           {/* Barra de pesquisa para quando tiver um usuário logado */}
           {user ? (
             <div className="flex sm:justify-around sm:w-full">
-              <div className="flex justify-center items-center sm:w-full">
-                <div className="relative flex items-center">
-                  <Search
-                    size={18}
-                    className="absolute translate-x-3 text-black"
+              {!isDashboardPage && (
+                <div className="flex justify-center items-center sm:w-full">
+                  <div className="relative flex items-center">
+                    <Search
+                      size={18}
+                      className="absolute translate-x-3 text-black"
+                    />
+                  </div>
+                  <input
+                    className=" bg-white rounded-full w-2/3 h-10 text-black px-10"
+                    type="text"
+                    placeholder="Buscar..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
-                <input
-                  className=" bg-white rounded-full w-2/3 h-10 text-black px-10"
-                  type="text"
-                  placeholder="Buscar..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
+              )}
 
               <button
                 onClick={async () => {

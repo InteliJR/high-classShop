@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Param } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 
 @Controller('dashboard')
@@ -8,6 +8,11 @@ export class DashboardController {
   @Get('stats')
   getAdminStats() {
     return this.dashboardService.getAdminStats();
+  }
+
+  @Get('specialist-stats/:specialistId')
+  getSpecialistStats(@Param('specialistId') specialistId: string) {
+    return this.dashboardService.getSpecialistStats(specialistId);
   }
 }
 

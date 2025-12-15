@@ -4,6 +4,7 @@ import {
   deleteSpecialist,
   type Specialist,
 } from "../../services/specialists.service";
+import { getSpecialistDashboardStats } from "../../services/dashboard.service";
 import Button from "../../components/ui/button";
 import EditIcon from "../../assets/icons/edit.svg";
 import TrashIcon from "../../assets/icons/trash.svg";
@@ -11,8 +12,14 @@ import Modal from "../../components/ui/Modal";
 import NewSpecialistForm from "./NewSpecialistForm";
 import { useSearch } from "../../contexts/SearchContext";
 
+// Interface para armazenar os dados de cada especialista
+interface SpecialistWithStats extends Specialist {
+  activeProcesses?: number;
+  conversionRate?: number;
+}
+
 export default function SpecialistsPage() {
-  const [specialists, setSpecialists] = useState<Specialist[]>([]);
+  const [specialists, setSpecialists] = useState<SpecialistWithStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +47,29 @@ export default function SpecialistsPage() {
     try {
       setIsLoading(true);
       const data = await getSpecialists();
-      setSpecialists(data);
+
+      // Buscar estatísticas de cada especialista
+      const specialistsWithStats = await Promise.all(
+        data.map(async (specialist) => {
+          try {
+            const stats = await getSpecialistDashboardStats(specialist.id);
+            return {
+              ...specialist,
+              activeProcesses: stats.activeProcesses,
+              conversionRate: stats.conversionRate,
+            };
+          } catch (error) {
+            console.error(`Erro ao buscar stats do especialista ${specialist.id}:`, error);
+            return {
+              ...specialist,
+              activeProcesses: 0,
+              conversionRate: 0,
+            };
+          }
+        })
+      );
+
+      setSpecialists(specialistsWithStats);
       setError(null);
     } catch (err) {
       setError("Não foi possível carregar os especialistas.");
@@ -110,12 +139,7 @@ export default function SpecialistsPage() {
                 : "Nenhum especialista cadastrado."}
             </p>
           ) : (
-            filteredSpecialists.map((specialist, index) => {
-              const mockOpenProcesses = [12, 8, 15, 6, 10][index % 5];
-              const mockConversionRate = ["68%", "72%", "65%", "80%", "75%"][
-                index % 5
-              ];
-
+            filteredSpecialists.map((specialist) => {
               return (
                 <div
                   key={specialist.id}
@@ -131,8 +155,8 @@ export default function SpecialistsPage() {
                       {specialist.speciality ?? "-"}
                     </span>
                   </div>
-                  <div>{mockOpenProcesses}</div>
-                  <div>{mockConversionRate}</div>
+                  <div>{specialist.activeProcesses ?? 0}</div>
+                  <div>{specialist.conversionRate ?? 0}%</div>
                   <div className="flex justify-end items-center gap-4 text-gray-400">
                     <button onClick={() => setSpecialistToEdit(specialist)}>
                       <img

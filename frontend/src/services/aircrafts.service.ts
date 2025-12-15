@@ -28,6 +28,11 @@ export interface RawAircraft {
   updated_at: string;
 }
 
+export interface ImageDto {
+  data: string; // base64
+  is_primary: boolean;
+}
+
 export interface CreateAircraftDto {
   marca: string;
   modelo: string;
@@ -39,16 +44,24 @@ export interface CreateAircraftDto {
   tipo_aeronave?: string;
   descricao?: string;
   specialist_id?: string;
+  images?: ImageDto[];
 }
 
 export interface UpdateAircraftDto extends Partial<CreateAircraftDto> {}
 
 // Get /aircrafts
-export async function getAircrafts(page = 1, perPage = 20, appliedFilters = []): Promise<{ aircrafts: Product[], pagination: PaginationMeta, filters: FiltersMeta<FiltersAircraftsMeta>}> {
+export async function getAircrafts(
+  page = 1,
+  perPage = 20,
+  appliedFilters: Partial<FiltersAircraftsMeta> = {}
+): Promise<{ aircrafts: Product[], pagination: PaginationMeta, filters: FiltersMeta<FiltersAircraftsMeta>}> {
   try {
-    const response = await api.get<ResponseAPI<RawAircraft, FiltersAircraftsMeta>>("/aircrafts", {
-      params: {page, perPage, appliedFilters},
-    });
+    const response = await api.get<ResponseAPI<RawAircraft, FiltersAircraftsMeta>>(
+      "/aircrafts",
+      {
+        params: { page, perPage, ...appliedFilters },
+      }
+    );
 
     //Extrai a respota da api
     const rawAircrafts: RawAircraft[] = response.data.data;
@@ -70,6 +83,7 @@ export async function getAircrafts(page = 1, perPage = 20, appliedFilters = []):
         valor: rawAircraft.valor,
         ano: rawAircraft.ano,
         estado: rawAircraft.estado,
+        specialist_id: rawAircraft.specialist_id,
       };
     });
     return {aircrafts, pagination, filters};

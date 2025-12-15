@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { S3Service } from 'src/aws/s3.service';
 import { QueryDto } from 'src/shared/dto/query.dto';
 import {
   ContainsBoatFilters,
@@ -14,27 +15,44 @@ import { UserEntity } from 'src/auth/entities/user.entity';
 
 @Injectable()
 export class BoatsService {
-  constructor(private prismaService: PrismaService) {}
+  constructor(
+    private prismaService: PrismaService,
+    private s3Service: S3Service,
+  ) {}
 
-  async create(data: {
-    marca: string;
-    modelo: string;
-    valor: number;
-    estado: string;
-    ano: number;
-    fabricante?: string;
-    tamanho?: string;
-    estilo?: string;
-    combustivel?: string;
-    motor?: string;
-    ano_motor?: number;
-    tipo_embarcacao?: string;
-    descricao_completa?: string;
-    acessorios?: string;
-    specialist_id?: string;
-  }) {
+  async create(createBoatDto: CreateBoatDto) {
+    const { images, ...boatData } = createBoatDto;
+
     try {
-      return await this.prismaService.boat.create({ data: data });
+      // 1. Criar o barco
+      const boat = await this.prismaService.boat.create({ data: boatData });
+
+      // 2. Processar e fazer upload das imagens, se existirem
+      if (images && images.length > 0) {
+        for (let i = 0; i < images.length; i++) {
+          const image = images[i];
+
+          const timestamp = Date.now();
+          const key = `boats/${boat.id}/${timestamp}-${i}.jpg`;
+
+          const imageKey = await this.s3Service.uploadBase64Image(image.data, key);
+
+          await this.prismaService.boat_image.create({
+            data: {
+              boat_id: boat.id,
+              image_url: imageKey,
+              is_primary: image.is_primary,
+              product_type: 'BOAT',
+            },
+          });
+        }
+      }
+
+      // 3. Retornar o barco com as imagens
+      return await this.prismaService.boat.findUnique({
+        where: { id: boat.id },
+        include: { images: true },
+      });
     } catch (error) {
       throw new Error(`Erro ao criar lancha: ${error.message}`);
     }
@@ -101,6 +119,11 @@ export class BoatsService {
       }
     }
 
+    // Filtro por especialista (usado na tela "Meus Produtos")
+    if (appliedFilters?.specialist_id) {
+      where.specialist_id = appliedFilters.specialist_id;
+    }
+
     // Agrupamento das operções para serem realizadas no banco de dados
     const [boats, total] = await this.prismaService.$transaction([
       this.prismaService.boat.findMany({
@@ -112,18 +135,33 @@ export class BoatsService {
           specialist: true,
         },
       }),
-      this.prismaService.boat.count(),
+      this.prismaService.boat.count({ where }),
     ]);
 
-    const boatEntities: Boat[] = boats.map((boat) => ({
-      ...boat,
-      descricao: boat.descricao_completa,
-      valor: boat.valor.toNumber(),
-      images: boat.images || [],
-      specialist: boat.specialist
-        ? UserEntity.fromPrisma(boat.specialist)
-        : null,
-    }));
+    // Converter as keys do S3 em URLs assinadas para cada barco
+    const boatEntities: Boat[] = await Promise.all(
+      boats.map(async (boat) => {
+        let imagesWithUrls: any[] = [];
+        if (boat.images && boat.images.length > 0) {
+          imagesWithUrls = await Promise.all(
+            boat.images.map(async (image) => ({
+              ...image,
+              image_url: await this.s3Service.getSignedUrl(image.image_url),
+            }))
+          );
+        }
+
+        return {
+          ...boat,
+          descricao: boat.descricao_completa,
+          valor: boat.valor.toNumber(),
+          images: imagesWithUrls,
+          specialist: boat.specialist
+            ? UserEntity.fromPrisma(boat.specialist)
+            : null,
+        };
+      })
+    );
 
     return {
       data: boatEntities,
@@ -133,37 +171,69 @@ export class BoatsService {
   }
 
   async findOne(id: number) {
-    const boat = await this.prismaService.boat.findUnique({ where: { id } });
+    const boat = await this.prismaService.boat.findUnique({
+      where: { id },
+      include: { images: true },
+    });
     if (!boat) {
       throw new NotFoundException('Boat not found');
     }
+
+    // Converter as keys do S3 em URLs assinadas
+    if (boat.images && boat.images.length > 0) {
+      const imagesWithUrls = await Promise.all(
+        boat.images.map(async (image) => ({
+          ...image,
+          image_url: await this.s3Service.getSignedUrl(image.image_url),
+        }))
+      );
+      return { ...boat, images: imagesWithUrls };
+    }
+
     return { ...boat };
   }
 
-  async update(
-    id: number,
-    data: Partial<{
-      marca: string;
-      modelo: string;
-      valor: number;
-      estado: string;
-      ano: number;
-      fabricante: string;
-      tamanho: string;
-      estilo: string;
-      combustivel: string;
-      motor: string;
-      ano_motor: number;
-      tipo_embarcacao: string;
-      descricao_completa: string;
-      acessorios: string;
-      specialist_id?: string;
-    }>,
-  ) {
+  async update(id: number, updateBoatDto: UpdateBoatDto) {
     await this.findOne(id);
 
+    const { images, ...boatData } = updateBoatDto;
+
     try {
-      return await this.prismaService.boat.update({ where: { id }, data: data });
+      // 1. Atualizar dados do barco
+      await this.prismaService.boat.update({ where: { id }, data: boatData });
+
+      // 2. Se houver novas imagens, processar
+      if (images && images.length > 0) {
+        // Remover imagens antigas
+        await this.prismaService.boat_image.deleteMany({
+          where: { boat_id: id },
+        });
+
+        // Adicionar novas imagens
+        for (let i = 0; i < images.length; i++) {
+          const image = images[i];
+
+          const timestamp = Date.now();
+          const key = `boats/${id}/${timestamp}-${i}.jpg`;
+
+          const imageKey = await this.s3Service.uploadBase64Image(image.data, key);
+
+          await this.prismaService.boat_image.create({
+            data: {
+              boat_id: id,
+              image_url: imageKey,
+              is_primary: image.is_primary,
+              product_type: 'BOAT',
+            },
+          });
+        }
+      }
+
+      // 3. Retornar o barco atualizado com imagens
+      return await this.prismaService.boat.findUnique({
+        where: { id },
+        include: { images: true },
+      });
     } catch (error) {
       throw new Error(`Erro ao atualizar lancha: ${error.message}`);
     }

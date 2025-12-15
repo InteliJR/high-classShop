@@ -35,10 +35,48 @@ export class S3Service {
 
     try {
       await this.s3Client.send(command);
-      return key; 
+      return key;
     } catch (error) {
       console.error('Failed to upload file to S3', error);
       throw new InternalServerErrorException('Failed to upload file.');
+    }
+  }
+
+  /**
+   * Faz o upload de uma imagem em base64 para o bucket S3.
+   * @param base64Data String base64 da imagem (com ou sem prefixo data:image/...)
+   * @param key O nome/caminho completo do ficheiro no bucket.
+   * @returns A 'key' do objeto salvo.
+   */
+  async uploadBase64Image(base64Data: string, key: string): Promise<string> {
+    // Remove o prefixo "data:image/...;base64," se existir
+    const base64Match = base64Data.match(/^data:image\/(\w+);base64,(.+)$/);
+    let buffer: Buffer;
+    let contentType = 'image/jpeg'; // default
+
+    if (base64Match) {
+      const imageType = base64Match[1]; // jpeg, png, etc
+      const base64Content = base64Match[2];
+      buffer = Buffer.from(base64Content, 'base64');
+      contentType = `image/${imageType}`;
+    } else {
+      // Assume que já é base64 puro
+      buffer = Buffer.from(base64Data, 'base64');
+    }
+
+    const command = new PutObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+    });
+
+    try {
+      await this.s3Client.send(command);
+      return key;
+    } catch (error) {
+      console.error('Failed to upload base64 image to S3', error);
+      throw new InternalServerErrorException('Failed to upload image.');
     }
   }
 

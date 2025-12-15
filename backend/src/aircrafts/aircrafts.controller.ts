@@ -25,12 +25,13 @@ export class AircraftsController {
   }
 
   @Get()
-  async getAllAircrafts(
-    @Query() { page, perPage, appliedFilters }: QueryDto<FiltersAircraftMeta>,
-  ) {
+  async getAllAircrafts(@Query() query: any) {
     //Tratamento das variáveis recebidas do front
+    let { page, perPage, ...rawFilters } = query;
     page = Number(page);
     perPage = Number(perPage);
+
+    const appliedFilters: FiltersAircraftMeta = rawFilters;
 
     // Chama o serviço para obter os dados
     const {

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { S3Service } from 'src/aws/s3.service';
 import { QueryDto } from 'src/shared/dto/query.dto';
 import {
   ContainsCarFilters,
@@ -14,24 +15,47 @@ import { UserEntity } from 'src/auth/entities/user.entity';
 
 @Injectable()
 export class CarsService {
-  constructor(private prismaService: PrismaService) { }
+  constructor(
+    private prismaService: PrismaService,
+    private s3Service: S3Service,
+  ) { }
 
-  async create(data: {
-    specialist_id?: string;
-    marca: string;
-    modelo: string;
-    valor: number;
-    estado: string;
-    ano: number;
-    descricao?: string;
-    cor?: string;
-    km?: number;
-    cambio?: string;
-    combustivel?: string;
-    tipo_categoria?: string;
-  }) {
+  async create(createCarDto: CreateCarDto) {
+    const { images, ...carData } = createCarDto;
+
     try {
-      return await this.prismaService.car.create({ data: data });
+      // 1. Criar o carro
+      const car = await this.prismaService.car.create({ data: carData });
+
+      // 2. Processar e fazer upload das imagens, se existirem
+      if (images && images.length > 0) {
+        for (let i = 0; i < images.length; i++) {
+          const image = images[i];
+
+          // Gerar chave única para a imagem no S3
+          const timestamp = Date.now();
+          const key = `cars/${car.id}/${timestamp}-${i}.jpg`;
+
+          // Upload da imagem base64 para o S3
+          const imageKey = await this.s3Service.uploadBase64Image(image.data, key);
+
+          // Salvar referência da imagem no banco de dados
+          await this.prismaService.car_image.create({
+            data: {
+              car_id: car.id,
+              image_url: imageKey,
+              is_primary: image.is_primary,
+              product_type: 'CAR',
+            },
+          });
+        }
+      }
+
+      // 3. Retornar o carro com as imagens
+      return await this.prismaService.car.findUnique({
+        where: { id: car.id },
+        include: { images: true },
+      });
     } catch (error) {
       throw new Error(`Erro ao criar carro: ${error.message}`);
     }
@@ -102,6 +126,11 @@ export class CarsService {
       }
     }
 
+    // Filtro por especialista (usado na tela "Meus Produtos")
+    if (appliedFilters?.specialist_id) {
+      where.specialist_id = appliedFilters.specialist_id;
+    }
+
     // Agrupamento de operações para serem realizadas no banco de dados
     const [cars, total] = await this.prismaService.$transaction([
       this.prismaService.car.findMany({
@@ -113,15 +142,31 @@ export class CarsService {
           specialist: true,
         },
       }),
-      this.prismaService.car.count(),
+      this.prismaService.car.count({ where }),
     ]);
 
-    const carEntities: Car[] = cars.map((car) => ({
-      ...car,
-      valor: car.valor.toNumber(),
-      images: car.images || [],
-      specialist: car.specialist ? UserEntity.fromPrisma(car.specialist) : null,
-    }));
+    // Converter as keys do S3 em URLs assinadas para cada carro
+    const carEntities: Car[] = await Promise.all(
+      cars.map(async (car) => {
+        let imagesWithUrls: any[] = [];
+        if (car.images && car.images.length > 0) {
+          imagesWithUrls = await Promise.all(
+            car.images.map(async (image) => ({
+              ...image,
+              image_url: await this.s3Service.getSignedUrl(image.image_url),
+            }))
+          );
+        }
+
+        return {
+          ...car,
+          valor: car.valor.toNumber(),
+          images: imagesWithUrls,
+          specialist: car.specialist ? UserEntity.fromPrisma(car.specialist) : null,
+        };
+      })
+    );
+
     return {
       data: carEntities,
       count: total,
@@ -130,40 +175,69 @@ export class CarsService {
   }
 
   async findOne(id: number) {
-    const car = await this.prismaService.car.findUnique({ where: { id } });
+    const car = await this.prismaService.car.findUnique({
+      where: { id },
+      include: { images: true },
+    });
     if (!car) {
       throw new NotFoundException('Car not found');
     }
+
+    // Converter as keys do S3 em URLs assinadas
+    if (car.images && car.images.length > 0) {
+      const imagesWithUrls = await Promise.all(
+        car.images.map(async (image) => ({
+          ...image,
+          image_url: await this.s3Service.getSignedUrl(image.image_url),
+        }))
+      );
+      return { ...car, images: imagesWithUrls };
+    }
+
     return { ...car };
   }
 
-  async update(
-    id: number,
-    data: Partial<{
-      specialist: any;
-      marca: string;
-      modelo: string;
-      valor: number;
-      estado: string;
-      ano: number;
-      descricao: string;
-      cor: string;
-      km: number;
-      cambio: string;
-      combustivel: string;
-      tipo_categoria: string;
-    }>,
-  ) {
+  async update(id: number, updateCarDto: UpdateCarDto) {
     await this.findOne(id);
 
+    const { images, ...carData } = updateCarDto;
+
     try {
-      if (data.specialist) {
-        data.specialist = { connect: { id: data.specialist } };
-      } else {
-        data.specialist = { disconnect: true };
+      // 1. Atualizar dados do carro
+      await this.prismaService.car.update({ where: { id }, data: carData });
+
+      // 2. Se houver novas imagens, processar
+      if (images && images.length > 0) {
+        // Remover imagens antigas
+        await this.prismaService.car_image.deleteMany({
+          where: { car_id: id },
+        });
+
+        // Adicionar novas imagens
+        for (let i = 0; i < images.length; i++) {
+          const image = images[i];
+
+          const timestamp = Date.now();
+          const key = `cars/${id}/${timestamp}-${i}.jpg`;
+
+          const imageKey = await this.s3Service.uploadBase64Image(image.data, key);
+
+          await this.prismaService.car_image.create({
+            data: {
+              car_id: id,
+              image_url: imageKey,
+              is_primary: image.is_primary,
+              product_type: 'CAR',
+            },
+          });
+        }
       }
 
-      return await this.prismaService.car.update({ where: { id }, data: data });
+      // 3. Retornar o carro atualizado com imagens
+      return await this.prismaService.car.findUnique({
+        where: { id },
+        include: { images: true },
+      });
     } catch (error) {
       throw new Error(`Erro ao atualizar carro: ${error.message}`);
     }

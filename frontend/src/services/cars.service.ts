@@ -36,6 +36,11 @@ export interface RawCar {
   updated_at: string;
 }
 
+export interface ImageDto {
+  data: string; // base64
+  is_primary: boolean;
+}
+
 export interface CreateCarDto {
   marca: string;
   modelo: string;
@@ -49,6 +54,7 @@ export interface CreateCarDto {
   tipo_categoria?: string;
   descricao?: string;
   specialist_id?: string;
+  images?: ImageDto[];
 }
 
 export interface UpdateCarDto extends Partial<CreateCarDto> {}
@@ -57,7 +63,7 @@ export interface UpdateCarDto extends Partial<CreateCarDto> {}
 export async function getCars(
   page = 1,
   perPage = 20,
-  appliedFilters = {}
+  appliedFilters: Partial<FiltersCarMeta> = {}
 ): Promise<{
   cars: Product[];
   pagination: PaginationMeta;
@@ -90,6 +96,7 @@ export async function getCars(
         valor: rawCar.valor,
         ano: rawCar.ano,
         estado: rawCar.estado,
+        specialist_id: rawCar.specialist_id,
       };
     });
     return { cars, pagination, filters };

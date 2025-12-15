@@ -39,6 +39,11 @@ export interface RawBoat {
   updated_at: string;
 }
 
+export interface ImageDto {
+  data: string; // base64
+  is_primary: boolean;
+}
+
 export interface CreateBoatDto {
   marca: string;
   modelo: string;
@@ -55,6 +60,7 @@ export interface CreateBoatDto {
   descricao_completa?: string;
   acessorios?: string;
   specialist_id?: string;
+  images?: ImageDto[];
 }
 
 export interface UpdateBoatDto extends Partial<CreateBoatDto> {}
@@ -63,7 +69,7 @@ export interface UpdateBoatDto extends Partial<CreateBoatDto> {}
 export async function getBoats(
   page = 1,
   perPage = 20,
-  appliedFilters = []
+  appliedFilters: Partial<FiltersBoatsMeta> = {}
 ): Promise<{
   boats: Product[];
   pagination: PaginationMeta;
@@ -73,7 +79,7 @@ export async function getBoats(
     const response = await api.get<ResponseAPI<RawBoat, FiltersBoatsMeta>>(
       "/boats",
       {
-        params: { page, perPage, appliedFilters },
+        params: { page, perPage, ...appliedFilters },
       }
     );
 
@@ -97,6 +103,7 @@ export async function getBoats(
         valor: rawBoat.valor,
         ano: rawBoat.ano,
         estado: rawBoat.estado,
+        specialist_id: rawBoat.specialist_id,
       };
     });
     return { boats, pagination, filters };

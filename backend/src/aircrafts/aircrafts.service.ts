@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateAircraftDto } from './dto/create-aircraft.dto';
 import { UpdateAircraftDto } from './dto/update-aircraft.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { S3Service } from 'src/aws/s3.service';
 import { QueryDto } from 'src/shared/dto/query.dto';
 import {
   ContainsAircraftFilters,
@@ -15,10 +16,13 @@ import { UserEntity } from 'src/auth/entities/user.entity';
 
 @Injectable()
 export class AircraftsService {
-  constructor(private prismaService: PrismaService) {}
+  constructor(
+    private prismaService: PrismaService,
+    private s3Service: S3Service,
+  ) {}
 
-  async create(data: CreateAircraftDto) {
-    const { specialist_id, ...aircraftData } = data;
+  async create(createAircraftDto: CreateAircraftDto) {
+    const { specialist_id, images, ...aircraftData } = createAircraftDto;
 
     const payload: Prisma.AircraftUncheckedCreateInput = {
       categoria: aircraftData.categoria,
@@ -34,7 +38,35 @@ export class AircraftsService {
     };
 
     try {
-      return await this.prismaService.aircraft.create({ data: payload });
+      // 1. Criar a aeronave
+      const aircraft = await this.prismaService.aircraft.create({ data: payload });
+
+      // 2. Processar e fazer upload das imagens, se existirem
+      if (images && images.length > 0) {
+        for (let i = 0; i < images.length; i++) {
+          const image = images[i];
+
+          const timestamp = Date.now();
+          const key = `aircrafts/${aircraft.id}/${timestamp}-${i}.jpg`;
+
+          const imageKey = await this.s3Service.uploadBase64Image(image.data, key);
+
+          await this.prismaService.aircraft_image.create({
+            data: {
+              aircraft_id: aircraft.id,
+              image_url: imageKey,
+              is_primary: image.is_primary,
+              product_type: 'AIRCRAFT',
+            },
+          });
+        }
+      }
+
+      // 3. Retornar a aeronave com as imagens
+      return await this.prismaService.aircraft.findUnique({
+        where: { id: aircraft.id },
+        include: { images: true },
+      });
     } catch (error) {
       throw new Error(`Erro ao criar aeronave: ${error.message}`);
     }
@@ -106,6 +138,11 @@ export class AircraftsService {
       }
     }
 
+    // Filtro por especialista (usado na tela "Meus Produtos")
+    if (appliedFilters?.specialist_id) {
+      where.specialist_id = appliedFilters.specialist_id;
+    }
+
     //Agrupamento das operações que serão realizadas no banco de dados
     const [aircrafts, total] = await this.prismaService.$transaction([
       this.prismaService.aircraft.findMany({
@@ -117,17 +154,32 @@ export class AircraftsService {
           specialist: true,
         },
       }),
-      this.prismaService.aircraft.count(),
+      this.prismaService.aircraft.count({ where }),
     ]);
 
-    const aircraftsEntities: Aircraft[] = aircrafts.map((aircraft) => ({
-      ...aircraft,
-      valor: aircraft.valor.toNumber(),
-      images: aircraft.images || [],
-      specialist: aircraft.specialist
-        ? UserEntity.fromPrisma(aircraft.specialist)
-        : null,
-    }));
+    // Converter as keys do S3 em URLs assinadas para cada aeronave
+    const aircraftsEntities: Aircraft[] = await Promise.all(
+      aircrafts.map(async (aircraft) => {
+        let imagesWithUrls: any[] = [];
+        if (aircraft.images && aircraft.images.length > 0) {
+          imagesWithUrls = await Promise.all(
+            aircraft.images.map(async (image) => ({
+              ...image,
+              image_url: await this.s3Service.getSignedUrl(image.image_url),
+            }))
+          );
+        }
+
+        return {
+          ...aircraft,
+          valor: aircraft.valor.toNumber(),
+          images: imagesWithUrls,
+          specialist: aircraft.specialist
+            ? UserEntity.fromPrisma(aircraft.specialist)
+            : null,
+        };
+      })
+    );
 
     return {
       data: aircraftsEntities,
@@ -139,10 +191,23 @@ export class AircraftsService {
   async findOne(id: number) {
     const aircraft = await this.prismaService.aircraft.findUnique({
       where: { id },
+      include: { images: true },
     });
     if (!aircraft) {
       throw new NotFoundException('Car not found');
     }
+
+    // Converter as keys do S3 em URLs assinadas
+    if (aircraft.images && aircraft.images.length > 0) {
+      const imagesWithUrls = await Promise.all(
+        aircraft.images.map(async (image) => ({
+          ...image,
+          image_url: await this.s3Service.getSignedUrl(image.image_url),
+        }))
+      );
+      return { ...aircraft, images: imagesWithUrls };
+    }
+
     return { ...aircraft };
   }
 
@@ -150,10 +215,10 @@ export class AircraftsService {
   //   return `This action updates a #${id} aircraft`;
   // }
 
-  async update(id: number, data: UpdateAircraftDto) {
+  async update(id: number, updateAircraftDto: UpdateAircraftDto) {
     await this.findOne(id);
 
-    const { specialist_id, ...aircraftData } = data;
+    const { specialist_id, images, ...aircraftData } = updateAircraftDto;
     const payload: Prisma.AircraftUncheckedUpdateInput = {};
 
     if (aircraftData.categoria !== undefined) {
@@ -188,7 +253,41 @@ export class AircraftsService {
     }
 
     try {
-      return await this.prismaService.aircraft.update({ where: { id }, data: payload });
+      // 1. Atualizar dados da aeronave
+      await this.prismaService.aircraft.update({ where: { id }, data: payload });
+
+      // 2. Se houver novas imagens, processar
+      if (images && images.length > 0) {
+        // Remover imagens antigas
+        await this.prismaService.aircraft_image.deleteMany({
+          where: { aircraft_id: id },
+        });
+
+        // Adicionar novas imagens
+        for (let i = 0; i < images.length; i++) {
+          const image = images[i];
+
+          const timestamp = Date.now();
+          const key = `aircrafts/${id}/${timestamp}-${i}.jpg`;
+
+          const imageKey = await this.s3Service.uploadBase64Image(image.data, key);
+
+          await this.prismaService.aircraft_image.create({
+            data: {
+              aircraft_id: id,
+              image_url: imageKey,
+              is_primary: image.is_primary,
+              product_type: 'AIRCRAFT',
+            },
+          });
+        }
+      }
+
+      // 3. Retornar a aeronave atualizada com imagens
+      return await this.prismaService.aircraft.findUnique({
+        where: { id },
+        include: { images: true },
+      });
     } catch (error) {
       throw new Error(`Erro ao atualizar aeronave: ${error.message}`);
     }

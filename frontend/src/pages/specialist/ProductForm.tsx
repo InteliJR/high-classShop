@@ -6,6 +6,7 @@ import CommonProductFields from "./CommonProductFields";
 import CarFields from "./CarFields";
 import BoatFields from "./BoatFields";
 import AircraftFields from "./AircraftFields";
+import { ImageUploader, type ImageData } from "../../components/ImageUploader";
 import { createCar, updateCar, type RawCar } from "../../services/cars.service";
 import { createBoat, updateBoat, type RawBoat } from "../../services/boats.service";
 import { createAircraft, updateAircraft, type RawAircraft } from "../../services/aircrafts.service";
@@ -39,6 +40,7 @@ export default function ProductForm({ mode, productType: initialProductType, pro
     initialProductType || userSpeciality || "CAR"
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [images, setImages] = useState<ImageData[]>([]);
 
   const {
     register,
@@ -49,12 +51,52 @@ export default function ProductForm({ mode, productType: initialProductType, pro
     defaultValues: productData as any || {},
   });
 
+  // Função para converter URL de imagem para base64
+  const urlToBase64 = async (url: string): Promise<string> => {
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error("Erro ao converter URL para base64:", error);
+      // Retornar a URL original como fallback
+      return url;
+    }
+  };
+
   // Atualiza o formulário quando os dados do produto mudam
   useEffect(() => {
-    if (productData) {
-      reset(productData as any);
-    }
-  }, [productData, reset]);
+    const loadProductData = async () => {
+      if (productData) {
+        reset(productData as any);
+
+        // Carregar imagens existentes no modo de edição
+        if (mode === "edit" && productData.images && productData.images.length > 0) {
+          // Converter URLs do S3 para base64
+          const existingImages: ImageData[] = await Promise.all(
+            productData.images.map(async (img: any) => ({
+              id: img.id,
+              data: await urlToBase64(img.image_url), // Converter URL para base64
+              is_primary: img.is_primary,
+              preview: img.image_url, // Manter URL para preview
+              isExisting: true,
+            }))
+          );
+          setImages(existingImages);
+        }
+      }
+    };
+
+    loadProductData();
+  }, [productData, reset, mode]);
 
   const onSubmit = async (data: any) => {
     setIsSubmitting(true);
@@ -67,6 +109,11 @@ export default function ProductForm({ mode, productType: initialProductType, pro
         valor: Number(data.valor),
         estado: data.estado,
       };
+
+      // Vincula o produto ao especialista logado (quando aplicável)
+      if (user?.role === "SPECIALIST" && user.id) {
+        formattedData.specialist_id = user.id;
+      }
 
       // Adiciona campos específicos de cada tipo de produto (apenas se preenchidos)
       if (productType === "CAR") {
@@ -91,6 +138,14 @@ export default function ProductForm({ mode, productType: initialProductType, pro
         if (data.assentos) formattedData.assentos = Number(data.assentos);
         if (data.tipo_aeronave) formattedData.tipo_aeronave = data.tipo_aeronave;
         if (data.descricao) formattedData.descricao = data.descricao;
+      }
+
+      // Adicionar TODAS as imagens (existentes já foram convertidas para base64)
+      if (images.length > 0) {
+        formattedData.images = images.map((img) => ({
+          data: img.data,
+          is_primary: img.is_primary,
+        }));
       }
 
       if (mode === "create") {
@@ -189,6 +244,19 @@ export default function ProductForm({ mode, productType: initialProductType, pro
           {productType === "BOAT" && <BoatFields register={register} errors={errors} />}
           {productType === "AIRCRAFT" && <AircraftFields register={register} errors={errors} />}
         </div>
+      </div>
+
+      {/* Upload de Imagens */}
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-semibold text-text-primary mb-4">
+          Imagens do Produto
+        </h3>
+        <ImageUploader
+          images={images}
+          onChange={setImages}
+          maxImages={10}
+          maxSizeMB={5}
+        />
       </div>
 
       {/* Botões de Ação */}

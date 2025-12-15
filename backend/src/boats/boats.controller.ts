@@ -25,16 +25,19 @@ export class BoatsController {
   }
 
   @Get()
-  async getAllBoats(@Query() { page, perPage, appliedFilters }: QueryDto<FiltersBoatMeta>) {
+  async getAllBoats(@Query() query: any) {
     // Tratamento das varíaveis recebidas do front
+    let { page, perPage, ...rawFilters } = query;
     page = Number(page);
     perPage = Number(perPage);
+
+    const appliedFilters: FiltersBoatMeta = rawFilters;
 
     // Chama o serviço para obter os dados
     const { data, count, filters = {} } = await this.boatsService.getAllBoats({
       page,
       perPage,
-      appliedFilters
+      appliedFilters,
     });
 
     // Cálculo dos elementos já visualizados

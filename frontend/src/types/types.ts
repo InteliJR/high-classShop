@@ -26,6 +26,8 @@ export interface FiltersCarMeta {
     km_max?: number;
     cambio?: cambioCarValues;
     combustivel?: combustivelCarValues;
+    // Filtro adicional para vincular produtos a um especialista específico
+    specialist_id?: string;
 }
 //Barco
 export interface FiltersBoatsMeta {
@@ -41,6 +43,8 @@ export interface FiltersBoatsMeta {
   fabricante?: string;
   combustivel?: combustivelBoatsValues;
   motor?: string;
+  // Filtro adicional para vincular produtos a um especialista específico
+  specialist_id?: string;
 } 
 // Aeronave
 export interface FiltersAircraftsMeta {
@@ -56,6 +60,8 @@ export interface FiltersAircraftsMeta {
   tipo_aeronave: tipoAeronaveValues;
   assentos_min: number;
   assentos_max: number;
+  // Filtro adicional para vincular produtos a um especialista específico
+  specialist_id?: string;
 } 
 
 //API
@@ -93,6 +99,8 @@ export interface Product {
   imageUrl?: string;
   ano?: number;
   estado?: string;
+  // Opcionalmente vinculado a um especialista
+  specialist_id?: string;
 }
 
 // Usuários

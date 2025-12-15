@@ -25,16 +25,19 @@ export class CarsController {
   }
 
   @Get()
-  async getAllCars(@Query() { page, perPage, appliedFilters }: QueryDto<FiltersCarMeta>) {
-    // Tratamento das variáveis recebidas do front
+  async getAllCars(@Query() query: any) {
+    // Extrai paginação e considera o restante como filtros
+    let { page, perPage, ...rawFilters } = query;
     page = Number(page);
     perPage = Number(perPage);
+
+    const appliedFilters: FiltersCarMeta = rawFilters;
 
     // Chama o serviço para obter os dados
     const { data, count, filters = {} } = await this.carsService.getAllCars({
       page,
       perPage,
-      appliedFilters
+      appliedFilters,
     });
 
     // Cálculo dos elementos já visualizados
