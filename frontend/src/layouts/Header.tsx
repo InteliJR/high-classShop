@@ -21,13 +21,24 @@ export default function Header() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Verifica se está na dashboard (admin ou specialist)
-  const isDashboardPage = location.pathname === '/admin/dashboard' || location.pathname === '/specialist/dashboard';
+  // Mostrar busca em admin (exceto dashboard) e em produtos do especialista
+  const showSearch =
+    (location.pathname.startsWith("/admin") &&
+      !location.pathname.includes("/dashboard")) ||
+    location.pathname.startsWith("/specialist/products");
+
+  // Lista de itens do menu para visitantes
+  const menuItems = [
+    { label: "Sobre nós", path: "/catalog/login" }, // Trocar para a landing page posteriormentes
+    { label: "Aeronave", path: "/catalog/aircrafts" },
+    { label: "Barco", path: "/catalog/boats" },
+    { label: "Carro", path: "/catalog/cars" },
+  ];
 
   return (
     <>
       <header
-        className={`w-full sticky flex h-24 bg-background-secondary text-white
+        className={`w-full sticky flex h-24 bg-background-secondary text-white z-50
           justify-end items-center px-6 sm:px-18 ${
             !isMobile && !isSidebarCollapsed && ""
           }`}
@@ -47,25 +58,24 @@ export default function Header() {
               {/* Navegação nos links */}
               <nav>
                 <ul className="flex gap-2">
-                  <li className="flex items-center p-2 gap-0.5">
-                    <a>Sobre nós</a>
-                    <ChevronDown size={20} />
-                  </li>
-                  <li className="flex items-center p-2 gap-0.5">
-                    <a>Aeronave</a>
-                    <ChevronDown size={20} />
-                  </li>
-                  <li className="flex items-center p-2 gap-0.5">
-                    <a>Barco</a>
-                    <ChevronDown size={20} />
-                  </li>
-                  <li className="flex items-center p-2 gap-0.5">
-                    <a>Carro</a>
-                    <ChevronDown size={20} />
-                  </li>
+                  {menuItems.map((item) => (
+                    <li
+                      key={item.path}
+                      className="flex items-center p-2 gap-0.5 cursor-pointer"
+                      onClick={() => navigate(item.path)}
+                    >
+                      <span>{item.label}</span>
+                      <ChevronDown size={20} />
+                    </li>
+                  ))}
                 </ul>
               </nav>
-              <button className="flex p-2 gap-3 bg-white text-black rounded-md">
+
+              {/* BOTÃO LOGIN */}
+              <button
+                onClick={() => navigate("/login")}
+                className="flex p-2 gap-3 bg-white text-black rounded-md cursor-pointer"
+              >
                 <UserCircle2 size={25} />
                 Login
               </button>
@@ -75,7 +85,7 @@ export default function Header() {
           {/* Barra de pesquisa para quando tiver um usuário logado */}
           {user ? (
             <div className="flex sm:justify-around sm:w-full">
-              {!isDashboardPage && (
+              {showSearch && (
                 <div className="flex justify-center items-center sm:w-full">
                   <div className="relative flex items-center">
                     <Search
@@ -95,8 +105,13 @@ export default function Header() {
 
               <button
                 onClick={async () => {
-                  await logout(); // limpa user e accessToken
-                  navigate("/login"); // redireciona para a tela de login
+                  try {
+                    await logout(); // limpa user e accessToken
+                  } catch (err) {
+                    console.log("Ocorreu um erro: ", err);
+                  } finally {
+                    navigate("/login"); // redireciona para a tela de login
+                  }
                 }}
               >
                 <UserCircle2 size={40} />

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useContext } from "react";
 import {
   getSpecialists,
   deleteSpecialist,
@@ -10,7 +10,7 @@ import EditIcon from "../../assets/icons/edit.svg";
 import TrashIcon from "../../assets/icons/trash.svg";
 import Modal from "../../components/ui/Modal";
 import NewSpecialistForm from "./NewSpecialistForm";
-import { useSearch } from "../../contexts/SearchContext";
+import { AppContext } from "../../contexts/AppContext";
 
 // Interface para armazenar os dados de cada especialista
 interface SpecialistWithStats extends Specialist {
@@ -31,7 +31,7 @@ export default function SpecialistsPage() {
   const [specialistToDelete, setSpecialistToDelete] =
     useState<Specialist | null>(null);
 
-  const { searchTerm } = useSearch();
+  const { searchTerm } = useContext(AppContext);
 
   const filteredSpecialists = specialists.filter((specialist) => {
     const searchLower = searchTerm.toLowerCase();

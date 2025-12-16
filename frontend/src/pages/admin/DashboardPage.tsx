@@ -1,11 +1,21 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useContext } from 'react';
 import { getDashboardStats, type DashboardStats } from '../../services/dashboard.service';
+import { getSpecialists } from '../../services/specialists.service';
+import { AppContext } from '../../contexts/AppContext';
 
 export default function DashboardPage() {
+  const { setSearchTerm } = useContext(AppContext);
+  
   // Estado para armazenar as estatísticas reais
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [specialistsCount, setSpecialistsCount] = useState(0);
+
+  // Limpar barra de pesquisa ao entrar no Dashboard
+  useEffect(() => {
+    setSearchTerm('');
+  }, [setSearchTerm]);
 
   // Buscar estatísticas ao carregar a página
   useEffect(() => {
@@ -20,6 +30,19 @@ export default function DashboardPage() {
       }
     }
     fetchStats();
+  }, []);
+
+  // Buscar quantidade de especialistas
+  useEffect(() => {
+    async function fetchSpecialists() {
+      try {
+        const specialists = await getSpecialists();
+        setSpecialistsCount(specialists.length);
+      } catch (error) {
+        console.error('Erro ao carregar especialistas:', error);
+      }
+    }
+    fetchSpecialists();
   }, []);
   // Mock data para gráfico de vendas
   const vendidosData = [
@@ -109,11 +132,17 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Card 4: Nível de Satisfação (NPS) - MOCKADO */}
+        {/* Card 4: Especialistas Ativos - DADOS REAIS */}
         <div className="bg-gray-300 rounded-lg p-6">
-          <p className="text-gray-700 font-semibold mb-2">Nível de Satisfação (NPS)</p>
-          <p className="text-4xl font-bold text-gray-900 mb-2">4.5</p>
-          <p className="text-sm text-gray-600">De 5 estrelas</p>
+          <p className="text-gray-700 font-semibold mb-2">Especialistas Ativos</p>
+          {isLoading ? (
+            <p className="text-2xl font-bold text-gray-900 mb-2">Carregando...</p>
+          ) : (
+            <>
+              <p className="text-4xl font-bold text-gray-900 mb-2">{specialistsCount}</p>
+              <p className="text-sm text-gray-600">Carros, Lanchas, Helicópteros</p>
+            </>
+          )}
         </div>
       </div>
 
