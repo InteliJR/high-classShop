@@ -100,10 +100,21 @@ export async function getBoats(
         modelo: rawBoat.modelo,
         descricao: rawBoat.descricao_completa || "",
         imageUrl: primaryImage ?? "",
+        images: rawBoat.images,
         valor: rawBoat.valor,
         ano: rawBoat.ano,
         estado: rawBoat.estado,
         specialist_id: rawBoat.specialist_id,
+        // Campos específicos de Lanchas
+        fabricante: rawBoat.fabricante,
+        tamanho: rawBoat.tamanho,
+        estilo: rawBoat.estilo,
+        combustivel: rawBoat.combustivel,
+        motor: rawBoat.motor,
+        ano_motor: rawBoat.ano_motor,
+        tipo_embarcacao: rawBoat.tipo_embarcacao,
+        descricao_completa: rawBoat.descricao_completa,
+        acessorios: rawBoat.acessorios,
       };
     });
     return { boats, pagination, filters };

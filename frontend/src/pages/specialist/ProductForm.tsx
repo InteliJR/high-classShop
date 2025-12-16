@@ -99,6 +99,12 @@ export default function ProductForm({ mode, productType: initialProductType, pro
   }, [productData, reset, mode]);
 
   const onSubmit = async (data: any) => {
+    // Validar que pelo menos uma imagem foi adicionada
+    if (images.length === 0) {
+      window.alert("Ao menos uma imagem é obrigatória para o produto.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       // Remove campos vazios e converte valores numéricos

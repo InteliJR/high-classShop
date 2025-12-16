@@ -93,10 +93,17 @@ export async function getCars(
         modelo: rawCar.modelo,
         descricao: rawCar.descricao,
         imageUrl: primaryImage ?? "",
+        images: rawCar.images,
         valor: rawCar.valor,
         ano: rawCar.ano,
         estado: rawCar.estado,
         specialist_id: rawCar.specialist_id,
+        // Campos específicos de Carros
+        cor: rawCar.cor,
+        km: rawCar.km,
+        cambio: rawCar.cambio,
+        combustivel: rawCar.combustivel,
+        tipo_categoria: rawCar.tipo_categoria,
       };
     });
     return { cars, pagination, filters };

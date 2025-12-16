@@ -80,10 +80,15 @@ export async function getAircrafts(
         modelo: rawAircraft.modelo,
         descricao: rawAircraft.descricao || "",
         imageUrl: primaryImage ?? "",
+        images: rawAircraft.images,
         valor: rawAircraft.valor,
         ano: rawAircraft.ano,
         estado: rawAircraft.estado,
         specialist_id: rawAircraft.specialist_id,
+        // Campos específicos de Aeronaves
+        categoria: rawAircraft.categoria,
+        assentos: rawAircraft.assentos,
+        tipo_aeronave: rawAircraft.tipo_aeronave,
       };
     });
     return {aircrafts, pagination, filters};

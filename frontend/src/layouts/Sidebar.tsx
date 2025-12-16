@@ -7,11 +7,8 @@ import {
   Car,
   Ship,
   Plane,
-<<<<<<< HEAD
   Package,
-=======
   Home,
->>>>>>> 930196b3eeea7901766f3dca5cb41dc87e75b6e4
 } from "lucide-react";
 import { useContext } from "react";
 import { AppContext } from "../contexts/AppContext";
