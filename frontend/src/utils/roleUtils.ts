@@ -12,7 +12,8 @@ export function getRoleBasedRoute(role: UserRole): string {
     case 'SPECIALIST':
       return '/specialist/dashboard';
     case 'CUSTOMER':
+      return '/customer/home';
     default:
-      return '/catalog/cars';
+      return '/customer/home';
   }
 }

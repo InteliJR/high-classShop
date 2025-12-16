@@ -7,7 +7,11 @@ import {
   Car,
   Ship,
   Plane,
+<<<<<<< HEAD
   Package,
+=======
+  Home,
+>>>>>>> 930196b3eeea7901766f3dca5cb41dc87e75b6e4
 } from "lucide-react";
 import { useContext } from "react";
 import { AppContext } from "../contexts/AppContext";
@@ -29,6 +33,16 @@ export default function Sidebar() {
     switch (user.role) {
       case "CUSTOMER":
         links.push(
+          {
+            to: "/customer/home",
+            label: "Home",
+            icon: <Home size={20} />,
+          },
+          {
+            to: "/customer/consultoria",
+            label: "Consultoria",
+            icon: <Users size={20} />,
+          },
           {
             to: "/catalog/cars",
             label: "Carros",

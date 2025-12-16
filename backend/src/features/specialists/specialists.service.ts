@@ -156,4 +156,29 @@ export class SpecialistsService {
     await this.prisma.user.delete({ where: { id } });
     return { ok: true };
   }
+
+  // Retorna especialistas agrupados por categoria (speciality).
+  async findAllGroupedByCategory() {
+    const specialists = await this.prisma.user.findMany({
+      where: { role: 'SPECIALIST' },
+      select: {
+        id: true,
+        name: true,
+        surname: true,
+        email: true,
+        cpf: true,
+        rg: true,
+        speciality: true,
+      },
+    });
+
+    // Agrupa os especialistas por categoria
+    const grouped = {
+      CAR: specialists.filter((s) => s.speciality === 'CAR'),
+      BOAT: specialists.filter((s) => s.speciality === 'BOAT'),
+      AIRCRAFT: specialists.filter((s) => s.speciality === 'AIRCRAFT'),
+    };
+
+    return grouped;
+  }
 }

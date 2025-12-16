@@ -20,7 +20,7 @@ export interface AuthContextProps {
   ) => Promise<{ user: UserProps; access_token: string }>;
   register: (data: RegisterValues) => Promise<{ user: UserProps }>;
   validateReferralToken: (token: string) => Promise<ReferralTokenPayload>;
-  logout: () => void;
+  logout: () => Promise<void>;
   loading: boolean;
   refreshUser: () => Promise<boolean>;
   verifyToken: () => Promise<boolean>;
@@ -147,7 +147,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Desloga o usuário da plataforma
   const logout = async () => {
     try {
-      await api.post("auth/logout");
+      await api.post("auth/logout", {}, {withCredentials: true});
     } catch (error) {
       throw error;
     } finally {
@@ -176,7 +176,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     <AuthContext.Provider value={contextValues}>
       {loading ? (
         <div className="h-screen w-screen flex items-center justify-center">
-          Carregando...
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-16 h-16 border-4 border-gray-200 border-t-primary rounded-full animate-spin" />
+            <p className="text-lg text-gray-600">Carregando...</p>
+          </div>
         </div>
       ) : (
         children

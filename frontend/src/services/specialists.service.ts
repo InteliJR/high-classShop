@@ -13,6 +13,13 @@ export type Specialist = {
   speciality: "CAR" | "BOAT" | "AIRCRAFT";
 };
 
+// Tipo para especialistas agrupados por categoria
+export type GroupedSpecialists = {
+  CAR: Specialist[];
+  BOAT: Specialist[];
+  AIRCRAFT: Specialist[];
+};
+
 // Tipo auxiliar para criação (DTO)
 export type CreateSpecialistData = {
   name: string;
@@ -50,6 +57,12 @@ export async function getSpecialists(): Promise<Specialist[]> {
   } catch (error) {
     throw new Error(getErrorMessage(error));
   }
+}
+
+// Busca especialistas agrupados por categoria.
+export async function getSpecialistsGroupedByCategory(): Promise<GroupedSpecialists> {
+  const { data } = await api.get<GroupedSpecialists>("/specialists/grouped-by-category");
+  return data;
 }
 
 // Cria um novo especialista enviando os dados para a API.

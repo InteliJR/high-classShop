@@ -21,6 +21,7 @@ import {
 import Button from "../components/ui/button.tsx";
 import Modal from "../components/ui/Modal.tsx";
 import ProductCard from "../components/ProductCard.tsx";
+import Loading from "../components/ui/Loading.tsx";
 
 // Mapeamento dos títulos de acordo com a rota passada
 const titles: { [key: string]: string } = {
@@ -103,11 +104,7 @@ export default function Catalog() {
 
   // Tela de carregamento
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-full w-full text-6xl">
-        <h1>Carregando...</h1>
-      </div>
-    );
+    return <Loading size="lg" text="Carregando produtos..." fullScreen />;
   }
 
   const title = titles[category || ""] || "Catálogo";
