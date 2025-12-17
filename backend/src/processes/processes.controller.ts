@@ -28,7 +28,7 @@ export class ProcessesController {
    * POST /api/processes
    * Cria um processo no estado normal de agendamento ('SCHEDULING')
    *
-   * @param {createProcessDto} createProcessDto - Dto para criar o processo
+   * @param {CreateProcessDTO} createProcessDto - Dto para criar o processo
    * @throws {BadRequestException} - Request incorreta
    * @returns {Promise<ApiResponseDto<ProcessResponse>>} - Processo com o formato de resposta de API
    */

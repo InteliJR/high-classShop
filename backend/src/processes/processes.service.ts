@@ -80,7 +80,7 @@ export class ProcessesService {
     } = {
       client_id,
       specialist_id,
-      [`${fieldName}_id`]: createProcessDto.product_id,
+      [`${fieldName}_id`]: Number(createProcessDto.product_id),
     };
 
     // Verificar se o processo já existe
@@ -113,15 +113,15 @@ export class ProcessesService {
     // Preenchimento do id e o include do produto de acordo com o tipo dele
     switch (createProcessDto.product_type) {
       case 'AIRCRAFT':
-        finalProduct.aircraft_id = createProcessDto.product_id;
+        finalProduct.aircraft_id = Number(createProcessDto.product_id);
         include.aircraft = true;
         break;
       case 'CAR':
-        finalProduct.car_id = createProcessDto.product_id;
+        finalProduct.car_id = Number(createProcessDto.product_id);
         include.car = true;
         break;
       case 'BOAT':
-        finalProduct.boat_id = createProcessDto.product_id;
+        finalProduct.boat_id = Number(createProcessDto.product_id);
         include.boat = true;
         break;
     }
