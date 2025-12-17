@@ -166,3 +166,61 @@ export async function deleteBoat(id: number): Promise<void> {
     throw error;
   }
 }
+
+// CSV Import Types
+export interface CsvErrorRow {
+  row: number;
+  reason: string;
+  fields?: Record<string, any>;
+}
+
+export interface CsvImportResponse {
+  success: boolean;
+  message: string;
+  insertedCount: number;
+  errorCount: number;
+  errorRows: CsvErrorRow[];
+  insertedIds?: number[];
+}
+
+export interface CsvTemplateResponse {
+  template: string;
+  columns: {
+    required: string[];
+    optional: string[];
+  };
+  instructions: Record<string, string>;
+  example: Record<string, any>;
+}
+
+// Get /boats/csv-template
+export async function getBoatsCsvTemplate(): Promise<CsvTemplateResponse> {
+  try {
+    const response = await api.get<CsvTemplateResponse>("/boats/csv-template");
+    return response.data;
+  } catch (error) {
+    console.error("Erro ao buscar template CSV:", error);
+    throw error;
+  }
+}
+
+// Post /boats/import-csv
+export async function importBoatsCsv(file: File): Promise<CsvImportResponse> {
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    const response = await api.post<CsvImportResponse>("/boats/import-csv", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error("Erro ao importar CSV:", error);
+    if (error.response?.data) {
+      throw error.response.data;
+    }
+    throw error;
+  }
+}

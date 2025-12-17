@@ -100,4 +100,69 @@ export class S3Service {
       throw new InternalServerErrorException('Failed to access file.');
     }
   }
+
+  /**
+   * Faz o upload de uma imagem a partir de uma URL externa para o bucket S3.
+   * @param imageUrl URL da imagem externa
+   * @param key O nome/caminho completo do ficheiro no bucket.
+   * @returns A 'key' do objeto salvo.
+   */
+  async uploadFromUrl(imageUrl: string, key: string): Promise<string> {
+    try {
+      // Fetch da imagem
+      const response = await fetch(imageUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; ImageBot/1.0)',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const contentType = response.headers.get('content-type') || 'image/jpeg';
+      
+      // Validar que é uma imagem
+      if (!contentType.startsWith('image/')) {
+        throw new Error(`URL não é uma imagem válida. Content-Type: ${contentType}`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      // Limite de 10MB
+      if (buffer.length > 10 * 1024 * 1024) {
+        throw new Error('Imagem muito grande. Limite: 10MB');
+      }
+
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+      });
+
+      await this.s3Client.send(command);
+      return key;
+    } catch (error) {
+      console.error('Failed to upload image from URL to S3', error);
+      throw new InternalServerErrorException(`Failed to upload image from URL: ${error.message}`);
+    }
+  }
+
+  /**
+   * Detecta se o valor é uma URL ou base64 e faz upload apropriado.
+   * @param imageData URL ou string base64 da imagem
+   * @param key O nome/caminho completo do ficheiro no bucket.
+   * @returns A 'key' do objeto salvo.
+   */
+  async uploadImageAuto(imageData: string, key: string): Promise<string> {
+    // Detecta se é uma URL (http:// ou https://)
+    if (imageData.startsWith('http://') || imageData.startsWith('https://')) {
+      return this.uploadFromUrl(imageData, key);
+    }
+    
+    // Caso contrário, assume que é base64
+    return this.uploadBase64Image(imageData, key);
+  }
 }

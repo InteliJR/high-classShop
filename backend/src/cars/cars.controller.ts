@@ -7,21 +7,64 @@ import {
   Param,
   Delete,
   Query,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CarsService } from './cars.service';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
-import { QueryDto } from 'src/shared/dto/query.dto';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { FiltersCarMeta } from 'src/shared/dto/filters.dto';
+import { Roles } from 'src/shared/decorators/roles.decorator';
+import { AuthGuard } from 'src/auth/auth.guard';
+import { UserRole } from '@prisma/client';
+import { CurrentUser } from 'src/shared/decorators/current-user.decorator';
+import { UserEntity } from 'src/auth/entities/user.entity';
+import { assertSpecialistCanCreate, assertSpecialistCanModify } from 'src/shared/helpers/specialist-auth.helper';
+import { CsvImportService } from 'src/shared/services/csv-import.service';
+import { CsvImportResponseDto } from 'src/shared/dto/csv-import-response.dto';
 
 @Controller('cars')
 export class CarsController {
-  constructor(private readonly carsService: CarsService) {}
+  constructor(
+    private readonly carsService: CarsService,
+    private readonly csvImportService: CsvImportService,
+  ) {}
 
   @Post()
-  create(@Body() createCarDto: CreateCarDto) {
+  @UseGuards(AuthGuard)
+  @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
+  create(@Body() createCarDto: CreateCarDto, @CurrentUser() user: UserEntity) {
+    assertSpecialistCanCreate('CAR', user);
+    createCarDto.specialist_id = user.id;
     return this.carsService.create(createCarDto);
+  }
+
+  @Post('import-csv')
+  @UseGuards(AuthGuard)
+  @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
+  @UseInterceptors(FileInterceptor('file'))
+  async importCsv(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: UserEntity,
+  ): Promise<CsvImportResponseDto> {
+    // Validar permissão do usuário
+    assertSpecialistCanCreate('CAR', user);
+
+    if (!file) {
+      throw new BadRequestException('Arquivo CSV é obrigatório.');
+    }
+
+    const csvContent = file.buffer.toString('utf-8');
+    return this.carsService.importFromCsv(csvContent, user);
+  }
+
+  @Get('csv-template')
+  getCsvTemplate() {
+    return this.carsService.getCsvTemplate();
   }
 
   @Get()
@@ -66,18 +109,28 @@ export class CarsController {
     };
   }
 
-  @Get(':id')
+  @Get(':id')  
   findOne(@Param('id') id: number) {
     return this.carsService.findOne(+id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: number, @Body() updateCarDto: UpdateCarDto) {
+  @UseGuards(AuthGuard)
+  @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
+  update(@Param('id') id: number, @Body() updateCarDto: UpdateCarDto, @CurrentUser() user: UserEntity) {
+    if (updateCarDto.specialist_id) {
+      throw new Error('Não é possível alterar o especialista');
+    }
+
+    assertSpecialistCanModify('CAR', user);
     return this.carsService.update(+id, updateCarDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  @UseGuards(AuthGuard)
+  @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
+  remove(@Param('id') id: string, @CurrentUser() user: UserEntity) {
+    assertSpecialistCanModify('CAR', user);
     return this.carsService.remove(+id);
   }
 }

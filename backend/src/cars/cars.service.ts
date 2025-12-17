@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -12,12 +12,33 @@ import {
 } from 'src/shared/dto/filters.dto';
 import { Car } from './entity/car.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
+import { CsvImportService, CsvColumnDefinition } from 'src/shared/services/csv-import.service';
+import { CsvImportResponseDto, CsvErrorRow } from 'src/shared/dto/csv-import-response.dto';
+import { validate } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class CarsService {
+  // Definição das colunas do CSV para carros
+  private readonly csvColumns: CsvColumnDefinition[] = [
+    { name: 'marca', required: true, type: 'string' },
+    { name: 'modelo', required: true, type: 'string' },
+    { name: 'valor', required: true, type: 'number' },
+    { name: 'estado', required: true, type: 'string' },
+    { name: 'ano', required: true, type: 'number' },
+    { name: 'cor', required: false, type: 'string' },
+    { name: 'km', required: false, type: 'number' },
+    { name: 'cambio', required: false, type: 'string' },
+    { name: 'combustivel', required: false, type: 'string' },
+    { name: 'tipo_categoria', required: false, type: 'string' },
+    { name: 'descricao', required: false, type: 'string' },
+    { name: 'imagem', required: false, type: 'string' }, // URL ou base64
+  ];
+
   constructor(
     private prismaService: PrismaService,
     private s3Service: S3Service,
+    private csvImportService: CsvImportService,
   ) { }
 
   async create(createCarDto: CreateCarDto) {
@@ -252,5 +273,153 @@ export class CarsService {
     } catch (error) {
       throw new Error(`Erro ao deletar carro: ${error.message}`);
     }
+  }
+
+  /**
+   * Retorna o template CSV para importação de carros
+   */
+  getCsvTemplate() {
+    const requiredColumns = this.csvColumns.filter(c => c.required).map(c => c.name);
+    const optionalColumns = this.csvColumns.filter(c => !c.required).map(c => c.name);
+    
+    const templateHeader = this.csvColumns.map(c => c.name).join(',');
+    const exampleRow = 'BMW,X5,450000,São Paulo,2023,Preto,15000,Automático,Gasolina,SUV,Carro em excelente estado,https://example.com/imagem.jpg';
+
+    return {
+      template: `${templateHeader}\n${exampleRow}`,
+      columns: {
+        required: requiredColumns,
+        optional: optionalColumns,
+      },
+      instructions: {
+        marca: 'Nome da marca do carro (texto)',
+        modelo: 'Nome do modelo (texto)',
+        valor: 'Preço em reais (número inteiro, sem pontos ou vírgulas)',
+        estado: 'Estado onde o carro está localizado (texto)',
+        ano: 'Ano de fabricação (número)',
+        cor: 'Cor do veículo (texto, opcional)',
+        km: 'Quilometragem (número, opcional)',
+        cambio: 'Tipo de câmbio: Manual, Automático, CVT (opcional)',
+        combustivel: 'Tipo de combustível: Gasolina, Etanol, Flex, Diesel, Elétrico, Híbrido (opcional)',
+        tipo_categoria: 'Categoria: Sedan, SUV, Hatch, Pickup, etc (opcional)',
+        descricao: 'Descrição detalhada do veículo (texto, opcional)',
+        imagem: 'URL da imagem ou string base64 (opcional)',
+      },
+      example: {
+        marca: 'BMW',
+        modelo: 'X5',
+        valor: 450000,
+        estado: 'São Paulo',
+        ano: 2023,
+        cor: 'Preto',
+        km: 15000,
+        cambio: 'Automático',
+        combustivel: 'Gasolina',
+        tipo_categoria: 'SUV',
+        descricao: 'Carro em excelente estado',
+        imagem: 'https://example.com/imagem.jpg',
+      },
+    };
+  }
+
+  /**
+   * Importa carros a partir de um CSV
+   */
+  async importFromCsv(csvContent: string, user: UserEntity): Promise<CsvImportResponseDto> {
+    // 1. Validar estrutura do CSV
+    const structureValidation = this.csvImportService.validateStructure(csvContent, this.csvColumns);
+    
+    if (!structureValidation.valid) {
+      throw new BadRequestException({
+        message: 'Estrutura do CSV inválida',
+        errors: structureValidation.errors,
+        missingRequired: structureValidation.missingRequired,
+        unknownColumns: structureValidation.unknownColumns,
+      });
+    }
+
+    // 2. Parsear o CSV
+    const rows = this.csvImportService.parseCSV(csvContent);
+    
+    const insertedIds: number[] = [];
+    const errorRows: CsvErrorRow[] = [];
+
+    // 3. Processar cada linha
+    for (let i = 0; i < rows.length; i++) {
+      const rowNumber = i + 2; // +2 porque linha 1 é header e arrays começam em 0
+      const row = rows[i];
+
+      try {
+        // Preparar DTO
+        const carData: any = {
+          marca: row.marca,
+          modelo: row.modelo,
+          valor: Number(row.valor),
+          estado: row.estado,
+          ano: Number(row.ano),
+          specialist_id: user.id,
+        };
+
+        // Campos opcionais
+        if (row.cor) carData.cor = row.cor;
+        if (row.km) carData.km = Number(row.km);
+        if (row.cambio) carData.cambio = row.cambio;
+        if (row.combustivel) carData.combustivel = row.combustivel;
+        if (row.tipo_categoria) carData.tipo_categoria = row.tipo_categoria;
+        if (row.descricao) carData.descricao = row.descricao;
+
+        // Validar usando class-validator
+        const dto = plainToInstance(CreateCarDto, carData);
+        const validationErrors = await validate(dto, { whitelist: true });
+
+        if (validationErrors.length > 0) {
+          const errorMessages = validationErrors.map(err => {
+            const constraints = err.constraints ? Object.values(err.constraints) : [];
+            return `${err.property}: ${constraints.join(', ')}`;
+          });
+          
+          errorRows.push({
+            row: rowNumber,
+            reason: errorMessages.join('; '),
+            fields: row,
+          });
+          continue;
+        }
+
+        // Criar o carro
+        const car = await this.prismaService.car.create({ data: carData });
+
+        // Processar imagem se fornecida
+        if (row.imagem && row.imagem.trim()) {
+          try {
+            const timestamp = Date.now();
+            const key = `cars/${car.id}/${timestamp}-0.jpg`;
+            const imageKey = await this.s3Service.uploadImageAuto(row.imagem, key);
+
+            await this.prismaService.car_image.create({
+              data: {
+                car_id: car.id,
+                image_url: imageKey,
+                is_primary: true,
+                product_type: 'CAR',
+              },
+            });
+          } catch (imageError) {
+            // Não falha a inserção se a imagem falhar, apenas registra
+            console.warn(`Erro ao processar imagem para carro ${car.id}: ${imageError.message}`);
+          }
+        }
+
+        insertedIds.push(car.id);
+      } catch (error) {
+        errorRows.push({
+          row: rowNumber,
+          reason: error.message || 'Erro desconhecido ao processar linha',
+          fields: row,
+        });
+      }
+    }
+
+    return this.csvImportService.createResponse(insertedIds, errorRows);
   }
 }

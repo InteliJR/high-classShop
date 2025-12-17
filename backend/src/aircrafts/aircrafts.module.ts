@@ -3,9 +3,10 @@ import { AircraftsService } from './aircrafts.service';
 import { AircraftsController } from './aircrafts.controller';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { S3Service } from 'src/aws/s3.service';
+import { CsvImportService } from 'src/shared/services/csv-import.service';
 
 @Module({
   controllers: [AircraftsController],
-  providers: [AircraftsService, PrismaService, S3Service],
+  providers: [AircraftsService, PrismaService, S3Service, CsvImportService],
 })
 export class AircraftsModule {}

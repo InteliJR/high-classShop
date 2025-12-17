@@ -1,5 +1,5 @@
 import { useForm } from "react-hook-form";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../store/authStateManager";
 import CommonProductFields from "./CommonProductFields";
@@ -7,10 +7,12 @@ import CarFields from "./CarFields";
 import BoatFields from "./BoatFields";
 import AircraftFields from "./AircraftFields";
 import { ImageUploader, type ImageData } from "../../components/ImageUploader";
-import { createCar, updateCar, type RawCar } from "../../services/cars.service";
-import { createBoat, updateBoat, type RawBoat } from "../../services/boats.service";
-import { createAircraft, updateAircraft, type RawAircraft } from "../../services/aircrafts.service";
-import type { SpecialityType } from "../../types/types";
+import { createCar, updateCar, type RawCar, importCarsCsv, getCarsCsvTemplate, type CsvImportResponse, type CsvTemplateResponse } from "../../services/cars.service";
+import { createBoat, updateBoat, type RawBoat, importBoatsCsv, getBoatsCsvTemplate } from "../../services/boats.service";
+import { createAircraft, updateAircraft, type RawAircraft, importAircraftsCsv, getAircraftsCsvTemplate } from "../../services/aircrafts.service";
+import { CsvImporter } from "../../components/CsvImporter";
+import { Modal } from "../../components/Modal";
+import type { SpecialityType, UserRole } from "../../types/types";
 
 type ProductType = "CAR" | "BOAT" | "AIRCRAFT";
 
@@ -34,6 +36,7 @@ export default function ProductForm({ mode, productType: initialProductType, pro
   const navigate = useNavigate();
   const user = useAuth((state) => state.user);
   const userSpeciality = user?.speciality as SpecialityType;
+  const userRole = user?.role as UserRole;
 
   // Define o tipo de produto baseado na especialidade do usuário
   const [productType, setProductType] = useState<ProductType>(
@@ -41,6 +44,46 @@ export default function ProductForm({ mode, productType: initialProductType, pro
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [images, setImages] = useState<ImageData[]>([]);
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+
+  // Validação de autorização: ADMIN pode criar qualquer tipo, SPECIALIST só do seu tipo
+  const canCreateProductType = useCallback((type: ProductType): boolean => {
+    if (userRole === "ADMIN") return true;
+    if (userRole === "SPECIALIST") {
+      return userSpeciality === type;
+    }
+    return false;
+  }, [userRole, userSpeciality]);
+
+  // Verificar se o usuário pode criar o tipo de produto selecionado
+  const isAuthorized = canCreateProductType(productType);
+
+  // Funções de import/template por tipo
+  const handleCsvImport = useCallback(async (file: File): Promise<CsvImportResponse> => {
+    if (!canCreateProductType(productType)) {
+      throw { message: `Você não tem permissão para criar ${productType === "CAR" ? "carros" : productType === "BOAT" ? "lanchas" : "aeronaves"}.` };
+    }
+    
+    switch (productType) {
+      case "CAR":
+        return importCarsCsv(file);
+      case "BOAT":
+        return importBoatsCsv(file);
+      case "AIRCRAFT":
+        return importAircraftsCsv(file);
+    }
+  }, [productType, canCreateProductType]);
+
+  const handleGetCsvTemplate = useCallback(async (): Promise<CsvTemplateResponse> => {
+    switch (productType) {
+      case "CAR":
+        return getCarsCsvTemplate();
+      case "BOAT":
+        return getBoatsCsvTemplate();
+      case "AIRCRAFT":
+        return getAircraftsCsvTemplate();
+    }
+  }, [productType]);
 
   const {
     register,
@@ -99,6 +142,12 @@ export default function ProductForm({ mode, productType: initialProductType, pro
   }, [productData, reset, mode]);
 
   const onSubmit = async (data: any) => {
+    // Validar autorização antes de enviar
+    if (!canCreateProductType(productType)) {
+      window.alert(`Você não tem permissão para ${mode === "create" ? "criar" : "editar"} ${productType === "CAR" ? "carros" : productType === "BOAT" ? "lanchas" : "aeronaves"}.`);
+      return;
+    }
+
     // Validar que pelo menos uma imagem foi adicionada
     if (images.length === 0) {
       window.alert("Ao menos uma imagem é obrigatória para o produto.");
@@ -204,8 +253,20 @@ export default function ProductForm({ mode, productType: initialProductType, pro
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
-      {/* Seletor de Tipo de Produto (apenas no modo criar e se não tiver especialidade) */}
-      {mode === "create" && !userSpeciality && (
+      {/* Alerta de autorização se não autorizado */}
+      {!isAuthorized && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-800 font-semibold">
+            Voce nao tem permissao para criar {productType === "CAR" ? "carros" : productType === "BOAT" ? "lanchas" : "aeronaves"}.
+          </p>
+          <p className="text-red-600 text-sm mt-1">
+            Sua especialidade é: {userSpeciality || "não definida"}. Apenas ADMIN pode criar qualquer tipo de produto.
+          </p>
+        </div>
+      )}
+
+      {/* Seletor de Tipo de Produto (apenas no modo criar e se for ADMIN sem especialidade) */}
+      {mode === "create" && userRole === "ADMIN" && (
         <div className="flex flex-col gap-2">
           <label htmlFor="productType" className="text-lg font-semibold text-text-primary">
             Tipo de Produto *
@@ -224,7 +285,7 @@ export default function ProductForm({ mode, productType: initialProductType, pro
       )}
 
       {/* Mostra a especialidade do usuário (se tiver) */}
-      {mode === "create" && userSpeciality && (
+      {mode === "create" && userSpeciality && userRole !== "ADMIN" && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-sm text-blue-800">
             <span className="font-semibold">Categoria:</span>{" "}
@@ -234,6 +295,44 @@ export default function ProductForm({ mode, productType: initialProductType, pro
           </p>
         </div>
       )}
+
+      {/* Botao para abrir modal de importacao CSV - apenas no modo criar */}
+      {mode === "create" && (
+        <div className="border-t pt-6">
+          <div className="flex items-center gap-4">
+            <h3 className="text-lg font-semibold text-text-primary">
+              Importacao em Lote
+            </h3>
+            <button
+              type="button"
+              onClick={() => setIsCsvModalOpen(true)}
+              disabled={!isAuthorized || isSubmitting}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+              Upload CSV
+            </button>
+          </div>
+          <p className="text-gray-500 text-sm mt-2">
+            Importe varios produtos de uma vez usando um arquivo CSV.
+          </p>
+        </div>
+      )}
+
+      {/* Modal de importacao CSV */}
+      <Modal
+        isOpen={isCsvModalOpen}
+        onClose={() => setIsCsvModalOpen(false)}
+        title={`Importar ${productType === "CAR" ? "Carros" : productType === "BOAT" ? "Lanchas" : "Aeronaves"} via CSV`}
+        size="lg"
+      >
+        <CsvImporter
+          productType={productType}
+          onImport={handleCsvImport}
+          onGetTemplate={handleGetCsvTemplate}
+          disabled={!isAuthorized || isSubmitting}
+          onSuccess={() => setIsCsvModalOpen(false)}
+        />
+      </Modal>
 
       {/* Campos Comuns */}
       <div className="grid grid-cols-2 gap-4">
@@ -278,7 +377,7 @@ export default function ProductForm({ mode, productType: initialProductType, pro
         <button
           type="submit"
           className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:bg-gray-400"
-          disabled={isSubmitting}
+          disabled={isSubmitting || !isAuthorized}
         >
           {isSubmitting ? "Salvando..." : mode === "create" ? "Criar Produto" : "Salvar Alterações"}
         </button>
