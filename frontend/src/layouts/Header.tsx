@@ -21,11 +21,13 @@ export default function Header() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Mostrar busca em admin (exceto dashboard) e em produtos do especialista
+  // Mostrar busca em admin (exceto dashboard) e em produtos do especialista (exceto formulários)
   const showSearch =
     (location.pathname.startsWith("/admin") &&
       !location.pathname.includes("/dashboard")) ||
-    location.pathname.startsWith("/specialist/products");
+    (location.pathname.startsWith("/specialist/products") &&
+      !location.pathname.includes("/new") &&
+      !location.pathname.match(/\/specialist\/products\/\d+$/));
 
   // Lista de itens do menu para visitantes
   const menuItems = [
