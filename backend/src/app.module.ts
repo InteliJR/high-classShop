@@ -15,6 +15,7 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ProcessesModule } from './processes/processes.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { DocusignModule } from './providers/docusign/docusign.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     ProcessesModule,
     ContractsModule,
     DashboardModule,
+    DocusignModule,
   ],
   providers: [
     PrismaService,
