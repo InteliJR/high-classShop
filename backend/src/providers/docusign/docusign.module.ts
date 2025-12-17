@@ -1,12 +1,24 @@
 import { Module } from '@nestjs/common';
-import { DocusignService } from './docusign.service';
+import { DocuSignService } from './docusign.service';
 import { DocuSignClient } from './docusign.client';
-import { ConfigService } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { requiredEnv } from 'src/shared/utils/required-env';
+import { TestController } from './docusign-test.controller';
+import { PdfService } from './pdf.service';
+import { WebhookController } from './webhook/webhook.controller';
+import { DocuSignWebhookService } from './webhook/webhook.service';
+import { WebhookSignatureValidator } from './webhook/webhook-signature.validator';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { AwsModule } from 'src/aws/aws.module';
 
 @Module({
+  imports: [ConfigModule, AwsModule],
   providers: [
-    DocusignService,
+    DocuSignService,
+    PdfService,
+    DocuSignWebhookService,
+    WebhookSignatureValidator,
+    PrismaService,
     {
       provide: DocuSignClient,
       useFactory: (configService: ConfigService) => {
@@ -41,8 +53,15 @@ import { requiredEnv } from 'src/shared/utils/required-env';
           environment,
         );
       },
+      inject: [ConfigService],
     },
   ],
-  exports: [DocuSignClient],
+  controllers: [TestController, WebhookController],
+  exports: [
+    DocuSignClient,
+    DocuSignService,
+    PdfService,
+    DocuSignWebhookService,
+  ],
 })
 export class DocusignModule {}

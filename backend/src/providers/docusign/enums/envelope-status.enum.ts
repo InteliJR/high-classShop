@@ -1,9 +1,8 @@
 export enum EnvelopeStatus {
-  COMPLETED = 'completed',
   CREATED = 'created',
-  DECLINED = 'declined',
-  DELIVERED = 'delivered',
   SENT = 'sent',
-  SIGNED = 'signed',
+  DELIVERED = 'delivered',
+  COMPLETED = 'completed',
+  DECLINED = 'declined',
   VOIDED = 'voided',
 }

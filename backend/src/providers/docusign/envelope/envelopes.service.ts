@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DocuSignService } from './docusign.service';
-import { CreateEnvelopeDto } from './dto/envelope/create-envelope.dto';
+import { DocuSignService } from '../docusign.service';
+import { CreateEnvelopeDto } from '../dto/request/create-envelope.dto';
 
 @Injectable()
 export class EnvelopeService {
@@ -17,7 +17,11 @@ export class EnvelopeService {
   }
 
   /** Gerar link de assinatura para o frontend */
-  async generateSigningUrl(envelopeId: string, email: string, name: string): Promise<string> {
+  async generateSigningUrl(
+    envelopeId: string,
+    email: string,
+    name: string,
+  ): Promise<string> {
     // TODO: chamar serviço da DocuSign + registrar tentativa no banco
     return '';
   }
