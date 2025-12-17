@@ -165,17 +165,14 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
       const result = await onImport(file);
       setImportResult(result);
       
-      // Limpar arquivo se sucesso total
+      // Limpar arquivo se sucesso total (mas manter resultado visível)
       if (result.errorCount === 0) {
         setFile(null);
         setLocalValidation(null);
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
-        // Callback de sucesso
-        if (onSuccess) {
-          onSuccess();
-        }
+        // NÃO fecha automaticamente - deixa o usuário ver o resultado
       }
     } catch (error: any) {
       // Erro de estrutura do CSV retornado pelo backend
@@ -570,6 +567,23 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
                       </tbody>
                     </table>
                   </div>
+                </div>
+              )}
+
+              {/* Botão de concluir quando importação foi bem-sucedida */}
+              {importResult.errorCount === 0 && onSuccess && (
+                <div className="mt-6 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetAll();
+                      onSuccess();
+                    }}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-all shadow-md"
+                  >
+                    <CheckCircle2 className="w-5 h-5" />
+                    Concluir
+                  </button>
                 </div>
               )}
             </div>

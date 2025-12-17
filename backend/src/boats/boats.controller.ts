@@ -16,11 +16,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { BoatsService } from './boats.service';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
-import { QueryDto } from 'src/shared/dto/query.dto';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { FiltersBoatMeta } from 'src/shared/dto/filters.dto';
 import { Roles } from 'src/shared/decorators/roles.decorator';
-import { AuthGuard } from 'src/auth/auth.guard';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from 'src/shared/decorators/current-user.decorator';
 import { UserEntity } from 'src/auth/entities/user.entity';
@@ -36,7 +34,6 @@ export class BoatsController {
   ) {}
 
   @Post()
-  @UseGuards(AuthGuard)
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   create(@Body() createBoatDto: CreateBoatDto, @CurrentUser() user: UserEntity) {
     assertSpecialistCanCreate('BOAT', user);
@@ -45,7 +42,6 @@ export class BoatsController {
   }
 
   @Post('import-csv')
-  @UseGuards(AuthGuard)
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   @UseInterceptors(FileInterceptor('file'))
   async importCsv(
@@ -116,7 +112,6 @@ export class BoatsController {
   }
 
   @Patch(':id')
-  @UseGuards(AuthGuard)
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   update(
     @Param('id') id: string,
@@ -128,7 +123,6 @@ export class BoatsController {
   }
 
   @Delete(':id')
-  @UseGuards(AuthGuard)
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   remove(@Param('id') id: string, @CurrentUser() user: UserEntity) {
     assertSpecialistCanModify('BOAT', user);

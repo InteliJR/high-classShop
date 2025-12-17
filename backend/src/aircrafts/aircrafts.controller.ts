@@ -16,11 +16,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { AircraftsService } from './aircrafts.service';
 import { CreateAircraftDto } from './dto/create-aircraft.dto';
 import { UpdateAircraftDto } from './dto/update-aircraft.dto';
-import { QueryDto } from 'src/shared/dto/query.dto';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { FiltersAircraftMeta } from 'src/shared/dto/filters.dto';
 import { Roles } from 'src/shared/decorators/roles.decorator';
-import { AuthGuard } from 'src/auth/auth.guard';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from 'src/shared/decorators/current-user.decorator';
 import { UserEntity } from 'src/auth/entities/user.entity';
@@ -36,7 +34,6 @@ export class AircraftsController {
   ) {}
 
   @Post()
-  @UseGuards(AuthGuard)
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   create(@Body() createAircraftDto: CreateAircraftDto, @CurrentUser() user: UserEntity) {
     assertSpecialistCanCreate('AIRCRAFT', user);
@@ -45,7 +42,6 @@ export class AircraftsController {
   }
 
   @Post('import-csv')
-  @UseGuards(AuthGuard)
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   @UseInterceptors(FileInterceptor('file'))
   async importCsv(
@@ -120,7 +116,6 @@ export class AircraftsController {
   }
 
   @Patch(':id')
-  @UseGuards(AuthGuard)
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   update(
     @Param('id') id: string,
@@ -132,7 +127,6 @@ export class AircraftsController {
   }
 
   @Delete(':id')
-  @UseGuards(AuthGuard)
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   remove(@Param('id') id: string, @CurrentUser() user: UserEntity) {
     assertSpecialistCanModify('AIRCRAFT', user);

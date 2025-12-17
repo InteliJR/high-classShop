@@ -19,7 +19,6 @@ import { UpdateCarDto } from './dto/update-car.dto';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { FiltersCarMeta } from 'src/shared/dto/filters.dto';
 import { Roles } from 'src/shared/decorators/roles.decorator';
-import { AuthGuard } from 'src/auth/auth.guard';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from 'src/shared/decorators/current-user.decorator';
 import { UserEntity } from 'src/auth/entities/user.entity';
@@ -35,7 +34,6 @@ export class CarsController {
   ) {}
 
   @Post()
-  @UseGuards(AuthGuard)
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   create(@Body() createCarDto: CreateCarDto, @CurrentUser() user: UserEntity) {
     assertSpecialistCanCreate('CAR', user);
@@ -44,7 +42,6 @@ export class CarsController {
   }
 
   @Post('import-csv')
-  @UseGuards(AuthGuard)
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   @UseInterceptors(FileInterceptor('file'))
   async importCsv(
@@ -115,7 +112,6 @@ export class CarsController {
   }
 
   @Patch(':id')
-  @UseGuards(AuthGuard)
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   update(@Param('id') id: number, @Body() updateCarDto: UpdateCarDto, @CurrentUser() user: UserEntity) {
     if (updateCarDto.specialist_id) {
@@ -127,7 +123,6 @@ export class CarsController {
   }
 
   @Delete(':id')
-  @UseGuards(AuthGuard)
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   remove(@Param('id') id: string, @CurrentUser() user: UserEntity) {
     assertSpecialistCanModify('CAR', user);

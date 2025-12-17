@@ -15,6 +15,7 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ProcessesModule } from './processes/processes.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { AuthGuard } from './auth/auth.guard';
 
 @Module({
   imports: [
@@ -38,7 +39,12 @@ import { DashboardModule } from './dashboard/dashboard.module';
     {
       provide: APP_FILTER,
       useClass: PrismaExceptionFilter,
-    }, {
+    },
+    {
+      provide: APP_GUARD,
+      useClass: AuthGuard,
+    },
+    {
       provide: APP_GUARD,
       useClass: RolesGuard,
     }

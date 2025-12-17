@@ -103,13 +103,11 @@ export class AuthController {
   }
 
   @Get('me')
-  @UseGuards(AuthGuard)
   async getUser(@Request() req: auth.RequestWithUser) {
     return req.user;
   }
 
   @Post('logout')
-  @UseGuards(AuthGuard)
   async logout(
     @Req() request: express.Request,
     @Res({ passthrough: true }) response: express.Response,
