@@ -59,14 +59,14 @@ enum SignatureType {
 }
 
 enum ProviderStatus {
-  CREATED       // envelope criado mas não enviado
-  SENT          // enviado aos signers
-  DELIVERED     // o signer abriu o documento
-  COMPLETED     // totalmente assinado
-  DECLINED      // usuário recusou
-  VOIDED        // cancelado pelo remetente
-  TIMEDOUT      // expiração automática
-  ERROR         // falha ao enviar ou processar
+  CREATED      @map("created") // envelope criado mas não enviado
+  SENT         @map("sent") // enviado aos signers
+  DELIVERED    @map("delivered")// o signer abriu o documento
+  COMPLETED     @map("completed")// totalmente assinado
+  DECLINED      @map("declined")// usuário recusou
+  VOIDED        @map("voided")// cancelado pelo remetente
+  TIMEDOUT      @map("timeout")// expiração automática
+  ERROR         @map("error")// falha ao enviar ou processar
 }
 
 
