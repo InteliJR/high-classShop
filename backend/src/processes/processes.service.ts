@@ -200,8 +200,6 @@ export class ProcessesService {
         this.prismaService.process.count(),
         this.prismaService.process.groupBy({
           by: ['status'],
-          take,
-          skip,
           orderBy: {
             status: 'asc',
           },
@@ -305,7 +303,7 @@ export class ProcessesService {
         updated_at: updatedProcess.updated_at,
         status_history: updatedStatusHistory,
       };
-    // Tratamento de erros
+      // Tratamento de erros
     } catch (err) {
       if (err.code === 'P2002') {
         throw new NotFoundException();

@@ -69,11 +69,10 @@ export class ProcessesController {
     const skip = (page - 1) * perPage;
     const pagination = new PaginationDto();
     pagination.current_page = page;
-    pagination.total_pages = count / perPage;
+    pagination.total_pages = Math.ceil(count / perPage);
     pagination.has_next = skip + perPage < count;
     pagination.has_prev = skip > 0;
     pagination.total = count;
-    pagination.total_pages = count / page;
 
     return {
       sucess: true,
