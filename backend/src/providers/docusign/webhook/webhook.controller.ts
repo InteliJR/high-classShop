@@ -118,7 +118,6 @@ export class WebhookController {
     const isValidSignature = this.signatureValidator.isValidSignature(
       signature,
       bodyString,
-      webhookUri,
     );
 
     if (!isValidSignature) {

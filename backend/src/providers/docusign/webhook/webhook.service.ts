@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { mapDocusignStatusToProviderStatus } from '../mappers/envelope-status.mapper';
 
 /**
  * Tipos de eventos suportados na webhooks v2.1 event-based
@@ -29,19 +30,6 @@ interface WebhookPayloadV21 {
     envelopeId: string;
   };
 }
-
-/**
- * Mapeamento de eventos DocuSign para status provider
- */
-const EVENT_TO_PROVIDER_STATUS: Record<DocuSignEventType, string> = {
-  'envelope-created': 'created',
-  'envelope-sent': 'sent',
-  'envelope-delivered': 'delivered',
-  'envelope-completed': 'completed',
-  'envelope-declined': 'declined',
-  'envelope-voided': 'voided',
-  'envelope-timedout': 'timeout', // Note: enum usa 'timeout' não 'timedout'
-};
 
 /**
  * Mapeamento de status provider para status do contrato
@@ -112,7 +100,7 @@ export class DocuSignWebhookService {
    * @returns Status provider correspondente
    */
   private mapEventToProviderStatus(event: string): string | null {
-    return EVENT_TO_PROVIDER_STATUS[event as DocuSignEventType] || null;
+    return  mapDocusignStatusToProviderStatus(event.replace('envelope-', '')) || null;
   }
 
   /**
@@ -251,6 +239,7 @@ export class DocuSignWebhookService {
           webhookConfigurationId: payload.configurationId,
           apiVersion: payload.apiVersion,
         },
+        signed_at: new Date(),
       };
 
       // Apenas atualizar signed_at se completado (evento de assinatura final)

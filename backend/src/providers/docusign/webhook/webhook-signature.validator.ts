@@ -43,20 +43,11 @@ export class WebhookSignatureValidator {
    *
    * @param signature - Header X-DocuSign-Signature-1 (base64)
    * @param requestBody - Body da requisição (JSON stringificado)
-   * @param webhookUri - URI configurado no webhook (para validação completa)
    * @returns true se assinatura é válida, false caso contrário
-   *
-   * @example
-   * const isValid = validator.isValidSignature(
-   *   req.headers['x-docusign-signature-1'],
-   *   JSON.stringify(req.body),
-   *   'https://example.com/webhook/docusign'
-   * );
    */
   isValidSignature(
     signature: string | undefined,
     requestBody: string,
-    webhookUri?: string,
   ): boolean {
     // Se não há secret key configurado, não podemos validar
     if (!this.webhookSecretKey) {
@@ -73,64 +64,27 @@ export class WebhookSignatureValidator {
     }
 
     try {
-      // 1. Construir a string para validação
-      // Formato: requestBody + webhookUri
-      // Note: webhookUri é opcional, DocuSign recomenda incluir para máxima segurança
-      let dataToVerify = requestBody;
-      if (webhookUri) {
-        dataToVerify += webhookUri;
-      }
-
-      this.logger.debug(`=== HMAC VALIDATION DEBUG ===`);
-      this.logger.debug(`Secret Key Length: ${this.webhookSecretKey.length}`);
-      this.logger.debug(
-        `Secret Key (first 10 chars): ${this.webhookSecretKey.substring(0, 10)}...`,
-      );
-      this.logger.debug(`Request Body Length: ${requestBody.length}`);
-      this.logger.debug(
-        `Request Body (first 100 chars): ${requestBody.substring(0, 100)}...`,
-      );
-      this.logger.debug(`Webhook URI: ${webhookUri || 'NONE'}`);
-      this.logger.debug(`Data To Verify Length: ${dataToVerify.length}`);
-      this.logger.debug(
-        `Data To Verify (first 100 chars): ${dataToVerify.substring(0, 100)}...`,
-      );
-
-      // 2. Calcular HMAC-SHA256
+      // Validar usando apenas o body (sem concatenação com URI)
       const calculated = crypto
         .createHmac('sha256', this.webhookSecretKey)
-        .update(dataToVerify)
+        .update(requestBody)
         .digest('base64');
 
-      this.logger.debug(`Calculated HMAC: ${calculated.substring(0, 30)}...`);
-      this.logger.debug(`Received HMAC: ${signature.substring(0, 30)}...`);
-      this.logger.debug(`Calculated Length: ${calculated.length}`);
-      this.logger.debug(`Received Length: ${signature.length}`);
-      this.logger.debug(`Calculated Full: ${calculated}`);
-      this.logger.debug(`Received Full: ${signature}`);
-
-      // 3. Comparar com signature do header
-      // Usar comparação timing-safe para evitar timing attacks
-      const receivedSignature = signature;
       const isValid = crypto.timingSafeEqual(
         Buffer.from(calculated),
-        Buffer.from(receivedSignature),
+        Buffer.from(signature),
       );
 
       if (isValid) {
-        this.logger.debug('✓ Assinatura HMAC validada com sucesso');
-      } else {
-        this.logger.warn(
-          '✗ Assinatura HMAC inválida. Possível ataque ou configuração incorreta.',
-        );
-        this.logger.warn(`Expected: ${calculated}`);
-        this.logger.warn(`Received: ${signature}`);
+        this.logger.log('✓ Assinatura HMAC validada com sucesso');
+        return true;
       }
 
-      return isValid;
+      this.logger.error(
+        `✗ Assinatura HMAC inválida. Esperado: ${signature.substring(0, 30)}... Calculado: ${calculated.substring(0, 30)}...`,
+      );
+      return false;
     } catch (error) {
-      // Se acontecer erro na validação (ex: encoding inválido),
-      // considera como inválido por segurança
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(
