@@ -16,6 +16,7 @@ import { ProcessesModule } from './processes/processes.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DocusignModule } from './providers/docusign/docusign.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -34,16 +35,18 @@ import { DocusignModule } from './providers/docusign/docusign.module';
     ContractsModule,
     DashboardModule,
     DocusignModule,
+    UsersModule,
   ],
   providers: [
     PrismaService,
     {
       provide: APP_FILTER,
       useClass: PrismaExceptionFilter,
-    }, {
+    },
+    {
       provide: APP_GUARD,
       useClass: RolesGuard,
-    }
+    },
   ],
 })
-export class AppModule { }
+export class AppModule {}
