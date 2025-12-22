@@ -88,6 +88,71 @@ export class ProcessesController {
   }
 
   /**
+   * GET /api/processes/:id
+   * Get a single process by its ID
+   *
+   * @param {string} processId - The ID of the process (UUID)
+   * @returns {Promise<ApiResponseDto<ProcessResponse>>} - Single process with all related data
+   * @throws {NotFoundException} - Process not found
+   */
+  @Get(':id')
+  async getById(
+    @Param('id', new ParseUUIDPipe()) processId: string,
+  ): Promise<ApiResponseDto<ProcessResponse>> {
+    const process = await this.processesService.getById(processId);
+
+    return {
+      sucess: true,
+      message: 'Processo obtido com sucesso',
+      data: process,
+    };
+  }
+
+  /**
+   * GET /api/processes/specialist/:specialistId
+   * Get all processes created by a specific specialist
+   *
+   * @param {string} specialistId - The ID of the specialist
+   * @param {QueryDto} - Parâmetros de paginação
+   * @returns {Promise<ApiResponseDto<ProcessResponse[], unknown, unknown>>} - Processos do especialista de forma paginada
+   */
+  @Get('specialist/:specialistId')
+  async getBySpecialist(
+    @Param('specialistId', new ParseUUIDPipe()) specialistId: string,
+    @Query() { perPage, page }: QueryDto,
+  ): Promise<ApiResponseDto<ProcessResponse[], unknown>> {
+    // Tratamento de variáveis do front
+    page = Number(page);
+    perPage = Number(perPage);
+
+    const { processes, count } = await this.processesService.getBySpecialistId(
+      specialistId,
+      { page, perPage },
+    );
+
+    // Criação do objeto de pagination
+    const skip = (page - 1) * perPage;
+    const pagination = new PaginationDto();
+    pagination.current_page = page;
+    pagination.total_pages = Math.ceil(count / perPage);
+    pagination.has_next = skip + perPage < count;
+    pagination.has_prev = skip > 0;
+    pagination.total = count;
+
+    return {
+      sucess: true,
+      message: 'Processos do especialista listados com sucesso',
+      data: processes,
+      meta: {
+        pagination,
+        summary: {
+          total_specialist_processes: count,
+        },
+      },
+    };
+  }
+
+  /**
    * PATCH /api/processes/:id/status
    * Atualiza status do processo
    *

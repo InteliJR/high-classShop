@@ -247,6 +247,123 @@ export class ProcessesService {
   }
 
   /**
+   * Get a single process by its ID
+   *
+   * @param {string} processId - The ID of the process to retrieve
+   * @returns {Promise<ProcessResponse>} - The process with all related data
+   * @throws {NotFoundException} - Process not found with the given ID
+   */
+  async getById(processId: string): Promise<ProcessResponse> {
+    try {
+      const process = await this.prismaService.process.findUniqueOrThrow({
+        where: { id: processId },
+        include: {
+          client: true,
+          car: true,
+          boat: true,
+          aircraft: true,
+          specialist: true,
+        },
+      });
+
+      return {
+        id: process.id,
+        status: process.status,
+        product_type: process.product_type,
+        client: {
+          id: process.client_id,
+          email: process.client?.email || '',
+          name: process.client?.name || '',
+        },
+        specialist: {
+          especialidade: process.specialist.speciality,
+          id: process.specialist.id,
+          name: process.specialist.name,
+        },
+        product: this.buildProduct(process),
+        created_at: process.created_at,
+        notes: process.notes,
+      };
+    } catch (err) {
+      if (err.code === 'P2025') {
+        throw new NotFoundException('Processo não encontrado');
+      }
+      throw new InternalServerErrorException('Erro ao buscar processo');
+    }
+  }
+
+  /**
+   * Get all processes created by a specific specialist
+   *
+   * @param {string} specialistId - The ID of the specialist
+   * @param {QueryDto} queryDto - Query parameters (page, perPage)
+   * @returns {Promise<{processes: ProcessResponse[], count: number}>} - Paginated list of specialist's processes
+   */
+  async getBySpecialistId(
+    specialistId: string,
+    { page, perPage }: QueryDto,
+  ): Promise<{
+    processes: ProcessResponse[];
+    count: number;
+  }> {
+    // Ensure page and perPage are numbers
+    const pageNum = Number(page) || 1;
+    const perPageNum = Number(perPage) || 20;
+    const skip = (pageNum - 1) * perPageNum;
+
+    // Fetch processes and count in parallel
+    const [processes, count] = await Promise.all([
+      this.prismaService.process.findMany({
+        where: {
+          specialist_id: specialistId, // CRUCIAL FILTER
+        },
+        include: {
+          client: true,
+          car: true,
+          boat: true,
+          aircraft: true,
+          specialist: true,
+        },
+        orderBy: { created_at: 'desc' },
+        skip,
+        take: perPageNum,
+      }),
+      this.prismaService.process.count({
+        where: {
+          specialist_id: specialistId,
+        },
+      }),
+    ]);
+
+    // Map processes to response entities
+    const processEntities: ProcessResponse[] = processes.map(
+      (process: any) => ({
+        id: process.id,
+        status: process.status,
+        product_type: process.product_type,
+        client: {
+          id: process.client_id,
+          email: process.client?.email,
+          name: process.client?.name,
+        },
+        specialist: {
+          especialidade: process.specialist.speciality,
+          id: process.specialist.id,
+          name: process.specialist.name,
+        },
+        product: this.buildProduct(process),
+        created_at: process.created_at,
+        notes: process.notes,
+      }),
+    );
+
+    return {
+      processes: processEntities,
+      count,
+    };
+  }
+
+  /**
    * Atualiza os status de um processo
    *
    * @param {string} processId - id do processo para ser atualizado
