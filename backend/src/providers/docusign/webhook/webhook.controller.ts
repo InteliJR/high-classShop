@@ -107,6 +107,14 @@ export class WebhookController {
     // Incluir URI para validação completa (recomendado pela DocuSign)
     const webhookUri = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
+    this.logger.debug(`=== DEBUG HMAC ===`);
+    this.logger.debug(`Received Signature: ${signature.substring(0, 20)}...`);
+    this.logger.debug(`Webhook URI: ${webhookUri}`);
+    this.logger.debug(`Body String Length: ${bodyString.length}`);
+    this.logger.debug(
+      `Body String (first 200 chars): ${bodyString.substring(0, 200)}...`,
+    );
+
     const isValidSignature = this.signatureValidator.isValidSignature(
       signature,
       bodyString,
@@ -117,6 +125,11 @@ export class WebhookController {
       this.logger.error(
         'Assinatura HMAC inválida. Webhook rejeitado (possível ataque ou secret incorreto).',
       );
+      this.logger.error(
+        `[DEBUGGING] Signature recebido: ${signature.substring(0, 20)}...`,
+      );
+      this.logger.error(`[DEBUGGING] URI: ${webhookUri}`);
+      this.logger.error(`[DEBUGGING] Body Length: ${bodyString.length}`);
       throw new InvalidWebhookSignatureException();
     }
 

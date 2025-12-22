@@ -81,11 +81,33 @@ export class WebhookSignatureValidator {
         dataToVerify += webhookUri;
       }
 
+      this.logger.debug(`=== HMAC VALIDATION DEBUG ===`);
+      this.logger.debug(`Secret Key Length: ${this.webhookSecretKey.length}`);
+      this.logger.debug(
+        `Secret Key (first 10 chars): ${this.webhookSecretKey.substring(0, 10)}...`,
+      );
+      this.logger.debug(`Request Body Length: ${requestBody.length}`);
+      this.logger.debug(
+        `Request Body (first 100 chars): ${requestBody.substring(0, 100)}...`,
+      );
+      this.logger.debug(`Webhook URI: ${webhookUri || 'NONE'}`);
+      this.logger.debug(`Data To Verify Length: ${dataToVerify.length}`);
+      this.logger.debug(
+        `Data To Verify (first 100 chars): ${dataToVerify.substring(0, 100)}...`,
+      );
+
       // 2. Calcular HMAC-SHA256
       const calculated = crypto
         .createHmac('sha256', this.webhookSecretKey)
         .update(dataToVerify)
         .digest('base64');
+
+      this.logger.debug(`Calculated HMAC: ${calculated.substring(0, 30)}...`);
+      this.logger.debug(`Received HMAC: ${signature.substring(0, 30)}...`);
+      this.logger.debug(`Calculated Length: ${calculated.length}`);
+      this.logger.debug(`Received Length: ${signature.length}`);
+      this.logger.debug(`Calculated Full: ${calculated}`);
+      this.logger.debug(`Received Full: ${signature}`);
 
       // 3. Comparar com signature do header
       // Usar comparação timing-safe para evitar timing attacks
@@ -101,6 +123,8 @@ export class WebhookSignatureValidator {
         this.logger.warn(
           '✗ Assinatura HMAC inválida. Possível ataque ou configuração incorreta.',
         );
+        this.logger.warn(`Expected: ${calculated}`);
+        this.logger.warn(`Received: ${signature}`);
       }
 
       return isValid;
@@ -112,6 +136,10 @@ export class WebhookSignatureValidator {
       this.logger.error(
         `Erro ao validar assinatura HMAC: ${errorMessage}. Rejeitar webhook.`,
       );
+
+      if (error instanceof Error) {
+        this.logger.debug(`Stack: ${error.stack}`);
+      }
 
       return false;
     }
