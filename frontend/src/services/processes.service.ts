@@ -119,3 +119,31 @@ export async function updateProcessStatus(
   );
   return response.data.data;
 }
+
+/**
+ * Get process completion reason
+ * @param processId - ID of the process
+ */
+export async function getProcessCompletionReason(
+  processId: string
+): Promise<string | null> {
+  const response = await api.get<ApiResponse<{ reason: string | null }>>(
+    `/processes/${processId}/completion-reason`,
+    { withCredentials: true }
+  );
+  return response.data.data.reason;
+}
+
+/**
+ * Get process with active contract data
+ * @param processId - ID of the process
+ */
+export async function getProcessWithActiveContract(
+  processId: string
+): Promise<any> {
+  const response = await api.get<ApiResponse<any>>(
+    `/processes/${processId}/with-contract`,
+    { withCredentials: true }
+  );
+  return response.data.data;
+}
