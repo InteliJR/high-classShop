@@ -108,7 +108,7 @@ export class ContractsService {
       // 1.2 Verificar se process_id existe no banco
       const process = await this.prismaService.process.findUnique({
         where: { id: createContractDto.process_id },
-        select: { id: true, status: true },
+        select: { id: true, status: true, active_contract_id: true },
       });
 
       if (!process) {
@@ -116,6 +116,28 @@ export class ContractsService {
           `Processo ${createContractDto.process_id} não encontrado`,
         );
         throw new ProcessNotFoundException(createContractDto.process_id);
+      }
+
+      // 1.2.1 Validar se há um contrato ativo que ainda está em negociação
+      if (process.active_contract_id) {
+        const activeContract = await this.prismaService.contract.findUnique({
+          where: { id: process.active_contract_id },
+          select: { id: true, provider_status: true },
+        });
+
+        if (
+          activeContract &&
+          !['DECLINED', 'VOIDED', 'TIMEDOUT'].includes(
+            activeContract.provider_status || '',
+          )
+        ) {
+          this.logger.warn(
+            `Processo ${createContractDto.process_id} já possui um contrato ativo: ${activeContract.id}`,
+          );
+          throw new ContractAlreadyExistsException(
+            createContractDto.process_id,
+          );
+        }
       }
 
       // 1.3 Verificar se usuário tem permissão para criar contrato neste process
@@ -128,7 +150,7 @@ export class ContractsService {
       // 1.4 Verificar se signer (client_email) existe no banco
       const signerUser = await this.prismaService.user.findUnique({
         where: { email: createContractDto.client_email },
-        select: { id: true, email: true, name: true, surname: true, },
+        select: { id: true, email: true, name: true, surname: true },
       });
 
       if (!signerUser) {
@@ -259,6 +281,16 @@ export class ContractsService {
               created_at: new Date(),
             },
           });
+
+          // 5.4 Atualizar processo para definir este contrato como ativo
+          await tx.process.update({
+            where: { id: createContractDto.process_id },
+            data: { active_contract_id: contract.id },
+          });
+
+          this.logger.log(
+            `✓ Contrato definido como ativo no processo ${createContractDto.process_id}`,
+          );
 
           return contract;
         },
