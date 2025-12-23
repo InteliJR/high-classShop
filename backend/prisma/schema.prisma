@@ -40,10 +40,11 @@ enum UserRole {
 }
 
 enum ProcessStatus {
-  SCHEDULING    @map("SCHEDULING")
-  NEGOTIATION   @map("NEGOTIATION")
-  DOCUMENTATION @map("DOCUMENTATION")
-  COMPLETED     @map("COMPLETED")
+  SCHEDULING          @map("SCHEDULING")
+  NEGOTIATION         @map("NEGOTIATION")
+  PROCESSING_CONTRACT @map("PROCESSING_CONTRACT")
+  DOCUMENTATION       @map("DOCUMENTATION")
+  COMPLETED           @map("COMPLETED")
 }
 
 enum ContractStatus {
