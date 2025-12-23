@@ -6,10 +6,10 @@ import { $Enums, User as PrismaUser, UserRole } from '@prisma/client';
  * Usa class-transformer para omitir password_hash automaticamente
  */
 export class UserEntity
-  implements Omit<PrismaUser, 'password_hash' | 'updated_at' >
+  implements Omit<PrismaUser, 'password_hash' | 'updated_at'>
 {
   @Expose()
-  id: string;
+  id:  string;
 
   @Expose()
   role: UserRole;
@@ -18,27 +18,47 @@ export class UserEntity
   name: string;
 
   @Expose()
+  surname: string;
+
+  @Expose()
   email: string;
 
+  @Expose()
+  cpf: string;
+
+  @Expose()
+  rg: string;
+
+  // @Expose()
+  // profile_image_url: string | null;
+
+  @Expose()
+  civil_state: $Enums.CivilState | null;
+
+  @Expose()
+  speciality: $Enums.ProductType | null;
+
+  @Expose()
+  address_id: string | null;
+
+  @Expose()
+  company_id: string | null;
+
+  @Expose()
+  consultant_id: string | null;
+
+  @Expose()
+  identification_number: string | null;
+
   @Exclude()
-  password_hash?: string;
-  
+  password_hash: string;
+
   @Expose()
   created_at: Date;
-  
+
   @Exclude()
   updated_at: Date;
 
-  address_id: string | null;
-  civil_state: $Enums.CivilState | null;
-  company_id: string | null;
-  consultant_id: string | null;
-  cpf: string;
-  identification_number: string | null;
-  rg: string;
-  speciality: $Enums.ProductType | null;
-  surname: string;
-  
   constructor(partial: Partial<PrismaUser>) {
     Object.assign(this, partial);
   }

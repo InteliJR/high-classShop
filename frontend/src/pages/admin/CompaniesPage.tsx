@@ -1,6 +1,6 @@
 // Página de gestão de escritórios, com listagem, criação e exclusão.
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useContext } from "react";
 import {
   getCompanies,
   deleteCompany,
@@ -11,7 +11,7 @@ import EditIcon from "../../assets/icons/edit.svg";
 import TrashIcon from "../../assets/icons/trash.svg";
 import Modal from "../../components/ui/Modal";
 import NewCompanyForm from "./NewCompanyForm";
-import { useSearch } from "../../contexts/SearchContext";
+import { AppContext } from "../../contexts/AppContext";
 
 export default function CompaniesPage() {
   // Guarda os dados da API para serem renderizados na tabela.
@@ -29,7 +29,7 @@ export default function CompaniesPage() {
   const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null);
 
   // Usa o contexto de busca global
-  const { searchTerm } = useSearch();
+  const { searchTerm } = useContext(AppContext);
 
   // Filtra as empresas com base no termo de busca
   const filteredCompanies = companies.filter((company) => {

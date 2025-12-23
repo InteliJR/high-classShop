@@ -12,7 +12,6 @@ import { CreateContractDto } from './dto/create-contract.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiResponseDto } from 'src/shared/dto/api-response.dto';
 import { ContractResponse } from './entity/contracts.response';
-import { AuthGuard } from 'src/auth/auth.guard';
 import type { RequestWithUser } from 'src/auth/dto/auth';
 
 @Controller('contracts')
@@ -30,7 +29,6 @@ export class ContractsController {
    * @param {CreateContractDto} createContractDto - dto com os parâmetros necessário do body
    */
   @Post()
-  @UseGuards(AuthGuard)
   @UseInterceptors(FileInterceptor('file'))
   async create(
     @UploadedFile() file: Express.Multer.File,

@@ -11,9 +11,13 @@ export default function ProductCard({
   modelo,
   descricao,
   valor,
-}: Product) {
+  images,
+}: Product & { images?: any[] }) {
   const [rotateX, setRotateX] = useState(0);
   const [rotateY, setRotateY] = useState(0);
+
+  // Pega a URL da imagem principal ou a primeira imagem do array
+  const primaryImageUrl = images?.find((img: any) => img.is_primary)?.image_url || images?.[0]?.image_url || imageUrl;
 
   const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
     const card = e.currentTarget;
@@ -47,27 +51,26 @@ export default function ProductCard({
       }}
     >
       <div className="flex justify-center">
-        {imageUrl && (
+        {primaryImageUrl && (
           <div className="w-full max-w-md aspect-square sm:aspect-video overflow-hidden rounded-lg">
-            {" "}
             <img
-              src={imageUrl}
+              src={primaryImageUrl}
               alt={`Imagem do produto ${marca} ${modelo}`}
               className="w-full h-full object-cover"
-            />{" "}
+            />
           </div>
         )}
       </div>
 
       <div className="flex flex-col text-sm sm:text-xl gap-2 justify-between items-center h-full">
         <div className="flex flex-col h-full justify-center align-center">
-        <h2 className="font-semibold">
-          {marca} {modelo}
-        </h2>
+          <h2 className="font-semibold text-center">
+            {marca} {modelo}
+          </h2>
         </div>
-        <div className="flex flex-col gap-y-1">
-        <p className="text-[8px] sm:text-xs line-clamp-2">{descricao}</p>
-        <p className="">{formatValue(valor)}</p>
+        <div className="flex flex-col gap-y-1 items-center">
+          <p className="text-[8px] sm:text-xs line-clamp-2 text-center">{descricao}</p>
+          <p className="font-bold text-green-600">{formatValue(valor)}</p>
         </div>
       </div>
     </article>

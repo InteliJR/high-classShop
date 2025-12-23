@@ -1,6 +1,6 @@
 // Página de gestão de consultores, com listagem, criação e exclusão.
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import {
   getConsultants,
   deleteConsultant,
@@ -11,7 +11,7 @@ import EditIcon from "../../assets/icons/edit.svg";
 import TrashIcon from "../../assets/icons/trash.svg";
 import Modal from "../../components/ui/Modal";
 import NewConsultantForm from "./NewConsultantForm";
-import { useSearch } from "../../contexts/SearchContext";
+import { AppContext } from "../../contexts/AppContext";
 
 export default function ConsultantsPage() {
   // Guarda os dados da API para serem renderizados na tabela.
@@ -29,7 +29,7 @@ export default function ConsultantsPage() {
   const [consultantToDelete, setConsultantToDelete] = useState<Consultant | null>(null);
 
   // Usa o contexto de busca global
-  const { searchTerm } = useSearch();
+  const { searchTerm } = useContext(AppContext);
 
   // Filtra os consultores com base no termo de busca
   const filteredConsultants = consultants.filter((consultant) => {

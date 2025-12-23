@@ -54,11 +54,11 @@ export class AuthController {
   ) {
     const { accessToken, refreshToken, user } =
       await this.authService.login(body);
-    
+
     response.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: true, // Trocar para true quando deployar
-      sameSite: 'strict', // Trocar para strict quando deployar
+      secure: process.env.NODE_ENV === 'production', // true apenas em produção (HTTPS)
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // strict apenas em produção
       path: '/api/auth/refresh',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
     });
@@ -79,14 +79,14 @@ export class AuthController {
     @Res({ passthrough: true }) response: express.Response,
   ) {
     const refreshToken = request.cookies.refreshToken;
-    const { accessToken, refreshToken: newRefreshToken, user } = 
+    const { accessToken, refreshToken: newRefreshToken, user } =
       await this.authService.refresh(refreshToken);
 
     // Set new refresh token cookie
     response.cookie('refreshToken', newRefreshToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
+      secure: process.env.NODE_ENV === 'production', // true apenas em produção (HTTPS)
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // strict apenas em produção
       path: '/api/auth/refresh',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
     });
@@ -103,13 +103,11 @@ export class AuthController {
   }
 
   @Get('me')
-  @UseGuards(AuthGuard)
   async getUser(@Request() req: auth.RequestWithUser) {
     return req.user;
   }
 
   @Post('logout')
-  @UseGuards(AuthGuard)
   async logout(
     @Req() request: express.Request,
     @Res({ passthrough: true }) response: express.Response,

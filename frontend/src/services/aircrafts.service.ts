@@ -28,6 +28,11 @@ export interface RawAircraft {
   updated_at: string;
 }
 
+export interface ImageDto {
+  data: string; // base64
+  is_primary: boolean;
+}
+
 export interface CreateAircraftDto {
   marca: string;
   modelo: string;
@@ -39,16 +44,24 @@ export interface CreateAircraftDto {
   tipo_aeronave?: string;
   descricao?: string;
   specialist_id?: string;
+  images?: ImageDto[];
 }
 
 export interface UpdateAircraftDto extends Partial<CreateAircraftDto> {}
 
 // Get /aircrafts
-export async function getAircrafts(page = 1, perPage = 20, appliedFilters = []): Promise<{ aircrafts: Product[], pagination: PaginationMeta, filters: FiltersMeta<FiltersAircraftsMeta>}> {
+export async function getAircrafts(
+  page = 1,
+  perPage = 20,
+  appliedFilters: Partial<FiltersAircraftsMeta> = {}
+): Promise<{ aircrafts: Product[], pagination: PaginationMeta, filters: FiltersMeta<FiltersAircraftsMeta>}> {
   try {
-    const response = await api.get<ResponseAPI<RawAircraft, FiltersAircraftsMeta>>("/aircrafts", {
-      params: {page, perPage, appliedFilters},
-    });
+    const response = await api.get<ResponseAPI<RawAircraft, FiltersAircraftsMeta>>(
+      "/aircrafts",
+      {
+        params: { page, perPage, ...appliedFilters },
+      }
+    );
 
     //Extrai a respota da api
     const rawAircrafts: RawAircraft[] = response.data.data;
@@ -67,9 +80,15 @@ export async function getAircrafts(page = 1, perPage = 20, appliedFilters = []):
         modelo: rawAircraft.modelo,
         descricao: rawAircraft.descricao || "",
         imageUrl: primaryImage ?? "",
+        images: rawAircraft.images,
         valor: rawAircraft.valor,
         ano: rawAircraft.ano,
         estado: rawAircraft.estado,
+        specialist_id: rawAircraft.specialist_id,
+        // Campos específicos de Aeronaves
+        categoria: rawAircraft.categoria,
+        assentos: rawAircraft.assentos,
+        tipo_aeronave: rawAircraft.tipo_aeronave,
       };
     });
     return {aircrafts, pagination, filters};
@@ -119,6 +138,64 @@ export async function deleteAircraft(id: number): Promise<void> {
     await api.delete(`/aircrafts/${id}`);
   } catch (error) {
     console.error("Erro ao deletar aeronave:", error);
+    throw error;
+  }
+}
+
+// CSV Import Types
+export interface CsvErrorRow {
+  row: number;
+  reason: string;
+  fields?: Record<string, any>;
+}
+
+export interface CsvImportResponse {
+  success: boolean;
+  message: string;
+  insertedCount: number;
+  errorCount: number;
+  errorRows: CsvErrorRow[];
+  insertedIds?: number[];
+}
+
+export interface CsvTemplateResponse {
+  template: string;
+  columns: {
+    required: string[];
+    optional: string[];
+  };
+  instructions: Record<string, string>;
+  example: Record<string, any>;
+}
+
+// Get /aircrafts/csv-template
+export async function getAircraftsCsvTemplate(): Promise<CsvTemplateResponse> {
+  try {
+    const response = await api.get<CsvTemplateResponse>("/aircrafts/csv-template");
+    return response.data;
+  } catch (error) {
+    console.error("Erro ao buscar template CSV:", error);
+    throw error;
+  }
+}
+
+// Post /aircrafts/import-csv
+export async function importAircraftsCsv(file: File): Promise<CsvImportResponse> {
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    const response = await api.post<CsvImportResponse>("/aircrafts/import-csv", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error("Erro ao importar CSV:", error);
+    if (error.response?.data) {
+      throw error.response.data;
+    }
     throw error;
   }
 }

@@ -16,11 +16,9 @@ import { UpdateClientDto } from './dto/update-client.dto';
 import { SendInvitationDto } from './dto/send-invitation.dto';
 import { ApiResponseDto } from '../shared/dto/api-response.dto';
 import { ClientEntity } from './entity/client.entity';
-import { AuthGuard } from '../auth/auth.guard';
 import * as auth from '../auth/dto/auth';
 
 @Controller('consultant')
-@UseGuards(AuthGuard)
 export class ConsultantController {
   constructor(private readonly consultantService: ConsultantService) {}
 

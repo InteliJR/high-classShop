@@ -7,6 +7,7 @@ import {
   Car,
   Ship,
   Plane,
+  Package,
   Home,
 } from "lucide-react";
 import { useContext } from "react";
@@ -64,11 +65,18 @@ export default function Sidebar() {
         });
         break;
       case "SPECIALIST":
-        links.push({
-          to: "/specialist/dashboard",
-          label: "Dashboard",
-          icon: <LayoutDashboard size={20} />,
-        });
+        links.push(
+          {
+            to: "/specialist/dashboard",
+            label: "Dashboard",
+            icon: <LayoutDashboard size={20} />,
+          },
+          {
+            to: "/specialist/products",
+            label: "Meus produtos",
+            icon: <Package size={20} />,
+          }
+        );
         break;
       case "ADMIN":
         links.push(

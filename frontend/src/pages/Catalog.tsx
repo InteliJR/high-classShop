@@ -17,11 +17,13 @@ import {
   ChevronsLeft,
   ChevronsRight,
   FunnelIcon,
+  X,
 } from "lucide-react";
 import Button from "../components/ui/button.tsx";
 import Modal from "../components/ui/Modal.tsx";
 import ProductCard from "../components/ProductCard.tsx";
 import Loading from "../components/ui/Loading.tsx";
+import ProductDetails from "../components/product/ProductDetails.tsx";
 
 // Mapeamento dos títulos de acordo com a rota passada
 const titles: { [key: string]: string } = {
@@ -46,6 +48,8 @@ export default function Catalog() {
     | null
   >(null);
   const [filterModal, setFilterModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [showProductDetails, setShowProductDetails] = useState(false);
 
   //Consumir a api
   useEffect(() => {
@@ -125,7 +129,15 @@ export default function Catalog() {
       {products.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-10 min-h-screen">
           {products.map((element) => (
-            <ProductCard key={element.id} {...element} />
+            <div
+              key={element.id}
+              onClick={() => {
+                setSelectedProduct(element);
+                setShowProductDetails(true);
+              }}
+            >
+              <ProductCard {...element} />
+            </div>
           ))}
         </div>
       ) : (
@@ -169,6 +181,28 @@ export default function Catalog() {
       >
         Inserir informações
       </Modal>
+
+      {/* Modal de Detalhes do Produto */}
+      {showProductDetails && selectedProduct && (
+        <div className="fixed inset-0 bg-white/10 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex justify-between items-center rounded-t-lg">
+              <h2 className="text-2xl font-bold text-gray-900">
+                {selectedProduct.marca} {selectedProduct.modelo}
+              </h2>
+              <button
+                onClick={() => setShowProductDetails(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6">
+              <ProductDetails product={selectedProduct} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

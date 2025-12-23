@@ -39,6 +39,11 @@ export interface RawBoat {
   updated_at: string;
 }
 
+export interface ImageDto {
+  data: string; // base64
+  is_primary: boolean;
+}
+
 export interface CreateBoatDto {
   marca: string;
   modelo: string;
@@ -55,6 +60,7 @@ export interface CreateBoatDto {
   descricao_completa?: string;
   acessorios?: string;
   specialist_id?: string;
+  images?: ImageDto[];
 }
 
 export interface UpdateBoatDto extends Partial<CreateBoatDto> {}
@@ -63,7 +69,7 @@ export interface UpdateBoatDto extends Partial<CreateBoatDto> {}
 export async function getBoats(
   page = 1,
   perPage = 20,
-  appliedFilters = []
+  appliedFilters: Partial<FiltersBoatsMeta> = {}
 ): Promise<{
   boats: Product[];
   pagination: PaginationMeta;
@@ -73,7 +79,7 @@ export async function getBoats(
     const response = await api.get<ResponseAPI<RawBoat, FiltersBoatsMeta>>(
       "/boats",
       {
-        params: { page, perPage, appliedFilters },
+        params: { page, perPage, ...appliedFilters },
       }
     );
 
@@ -94,9 +100,21 @@ export async function getBoats(
         modelo: rawBoat.modelo,
         descricao: rawBoat.descricao_completa || "",
         imageUrl: primaryImage ?? "",
+        images: rawBoat.images,
         valor: rawBoat.valor,
         ano: rawBoat.ano,
         estado: rawBoat.estado,
+        specialist_id: rawBoat.specialist_id,
+        // Campos específicos de Lanchas
+        fabricante: rawBoat.fabricante,
+        tamanho: rawBoat.tamanho,
+        estilo: rawBoat.estilo,
+        combustivel: rawBoat.combustivel,
+        motor: rawBoat.motor,
+        ano_motor: rawBoat.ano_motor,
+        tipo_embarcacao: rawBoat.tipo_embarcacao,
+        descricao_completa: rawBoat.descricao_completa,
+        acessorios: rawBoat.acessorios,
       };
     });
     return { boats, pagination, filters };
@@ -145,6 +163,64 @@ export async function deleteBoat(id: number): Promise<void> {
     await api.delete(`/boats/${id}`);
   } catch (error) {
     console.error("Erro ao deletar lancha:", error);
+    throw error;
+  }
+}
+
+// CSV Import Types
+export interface CsvErrorRow {
+  row: number;
+  reason: string;
+  fields?: Record<string, any>;
+}
+
+export interface CsvImportResponse {
+  success: boolean;
+  message: string;
+  insertedCount: number;
+  errorCount: number;
+  errorRows: CsvErrorRow[];
+  insertedIds?: number[];
+}
+
+export interface CsvTemplateResponse {
+  template: string;
+  columns: {
+    required: string[];
+    optional: string[];
+  };
+  instructions: Record<string, string>;
+  example: Record<string, any>;
+}
+
+// Get /boats/csv-template
+export async function getBoatsCsvTemplate(): Promise<CsvTemplateResponse> {
+  try {
+    const response = await api.get<CsvTemplateResponse>("/boats/csv-template");
+    return response.data;
+  } catch (error) {
+    console.error("Erro ao buscar template CSV:", error);
+    throw error;
+  }
+}
+
+// Post /boats/import-csv
+export async function importBoatsCsv(file: File): Promise<CsvImportResponse> {
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    const response = await api.post<CsvImportResponse>("/boats/import-csv", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error("Erro ao importar CSV:", error);
+    if (error.response?.data) {
+      throw error.response.data;
+    }
     throw error;
   }
 }
