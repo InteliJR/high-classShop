@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PDFDocument, PDFPage, rgb } from 'pdf-lib';
 import { PdfProcessingException } from 'src/shared/exceptions/custom-exceptions';
+import { StandardFonts } from 'pdf-lib';
 
 /**
  * Serviço de Manipulação de PDF
@@ -19,6 +20,31 @@ import { PdfProcessingException } from 'src/shared/exceptions/custom-exceptions'
 @Injectable()
 export class PdfService {
   private readonly logger = new Logger(PdfService.name);
+
+  // Função utilitária para quebrar texto em múltiplas linhas
+  private splitTextIntoLines(
+    text: string,
+    maxWidth: number,
+    font: any, // PDF embedded font
+    fontSize: number,
+  ): string[] {
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
+
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const width = font.widthOfTextAtSize(testLine, fontSize);
+      if (width > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+    return lines;
+  }
 
   /**
    * Cria um PDF estático de assinatura com text anchors
@@ -52,6 +78,9 @@ export class PdfService {
       const margin = 40;
       let yPosition = height - 100;
 
+      // Adiciona fonte
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
       // ===== CONTEÚDO VISUAL =====
 
       // Título
@@ -65,18 +94,27 @@ export class PdfService {
       // Texto informativo
       yPosition -= 60;
       const lineHeight = 20;
+      const infoText =
+        'As partes abaixo identificadas declaram que leram, compreenderam e concordam integralmente com os termos do contrato apresentado nas páginas anteriores, assinando-o eletronicamente por meio da plataforma DocuSign, nos termos da legislação aplicável.';
 
-      page.drawText(
-        'PAs partes abaixo identificadas declaram que leram, compreenderam e concordam integralmente com os termos do contrato apresentado nas páginas anteriores, assinando-o eletronicamente por meio da plataforma DocuSign, nos termos da legislação aplicável.',
-        {
+      const maxTextWidth = width - margin * 2;
+      const infoLines = this.splitTextIntoLines(
+        infoText,
+        maxTextWidth,
+        font,
+        12,
+      );
+
+      for (const line of infoLines) {
+        page.drawText(line, {
           x: margin,
           y: yPosition,
           size: 12,
+          font,
           color: rgb(0.3, 0.3, 0.3),
-        },
-      );
-
-      yPosition -= lineHeight * 2;
+        });
+        yPosition -= lineHeight;
+      }
 
       // ===== CAMPO 1: ASSINATURA =====
 
