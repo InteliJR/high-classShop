@@ -12,6 +12,7 @@ import type { Request } from 'express';
 import { DocuSignWebhookService } from './webhook.service';
 import { WebhookSignatureValidator } from './webhook-signature.validator';
 import { InvalidWebhookSignatureException } from 'src/shared/exceptions/custom-exceptions';
+import { Public } from 'src/shared/decorators/public.decorator';
 
 /**
  * Controller para Webhooks da DocuSign
@@ -78,6 +79,7 @@ export class WebhookController {
    * }
    */
   @Post()
+  @Public()
   @HttpCode(200)
   async handleWebhook(
     @Headers() headers: Record<string, string>,
