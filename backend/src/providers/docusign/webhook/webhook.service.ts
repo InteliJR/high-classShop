@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { mapDocusignStatusToProviderStatus } from '../mappers/envelope-status.mapper';
+import { ProcessCompletionReason } from '@prisma/client';
 
 /**
  * Tipos de eventos suportados na webhooks v2.1 event-based
@@ -100,7 +101,9 @@ export class DocuSignWebhookService {
    * @returns Status provider correspondente
    */
   private mapEventToProviderStatus(event: string): string | null {
-    return  mapDocusignStatusToProviderStatus(event.replace('envelope-', '')) || null;
+    return (
+      mapDocusignStatusToProviderStatus(event.replace('envelope-', '')) || null
+    );
   }
 
   /**
@@ -251,20 +254,119 @@ export class DocuSignWebhookService {
         );
       }
 
-      // ===== ETAPA 7: ATUALIZAR CONTRATO NO BANCO =====
+      // ===== ETAPA 7: ATUALIZAR CONTRATO E SINCRONIZAR PROCESSO =====
 
-      const updated = await this.prismaService.contract.update({
-        where: { id: contract.id },
-        data: updateData,
-      });
+      const updated = await this.prismaService.$transaction(async (tx) => {
+        // 7.1 Atualizar contrato
+        const updatedContract = await tx.contract.update({
+          where: { id: contract.id },
+          data: updateData,
+        });
 
-      this.logger.log(`✓ Contrato atualizado com sucesso`, {
-        contractId: contract.id,
-        event,
-        envelopeId,
-        providerStatus,
-        contractStatus,
-        isSigned: contractStatus === 'SIGNED',
+        this.logger.log(`✓ Contrato atualizado com sucesso`, {
+          contractId: contract.id,
+          event,
+          envelopeId,
+          providerStatus,
+          contractStatus,
+          isSigned: contractStatus === 'SIGNED',
+        });
+
+        // 7.2 Buscar processo relacionado
+        const process = await tx.process.findUnique({
+          where: { id: contract.process_id },
+          select: { id: true, status: true, active_contract_id: true },
+        });
+
+        if (!process) {
+          this.logger.warn(
+            `Processo não encontrado para contrato: ${contract.id}`,
+          );
+          return updatedContract;
+        }
+
+        // 7.3 Sincronizar status do processo com base no status do contrato
+        let processStatusUpdate: any = {};
+        let updateProcessActiveContract = false;
+
+        if (providerStatus === 'SENT' && process.status === 'NEGOTIATION') {
+          // Envelope foi enviado → mudar processo de NEGOTIATION para DOCUMENTATION
+          processStatusUpdate.status = 'DOCUMENTATION';
+          updateProcessActiveContract = true;
+          this.logger.log(
+            `[SYNC] Processo ${process.id}: NEGOTIATION → DOCUMENTATION (contrato enviado)`,
+          );
+        } else if (providerStatus === 'COMPLETED') {
+          // Envelope foi assinado → mudar processo para COMPLETED
+          processStatusUpdate.status = 'COMPLETED';
+          updateProcessActiveContract = true;
+          this.logger.log(
+            `[SYNC] Processo ${process.id}: → COMPLETED (contrato assinado)`,
+          );
+          // Registrar razão de conclusão
+          await tx.processStatusHistory.create({
+            data: {
+              processId: process.id,
+              reason: ProcessCompletionReason.CONTRACT_SIGNED,
+            },
+          });
+        } else if (
+          ['DECLINED', 'VOIDED', 'TIMEDOUT'].includes(providerStatus)
+        ) {
+          // Envelope foi recusado/cancelado/expirou → voltar para NEGOTIATION e limpar contrato ativo
+          processStatusUpdate.status = 'NEGOTIATION';
+          processStatusUpdate.active_contract_id = null;
+          this.logger.log(
+            `[SYNC] Processo ${process.id}: → NEGOTIATION (contrato ${providerStatus})`,
+          );
+          // Registrar razão de conclusão baseada no status do provider
+          let completionReason: ProcessCompletionReason =
+            ProcessCompletionReason.CLIENT_DECLINED;
+          if (providerStatus === 'VOIDED') {
+            completionReason = ProcessCompletionReason.CONTRACT_VOIDED;
+          } else if (providerStatus === 'TIMEDOUT') {
+            completionReason = ProcessCompletionReason.CONTRACT_TIMEDOUT;
+          }
+          await tx.processStatusHistory.create({
+            data: {
+              processId: process.id,
+              reason: completionReason,
+            },
+          });
+        } else if (process.active_contract_id === contract.id) {
+          // Se este é o contrato ativo, manter status como está
+          updateProcessActiveContract = true;
+        }
+
+        // 7.4 Atualizar processo se necessário
+        if (
+          Object.keys(processStatusUpdate).length > 0 ||
+          updateProcessActiveContract
+        ) {
+          if (
+            updateProcessActiveContract &&
+            !processStatusUpdate.active_contract_id
+          ) {
+            processStatusUpdate.active_contract_id = contract.id;
+          }
+
+          await tx.process.update({
+            where: { id: process.id },
+            data: processStatusUpdate,
+          });
+
+          this.logger.log(`[SYNC] Processo atualizado:`, {
+            processId: process.id,
+            statusBefore: process.status,
+            statusAfter: processStatusUpdate.status || process.status,
+            activeContractId:
+              processStatusUpdate.active_contract_id !== undefined
+                ? processStatusUpdate.active_contract_id
+                : process.active_contract_id,
+          });
+        }
+
+        return updatedContract;
       });
 
       // ===== ETAPA 8: LOG DE AUDITORIA =====
