@@ -145,8 +145,8 @@ export default function ProcessCard({
         </div>
       )}
 
-        {/* Document Link: Show if in DOCUMENTATION status and contract exists with S3 URL */}
-        {process.status === "DOCUMENTATION" || process.status === "COMPLETED" && activeContract && (
+        {/* Document Link: Show if in DOCUMENTATION or COMPLETED status and contract exists with S3 URL */}
+        {(process.status === "DOCUMENTATION" || process.status === "COMPLETED") && activeContract && (
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-center justify-between gap-2">
               <div className="flex-1 min-w-0">
