@@ -475,13 +475,6 @@ export class ProcessesService {
         car: true,
         boat: true,
         aircraft: true,
-        contracts: {
-          where: {
-            id: {
-              equals: undefined, // Placeholder - será substituído abaixo
-            },
-          },
-        },
       },
     });
 
@@ -491,13 +484,14 @@ export class ProcessesService {
       );
     }
 
-    // Se houver contrato ativo, buscar seus dados
+    // Se houver contrato ativo, buscar seus dados completos
     let activeContract = null;
     if (process.active_contract_id) {
       activeContract = await this.prismaService.contract.findUnique({
         where: { id: process.active_contract_id },
         select: {
           id: true,
+          file_name: true,
           provider_id: true,
           provider_status: true,
           status: true,

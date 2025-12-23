@@ -246,7 +246,7 @@ export class DocuSignWebhookService {
       };
 
       // Apenas atualizar signed_at se completado (evento de assinatura final)
-      if (providerStatus === 'completed' && !contract.signed_at) {
+      if (providerStatus === 'COMPLETED' && !contract.signed_at) {
         // Usar data do webhook como signed_at (moment da assinatura)
         updateData.signed_at = new Date(generatedDateTime);
         this.logger.log(
@@ -289,12 +289,16 @@ export class DocuSignWebhookService {
         let processStatusUpdate: any = {};
         let updateProcessActiveContract = false;
 
-        if (providerStatus === 'SENT' && process.status === 'NEGOTIATION') {
-          // Envelope foi enviado → mudar processo de NEGOTIATION para DOCUMENTATION
+        if (
+          providerStatus === 'SENT' &&
+          (process.status === 'NEGOTIATION' ||
+            process.status === 'PROCESSING_CONTRACT')
+        ) {
+          // Envelope foi enviado → mudar processo de NEGOTIATION/PROCESSING_CONTRACT para DOCUMENTATION
           processStatusUpdate.status = 'DOCUMENTATION';
           updateProcessActiveContract = true;
           this.logger.log(
-            `[SYNC] Processo ${process.id}: NEGOTIATION → DOCUMENTATION (contrato enviado)`,
+            `[SYNC] Processo ${process.id}: ${process.status} → DOCUMENTATION (contrato enviado)`,
           );
         } else if (providerStatus === 'COMPLETED') {
           // Envelope foi assinado → mudar processo para COMPLETED

@@ -282,14 +282,20 @@ export class ContractsService {
             },
           });
 
-          // 5.4 Atualizar processo para definir este contrato como ativo
+          // 5.4 Atualizar processo para definir este contrato como ativo e mudar status para PROCESSING_CONTRACT
           await tx.process.update({
             where: { id: createContractDto.process_id },
-            data: { active_contract_id: contract.id },
+            data: {
+              active_contract_id: contract.id,
+              status: 'PROCESSING_CONTRACT', // Status intermediário: processando contrato
+            },
           });
 
           this.logger.log(
             `✓ Contrato definido como ativo no processo ${createContractDto.process_id}`,
+          );
+          this.logger.log(
+            `✓ Processo ${createContractDto.process_id} atualizado para PROCESSING_CONTRACT`,
           );
 
           return contract;
