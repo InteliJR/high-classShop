@@ -18,7 +18,6 @@ import { CreateContractDto } from './dto/create-contract.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiResponseDto } from 'src/shared/dto/api-response.dto';
 import { ContractResponse } from './entity/contracts.response';
-import { AuthGuard } from 'src/auth/auth.guard';
 import type { RequestWithUser } from 'src/auth/dto/auth';
 import { validatePdfFile } from 'src/shared/validators/pdf.validator';
 import { InvalidPdfException } from 'src/shared/exceptions/custom-exceptions';
@@ -148,7 +147,6 @@ export class ContractsController {
    * }
    */
   @Post()
-  @UseGuards(AuthGuard)
   @UseInterceptors(FileInterceptor('file'))
   async create(
     @UploadedFile(new PdfValidationPipe()) file: Express.Multer.File,

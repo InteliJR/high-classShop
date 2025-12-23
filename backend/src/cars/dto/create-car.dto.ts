@@ -1,4 +1,13 @@
-import { IsString, IsNumber, IsOptional, IsUUID } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsUUID, IsArray, ValidateNested, IsBoolean } from 'class-validator';
+import { Type } from 'class-transformer';
+
+class ImageDto {
+    @IsString()
+    data: string; // base64 string
+
+    @IsBoolean()
+    is_primary: boolean;
+}
 
 export class CreateCarDto {
     @IsString()
@@ -43,4 +52,10 @@ export class CreateCarDto {
     @IsOptional()
     @IsUUID()
     specialist_id?: string;
+
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => ImageDto)
+    images?: ImageDto[];
 }

@@ -52,13 +52,25 @@ export default function ProductsPage() {
     try {
       if (productType === "cars") {
         const { cars } = await getCars(1, 100);
-        setProducts(cars);
+        setProducts(
+          user?.role === "SPECIALIST" && user.id
+            ? cars.filter((car: any) => car.specialist_id === user.id)
+            : cars
+        );
       } else if (productType === "boats") {
         const { boats } = await getBoats(1, 100);
-        setProducts(boats);
+        setProducts(
+          user?.role === "SPECIALIST" && user.id
+            ? boats.filter((boat: any) => boat.specialist_id === user.id)
+            : boats
+        );
       } else if (productType === "aircrafts") {
         const { aircrafts } = await getAircrafts(1, 100);
-        setProducts(aircrafts);
+        setProducts(
+          user?.role === "SPECIALIST" && user.id
+            ? aircrafts.filter((aircraft: any) => aircraft.specialist_id === user.id)
+            : aircrafts
+        );
       }
     } catch (error) {
       console.error("Erro ao carregar produtos:", error);

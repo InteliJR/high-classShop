@@ -1,6 +1,6 @@
 // Página de gestão de consultores, com listagem, criação e exclusão.
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import {
   getConsultants,
   deleteConsultant,
@@ -11,7 +11,7 @@ import EditIcon from "../../assets/icons/edit.svg";
 import TrashIcon from "../../assets/icons/trash.svg";
 import Modal from "../../components/ui/Modal";
 import NewConsultantForm from "./NewConsultantForm";
-import { useSearch } from "../../contexts/SearchContext";
+import { AppContext } from "../../contexts/AppContext";
 
 export default function ConsultantsPage() {
   // Guarda os dados da API para serem renderizados na tabela.
@@ -29,7 +29,7 @@ export default function ConsultantsPage() {
   const [consultantToDelete, setConsultantToDelete] = useState<Consultant | null>(null);
 
   // Usa o contexto de busca global
-  const { searchTerm } = useSearch();
+  const { searchTerm } = useContext(AppContext);
 
   // Filtra os consultores com base no termo de busca
   const filteredConsultants = consultants.filter((consultant) => {
@@ -82,7 +82,14 @@ export default function ConsultantsPage() {
 
   // Exibe uma mensagem de 'loading' enquanto os dados não chegam.
   if (isLoading) {
-    return <p>Carregando...</p>;
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-3 border-gray-200 border-t-primary rounded-full animate-spin" />
+          <p className="text-gray-600">Carregando consultores...</p>
+        </div>
+      </div>
+    );
   }
 
   // Exibe uma mensagem de erro se a busca de dados falhar.

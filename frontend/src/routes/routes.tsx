@@ -14,6 +14,8 @@ import ProductFormPage from "../pages/specialist/ProductFormPage";
 import SpecialistDashboard from "../pages/specialist/SpecialistDashboard";
 import CreateContractPage from "../pages/specialist/CreateContractPage";
 import ProcessesPage from "../pages/specialist/ProcessesPage";
+import CustomerHomePage from "../pages/customer/CustomerHomePage";
+import ConsultoriaPage from "../pages/customer/ConsultoriaPage";
 
 export default function RouterApp() {
   const routerApp = createBrowserRouter([
@@ -33,6 +35,27 @@ export default function RouterApp() {
     {
       path: "/register",
       element: <RegisterPage />,
+    },
+    // Customer routes
+    {
+      path: "/customer/home",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={['CUSTOMER']}>
+            <CustomerHomePage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/customer/consultoria",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={['CUSTOMER']}>
+            <ConsultoriaPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
     },
     {
       path: "/consultant/dashboard",

@@ -7,30 +7,71 @@ import {
   Param,
   Delete,
   Query,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AircraftsService } from './aircrafts.service';
 import { CreateAircraftDto } from './dto/create-aircraft.dto';
 import { UpdateAircraftDto } from './dto/update-aircraft.dto';
-import { QueryDto } from 'src/shared/dto/query.dto';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { FiltersAircraftMeta } from 'src/shared/dto/filters.dto';
+import { Roles } from 'src/shared/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
+import { CurrentUser } from 'src/shared/decorators/current-user.decorator';
+import { UserEntity } from 'src/auth/entities/user.entity';
+import { assertSpecialistCanCreate, assertSpecialistCanModify } from 'src/shared/helpers/specialist-auth.helper';
+import { CsvImportService } from 'src/shared/services/csv-import.service';
+import { CsvImportResponseDto } from 'src/shared/dto/csv-import-response.dto';
 
 @Controller('aircrafts')
 export class AircraftsController {
-  constructor(private readonly aircraftsService: AircraftsService) {}
+  constructor(
+    private readonly aircraftsService: AircraftsService,
+    private readonly csvImportService: CsvImportService,
+  ) {}
 
   @Post()
-  create(@Body() createAircraftDto: CreateAircraftDto) {
+  @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
+  create(@Body() createAircraftDto: CreateAircraftDto, @CurrentUser() user: UserEntity) {
+    assertSpecialistCanCreate('AIRCRAFT', user);
+    createAircraftDto.specialist_id = user.id;
     return this.aircraftsService.create(createAircraftDto);
   }
 
+  @Post('import-csv')
+  @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
+  @UseInterceptors(FileInterceptor('file'))
+  async importCsv(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: UserEntity,
+  ): Promise<CsvImportResponseDto> {
+    // Validar permissão do usuário
+    assertSpecialistCanCreate('AIRCRAFT', user);
+
+    if (!file) {
+      throw new BadRequestException('Arquivo CSV é obrigatório.');
+    }
+
+    const csvContent = file.buffer.toString('utf-8');
+    return this.aircraftsService.importFromCsv(csvContent, user);
+  }
+
+  @Get('csv-template')
+  getCsvTemplate() {
+    return this.aircraftsService.getCsvTemplate();
+  }
+
   @Get()
-  async getAllAircrafts(
-    @Query() { page, perPage, appliedFilters }: QueryDto<FiltersAircraftMeta>,
-  ) {
+  async getAllAircrafts(@Query() query: any) {
     //Tratamento das variáveis recebidas do front
+    let { page, perPage, ...rawFilters } = query;
     page = Number(page);
     perPage = Number(perPage);
+
+    const appliedFilters: FiltersAircraftMeta = rawFilters;
 
     // Chama o serviço para obter os dados
     const {
@@ -75,15 +116,20 @@ export class AircraftsController {
   }
 
   @Patch(':id')
+  @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   update(
     @Param('id') id: string,
     @Body() updateAircraftDto: UpdateAircraftDto,
+    @CurrentUser() user: UserEntity,
   ) {
+    assertSpecialistCanModify('AIRCRAFT', user);
     return this.aircraftsService.update(+id, updateAircraftDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
+  remove(@Param('id') id: string, @CurrentUser() user: UserEntity) {
+    assertSpecialistCanModify('AIRCRAFT', user);
     return this.aircraftsService.remove(+id);
   }
 }

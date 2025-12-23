@@ -33,6 +33,8 @@ export class FiltersCarMeta {
   km_max?: number;
   cambio?: cambioCarValues;
   combustivel?: combustivelCarValues;
+  // Filtro adicional para vincular produtos a um especialista específico
+  specialist_id?: string;
 }
 export class ContainsCarFilters {
   marca?: string;
@@ -83,6 +85,8 @@ export class FiltersBoatMeta {
   fabricante?: string;
   combustivel?: combustivelBoatValues;
   motor?: string;
+  // Filtro adicional para vincular produtos a um especialista específico
+  specialist_id?: string;
 }
 export class ExactBoatFilters {
   estado?: estadoValues;
@@ -124,6 +128,8 @@ export class FiltersAircraftMeta {
   tipo_aeronave?: tipoAeronaveValues;
   assentos_min?: number;
   assentos_max?: number;
+  // Filtro adicional para vincular produtos a um especialista específico
+  specialist_id?: string;
 }
 export class ExactAircraftFilters {
   tipo_aeronave?: tipoAeronaveValues;

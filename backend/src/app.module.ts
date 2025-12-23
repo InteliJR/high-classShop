@@ -17,6 +17,7 @@ import { ContractsModule } from './contracts/contracts.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DocusignModule } from './providers/docusign/docusign.module';
 import { UsersModule } from './users/users.module';
+import { AuthGuard } from './auth/auth.guard';
 
 @Module({
   imports: [
@@ -46,6 +47,10 @@ import { UsersModule } from './users/users.module';
     {
       provide: APP_GUARD,
       useClass: RolesGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: AuthGuard,
     },
   ],
 })
