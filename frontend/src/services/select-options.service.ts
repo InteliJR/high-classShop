@@ -66,7 +66,7 @@ export async function fetchAvailableProducts(
     const endpointMap: Record<"CAR" | "BOAT" | "AIRCRAFT", string> = {
       CAR: "cars",
       BOAT: "boats",
-      AIRCRAFT: "aircraft",
+      AIRCRAFT: "aircrafts",
     };
 
     const endpoint = endpointMap[productType];
