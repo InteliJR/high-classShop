@@ -115,7 +115,7 @@ export class CarsController {
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   update(@Param('id') id: number, @Body() updateCarDto: UpdateCarDto, @CurrentUser() user: UserEntity) {
     if (updateCarDto.specialist_id) {
-      throw new Error('Não é possível alterar o especialista');
+      delete updateCarDto.specialist_id;
     }
 
     assertSpecialistCanModify('CAR', user);

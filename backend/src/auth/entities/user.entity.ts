@@ -29,8 +29,8 @@ export class UserEntity
   @Expose()
   rg: string;
 
-  @Expose()
-  profile_image_url: string | null;
+  // @Expose()
+  // profile_image_url: string | null;
 
   @Expose()
   civil_state: $Enums.CivilState | null;
