@@ -1,9 +1,14 @@
-import { Check, ChevronDown, Edit2 } from "lucide-react";
-import { useState } from "react";
+import { Check, ChevronDown, Edit2, ExternalLink } from "lucide-react";
+import { useState, useEffect } from "react";
 import type { Process } from "../services/processes.service";
 import type { Product } from "../types/types";
 import React from "react";
 import UpdateProcessStatusModal from "./UpdateProcessStatusModal";
+import { getContextualStatusMessage } from "../utils/processStatusMessages";
+import {
+  getProcessCompletionReason,
+  getProcessWithActiveContract,
+} from "../services/processes.service";
 
 interface ProcessCardProps {
   process: Process;
@@ -36,6 +41,27 @@ export default function ProcessCard({
   onStatusUpdated,
 }: ProcessCardProps) {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [completionReason, setCompletionReason] = useState<string | null>(null);
+  const [activeContract, setActiveContract] = useState<any>(null);
+
+  // Load completion reason and active contract on mount and when process changes
+  useEffect(() => {
+    const loadDetails = async () => {
+      try {
+        const [reason, processData] = await Promise.all([
+          getProcessCompletionReason(process.id),
+          getProcessWithActiveContract(process.id),
+        ]);
+        setCompletionReason(reason);
+        setActiveContract(processData.activeContract);
+        console.log(processData);
+      } catch (error) {
+        console.error("Error loading process details:", error);
+      }
+    };
+
+    loadDetails();
+  }, [process.id]);
 
   // Map process status to step index
   const statusSteps: Record<Process["status"], number> = {
@@ -50,7 +76,30 @@ export default function ProcessCard({
   const currentStep = statusSteps[process.status];
 
   return (
-    <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border border-gray-100 overflow-hidden">
+    <div
+      className={`bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border border-gray-100 overflow-hidden relative ${
+        process.status === "NEGOTIATION" && onUploadDocuments && !isExpanded
+          ? "pb-20"
+          : ""
+      }`}
+    >
+      {/* Upload Documents Button: Fixed bottom right with margin, only when not expanded */}
+      {process.status === "NEGOTIATION" && onUploadDocuments && !isExpanded && (
+        <>
+          {/* Desktop: botão absoluto no canto inferior direito do card */}
+          <button
+            onClick={onUploadDocuments}
+            className="
+        hidden md:block
+        px-4 py-2 bg-slate-700 text-white text-xs md:text-sm font-medium rounded-lg shadow-lg hover:bg-slate-800 transition-colors whitespace-nowrap
+        absolute bottom-6 right-6 z-20
+      "
+            style={{ position: "absolute" }}
+          >
+            Subir documento
+          </button>
+        </>
+      )}
       {/* Header: Process Title with Client and Product */}
       <div className="px-3 py-2 md:px-6 md:py-4 border-b border-gray-100 flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -77,6 +126,56 @@ export default function ProcessCard({
 
       {/* Stepper/Timeline - Vertical on mobile, Horizontal on tablet+ */}
       <div className="px-3 py-4 md:px-6 md:py-6">
+        {/* Contextual Status Message - No redundant badge */}
+        <div className="mb-4">
+          <p className="text-sm text-gray-700 font-medium">
+            {getContextualStatusMessage(process.status, completionReason)}
+          </p>
+        </div>
+
+        {/* Mobile: botão logo abaixo do status, antes do stepper */}
+      {process.status === "NEGOTIATION" && onUploadDocuments && !isExpanded && (
+        <div className="md:hidden w-full mb-2 flex justify-end">
+          <button
+            onClick={onUploadDocuments}
+            className="px-4 py-2 bg-slate-700 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-slate-800 transition-colors whitespace-nowrap"
+          >
+            Subir documento
+          </button>
+        </div>
+      )}
+
+        {/* Document Link: Show if in DOCUMENTATION status and contract exists with S3 URL */}
+        {process.status === "DOCUMENTATION" || process.status === "COMPLETED" && activeContract && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-600 font-medium">
+                  Documento Enviado
+                </p>
+                <p className="text-sm text-blue-900 font-semibold truncate">
+                  {activeContract.file_name || "Contrato"}
+                </p>
+              </div>
+              {activeContract.original_pdf_url ? (
+                <a
+                  href={activeContract.original_pdf_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors whitespace-nowrap"
+                >
+                  Baixar
+                  <ExternalLink size={14} />
+                </a>
+              ) : (
+                <span className="text-xs text-gray-500 italic">
+                  Documento ainda não disponível para download
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="hidden md:flex md:items-center md:justify-between">
           {/* Horizontal Stepper (Tablet and up) */}
           {stepLabels.map((label, index) => {
