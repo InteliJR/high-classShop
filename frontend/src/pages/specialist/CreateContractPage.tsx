@@ -55,7 +55,7 @@ export default function CreateContractPage() {
             Nenhum processo selecionado
           </p>
           <button
-            onClick={() => navigate("/specialist/dashboard")}
+            onClick={() => navigate("/specialist/processes")}
             className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition"
           >
             Voltar ao Dashboard
@@ -128,16 +128,29 @@ export default function CreateContractPage() {
 
       reset();
       setTimeout(() => {
-        navigate("/specialist/dashboard");
+        navigate("/specialist/processes");
       }, 2000);
     } catch (error: any) {
       console.error("Erro ao criar contrato:", error);
-      setSubmitStatus({
-        type: "error",
-        message:
-          error.response?.data?.message ||
-          "Erro ao enviar documento. Tente novamente.",
-      });
+
+      // Tratamento específico para contrato já existente
+      if (
+        error.response?.status === 409 ||
+        error.response?.data?.error === "CONTRACT_ALREADY_EXISTS"
+      ) {
+        setSubmitStatus({
+          type: "error",
+          message:
+            "Já existe um contrato ativo para este processo. Aguarde a assinatura, recusa ou cancelamento antes de criar um novo.",
+        });
+      } else {
+        setSubmitStatus({
+          type: "error",
+          message:
+            error.response?.data?.message ||
+            "Erro ao enviar documento. Tente novamente.",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
