@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Edit2, ExternalLink } from "lucide-react";
+import { Check, ChevronDown, Edit2, ExternalLink, Loader } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { Process } from "../services/processes.service";
 import type { Product } from "../types/types";
@@ -67,6 +67,7 @@ export default function ProcessCard({
   const statusSteps: Record<Process["status"], number> = {
     SCHEDULING: 0,
     NEGOTIATION: 1,
+    PROCESSING_CONTRACT: 1.5, // Between NEGOTIATION and DOCUMENTATION
     DOCUMENTATION: 2,
     COMPLETED: 3,
   };
@@ -128,53 +129,76 @@ export default function ProcessCard({
       <div className="px-3 py-4 md:px-6 md:py-6">
         {/* Contextual Status Message - No redundant badge */}
         <div className="mb-4">
-          <p className="text-sm text-gray-700 font-medium">
-            {getContextualStatusMessage(process.status, completionReason)}
-          </p>
+          <div className="flex items-center gap-2">
+            {process.status === "PROCESSING_CONTRACT" && (
+              <Loader size={18} className="animate-spin text-orange-600" />
+            )}
+            <p className="text-sm text-gray-700 font-medium">
+              {getContextualStatusMessage(process.status, completionReason)}
+            </p>
+          </div>
         </div>
 
         {/* Mobile: botão logo abaixo do status, antes do stepper */}
-      {process.status === "NEGOTIATION" && onUploadDocuments && !isExpanded && (
-        <div className="md:hidden w-full mb-2 flex justify-end">
-          <button
-            onClick={onUploadDocuments}
-            className="px-4 py-2 bg-slate-700 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-slate-800 transition-colors whitespace-nowrap"
-          >
-            Subir documento
-          </button>
-        </div>
-      )}
+        {process.status === "NEGOTIATION" &&
+          onUploadDocuments &&
+          !isExpanded && (
+            <div className="md:hidden w-full mb-2 flex justify-end">
+              <button
+                onClick={onUploadDocuments}
+                className="px-4 py-2 bg-slate-700 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-slate-800 transition-colors whitespace-nowrap"
+              >
+                Subir documento
+              </button>
+            </div>
+          )}
+
+        {/* Desabilitar upload enquanto processa contrato */}
+        {process.status === "PROCESSING_CONTRACT" &&
+          onUploadDocuments &&
+          !isExpanded && (
+            <div className="md:hidden w-full mb-2 flex justify-end">
+              <button
+                disabled
+                className="px-4 py-2 bg-gray-300 text-gray-600 text-xs font-medium rounded-lg shadow-lg cursor-not-allowed whitespace-nowrap"
+              >
+                Processando...
+              </button>
+            </div>
+          )}
 
         {/* Document Link: Show if in DOCUMENTATION or COMPLETED status and contract exists with S3 URL */}
-        {(process.status === "DOCUMENTATION" || process.status === "COMPLETED") && activeContract && (
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-gray-600 font-medium">
-                  Documento Enviado
-                </p>
-                <p className="text-sm text-blue-900 font-semibold truncate">
-                  {activeContract.file_name || "Contrato"}
-                </p>
+        {(process.status === "DOCUMENTATION" ||
+          process.status === "COMPLETED") &&
+          activeContract && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-600 font-medium">
+                    Documento Enviado
+                  </p>
+                  <p className="text-sm text-blue-900 font-semibold truncate">
+                    {activeContract.file_name || "Contrato"}
+                  </p>
+                </div>
+                {activeContract.original_pdf_url ? (
+                  <a
+                    href={activeContract.original_pdf_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors whitespace-nowrap"
+                  >
+                    Baixar
+                    <ExternalLink size={14} />
+                  </a>
+                ) : (
+                  <span className="text-xs text-gray-500 italic">
+                    Documento ainda não disponível para download
+                  </span>
+                )}
               </div>
-              {activeContract.original_pdf_url ? (
-                <a
-                  href={activeContract.original_pdf_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors whitespace-nowrap"
-                >
-                  Baixar
-                  <ExternalLink size={14} />
-                </a>
-              ) : (
-                <span className="text-xs text-gray-500 italic">
-                  Documento ainda não disponível para download
-                </span>
-              )}
             </div>
-          </div>
-        )}
+          )}
 
         <div className="hidden md:flex md:items-center md:justify-between">
           {/* Horizontal Stepper (Tablet and up) */}

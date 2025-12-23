@@ -2,7 +2,7 @@ import api from "./api";
 
 export interface Process {
   id: string;
-  status: "SCHEDULING" | "NEGOTIATION" | "DOCUMENTATION" | "COMPLETED";
+  status: "SCHEDULING" | "NEGOTIATION" | "PROCESSING_CONTRACT" | "DOCUMENTATION" | "COMPLETED";
   product_type: "CAR" | "BOAT" | "AIRCRAFT";
   client_id: string;
   specialist_id: string;

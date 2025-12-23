@@ -5,6 +5,7 @@
 type ProcessStatus =
   | "SCHEDULING"
   | "NEGOTIATION"
+  | "PROCESSING_CONTRACT"
   | "DOCUMENTATION"
   | "COMPLETED";
 
@@ -17,6 +18,7 @@ export function getProcessStatusMessage(status: ProcessStatus): string {
   const messages: Record<ProcessStatus, string> = {
     SCHEDULING: "Agendamento",
     NEGOTIATION: "Negociação",
+    PROCESSING_CONTRACT: "Processando Contrato",
     DOCUMENTATION: "Documentação",
     COMPLETED: "Completo",
   };
@@ -33,6 +35,7 @@ export function getProcessStatusColor(status: ProcessStatus): string {
   const colors: Record<ProcessStatus, string> = {
     SCHEDULING: "bg-blue-100 text-blue-800 border-blue-300",
     NEGOTIATION: "bg-yellow-100 text-yellow-800 border-yellow-300",
+    PROCESSING_CONTRACT: "bg-orange-100 text-orange-800 border-orange-300",
     DOCUMENTATION: "bg-purple-100 text-purple-800 border-purple-300",
     COMPLETED: "bg-green-100 text-green-800 border-green-300",
   };
@@ -77,6 +80,10 @@ export function getContextualStatusMessage(
 
   if (status === "NEGOTIATION") {
     return "Aguardando envio de contrato";
+  }
+
+  if (status === "PROCESSING_CONTRACT") {
+    return "Seu contrato está sendo processado. Isso pode levar alguns segundos...";
   }
 
   if (status === "DOCUMENTATION") {

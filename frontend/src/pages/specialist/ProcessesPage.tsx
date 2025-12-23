@@ -51,12 +51,15 @@ export default function ProcessesPage() {
   const itemsPerPage = 10;
 
   /**
-   * Check if there are processes in NEGOTIATION or DOCUMENTATION status
+   * Check if there are processes in NEGOTIATION, PROCESSING_CONTRACT or DOCUMENTATION status
    * These statuses require real-time updates for better UX
    */
   const hasRelevantProcesses = (): boolean => {
     return processes.some(
-      (p) => p.status === "NEGOTIATION" || p.status === "DOCUMENTATION"
+      (p) =>
+        p.status === "NEGOTIATION" ||
+        p.status === "PROCESSING_CONTRACT" ||
+        p.status === "DOCUMENTATION"
     );
   };
 
