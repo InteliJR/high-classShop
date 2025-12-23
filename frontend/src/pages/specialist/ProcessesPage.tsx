@@ -37,6 +37,7 @@ export default function ProcessesPage() {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false); // Track if user is in edit mode
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -48,6 +49,16 @@ export default function ProcessesPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const itemsPerPage = 10;
+
+  /**
+   * Check if there are processes in NEGOTIATION or DOCUMENTATION status
+   * These statuses require real-time updates for better UX
+   */
+  const hasRelevantProcesses = (): boolean => {
+    return processes.some(
+      (p) => p.status === "NEGOTIATION" || p.status === "DOCUMENTATION"
+    );
+  };
 
   // Fetch processes by specialist
   const loadProcesses = async (page: number) => {
@@ -84,6 +95,24 @@ export default function ProcessesPage() {
     }
   }, [user?.id]);
 
+  // Smart Polling: Only poll if there are processes in NEGOTIATION or DOCUMENTATION
+  // AND user is not editing/in modal. Interval: 30 seconds
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Check if polling should be active
+    const shouldPoll =
+      hasRelevantProcesses() && !isEditing && !expandedProcessId;
+
+    if (!shouldPoll) return;
+
+    const pollingInterval = setInterval(() => {
+      loadProcesses(currentPage);
+    }, 30000); // Poll every 30 seconds
+
+    return () => clearInterval(pollingInterval);
+  }, [user?.id, currentPage, isEditing, expandedProcessId, processes]);
+
   // Handle pagination
   const handleNextPage = () => {
     if (hasNextPage) {
@@ -101,18 +130,29 @@ export default function ProcessesPage() {
 
   // Handle process card accordion toggle
   const handleToggleExpand = (processId: string) => {
-    setExpandedProcessId(expandedProcessId === processId ? null : processId);
+    const newExpandedId = expandedProcessId === processId ? null : processId;
+    setExpandedProcessId(newExpandedId);
+    setIsEditing(!!newExpandedId); // Pause polling when expanding a process
   };
 
   // Handle upload documents button
   const handleUploadDocuments = (processId: string) => {
+    setIsEditing(true); // Pause polling when navigating to upload
     navigate(`/specialist/contracts/new?processId=${processId}`);
   };
 
   // Handle successful process creation
   const handleProcessCreated = () => {
     setShowCreateModal(false);
+    setIsEditing(false); // Resume polling after creation
     loadProcesses(1); // Reload from first page
+  };
+
+  // Handle after status is updated
+  const handleStatusUpdated = () => {
+    setExpandedProcessId(null);
+    setIsEditing(false); // Resume polling after status update
+    loadProcesses(currentPage);
   };
 
   return (
@@ -210,7 +250,7 @@ export default function ProcessesPage() {
                 isExpanded={expandedProcessId === process.id}
                 onToggleExpand={() => handleToggleExpand(process.id)}
                 onUploadDocuments={() => handleUploadDocuments(process.id)}
-                onStatusUpdated={() => loadProcesses(currentPage)}
+                onStatusUpdated={() => handleStatusUpdated()}
               />
             ))}
           </div>
