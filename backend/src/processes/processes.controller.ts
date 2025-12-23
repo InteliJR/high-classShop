@@ -179,4 +179,48 @@ export class ProcessesController {
       data: updatedProcess,
     };
   }
+
+  /**
+   * GET /api/processes/:id/completion-reason
+   * Retorna a razão de conclusão do processo
+   *
+   * @param {string} processId - Id do processo obtido nos parametros
+   * @returns {Promise<ApiResponseDto<{ reason: string | null }>>}
+   * @throws {NotFoundException} - Não existe nenhum processo com o id passado
+   */
+  @Get(':id/completion-reason')
+  async getCompletionReason(
+    @Param('id', new ParseUUIDPipe()) processId: string,
+  ): Promise<ApiResponseDto<{ reason: string | null }>> {
+    const reason =
+      await this.processesService.getProcessCompletionReason(processId);
+
+    return {
+      sucess: true,
+      message: 'Razão de conclusão do processo obtida com sucesso',
+      data: { reason },
+    };
+  }
+
+  /**
+   * GET /api/processes/:id/with-contract
+   * Retorna processo com dados do contrato ativo
+   *
+   * @param {string} processId - Id do processo obtido nos parametros
+   * @returns {Promise<ApiResponseDto<any>>}
+   * @throws {NotFoundException} - Não existe nenhum processo com o id passado
+   */
+  @Get(':id/with-contract')
+  async getWithContract(
+    @Param('id', new ParseUUIDPipe()) processId: string,
+  ): Promise<ApiResponseDto<any>> {
+    const processWithContract =
+      await this.processesService.getByIdWithActiveContract(processId);
+
+    return {
+      sucess: true,
+      message: 'Processo com contrato ativo obtido com sucesso',
+      data: processWithContract,
+    };
+  }
 }

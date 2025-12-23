@@ -431,4 +431,93 @@ export class ProcessesService {
       throw new InternalServerErrorException();
     }
   }
+
+  /**
+   * Obtém a razão de conclusão de um processo
+   *
+   * @param {string} processId - Id do processo
+   * @returns {Promise<string | null>} - Razão de conclusão ou null
+   * @throws {NotFoundException} - Processo não encontrado
+   */
+  async getProcessCompletionReason(processId: string): Promise<string | null> {
+    const process = await this.prismaService.process.findUnique({
+      where: { id: processId },
+      select: { id: true },
+    });
+
+    if (!process) {
+      throw new NotFoundException(
+        `Processo com id ${processId} não encontrado`,
+      );
+    }
+
+    const statusHistory =
+      await this.prismaService.processStatusHistory.findFirst({
+        where: { processId },
+        orderBy: { changed_at: 'desc' },
+        select: { reason: true },
+      });
+
+    return statusHistory?.reason || null;
+  }
+
+  /**
+   * Obtém um processo com dados do contrato ativo
+   *
+   * @param {string} processId - Id do processo
+   * @returns {Promise<any>} - Processo com contrato ativo
+   * @throws {NotFoundException} - Processo não encontrado
+   */
+  async getByIdWithActiveContract(processId: string): Promise<any> {
+    const process = await this.prismaService.process.findUnique({
+      where: { id: processId },
+      include: {
+        car: true,
+        boat: true,
+        aircraft: true,
+        contracts: {
+          where: {
+            id: {
+              equals: undefined, // Placeholder - será substituído abaixo
+            },
+          },
+        },
+      },
+    });
+
+    if (!process) {
+      throw new NotFoundException(
+        `Processo com id ${processId} não encontrado`,
+      );
+    }
+
+    // Se houver contrato ativo, buscar seus dados
+    let activeContract = null;
+    if (process.active_contract_id) {
+      activeContract = await this.prismaService.contract.findUnique({
+        where: { id: process.active_contract_id },
+        select: {
+          id: true,
+          provider_id: true,
+          provider_status: true,
+          status: true,
+          original_pdf_url: true,
+          created_at: true,
+          signed_at: true,
+        },
+      });
+    }
+
+    return {
+      id: process.id,
+      status: process.status,
+      notes: process.notes,
+      product_type: process.product_type,
+      active_contract_id: process.active_contract_id,
+      activeContract,
+      original_pdf_url: activeContract?.original_pdf_url,
+      created_at: process.created_at,
+      updated_at: process.updated_at,
+    };
+  }
 }
