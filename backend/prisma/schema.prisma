@@ -59,16 +59,22 @@ enum SignatureType {
 }
 
 enum ProviderStatus {
-  CREATED      @map("created") // envelope criado mas não enviado
-  SENT         @map("sent") // enviado aos signers
-  DELIVERED    @map("delivered")// o signer abriu o documento
-  COMPLETED     @map("completed")// totalmente assinado
-  DECLINED      @map("declined")// usuário recusou
-  VOIDED        @map("voided")// cancelado pelo remetente
-  TIMEDOUT      @map("timeout")// expiração automática
-  ERROR         @map("error")// falha ao enviar ou processar
+  CREATED   @map("created") // envelope criado mas não enviado
+  SENT      @map("sent") // enviado aos signers
+  DELIVERED @map("delivered") // o signer abriu o documento
+  COMPLETED @map("completed") // totalmente assinado
+  DECLINED  @map("declined") // usuário recusou
+  VOIDED    @map("voided") // cancelado pelo remetente
+  TIMEDOUT  @map("timeout") // expiração automática
+  ERROR     @map("error") // falha ao enviar ou processar
 }
 
+enum ProcessCompletionReason {
+  CONTRACT_SIGNED   @map("CONTRACT_SIGNED")
+  CLIENT_DECLINED   @map("CLIENT_DECLINED")
+  CONTRACT_VOIDED   @map("CONTRACT_VOIDED")
+  CONTRACT_TIMEDOUT @map("CONTRACT_TIMEDOUT")
+}
 
 // =====================
 // MODELS
@@ -259,19 +265,19 @@ model Product {
   car_id      Int?
   boat_id     Int?
   aircraft_id Int?
-  
-  process     Process?    @relation(fields: [processId], references: [id])
-  processId   String?     @db.Uuid
+
+  process   Process? @relation(fields: [processId], references: [id])
+  processId String?  @db.Uuid
 }
 
 model Process {
-  id                 String        @id @default(uuid()) @db.Uuid
-  client_id          String        @db.Uuid
-  specialist_id      String        @db.Uuid
+  id            String @id @default(uuid()) @db.Uuid
+  client_id     String @db.Uuid
+  specialist_id String @db.Uuid
   // TODO: trocar para db.Uuid quando for uuid
-  car_id             Int?
-  aircraft_id        Int?
-  boat_id            Int?
+  car_id        Int?
+  aircraft_id   Int?
+  boat_id       Int?
 
   product_id         String?       @db.Uuid
   product_type       ProductType
@@ -370,11 +376,16 @@ model Appointment {
 }
 
 model ProcessStatusHistory {
-  id         String        @id @default(uuid())
-  process    Process       @relation(fields: [processId], references: [id])
-  processId  String        @db.Uuid
-  status     ProcessStatus @default(SCHEDULING)
-  changed_at DateTime      @default(now())
+  id         String                   @id @default(uuid())
+  process    Process                  @relation(fields: [processId], references: [id])
+  processId  String                   @db.Uuid
+  status     ProcessStatus            @default(SCHEDULING)
+  reason     ProcessCompletionReason?
+  changed_by String?                  @db.Uuid
+  changed_at DateTime                 @default(now())
+
+  @@index([processId])
+  @@index([changed_at])
 }
 
 model Car_interest {
