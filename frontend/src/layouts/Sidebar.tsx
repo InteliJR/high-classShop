@@ -9,6 +9,7 @@ import {
   Plane,
   Package,
   Home,
+  FilePen,
 } from "lucide-react";
 import { useContext } from "react";
 import { AppContext } from "../contexts/AppContext";
@@ -75,6 +76,11 @@ export default function Sidebar() {
             to: "/specialist/products",
             label: "Meus produtos",
             icon: <Package size={20} />,
+          },
+          {
+            to: "/specialist/processes",
+            label: "Meus processos",
+            icon: < FilePen size={20} />,
           }
         );
         break;
