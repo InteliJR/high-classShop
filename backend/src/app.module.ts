@@ -1,22 +1,22 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { AircraftsModule } from './aircrafts/aircrafts.module';
-import { BoatsModule } from './boats/boats.module';
-import { CarsModule } from './cars/cars.module';
+import { AircraftsModule } from './features/aircrafts/aircrafts.module';
+import { BoatsModule } from './features/boats/boats.module';
+import { CarsModule } from './features/cars/cars.module';
 import { PrismaService } from './prisma/prisma.service';
 import { CompaniesModule } from './features/companies/companies.module';
 import { ConsultantsModule } from './features/consultants/consultants.module';
 import { SpecialistsModule } from './features/specialists/specialists.module';
 import { AuthModule } from './auth/auth.module';
-import { ConsultantModule } from './consultant/consultant.module';
+import { ConsultantModule } from './features/consultant/consultant.module';
 import { RolesGuard } from './shared/guards/roles.guard';
 import { PrismaExceptionFilter } from './shared/filters/prisma-exception.filter';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
-import { ProcessesModule } from './processes/processes.module';
-import { ContractsModule } from './contracts/contracts.module';
-import { DashboardModule } from './dashboard/dashboard.module';
+import { ProcessesModule } from './features/processes/processes.module';
+import { ContractsModule } from './features/contracts/contracts.module';
+import { DashboardModule } from './features/dashboard/dashboard.module';
 import { DocusignModule } from './providers/docusign/docusign.module';
-import { UsersModule } from './users/users.module';
+import { UsersModule } from './features/users/users.module';
 import { AuthGuard } from './auth/auth.guard';
 
 @Module({

@@ -14,9 +14,9 @@ import {
 import { ConsultantService } from './consultant.service';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SendInvitationDto } from './dto/send-invitation.dto';
-import { ApiResponseDto } from '../shared/dto/api-response.dto';
+import { ApiResponseDto } from 'src/shared/dto/api-response.dto';
 import { ClientEntity } from './entity/client.entity';
-import * as auth from '../auth/dto/auth';
+import * as auth from 'src/auth/dto/auth';
 
 @Controller('consultant')
 export class ConsultantController {

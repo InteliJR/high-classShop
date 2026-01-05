@@ -3,8 +3,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ConsultantController } from './consultant.controller';
 import { ConsultantService } from './consultant.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { AwsModule } from '../aws/aws.module';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { AwsModule } from 'src/aws/aws.module';
 
 @Module({
   imports: [
