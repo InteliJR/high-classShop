@@ -62,6 +62,7 @@ enum ProcessStatus {
   PROCESSING_CONTRACT @map("PROCESSING_CONTRACT")
   DOCUMENTATION       @map("DOCUMENTATION")
   COMPLETED           @map("COMPLETED")
+  REJECTED            @map("REJECTED")
 }
 
 // ContractStatus: status de documento legal
@@ -411,6 +412,7 @@ model User {
   refreshTokens            RefreshToken[]
   created_contracts        Contract[]          @relation("contract_created_by")
   signed_contracts         Contract[]          @relation("contract_signed_by")
+  process_rejections       ProcessRejection[]
 }
 
 // RefreshToken: tokens de sessão vinculados a usuários
@@ -640,6 +642,7 @@ model Process {
   contracts       Contract[] @relation("process_contracts")
 
   ProcessStatusHistory ProcessStatusHistory[]
+  rejections           ProcessRejection[]
   products             Product[]
 
   @@unique([client_id, specialist_id, car_id, boat_id, aircraft_id], name: "unique_active_product")
@@ -661,6 +664,22 @@ model ProcessStatusHistory {
 
   @@index([processId])
   @@index([changed_at])
+}
+
+// ProcessRejection: registro de rejeição de um processo com motivo textual
+model ProcessRejection {
+  id               String   @id @default(uuid()) @db.Uuid
+  process_id       String   @db.Uuid
+  rejected_by_id   String   @db.Uuid
+  rejection_reason String   @db.Text
+  rejected_at      DateTime @default(now())
+
+  process     Process @relation(fields: [process_id], references: [id], onDelete: Cascade)
+  rejected_by User    @relation(fields: [rejected_by_id], references: [id])
+
+  @@index([process_id])
+  @@index([rejected_by_id])
+  @@index([rejected_at])
 }
 
 // Contract: documentos digitais com integração a provedores de assinatura (DocuSign, etc.)
