@@ -12,6 +12,8 @@ import ConsultantsPage from "../pages/admin/ConsultantsPage";
 import ProductsPage from "../pages/specialist/ProductsPage";
 import ProductFormPage from "../pages/specialist/ProductFormPage";
 import SpecialistDashboard from "../pages/specialist/SpecialistDashboard";
+import CreateContractPage from "../pages/specialist/CreateContractPage";
+import ProcessesPage from "../pages/specialist/ProcessesPage";
 import CustomerHomePage from "../pages/customer/CustomerHomePage";
 import ConsultoriaPage from "../pages/customer/ConsultoriaPage";
 
@@ -141,6 +143,26 @@ export default function RouterApp() {
         <MainLayout>
           <ProtectedRoute allowedRoles={["SPECIALIST"]}>
             <ProductFormPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/specialist/contracts/new",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["SPECIALIST"]}>
+            <CreateContractPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/specialist/processes",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["SPECIALIST"]}>
+            < ProcessesPage />
           </ProtectedRoute>
         </MainLayout>
       ),
