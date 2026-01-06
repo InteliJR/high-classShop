@@ -9,7 +9,7 @@ export class UserEntity
   implements Omit<PrismaUser, 'password_hash' | 'updated_at'>
 {
   @Expose()
-  id:  string;
+  id: string;
 
   @Expose()
   role: UserRole;
@@ -49,6 +49,9 @@ export class UserEntity
 
   @Expose()
   identification_number: string | null;
+
+  @Expose()
+  calendly_url: string | null;
 
   @Exclude()
   password_hash: string;

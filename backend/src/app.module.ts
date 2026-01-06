@@ -18,6 +18,7 @@ import { DashboardModule } from './features/dashboard/dashboard.module';
 import { DocusignModule } from './providers/docusign/docusign.module';
 import { UsersModule } from './features/users/users.module';
 import { AuthGuard } from './auth/auth.guard';
+import { AppointmentsModule } from './features/appointments/appointments.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AuthGuard } from './auth/auth.guard';
     AuthModule,
     ConsultantModule,
     ProcessesModule,
+    AppointmentsModule,
     ContractsModule,
     DashboardModule,
     DocusignModule,
