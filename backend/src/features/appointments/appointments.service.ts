@@ -4,6 +4,7 @@ import {
   ConflictException,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import {
@@ -51,6 +52,8 @@ import { plainToInstance } from 'class-transformer';
  */
 @Injectable()
 export class AppointmentsService {
+  private readonly logger = new Logger(AppointmentsService.name);
+
   constructor(private prisma: PrismaService) {}
 
   /**
@@ -76,9 +79,14 @@ export class AppointmentsService {
     dto: CreateAppointmentDto,
     userId: string,
   ): Promise<AppointmentResponseEntity> {
+    this.logger.log(
+      `[create] Criando agendamento para cliente ${dto.client_id} com especialista ${dto.specialist_id}`,
+    );
+
     // Validação 1: appointment_datetime deve ser futuro
     const now = new Date();
     if (new Date(dto.appointment_datetime) <= now) {
+      this.logger.warn('[create] Data/hora do agendamento é no passado');
       throw new BadRequestException({
         success: false,
         error: {
@@ -94,10 +102,14 @@ export class AppointmentsService {
     }
 
     // Validação 2: Verificar que cliente existe
+    this.logger.debug(
+      `[create] Validando existência do cliente ${dto.client_id}`,
+    );
     const client = await this.prisma.user.findUnique({
       where: { id: dto.client_id },
     });
     if (!client) {
+      this.logger.error(`[create] Cliente ${dto.client_id} não encontrado`);
       throw new NotFoundException({
         success: false,
         error: {

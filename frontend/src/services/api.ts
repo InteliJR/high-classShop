@@ -3,7 +3,7 @@ import { useAuth } from "../store/authStateManager";
 
 // Instanciar a origem das rquisições para a api
 const api = axios.create({
-  baseURL: "http://localhost:3000/api/",
+  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api/",
 });
 
 // Adiciona token de acesso no header das requisições
@@ -37,7 +37,7 @@ api.interceptors.response.use(
         await refresh();
         const token = useAuth.getState().accessToken;
         if (!token) {
-          throw new Error('Failed to refresh token');
+          throw new Error("Failed to refresh token");
         }
         original.headers.Authorization = `Bearer ${token}`;
         return api(original);

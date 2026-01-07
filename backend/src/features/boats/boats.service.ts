@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -12,13 +17,21 @@ import {
 } from 'src/shared/dto/filters.dto';
 import { Boat } from './entity/boat.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
-import { CsvImportService, CsvColumnDefinition } from 'src/shared/services/csv-import.service';
-import { CsvImportResponseDto, CsvErrorRow } from 'src/shared/dto/csv-import-response.dto';
+import {
+  CsvImportService,
+  CsvColumnDefinition,
+} from 'src/shared/services/csv-import.service';
+import {
+  CsvImportResponseDto,
+  CsvErrorRow,
+} from 'src/shared/dto/csv-import-response.dto';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class BoatsService {
+  private readonly logger = new Logger(BoatsService.name);
+
   // Definição das colunas do CSV para barcos
   private readonly csvColumns: CsvColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
@@ -45,21 +58,35 @@ export class BoatsService {
   ) {}
 
   async create(createBoatDto: CreateBoatDto) {
+    this.logger.log('[create] Iniciando criação de novo barco');
     const { images, ...boatData } = createBoatDto;
 
     try {
       // 1. Criar o barco
+      this.logger.debug(
+        `[create] Criando barco: ${boatData.marca} ${boatData.modelo}`,
+      );
       const boat = await this.prismaService.boat.create({ data: boatData });
+      this.logger.log(`[create] Barco criado com sucesso - ID: ${boat.id}`);
 
       // 2. Processar e fazer upload das imagens, se existirem
       if (images && images.length > 0) {
+        this.logger.log(
+          `[create] Processando ${images.length} imagens para o barco ${boat.id}`,
+        );
         for (let i = 0; i < images.length; i++) {
           const image = images[i];
 
           const timestamp = Date.now();
           const key = `boats/${boat.id}/${timestamp}-${i}.jpg`;
 
-          const imageKey = await this.s3Service.uploadBase64Image(image.data, key);
+          this.logger.debug(
+            `[create] Fazendo upload da imagem ${i + 1}/${images.length} para S3`,
+          );
+          const imageKey = await this.s3Service.uploadBase64Image(
+            image.data,
+            key,
+          );
 
           await this.prismaService.boat_image.create({
             data: {
@@ -69,16 +96,31 @@ export class BoatsService {
               product_type: 'BOAT',
             },
           });
+          this.logger.debug(`[create] Imagem ${i + 1} salva com sucesso`);
         }
+        this.logger.log(
+          `[create] Todas as ${images.length} imagens processadas com sucesso`,
+        );
       }
 
       // 3. Retornar o barco com as imagens
-      return await this.prismaService.boat.findUnique({
+      const boatWithImages = await this.prismaService.boat.findUnique({
         where: { id: boat.id },
         include: { images: true },
       });
+      if (!boatWithImages) {
+        throw new Error('Erro ao buscar barco criado');
+      }
+      this.logger.log(
+        `[create] Barco ${boat.id} criado com sucesso com ${boatWithImages.images.length} imagens`,
+      );
+      return boatWithImages;
     } catch (error) {
-      throw new Error(`Erro ao criar lancha: ${error.message}`);
+      this.logger.error(
+        `[create] Erro ao criar barco: ${error.message}`,
+        error.stack,
+      );
+      throw new Error(`Erro ao criar barco: ${error.message}`);
     }
   }
 
@@ -171,7 +213,7 @@ export class BoatsService {
             boat.images.map(async (image) => ({
               ...image,
               image_url: await this.s3Service.getSignedUrl(image.image_url),
-            }))
+            })),
           );
         }
 
@@ -184,7 +226,7 @@ export class BoatsService {
             ? UserEntity.fromPrisma(boat.specialist)
             : null,
         };
-      })
+      }),
     );
 
     return {
@@ -195,13 +237,16 @@ export class BoatsService {
   }
 
   async findOne(id: number) {
+    this.logger.log(`[findOne] Buscando barco - ID: ${id}`);
     const boat = await this.prismaService.boat.findUnique({
       where: { id },
       include: { images: true },
     });
     if (!boat) {
+      this.logger.warn(`[findOne] Barco não encontrado - ID: ${id}`);
       throw new NotFoundException('Boat not found');
     }
+    this.logger.log(`[findOne] Barco encontrado - ID: ${id}`);
 
     // Converter as keys do S3 em URLs assinadas
     if (boat.images && boat.images.length > 0) {
@@ -209,7 +254,7 @@ export class BoatsService {
         boat.images.map(async (image) => ({
           ...image,
           image_url: await this.s3Service.getSignedUrl(image.image_url),
-        }))
+        })),
       );
       return { ...boat, images: imagesWithUrls };
     }
@@ -240,7 +285,10 @@ export class BoatsService {
           const timestamp = Date.now();
           const key = `boats/${id}/${timestamp}-${i}.jpg`;
 
-          const imageKey = await this.s3Service.uploadBase64Image(image.data, key);
+          const imageKey = await this.s3Service.uploadBase64Image(
+            image.data,
+            key,
+          );
 
           await this.prismaService.boat_image.create({
             data: {
@@ -278,11 +326,16 @@ export class BoatsService {
    * Retorna o template CSV para importação de barcos
    */
   getCsvTemplate() {
-    const requiredColumns = this.csvColumns.filter(c => c.required).map(c => c.name);
-    const optionalColumns = this.csvColumns.filter(c => !c.required).map(c => c.name);
-    
-    const templateHeader = this.csvColumns.map(c => c.name).join(',');
-    const exampleRow = 'Azimut,55 Fly,3500000,São Paulo,2022,Azimut,55 pés,Flybridge,Diesel,Volvo Penta D6,2022,Lancha,Embarcação em excelente estado com todos os opcionais,GPS Garmin - Ar condicionado - Gerador,https://example.com/imagem.jpg';
+    const requiredColumns = this.csvColumns
+      .filter((c) => c.required)
+      .map((c) => c.name);
+    const optionalColumns = this.csvColumns
+      .filter((c) => !c.required)
+      .map((c) => c.name);
+
+    const templateHeader = this.csvColumns.map((c) => c.name).join(',');
+    const exampleRow =
+      'Azimut,55 Fly,3500000,São Paulo,2022,Azimut,55 pés,Flybridge,Diesel,Volvo Penta D6,2022,Lancha,Embarcação em excelente estado com todos os opcionais,GPS Garmin - Ar condicionado - Gerador,https://example.com/imagem.jpg';
 
     return {
       template: `${templateHeader}\n${exampleRow}`,
@@ -303,7 +356,8 @@ export class BoatsService {
         motor: 'Modelo do motor (texto, opcional)',
         ano_motor: 'Ano do motor (número, opcional)',
         tipo_embarcacao: 'Tipo: Lancha, Veleiro, Iate, Jet Ski, etc (opcional)',
-        descricao_completa: 'Descrição detalhada da embarcação (texto, opcional)',
+        descricao_completa:
+          'Descrição detalhada da embarcação (texto, opcional)',
         acessorios: 'Lista de acessórios separados por hífen (opcional)',
         imagem: 'URL da imagem ou string base64 (opcional)',
       },
@@ -320,7 +374,8 @@ export class BoatsService {
         motor: 'Volvo Penta D6',
         ano_motor: 2022,
         tipo_embarcacao: 'Lancha',
-        descricao_completa: 'Embarcação em excelente estado com todos os opcionais',
+        descricao_completa:
+          'Embarcação em excelente estado com todos os opcionais',
         acessorios: 'GPS Garmin - Ar condicionado - Gerador',
         imagem: 'https://example.com/imagem.jpg',
       },
@@ -330,10 +385,16 @@ export class BoatsService {
   /**
    * Importa barcos a partir de um CSV
    */
-  async importFromCsv(csvContent: string, user: UserEntity): Promise<CsvImportResponseDto> {
+  async importFromCsv(
+    csvContent: string,
+    user: UserEntity,
+  ): Promise<CsvImportResponseDto> {
     // 1. Validar estrutura do CSV
-    const structureValidation = this.csvImportService.validateStructure(csvContent, this.csvColumns);
-    
+    const structureValidation = this.csvImportService.validateStructure(
+      csvContent,
+      this.csvColumns,
+    );
+
     if (!structureValidation.valid) {
       throw new BadRequestException({
         message: 'Estrutura do CSV inválida',
@@ -345,7 +406,7 @@ export class BoatsService {
 
     // 2. Parsear o CSV
     const rows = this.csvImportService.parseCSV(csvContent);
-    
+
     const insertedIds: number[] = [];
     const errorRows: CsvErrorRow[] = [];
 
@@ -373,7 +434,8 @@ export class BoatsService {
         if (row.motor) boatData.motor = row.motor;
         if (row.ano_motor) boatData.ano_motor = Number(row.ano_motor);
         if (row.tipo_embarcacao) boatData.tipo_embarcacao = row.tipo_embarcacao;
-        if (row.descricao_completa) boatData.descricao_completa = row.descricao_completa;
+        if (row.descricao_completa)
+          boatData.descricao_completa = row.descricao_completa;
         if (row.acessorios) boatData.acessorios = row.acessorios;
 
         // Validar usando class-validator
@@ -381,11 +443,13 @@ export class BoatsService {
         const validationErrors = await validate(dto, { whitelist: true });
 
         if (validationErrors.length > 0) {
-          const errorMessages = validationErrors.map(err => {
-            const constraints = err.constraints ? Object.values(err.constraints) : [];
+          const errorMessages = validationErrors.map((err) => {
+            const constraints = err.constraints
+              ? Object.values(err.constraints)
+              : [];
             return `${err.property}: ${constraints.join(', ')}`;
           });
-          
+
           errorRows.push({
             row: rowNumber,
             reason: errorMessages.join('; '),
@@ -402,7 +466,10 @@ export class BoatsService {
           try {
             const timestamp = Date.now();
             const key = `boats/${boat.id}/${timestamp}-0.jpg`;
-            const imageKey = await this.s3Service.uploadImageAuto(row.imagem, key);
+            const imageKey = await this.s3Service.uploadImageAuto(
+              row.imagem,
+              key,
+            );
 
             await this.prismaService.boat_image.create({
               data: {
@@ -413,7 +480,9 @@ export class BoatsService {
               },
             });
           } catch (imageError) {
-            console.warn(`Erro ao processar imagem para barco ${boat.id}: ${imageError.message}`);
+            console.warn(
+              `Erro ao processar imagem para barco ${boat.id}: ${imageError.message}`,
+            );
           }
         }
 

@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -12,13 +17,21 @@ import {
 } from 'src/shared/dto/filters.dto';
 import { Car } from './entity/car.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
-import { CsvImportService, CsvColumnDefinition } from 'src/shared/services/csv-import.service';
-import { CsvImportResponseDto, CsvErrorRow } from 'src/shared/dto/csv-import-response.dto';
+import {
+  CsvImportService,
+  CsvColumnDefinition,
+} from 'src/shared/services/csv-import.service';
+import {
+  CsvImportResponseDto,
+  CsvErrorRow,
+} from 'src/shared/dto/csv-import-response.dto';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class CarsService {
+  private readonly logger = new Logger(CarsService.name);
+
   // Definição das colunas do CSV para carros
   private readonly csvColumns: CsvColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
@@ -39,7 +52,7 @@ export class CarsService {
     private prismaService: PrismaService,
     private s3Service: S3Service,
     private csvImportService: CsvImportService,
-  ) { }
+  ) {}
 
   async create(createCarDto: CreateCarDto) {
     const { images, ...carData } = createCarDto;
@@ -58,7 +71,10 @@ export class CarsService {
           const key = `cars/${car.id}/${timestamp}-${i}.jpg`;
 
           // Upload da imagem base64 para o S3
-          const imageKey = await this.s3Service.uploadBase64Image(image.data, key);
+          const imageKey = await this.s3Service.uploadBase64Image(
+            image.data,
+            key,
+          );
 
           // Salvar referência da imagem no banco de dados
           await this.prismaService.car_image.create({
@@ -175,7 +191,7 @@ export class CarsService {
             car.images.map(async (image) => ({
               ...image,
               image_url: await this.s3Service.getSignedUrl(image.image_url),
-            }))
+            })),
           );
         }
 
@@ -183,9 +199,11 @@ export class CarsService {
           ...car,
           valor: car.valor.toNumber(),
           images: imagesWithUrls,
-          specialist: car.specialist ? UserEntity.fromPrisma(car.specialist) : null,
+          specialist: car.specialist
+            ? UserEntity.fromPrisma(car.specialist)
+            : null,
         };
-      })
+      }),
     );
 
     return {
@@ -196,13 +214,16 @@ export class CarsService {
   }
 
   async findOne(id: number) {
+    this.logger.log(`[findOne] Buscando carro - ID: ${id}`);
     const car = await this.prismaService.car.findUnique({
       where: { id },
       include: { images: true },
     });
     if (!car) {
+      this.logger.warn(`[findOne] Carro não encontrado - ID: ${id}`);
       throw new NotFoundException('Car not found');
     }
+    this.logger.log(`[findOne] Carro encontrado - ID: ${id}`);
 
     // Converter as keys do S3 em URLs assinadas
     if (car.images && car.images.length > 0) {
@@ -210,7 +231,7 @@ export class CarsService {
         car.images.map(async (image) => ({
           ...image,
           image_url: await this.s3Service.getSignedUrl(image.image_url),
-        }))
+        })),
       );
       return { ...car, images: imagesWithUrls };
     }
@@ -241,7 +262,10 @@ export class CarsService {
           const timestamp = Date.now();
           const key = `cars/${id}/${timestamp}-${i}.jpg`;
 
-          const imageKey = await this.s3Service.uploadBase64Image(image.data, key);
+          const imageKey = await this.s3Service.uploadBase64Image(
+            image.data,
+            key,
+          );
 
           await this.prismaService.car_image.create({
             data: {
@@ -279,11 +303,16 @@ export class CarsService {
    * Retorna o template CSV para importação de carros
    */
   getCsvTemplate() {
-    const requiredColumns = this.csvColumns.filter(c => c.required).map(c => c.name);
-    const optionalColumns = this.csvColumns.filter(c => !c.required).map(c => c.name);
-    
-    const templateHeader = this.csvColumns.map(c => c.name).join(',');
-    const exampleRow = 'BMW,X5,450000,São Paulo,2023,Preto,15000,Automático,Gasolina,SUV,Carro em excelente estado,https://example.com/imagem.jpg';
+    const requiredColumns = this.csvColumns
+      .filter((c) => c.required)
+      .map((c) => c.name);
+    const optionalColumns = this.csvColumns
+      .filter((c) => !c.required)
+      .map((c) => c.name);
+
+    const templateHeader = this.csvColumns.map((c) => c.name).join(',');
+    const exampleRow =
+      'BMW,X5,450000,São Paulo,2023,Preto,15000,Automático,Gasolina,SUV,Carro em excelente estado,https://example.com/imagem.jpg';
 
     return {
       template: `${templateHeader}\n${exampleRow}`,
@@ -300,7 +329,8 @@ export class CarsService {
         cor: 'Cor do veículo (texto, opcional)',
         km: 'Quilometragem (número, opcional)',
         cambio: 'Tipo de câmbio: Manual, Automático, CVT (opcional)',
-        combustivel: 'Tipo de combustível: Gasolina, Etanol, Flex, Diesel, Elétrico, Híbrido (opcional)',
+        combustivel:
+          'Tipo de combustível: Gasolina, Etanol, Flex, Diesel, Elétrico, Híbrido (opcional)',
         tipo_categoria: 'Categoria: Sedan, SUV, Hatch, Pickup, etc (opcional)',
         descricao: 'Descrição detalhada do veículo (texto, opcional)',
         imagem: 'URL da imagem ou string base64 (opcional)',
@@ -325,10 +355,16 @@ export class CarsService {
   /**
    * Importa carros a partir de um CSV
    */
-  async importFromCsv(csvContent: string, user: UserEntity): Promise<CsvImportResponseDto> {
+  async importFromCsv(
+    csvContent: string,
+    user: UserEntity,
+  ): Promise<CsvImportResponseDto> {
     // 1. Validar estrutura do CSV
-    const structureValidation = this.csvImportService.validateStructure(csvContent, this.csvColumns);
-    
+    const structureValidation = this.csvImportService.validateStructure(
+      csvContent,
+      this.csvColumns,
+    );
+
     if (!structureValidation.valid) {
       throw new BadRequestException({
         message: 'Estrutura do CSV inválida',
@@ -340,7 +376,7 @@ export class CarsService {
 
     // 2. Parsear o CSV
     const rows = this.csvImportService.parseCSV(csvContent);
-    
+
     const insertedIds: number[] = [];
     const errorRows: CsvErrorRow[] = [];
 
@@ -373,11 +409,13 @@ export class CarsService {
         const validationErrors = await validate(dto, { whitelist: true });
 
         if (validationErrors.length > 0) {
-          const errorMessages = validationErrors.map(err => {
-            const constraints = err.constraints ? Object.values(err.constraints) : [];
+          const errorMessages = validationErrors.map((err) => {
+            const constraints = err.constraints
+              ? Object.values(err.constraints)
+              : [];
             return `${err.property}: ${constraints.join(', ')}`;
           });
-          
+
           errorRows.push({
             row: rowNumber,
             reason: errorMessages.join('; '),
@@ -394,7 +432,10 @@ export class CarsService {
           try {
             const timestamp = Date.now();
             const key = `cars/${car.id}/${timestamp}-0.jpg`;
-            const imageKey = await this.s3Service.uploadImageAuto(row.imagem, key);
+            const imageKey = await this.s3Service.uploadImageAuto(
+              row.imagem,
+              key,
+            );
 
             await this.prismaService.car_image.create({
               data: {
@@ -406,7 +447,9 @@ export class CarsService {
             });
           } catch (imageError) {
             // Não falha a inserção se a imagem falhar, apenas registra
-            console.warn(`Erro ao processar imagem para carro ${car.id}: ${imageError.message}`);
+            console.warn(
+              `Erro ao processar imagem para carro ${car.id}: ${imageError.message}`,
+            );
           }
         }
 

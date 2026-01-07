@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProcessDTO } from './dto/create-process.dto';
@@ -19,6 +20,8 @@ import { ProcessWithHistory } from './entity/process-history.response';
 
 @Injectable()
 export class ProcessesService {
+  private readonly logger = new Logger(ProcessesService.name);
+
   constructor(private readonly prismaService: PrismaService) {}
 
   /**
@@ -57,6 +60,9 @@ export class ProcessesService {
    * @returns {Promise<ProcessResponse>} - Entidade do processo
    */
   async create(createProcessDto: CreateProcessDTO): Promise<ProcessResponse> {
+    this.logger.log(
+      `[create] Iniciando criação de processo para cliente ${createProcessDto.client_id}`,
+    );
     const { product_id, client_id, specialist_id, ...dataToSave } =
       createProcessDto;
 
@@ -84,10 +90,14 @@ export class ProcessesService {
     };
 
     // Verificar se o processo já existe
+    this.logger.debug('[create] Verificando se processo já existe');
     const processAlreadyExists = await this.prismaService.process.findFirst({
       where: whereClause,
     });
     if (processAlreadyExists) {
+      this.logger.warn(
+        `[create] Processo já existe para cliente ${client_id} e produto ${product_id}`,
+      );
       throw new BadRequestException();
     }
 
