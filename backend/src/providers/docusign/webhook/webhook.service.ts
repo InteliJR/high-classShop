@@ -317,11 +317,11 @@ export class DocuSignWebhookService {
         } else if (
           ['DECLINED', 'VOIDED', 'TIMEDOUT'].includes(providerStatus)
         ) {
-          // Envelope foi recusado/cancelado/expirou → voltar para NEGOTIATION e limpar contrato ativo
-          processStatusUpdate.status = 'NEGOTIATION';
+          // Envelope foi recusado/cancelado/expirou → marcar processo como REJECTED
+          processStatusUpdate.status = 'REJECTED';
           processStatusUpdate.active_contract_id = null;
           this.logger.log(
-            `[SYNC] Processo ${process.id}: → NEGOTIATION (contrato ${providerStatus})`,
+            `[SYNC] Processo ${process.id}: → REJECTED (contrato ${providerStatus})`,
           );
           // Registrar razão de conclusão baseada no status do provider
           let completionReason: ProcessCompletionReason =

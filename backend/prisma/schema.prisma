@@ -100,6 +100,22 @@ enum ProcessCompletionReason {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ▸ PROPOSTAS DE NEGOCIAÇÃO
+// ─────────────────────────────────────────────────────────────────────────────
+// ProposalStatus: estados possíveis de uma proposta de valor
+// - PENDING: aguardando resposta do outro participante
+// - ACCEPTED: proposta aceita (encerra negociação, move processo para PROCESSING_CONTRACT)
+// - REJECTED: proposta rejeitada (permite nova proposta do mesmo participante)
+// - COUNTERED: foi feita uma contraproposta (esta proposta não está mais ativa)
+
+enum ProposalStatus {
+  PENDING   @map("PENDING")
+  ACCEPTED  @map("ACCEPTED")
+  REJECTED  @map("REJECTED")
+  COUNTERED @map("COUNTERED")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ▸ PRODUTO (Product Enums)
 // ─────────────────────────────────────────────────────────────────────────────
 // • EstadoProduto: condição do produto
@@ -401,22 +417,25 @@ model User {
   // Ex: https://calendly.com/nome-especialista
   calendly_url String?
 
-  created_at               DateTime            @default(now())
-  updated_at               DateTime            @updatedAt
+  created_at               DateTime              @default(now())
+  updated_at               DateTime              @updatedAt
   cars                     Car[]
   boats                    Boat[]
   aircraft                 Aircraft[]
-  processesAsClient        Process[]           @relation("process_as_client")
-  processesAsSpecialist    Process[]           @relation("process_as_specialist")
-  appointmentsAsClient     Appointment[]       @relation("appointment_as_client")
-  appointmentsAsSpecialist Appointment[]       @relation("appointment_as_specialist")
+  processesAsClient        Process[]             @relation("process_as_client")
+  processesAsSpecialist    Process[]             @relation("process_as_specialist")
+  appointmentsAsClient     Appointment[]         @relation("appointment_as_client")
+  appointmentsAsSpecialist Appointment[]         @relation("appointment_as_specialist")
   car_interests            Car_interest[]
   boat_interests           Boat_interest[]
   aircraft_interests       Aircraft_interest[]
   refreshTokens            RefreshToken[]
-  created_contracts        Contract[]          @relation("contract_created_by")
-  signed_contracts         Contract[]          @relation("contract_signed_by")
+  created_contracts        Contract[]            @relation("contract_created_by")
+  signed_contracts         Contract[]            @relation("contract_signed_by")
   process_rejections       ProcessRejection[]
+  // Propostas de negociação enviadas e recebidas pelo usuário
+  proposals_sent           NegotiationProposal[] @relation("proposal_author")
+  proposals_received       NegotiationProposal[] @relation("proposal_recipient")
 }
 
 // RefreshToken: tokens de sessão vinculados a usuários
@@ -653,6 +672,13 @@ model Process {
   appointment          Appointment?           @relation("appointment_process", fields: [appointment_id], references: [id], onDelete: Cascade)
   appointment_id       String?                @unique @db.Uuid
 
+  // Propostas de negociação: histórico de propostas de valor entre cliente e especialista
+  // TODO: Implementar limite de propostas para evitar spam (sugestão: 20 por processo)
+  proposals            NegotiationProposal[] @relation("process_proposals")
+  // Proposta aceita final que definiu o valor de venda
+  accepted_proposal    NegotiationProposal?  @relation("accepted_proposal", fields: [accepted_proposal_id], references: [id])
+  accepted_proposal_id String?               @unique @db.Uuid
+
   @@unique([client_id, specialist_id, car_id, boat_id, aircraft_id], name: "unique_active_product")
   @@index([status])
   @@index([product_type])
@@ -688,6 +714,57 @@ model ProcessRejection {
   @@index([process_id])
   @@index([rejected_by_id])
   @@index([rejected_at])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ PROPOSTAS DE NEGOCIAÇÃO
+// ─────────────────────────────────────────────────────────────────────────────
+// NegotiationProposal: proposta de valor enviada durante fase NEGOTIATION
+// Funciona como um chat de propostas onde cliente e especialista alternam propostas
+// até chegarem a um acordo (ACCEPTED) ou desistirem (REJECTED)
+//
+// Regras de negócio:
+// - Valor mínimo: 80% do valor original do produto
+// - Alternância: após uma proposta, o outro participante deve responder
+// - Proposta PENDING: aguardando resposta
+// - Proposta ACCEPTED: encerra negociação, move processo para PROCESSING_CONTRACT
+// - Proposta REJECTED: permite nova proposta do mesmo participante
+// - Proposta COUNTERED: foi feita contraproposta, esta não está mais ativa
+//
+// TODO: Implementar limite de propostas para evitar spam (sugestão: 20 por processo)
+// TODO: Implementar timeout de resposta (ex: 48h para responder)
+// TODO: Adicionar notificações por email quando nova proposta chegar
+
+model NegotiationProposal {
+  id             String         @id @default(uuid()) @db.Uuid
+  process_id     String         @db.Uuid
+  proposed_by_id String         @db.Uuid
+  proposed_to_id String         @db.Uuid
+  // Valor proposto em Decimal para precisão monetária
+  // Validação: deve ser >= 80% do valor do produto (validado no backend)
+  proposed_value Decimal        @db.Decimal(15, 2)
+  status         ProposalStatus @default(PENDING)
+  // Mensagem opcional para contextualizar a proposta (max 500 chars, validado no DTO)
+  message        String?        @db.VarChar(500)
+  // Referência à proposta anterior que esta responde (para histórico encadeado)
+  counter_to_id  String?        @db.Uuid
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
+
+  // Relações
+  process             Process               @relation("process_proposals", fields: [process_id], references: [id], onDelete: Cascade)
+  proposed_by         User                  @relation("proposal_author", fields: [proposed_by_id], references: [id])
+  proposed_to         User                  @relation("proposal_recipient", fields: [proposed_to_id], references: [id])
+  counter_to          NegotiationProposal?  @relation("counter_proposals", fields: [counter_to_id], references: [id])
+  counter_proposals   NegotiationProposal[] @relation("counter_proposals")
+  // Relação inversa: processo que aceitou esta proposta como final
+  accepted_by_process Process?              @relation("accepted_proposal")
+
+  @@index([process_id])
+  @@index([proposed_by_id])
+  @@index([proposed_to_id])
+  @@index([status])
+  @@index([created_at])
 }
 
 // Contract: documentos digitais com integração a provedores de assinatura (DocuSign, etc.)

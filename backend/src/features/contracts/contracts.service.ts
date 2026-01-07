@@ -118,7 +118,28 @@ export class ContractsService {
         throw new ProcessNotFoundException(createContractDto.process_id);
       }
 
-      // 1.2.1 Validar se há um contrato ativo que ainda está em negociação
+      // 1.2.1 Validar que processo está em PROCESSING_CONTRACT ou DOCUMENTATION
+      // Contratos só podem ser criados após negociação ser aceita
+      const allowedStatuses = ['PROCESSING_CONTRACT', 'DOCUMENTATION'];
+      if (!allowedStatuses.includes(process.status)) {
+        this.logger.warn(
+          `Processo ${createContractDto.process_id} não está em status adequado para criação de contrato. Status atual: ${process.status}`,
+        );
+        throw new InternalServerErrorException({
+          success: false,
+          error: {
+            code: 400,
+            message:
+              'Processo deve estar em fase de preparação de contrato ou documentação',
+            details: {
+              current_status: process.status,
+              allowed_statuses: allowedStatuses,
+            },
+          },
+        });
+      }
+
+      // 1.2.2 Validar se há um contrato ativo que ainda está em negociação
       if (process.active_contract_id) {
         const activeContract = await this.prismaService.contract.findUnique({
           where: { id: process.active_contract_id },
@@ -283,11 +304,12 @@ export class ContractsService {
           });
 
           // 5.4 Atualizar processo para definir este contrato como ativo e mudar status para PROCESSING_CONTRACT
+          // (Contrato foi enviado para DocuSign, avança do DOCUMENTATION para PROCESSING_CONTRACT)
           await tx.process.update({
             where: { id: createContractDto.process_id },
             data: {
               active_contract_id: contract.id,
-              status: 'PROCESSING_CONTRACT', // Status intermediário: processando contrato
+              status: 'PROCESSING_CONTRACT', // Aguardando resposta da assinatura
             },
           });
 

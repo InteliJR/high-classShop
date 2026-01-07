@@ -19,6 +19,7 @@ import ConsultoriaPage from "../pages/customer/ConsultoriaPage";
 import ProfilePage from "../pages/ProfilePage";
 import ProductPage from "../pages/ProductPage";
 import CustomerProcessesPage from "../pages/customer/CustomerProcessesPage";
+import NegotiationPage from "../pages/negotiation/NegotiationPage";
 
 export default function RouterApp() {
   const routerApp = createBrowserRouter([
@@ -198,6 +199,17 @@ export default function RouterApp() {
         <MainLayout>
           <ProtectedRoute allowedRoles={["SPECIALIST"]}>
             <ProcessesPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    // Negotiation page (accessible by customers and specialists)
+    {
+      path: "/processes/:processId/negotiation",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["CUSTOMER", "SPECIALIST"]}>
+            <NegotiationPage />
           </ProtectedRoute>
         </MainLayout>
       ),

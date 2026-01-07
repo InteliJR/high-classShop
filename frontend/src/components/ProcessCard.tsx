@@ -5,8 +5,10 @@ import {
   ExternalLink,
   Loader,
   X,
+  MessageSquare,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import type { Process } from "../services/processes.service";
 import type { Product } from "../types/types";
 import React from "react";
@@ -47,6 +49,7 @@ export default function ProcessCard({
   onUploadDocuments,
   onStatusUpdated,
 }: ProcessCardProps) {
+  const navigate = useNavigate();
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [completionReason, setCompletionReason] = useState<string | null>(null);
   const [activeContract, setActiveContract] = useState<any>(null);
@@ -97,23 +100,33 @@ export default function ProcessCard({
           : ""
       }`}
     >
-      {/* Upload Documents Button: Fixed bottom right with margin, only when not expanded */}
-      {process.status === "NEGOTIATION" && onUploadDocuments && !isExpanded && (
-        <>
-          {/* Desktop: botão absoluto no canto inferior direito do card */}
+      {/* Negotiation button - always visible on NEGOTIATION status */}
+      {process.status === "NEGOTIATION" && !isExpanded && (
+        <div className="hidden md:block absolute top-6 right-6 z-20">
           <button
-            onClick={onUploadDocuments}
-            className="
-        hidden md:block
-        px-4 py-2 bg-slate-700 text-white text-xs md:text-sm font-medium rounded-lg shadow-lg hover:bg-slate-800 transition-colors whitespace-nowrap
-        absolute bottom-6 right-6 z-20
-      "
-            style={{ position: "absolute" }}
+            onClick={() => navigate(`/processes/${process.id}/negotiation`)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs md:text-sm font-medium rounded-lg shadow-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
           >
-            Subir documento
+            <MessageSquare size={16} />
+            Negociar
           </button>
-        </>
+        </div>
       )}
+      {/* Upload Contract Button: For DOCUMENTATION status */}
+      {process.status === "DOCUMENTATION" &&
+        onUploadDocuments &&
+        !isExpanded && (
+          <div className="hidden md:block absolute top-6 right-6 z-20">
+            <button
+              onClick={onUploadDocuments}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white text-xs md:text-sm font-medium rounded-lg shadow-lg hover:bg-orange-700 transition-colors whitespace-nowrap"
+            >
+              Enviar Contrato
+            </button>
+          </div>
+        )}
+      {/* Upload Documents Button: Fixed bottom right with margin, only when not expanded */}
+      
       {/* Header: Process Title with Client and Product */}
       <div className="px-3 py-2 md:px-6 md:py-4 border-b border-gray-100 flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -161,33 +174,34 @@ export default function ProcessCard({
           </div>
         </div>
 
-        {/* Mobile: botão logo abaixo do status, antes do stepper */}
-        {process.status === "NEGOTIATION" &&
+        {/* Mobile: botões logo abaixo do status, antes do stepper */}
+        {process.status === "NEGOTIATION" && !isExpanded && (
+          <div className="md:hidden w-full mb-2 flex flex-col gap-2">
+            <button
+              onClick={() => navigate(`/processes/${process.id}/negotiation`)}
+              className="w-full px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-blue-700 transition-colors inline-flex items-center justify-center gap-1"
+            >
+              <MessageSquare size={14} />
+              Negociar
+            </button>
+          </div>
+        )}
+
+        {/* Mobile: botão para enviar contrato em DOCUMENTATION */}
+        {process.status === "DOCUMENTATION" &&
           onUploadDocuments &&
           !isExpanded && (
-            <div className="md:hidden w-full mb-2 flex justify-end">
+            <div className="md:hidden w-full mb-2 flex flex-col gap-2">
               <button
                 onClick={onUploadDocuments}
-                className="px-4 py-2 bg-slate-700 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-slate-800 transition-colors whitespace-nowrap"
+                className="w-full px-4 py-2 bg-orange-600 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-orange-700 transition-colors inline-flex items-center justify-center gap-1"
               >
-                Subir documento
+                Enviar Contrato
               </button>
             </div>
           )}
 
         {/* Desabilitar upload enquanto processa contrato */}
-        {process.status === "PROCESSING_CONTRACT" &&
-          onUploadDocuments &&
-          !isExpanded && (
-            <div className="md:hidden w-full mb-2 flex justify-end">
-              <button
-                disabled
-                className="px-4 py-2 bg-gray-300 text-gray-600 text-xs font-medium rounded-lg shadow-lg cursor-not-allowed whitespace-nowrap"
-              >
-                Processando...
-              </button>
-            </div>
-          )}
 
         {/* Document Link: Show if in DOCUMENTATION or COMPLETED status and contract exists with S3 URL */}
         {(process.status === "DOCUMENTATION" ||
@@ -413,13 +427,24 @@ export default function ProcessCard({
               Alterar Status
             </button>
 
-            {/* Upload Documents Button: Only show if status is NEGOTIATION */}
-            {process.status === "NEGOTIATION" && onUploadDocuments && (
+            {/* Negotiation Button: Only show if status is NEGOTIATION */}
+            {process.status === "NEGOTIATION" && (
+              <button
+                onClick={() => navigate(`/processes/${process.id}/negotiation`)}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 bg-blue-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
+              >
+                <MessageSquare size={16} />
+                Ver Negociação
+              </button>
+            )}
+
+            {/* Upload Contract Button: Only show if status is DOCUMENTATION */}
+            {process.status === "DOCUMENTATION" && onUploadDocuments && (
               <button
                 onClick={onUploadDocuments}
-                className="flex-1 px-3 py-2 md:px-4 md:py-2 bg-slate-700 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors whitespace-nowrap"
+                className="flex-1 px-3 py-2 md:px-4 md:py-2 bg-orange-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors whitespace-nowrap"
               >
-                Subir documentos
+                Enviar Contrato
               </button>
             )}
           </div>
