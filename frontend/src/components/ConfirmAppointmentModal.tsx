@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, CheckCircle, AlertCircle } from "lucide-react";
+import { X, CheckCircle, AlertCircle, Mail } from "lucide-react";
 import { useCreateAppointment } from "../hooks/useCreateAppointment";
 
 interface ConfirmAppointmentModalProps {
@@ -10,6 +10,7 @@ interface ConfirmAppointmentModalProps {
   productType: "CAR" | "BOAT" | "AIRCRAFT";
   productId: string | number;
   specialistName?: string;
+  isEmailOnly?: boolean; // Se true, mostra fluxo para agendamento por email
 }
 
 export default function ConfirmAppointmentModal({
@@ -20,6 +21,7 @@ export default function ConfirmAppointmentModal({
   productType,
   productId,
   specialistName,
+  isEmailOnly = false,
 }: ConfirmAppointmentModalProps) {
   const [notes, setNotes] = useState("");
   const [appointmentDatetime, setAppointmentDatetime] = useState("");
@@ -64,7 +66,7 @@ export default function ConfirmAppointmentModal({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-xl font-bold text-gray-900">
-            Confirmar Agendamento
+            {isEmailOnly ? "Confirmar Agendamento" : "Confirmar Agendamento"}
           </h2>
           <button
             onClick={handleClose}
@@ -86,11 +88,19 @@ export default function ConfirmAppointmentModal({
               <h3 className="text-lg font-semibold text-green-600">
                 Agendamento Confirmado!
               </h3>
-              <p className="text-sm text-gray-600">
-                Seu agendamento com{" "}
-                <strong>{specialistName || "o especialista"}</strong> foi criado
-                com sucesso. Você receberá uma confirmação por e-mail em breve.
-              </p>
+              {isEmailOnly ? (
+                <p className="text-sm text-gray-600">
+                  Sua solicitação de agendamento foi registrada. Você e o
+                  especialista receberão uma confirmação por e-mail.
+                </p>
+              ) : (
+                <p className="text-sm text-gray-600">
+                  Seu agendamento com{" "}
+                  <strong>{specialistName || "o especialista"}</strong> foi
+                  criado com sucesso. Você receberá uma confirmação por e-mail
+                  em breve.
+                </p>
+              )}
               <button
                 onClick={handleClose}
                 className="w-full px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
@@ -105,6 +115,20 @@ export default function ConfirmAppointmentModal({
                 <div className="flex gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
                   <AlertCircle className="text-red-600 shrink-0" size={20} />
                   <p className="text-sm text-red-700">{error}</p>
+                </div>
+              )}
+
+              {/* Info box for email flow */}
+              {isEmailOnly && (
+                <div className="flex gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <Mail className="text-blue-600 shrink-0 mt-0.5" size={18} />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-semibold">Agendamento por E-mail</p>
+                    <p className="mt-1">
+                      Após confirmar, você poderá adicionar a data e hora do
+                      agendamento que foi acordado por e-mail.
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -125,7 +149,7 @@ export default function ConfirmAppointmentModal({
                   htmlFor="date"
                   className="block text-sm font-medium text-gray-700 mb-2"
                 >
-                  Data e Hora do Agendamento (Opcional)
+                  Data e Hora do Agendamento {!isEmailOnly && "(Opcional)"}
                 </label>
                 <input
                   id="date"

@@ -82,7 +82,8 @@ export class CreateAppointmentDto {
    * - appointment_datetime deve ser futuro (não permite agendamentos no passado)
    * - Verificar conflitos de horário do especialista
    */
-  appointment_datetime: Date; // Será validado como DateTime no service
+  @IsOptional()
+  appointment_datetime?: Date; // Será validado como DateTime no service
 
   /**
    * Anotações opcionais sobre o agendamento

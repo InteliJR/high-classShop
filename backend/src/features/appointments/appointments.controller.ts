@@ -39,7 +39,7 @@ import { UserEntity } from 'src/auth/entities/user.entity';
  * - Erros retornam estrutura padrão com code, message, details
  * - Dados retornam em UTC ISO 8601 (frontend converte para local)
  */
-@Controller('api/appointments')
+@Controller('appointments')
 @UseGuards(AuthGuard)
 export class AppointmentsController {
   constructor(private appointmentsService: AppointmentsService) {}
@@ -106,6 +106,67 @@ export class AppointmentsController {
    * - has_next/has_prev para implementar paginação
    * - summary.upcoming para mostrar "5 agendamentos próximos"
    */
+  /**
+   * GET /api/appointments/check
+   *
+   * Verifica se existe agendamento SCHEDULED entre cliente e especialista para um produto específico
+   * Usado para impedir agendamentos duplicados e condicionalmente exibir botão de confirmação
+   *
+   * Query Parameters (todos obrigatórios):
+   * - client_id: UUID do cliente
+   * - specialist_id: UUID do especialista
+   * - product_type: CAR | BOAT | AIRCRAFT
+   * - product_id: ID numérico do produto
+   *
+   * Respostas esperadas:
+   * - 200 OK: Retorna null se não encontrado, ou Appointment se existe
+   * - 400 Bad Request: Parâmetros inválidos ou ausentes
+   * - 401 Unauthorized: Token JWT inválido
+   *
+   * Exemplo de resposta 200 (sem agendamento):
+   * {
+   *   "success": true,
+   *   "message": "Agendamento não encontrado",
+   *   "data": null
+   * }
+   *
+   * Exemplo de resposta 200 (com agendamento):
+   * {
+   *   "success": true,
+   *   "message": "Agendamento encontrado",
+   *   "data": {
+   *     "id": "uuid",
+   *     "appointment_datetime": "2024-10-10T14:00:00Z",
+   *     "status": "SCHEDULED",
+   *     "created_at": "2024-10-08T14:30:00Z"
+   *   }
+   * }
+   *
+   * Frontend:
+   * - Usar este endpoint ao carregar ProductPage
+   * - Se retorna dados: Mostrar "Você já possui um agendamento marcado"
+   * - Se retorna null: Mostrar botão de confirmação normalmente
+   */
+  @Get('check')
+  async checkExisting(@Query() query: any, @Request() req: any) {
+    const { client_id, specialist_id, product_type, product_id } = query;
+
+    const appointment = await this.appointmentsService.findScheduledAppointment(
+      client_id,
+      specialist_id,
+      product_type,
+      product_id,
+    );
+
+    return {
+      success: true,
+      message: appointment
+        ? 'Agendamento encontrado'
+        : 'Agendamento não encontrado',
+      data: appointment,
+    };
+  }
+
   @Get()
   async list(@Query() query: GetAppointmentsQueryDto, @Request() req: any) {
     // userId e userRole vêm do AuthGuard (JWT descodificado)

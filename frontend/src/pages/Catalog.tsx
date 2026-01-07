@@ -124,7 +124,7 @@ export default function Catalog() {
 
       {/* Apresentação dos produtos */}
       {products.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-10 min-h-screen">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-10 min-h-screen auto-rows-max">
           {products.map((element) => {
             // Mapear categoria para productType da URL
             const productTypeMap: Record<string, string> = {
@@ -140,7 +140,7 @@ export default function Catalog() {
                 onClick={() =>
                   navigate(`/catalog/${productType}/${element.id}`)
                 }
-                className="cursor-pointer"
+                className="cursor-pointer w-full"
               >
                 <ProductCard {...element} />
               </div>

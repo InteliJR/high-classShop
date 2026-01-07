@@ -35,6 +35,7 @@ interface ProcessCardProps {
   onToggleExpand?: () => void;
   onUploadDocuments?: () => void;
   onStatusUpdated?: () => void;
+  isClientView?: boolean; // Se true, remove botões de ação (apenas visualização)
 }
 
 /**
@@ -48,6 +49,7 @@ export default function ProcessCard({
   onToggleExpand,
   onUploadDocuments,
   onStatusUpdated,
+  isClientView = false,
 }: ProcessCardProps) {
   const navigate = useNavigate();
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -100,7 +102,7 @@ export default function ProcessCard({
           : ""
       }`}
     >
-      {/* Negotiation button - always visible on NEGOTIATION status */}
+      {/* Negotiation button - always visible on NEGOTIATION status (visible for both specialist and client) */}
       {process.status === "NEGOTIATION" && !isExpanded && (
         <div className="hidden md:block absolute top-6 right-6 z-20">
           <button
@@ -112,10 +114,11 @@ export default function ProcessCard({
           </button>
         </div>
       )}
-      {/* Upload Contract Button: For DOCUMENTATION status */}
+      {/* Upload Contract Button: For DOCUMENTATION status (hidden in client view) */}
       {process.status === "DOCUMENTATION" &&
         onUploadDocuments &&
-        !isExpanded && (
+        !isExpanded &&
+        !isClientView && (
           <div className="hidden md:block absolute top-6 right-6 z-20">
             <button
               onClick={onUploadDocuments}
@@ -190,7 +193,8 @@ export default function ProcessCard({
         {/* Mobile: botão para enviar contrato em DOCUMENTATION */}
         {process.status === "DOCUMENTATION" &&
           onUploadDocuments &&
-          !isExpanded && (
+          !isExpanded &&
+          !isClientView && (
             <div className="md:hidden w-full mb-2 flex flex-col gap-2">
               <button
                 onClick={onUploadDocuments}

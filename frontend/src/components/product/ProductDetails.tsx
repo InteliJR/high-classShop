@@ -13,15 +13,63 @@ export default function ProductDetails({ product }: ProductDetailsProps) {
 
   // Função auxiliar para formatar valores monetários
   const formatValue = (value: any) => {
-    if (!value) return "N/A";
-    // Garantir conversão para número (em caso de string ou objeto Decimal)
-    const numValue =
-      typeof value === "object" ? parseFloat(value.toString()) : Number(value);
-    if (isNaN(numValue)) return "N/A";
-    return numValue.toLocaleString("pt-BR", {
+    if (value === null || value === undefined) return "N/A";
+
+    let numValue: number | null = null;
+
+    if (typeof value === "number") {
+      numValue = value;
+    } else if (typeof value === "string") {
+      // Try to parse strings like "950000" or "950.000,00"
+      const sanitized = value.replace(/\./g, "").replace(/,/g, ".");
+      const parsed = Number(sanitized);
+      numValue = Number.isNaN(parsed) ? null : parsed;
+    } else if (Array.isArray(value)) {
+      numValue = Number(value[0]);
+    } else if (typeof value === "object") {
+      // Common Decimal-like objects (Prisma/decimal.js)
+      if (typeof value.toNumber === "function") {
+        try {
+          numValue = value.toNumber();
+        } catch (e) {
+          numValue = null;
+        }
+      }
+
+      // fallback: try toString()
+      if (numValue === null && typeof value.toString === "function") {
+        const str = value.toString();
+        const parsed = Number(str.replace(/\./g, "").replace(/,/g, "."));
+        numValue = Number.isNaN(parsed) ? null : parsed;
+      }
+
+      // If the object looks like Decimal internals {d:[], e: number, s: 1|-1}
+      if (
+        numValue === null &&
+        Object.prototype.hasOwnProperty.call(value, "d") &&
+        Object.prototype.hasOwnProperty.call(value, "e") &&
+        Object.prototype.hasOwnProperty.call(value, "s")
+      ) {
+        try {
+          const digits = (value.d || []).join("");
+          const len = digits.length;
+          const exp = value.e - (len - 1);
+          const baseNum = Number(digits);
+          if (!Number.isNaN(baseNum)) {
+            numValue = baseNum * Math.pow(10, exp) * (value.s === -1 ? -1 : 1);
+          }
+        } catch (e) {
+          numValue = null;
+        }
+      }
+    }
+
+    if (numValue === null || Number.isNaN(numValue)) return "N/A";
+
+    return new Intl.NumberFormat("pt-BR", {
       style: "currency",
       currency: "BRL",
-    });
+    }).format(numValue);
   };
 
   // Função auxiliar para formatar números

@@ -1,17 +1,13 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   ChevronLeft,
   ChevronRight,
   FileText,
-  Check,
-  Clock,
-  XCircle,
-  MessageSquare,
   AlertCircle,
 } from "lucide-react";
 import { useAuth } from "../../store/authStateManager";
 import Loading from "../../components/ui/Loading";
+import ProcessCard from "../../components/ProcessCard";
 import api from "../../services/api";
 
 interface ProcessClient {
@@ -75,7 +71,6 @@ interface ApiResponse {
  */
 export default function CustomerProcessesPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [processes, setProcesses] = useState<ProcessClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,51 +80,6 @@ export default function CustomerProcessesPage() {
   const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
   const itemsPerPage = 10;
-
-  // Descrições por status
-  const statusDescriptions: Record<
-    string,
-    { title: string; description: string; icon: React.ReactNode; color: string }
-  > = {
-    SCHEDULING: {
-      title: "Agendamento",
-      description:
-        "Reunião marcada! Aguarde os próximos passos para prosseguir com a negociação.",
-      icon: <Clock size={20} />,
-      color: "blue",
-    },
-    NEGOTIATION: {
-      title: "Negociação",
-      description:
-        "Nessa etapa você enviará uma proposta e chegará em um acordo com o responsável pelo produto.",
-      icon: <MessageSquare size={20} />,
-      color: "yellow",
-    },
-    PROCESSING_CONTRACT: {
-      title: "Processando Contrato",
-      description: "O contrato está sendo processado. Aguarde a finalização.",
-      icon: <FileText size={20} />,
-      color: "orange",
-    },
-    DOCUMENTATION: {
-      title: "Documentação",
-      description: "Aguarde o envio do contrato em seu e-mail para assinatura.",
-      icon: <FileText size={20} />,
-      color: "purple",
-    },
-    COMPLETED: {
-      title: "Concluído",
-      description: "Tudo feito, parabéns pela compra! 🎉",
-      icon: <Check size={20} />,
-      color: "green",
-    },
-    REJECTED: {
-      title: "Rejeitado",
-      description: "Processo cancelado.",
-      icon: <XCircle size={20} />,
-      color: "red",
-    },
-  };
 
   // Buscar processos do cliente
   const loadProcesses = async (page: number) => {
@@ -182,47 +132,6 @@ export default function CustomerProcessesPage() {
     }
   };
 
-  const getStatusInfo = (status: string) => {
-    return statusDescriptions[status] || statusDescriptions.SCHEDULING;
-  };
-
-  const getColorClasses = (color: string) => {
-    const colors: Record<string, { bg: string; text: string; border: string }> =
-      {
-        blue: {
-          bg: "bg-blue-50",
-          text: "text-blue-700",
-          border: "border-blue-200",
-        },
-        yellow: {
-          bg: "bg-yellow-50",
-          text: "text-yellow-700",
-          border: "border-yellow-200",
-        },
-        orange: {
-          bg: "bg-orange-50",
-          text: "text-orange-700",
-          border: "border-orange-200",
-        },
-        purple: {
-          bg: "bg-purple-50",
-          text: "text-purple-700",
-          border: "border-purple-200",
-        },
-        green: {
-          bg: "bg-green-50",
-          text: "text-green-700",
-          border: "border-green-200",
-        },
-        red: {
-          bg: "bg-red-50",
-          text: "text-red-700",
-          border: "border-red-200",
-        },
-      };
-    return colors[color] || colors.blue;
-  };
-
   if (loading) {
     return <Loading size="lg" text="Carregando seus processos..." fullScreen />;
   }
@@ -268,89 +177,14 @@ export default function CustomerProcessesPage() {
         {/* Processes List */}
         {processes.length > 0 && (
           <div className="space-y-4">
-            {processes.map((process) => {
-              const statusInfo = getStatusInfo(process.status);
-              const colorClasses = getColorClasses(statusInfo.color);
-
-              return (
-                <div
-                  key={process.id}
-                  className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden"
-                >
-                  {/* Header */}
-                  <div className="px-4 py-4 border-b border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-semibold text-gray-900">
-                          {process.product?.marca}{" "}
-                          {process.product?.modelo || "Produto"}
-                        </h3>
-                        <p className="text-sm text-gray-500">
-                          Especialista:{" "}
-                          {process.specialist?.name || "Não atribuído"}
-                        </p>
-                      </div>
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium ${colorClasses.bg} ${colorClasses.text} ${colorClasses.border} border`}
-                      >
-                        {statusInfo.title}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Status Description */}
-                  <div className={`px-4 py-4 ${colorClasses.bg}`}>
-                    <div className="flex items-start gap-3">
-                      <div className={colorClasses.text}>{statusInfo.icon}</div>
-                      <div>
-                        <p
-                          className={`text-sm font-medium ${colorClasses.text}`}
-                        >
-                          {statusInfo.description}
-                        </p>
-
-                        {/* Motivo da rejeição se houver */}
-                        {process.status === "REJECTED" &&
-                          process.rejection_reason && (
-                            <p className="text-sm text-red-600 mt-2">
-                              <strong>Motivo:</strong>{" "}
-                              {process.rejection_reason}
-                            </p>
-                          )}
-
-                        {/* Notas se houver */}
-                        {process.notes && (
-                          <p className="text-sm text-gray-600 mt-2">
-                            <strong>Observações:</strong> {process.notes}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Footer */}
-                  <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-                    <p className="text-xs text-gray-500">
-                      Criado em:{" "}
-                      {new Date(process.created_at).toLocaleDateString("pt-BR")}
-                    </p>
-
-                    {/* Button to negotiate if status is NEGOTIATION */}
-                    {process.status === "NEGOTIATION" && (
-                      <button
-                        onClick={() =>
-                          navigate(`/processes/${process.id}/negotiation`)
-                        }
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        <MessageSquare size={16} />
-                        Negociar
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {processes.map((process) => (
+              <ProcessCard
+                key={process.id}
+                process={process as any}
+                product={process.product}
+                isClientView={true}
+              />
+            ))}
           </div>
         )}
 

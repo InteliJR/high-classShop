@@ -28,6 +28,12 @@ import {
   Aircraft,
 } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
+import {
+  parseDate,
+  isFutureDate,
+  formatToISO,
+  suggestNextAvailableSlots,
+} from 'src/shared/utils/date.utils';
 
 /**
  * AppointmentsService
@@ -83,22 +89,41 @@ export class AppointmentsService {
       `[create] Criando agendamento para cliente ${dto.client_id} com especialista ${dto.specialist_id}`,
     );
 
-    // Validação 1: appointment_datetime deve ser futuro
-    const now = new Date();
-    if (new Date(dto.appointment_datetime) <= now) {
-      this.logger.warn('[create] Data/hora do agendamento é no passado');
-      throw new BadRequestException({
-        success: false,
-        error: {
-          code: 400,
-          message: 'Data/hora do agendamento deve ser futura',
-          details: {
-            appointment_datetime: [
-              'appointment_datetime deve ser futuro, não pode ser no passado ou presente',
-            ],
+    // Validação 1: appointment_datetime deve ser futuro (se fornecido)
+    let appointmentDateTime: Date | null = null;
+    if (dto.appointment_datetime) {
+      appointmentDateTime = parseDate(dto.appointment_datetime);
+      if (!appointmentDateTime) {
+        this.logger.warn('[create] Data/hora do agendamento é inválida');
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message: 'Data/hora do agendamento é inválida',
+            details: {
+              appointment_datetime: [
+                'appointment_datetime deve estar em formato ISO 8601 UTC válido',
+              ],
+            },
           },
-        },
-      });
+        });
+      }
+
+      if (!isFutureDate(appointmentDateTime)) {
+        this.logger.warn('[create] Data/hora do agendamento é no passado');
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message: 'Data/hora do agendamento deve ser futura',
+            details: {
+              appointment_datetime: [
+                'appointment_datetime deve ser futuro, não pode ser no passado ou presente',
+              ],
+            },
+          },
+        });
+      }
     }
 
     // Validação 2: Verificar que cliente existe
@@ -243,47 +268,51 @@ export class AppointmentsService {
 
     // Validação 7: Verificar conflitos de horário (especialista não pode ter 2 agendamentos no mesmo horário)
     // Considerar janela de 1 hora para evitar overlap (ex: agendamento 14:00-15:00)
-    const conflictStart = new Date(
-      new Date(dto.appointment_datetime).getTime() - 60 * 60 * 1000,
-    );
-    const conflictEnd = new Date(
-      new Date(dto.appointment_datetime).getTime() + 60 * 60 * 1000,
-    );
-
-    const existingAppointment = await this.prisma.appointment.findFirst({
-      where: {
-        specialist_id: dto.specialist_id,
-        appointment_datetime: {
-          gte: conflictStart,
-          lte: conflictEnd,
-        },
-        status: { in: [StatusAgendamento.SCHEDULED] }, // Apenas agendamentos ativos
-      },
-    });
-
-    if (existingAppointment) {
-      // Gerar 3 sugestões de horários alternativos (próximas 3 horas disponíveis)
-      const suggestedTimes = await this.suggestAlternativeTimes(
-        dto.specialist_id,
-        new Date(dto.appointment_datetime),
+    let existingAppointment = null;
+    if (appointmentDateTime) {
+      const conflictStart = new Date(
+        appointmentDateTime.getTime() - 60 * 60 * 1000,
+      );
+      const conflictEnd = new Date(
+        appointmentDateTime.getTime() + 60 * 60 * 1000,
       );
 
-      throw new ConflictException({
-        success: false,
-        error: {
-          code: 409,
-          message: 'Especialista já possui agendamento neste horário',
-          details: {
-            conflicting_appointment: {
-              id: existingAppointment.id,
-              appointment_datetime:
-                existingAppointment.appointment_datetime.toISOString(),
-              client_id: existingAppointment.client_id,
-            },
-            suggested_times: suggestedTimes, // Retornar formato ISO 8601 UTC
+      existingAppointment = await this.prisma.appointment.findFirst({
+        where: {
+          specialist_id: dto.specialist_id,
+          appointment_datetime: {
+            gte: conflictStart,
+            lte: conflictEnd,
           },
+          status: { in: [StatusAgendamento.SCHEDULED] }, // Apenas agendamentos ativos
         },
       });
+
+      if (existingAppointment) {
+        // Gerar 3 sugestões de horários alternativos (próximas 3 horas disponíveis)
+        const suggestedTimes = suggestNextAvailableSlots(
+          appointmentDateTime,
+          3,
+        );
+
+        throw new ConflictException({
+          success: false,
+          error: {
+            code: 409,
+            message: 'Especialista já possui agendamento neste horário',
+            details: {
+              conflicting_appointment: {
+                id: existingAppointment.id,
+                appointment_datetime: formatToISO(
+                  existingAppointment.appointment_datetime,
+                ),
+                client_id: existingAppointment.client_id,
+              },
+              suggested_times: suggestedTimes, // Retornar formato ISO 8601 UTC
+            },
+          },
+        });
+      }
     }
 
     // Criar Appointment
@@ -293,7 +322,7 @@ export class AppointmentsService {
         specialist_id: dto.specialist_id,
         product_type: dto.product_type,
         product_id: dto.product_id,
-        appointment_datetime: new Date(dto.appointment_datetime),
+        appointment_datetime: appointmentDateTime || new Date(),
         status: StatusAgendamento.SCHEDULED,
         notes: dto.notes,
       },
@@ -811,6 +840,94 @@ export class AppointmentsService {
     }
 
     // Usar class-transformer para aplicar Expose/Exclude
+    return plainToInstance(AppointmentResponseEntity, entity, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  /**
+   * Busca agendamento SCHEDULED entre cliente e especialista para um produto específico
+   * Usado para impedir duplicatas e condicionalmente exibir botão de confirmação no frontend
+   *
+   * @param clientId ID do cliente (UUID)
+   * @param specialistId ID do especialista (UUID)
+   * @param productType Tipo de produto (CAR, BOAT, AIRCRAFT)
+   * @param productId ID do produto (convertido para number)
+   * @returns Appointment se encontrado e status = SCHEDULED, caso contrário null
+   */
+  async findScheduledAppointment(
+    clientId: string,
+    specialistId: string,
+    productType: ProductType,
+    productId: number | string,
+  ): Promise<AppointmentResponseEntity | null> {
+    // Converter productId para number (pode vir como string da query param)
+    const productIdNum = typeof productId === 'string' ? parseInt(productId, 10) : productId;
+
+    if (isNaN(productIdNum)) {
+      this.logger.warn(
+        `[findScheduledAppointment] productId inválido: ${productId}`,
+      );
+      return null;
+    }
+
+    this.logger.log(
+      `[findScheduledAppointment] Buscando agendamento existente: cliente=${clientId}, especialista=${specialistId}, produto=${productType}/${productIdNum}`,
+    );
+
+    const appointment = await this.prisma.appointment.findFirst({
+      where: {
+        client_id: clientId,
+        specialist_id: specialistId,
+        product_type: productType,
+        product_id: productIdNum,
+        status: 'SCHEDULED',
+      },
+      include: {
+        client: true,
+        specialist: true,
+      },
+    });
+
+    if (!appointment) {
+      this.logger.log(
+        `[findScheduledAppointment] Nenhum agendamento SCHEDULED encontrado`,
+      );
+      return null;
+    }
+
+    this.logger.log(
+      `[findScheduledAppointment] Agendamento encontrado: ${appointment.id}`,
+    );
+
+    // Converter para AppointmentResponseEntity
+    const entity = new AppointmentResponseEntity();
+    entity.id = appointment.id;
+    entity.appointment_datetime = appointment.appointment_datetime;
+    entity.status = appointment.status;
+    entity.notes = appointment.notes || undefined;
+    entity.created_at = appointment.created_at;
+    entity.updated_at = appointment.updated_at;
+
+    const clientDto = new ClientResponseDto();
+    clientDto.id = appointment.client.id;
+    clientDto.name = appointment.client.name;
+    clientDto.surname = appointment.client.surname;
+    clientDto.email = appointment.client.email;
+    entity.client = clientDto;
+
+    const specialistDto = new SpecialistResponseDto();
+    specialistDto.id = appointment.specialist.id;
+    specialistDto.name = appointment.specialist.name;
+    specialistDto.surname = appointment.specialist.surname;
+    if (appointment.specialist.speciality) {
+      specialistDto.speciality = appointment.specialist.speciality;
+    }
+    if (appointment.specialist.calendly_url) {
+      specialistDto.calendly_url = appointment.specialist.calendly_url;
+    }
+    entity.specialist = specialistDto;
+
     return plainToInstance(AppointmentResponseEntity, entity, {
       excludeExtraneousValues: true,
     });
