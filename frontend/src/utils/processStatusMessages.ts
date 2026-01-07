@@ -7,7 +7,8 @@ type ProcessStatus =
   | "NEGOTIATION"
   | "PROCESSING_CONTRACT"
   | "DOCUMENTATION"
-  | "COMPLETED";
+  | "COMPLETED"
+  | "REJECTED";
 
 /**
  * Maps process status to a user-friendly step label
@@ -21,6 +22,7 @@ export function getProcessStatusMessage(status: ProcessStatus): string {
     PROCESSING_CONTRACT: "Processando Contrato",
     DOCUMENTATION: "Documentação",
     COMPLETED: "Completo",
+    REJECTED: "Rejeitado",
   };
 
   return messages[status] || status;
@@ -38,6 +40,7 @@ export function getProcessStatusColor(status: ProcessStatus): string {
     PROCESSING_CONTRACT: "bg-orange-100 text-orange-800 border-orange-300",
     DOCUMENTATION: "bg-purple-100 text-purple-800 border-purple-300",
     COMPLETED: "bg-green-100 text-green-800 border-green-300",
+    REJECTED: "bg-red-100 text-red-800 border-red-300",
   };
 
   return colors[status] || "bg-gray-100 text-gray-800 border-gray-300";
@@ -68,11 +71,13 @@ export function getCompletionReasonMessage(
  * Replaces the redundant status badge message
  * @param status - The process status
  * @param completionReason - The reason if status is COMPLETED
+ * @param rejectionReason - The reason if status is REJECTED
  * @returns Contextual message for the user
  */
 export function getContextualStatusMessage(
   status: ProcessStatus,
-  completionReason?: string | null
+  completionReason?: string | null,
+  rejectionReason?: string | null
 ): string {
   if (status === "SCHEDULING") {
     return "Agendamento em progresso";
@@ -98,16 +103,22 @@ export function getContextualStatusMessage(
     return "Processo concluído";
   }
 
+  if (status === "REJECTED") {
+    return rejectionReason
+      ? `Processo rejeitado: ${rejectionReason}`
+      : "Processo foi rejeitado";
+  }
+
   return "Status desconhecido";
 }
 
 /**
- * Determines if a process is in a final state (completed or failed)
+ * Determines if a process is in a final state (completed, rejected or failed)
  * @param status - The process status
  * @returns Boolean indicating if process is final
  */
 export function isProcessFinal(status: ProcessStatus): boolean {
-  return status === "COMPLETED";
+  return status === "COMPLETED" || status === "REJECTED";
 }
 
 /**

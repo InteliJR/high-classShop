@@ -42,6 +42,11 @@ export default function Sidebar() {
             icon: <Users size={20} />,
           },
           {
+            to: "/customer/processes",
+            label: "Meus Processos",
+            icon: <FilePen size={20} />,
+          },
+          {
             to: "/catalog/cars",
             label: "Carros",
             icon: <Car size={20} />,
@@ -80,7 +85,7 @@ export default function Sidebar() {
           {
             to: "/specialist/processes",
             label: "Meus processos",
-            icon: < FilePen size={20} />,
+            icon: <FilePen size={20} />,
           }
         );
         break;

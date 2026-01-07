@@ -2,7 +2,13 @@ import api from "./api";
 
 export interface Process {
   id: string;
-  status: "SCHEDULING" | "NEGOTIATION" | "PROCESSING_CONTRACT" | "DOCUMENTATION" | "COMPLETED";
+  status:
+    | "SCHEDULING"
+    | "NEGOTIATION"
+    | "PROCESSING_CONTRACT"
+    | "DOCUMENTATION"
+    | "COMPLETED"
+    | "REJECTED";
   product_type: "CAR" | "BOAT" | "AIRCRAFT";
   client_id: string;
   specialist_id: string;
@@ -10,6 +16,7 @@ export interface Process {
   notes?: string;
   created_at: string;
   updated_at: string;
+  rejection_reason?: string | null;
   client?: {
     id: string;
     email?: string;
@@ -145,5 +152,65 @@ export async function getProcessWithActiveContract(
     `/processes/${processId}/with-contract`,
     { withCredentials: true }
   );
+  return response.data.data;
+}
+
+/**
+ * Get processes by client ID
+ * @param clientId - ID of the client
+ * @param page - Page number
+ * @param perPage - Items per page
+ */
+export async function getProcessesByClient(
+  clientId: string,
+  page = 1,
+  perPage = 20
+): Promise<Process[]> {
+  const response = await api.get<ApiResponse<Process[]>>(
+    `/processes/client/${clientId}`,
+    {
+      withCredentials: true,
+      params: { page, perPage },
+    }
+  );
+  return response.data.data;
+}
+
+/**
+ * Reject a process with optional reason
+ * @param processId - ID of the process to reject
+ * @param rejectionReason - Optional reason for rejection
+ */
+export async function rejectProcess(
+  processId: string,
+  rejectionReason?: string
+): Promise<Process> {
+  const response = await api.patch<ApiResponse<Process>>(
+    `/processes/${processId}/reject`,
+    { rejection_reason: rejectionReason },
+    { withCredentials: true }
+  );
+  return response.data.data;
+}
+
+export interface CreateAppointmentRequest {
+  specialist_id: string;
+  client_id: string;
+  product_type: "CAR" | "BOAT" | "AIRCRAFT";
+  product_id: string | number;
+  scheduled_date?: string;
+  notes?: string;
+}
+
+/**
+ * Create an appointment confirmation (Calendly integration)
+ * @param data - Appointment data from Calendly
+ */
+export async function createAppointment(
+  data: CreateAppointmentRequest
+): Promise<any> {
+  const response = await api.post<ApiResponse<any>>("/appointments", data, {
+    withCredentials: true,
+  });
   return response.data.data;
 }

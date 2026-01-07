@@ -16,6 +16,9 @@ import CreateContractPage from "../pages/specialist/CreateContractPage";
 import ProcessesPage from "../pages/specialist/ProcessesPage";
 import CustomerHomePage from "../pages/customer/CustomerHomePage";
 import ConsultoriaPage from "../pages/customer/ConsultoriaPage";
+import ProfilePage from "../pages/ProfilePage";
+import ProductPage from "../pages/ProductPage";
+import CustomerProcessesPage from "../pages/customer/CustomerProcessesPage";
 
 export default function RouterApp() {
   const routerApp = createBrowserRouter([
@@ -41,7 +44,7 @@ export default function RouterApp() {
       path: "/customer/home",
       element: (
         <MainLayout>
-          <ProtectedRoute allowedRoles={['CUSTOMER']}>
+          <ProtectedRoute allowedRoles={["CUSTOMER"]}>
             <CustomerHomePage />
           </ProtectedRoute>
         </MainLayout>
@@ -51,9 +54,41 @@ export default function RouterApp() {
       path: "/customer/consultoria",
       element: (
         <MainLayout>
-          <ProtectedRoute allowedRoles={['CUSTOMER']}>
+          <ProtectedRoute allowedRoles={["CUSTOMER"]}>
             <ConsultoriaPage />
           </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/customer/processes",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["CUSTOMER"]}>
+            <CustomerProcessesPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    // Profile route (all authenticated users)
+    {
+      path: "/profile",
+      element: (
+        <MainLayout>
+          <ProtectedRoute
+            allowedRoles={["CUSTOMER", "CONSULTANT", "SPECIALIST", "ADMIN"]}
+          >
+            <ProfilePage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    // Product detail page (public)
+    {
+      path: "/catalog/:productType/:id",
+      element: (
+        <MainLayout>
+          <ProductPage />
         </MainLayout>
       ),
     },
@@ -162,7 +197,7 @@ export default function RouterApp() {
       element: (
         <MainLayout>
           <ProtectedRoute allowedRoles={["SPECIALIST"]}>
-            < ProcessesPage />
+            <ProcessesPage />
           </ProtectedRoute>
         </MainLayout>
       ),

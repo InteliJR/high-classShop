@@ -1,4 +1,11 @@
-import { Check, ChevronDown, Edit2, ExternalLink, Loader } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Edit2,
+  ExternalLink,
+  Loader,
+  X,
+} from "lucide-react";
 import { useState, useEffect } from "react";
 import type { Process } from "../services/processes.service";
 import type { Product } from "../types/types";
@@ -64,17 +71,23 @@ export default function ProcessCard({
   }, [process.id]);
 
   // Map process status to step index
-  const statusSteps: Record<Process["status"], number> = {
+  // REJECTED substitui o último passo (COMPLETED)
+  const statusSteps: Record<string, number> = {
     SCHEDULING: 0,
     NEGOTIATION: 1,
     PROCESSING_CONTRACT: 1.5, // Between NEGOTIATION and DOCUMENTATION
     DOCUMENTATION: 2,
     COMPLETED: 3,
+    REJECTED: 3, // Mesmo índice que COMPLETED, mas com visual diferente
   };
 
-  const stepLabels = ["Agendamento", "Negociação", "Documentação", "Concluído"];
+  // Labels dinâmicos: se rejeitado, muda o último label
+  const isRejected = process.status === "REJECTED";
+  const stepLabels = isRejected
+    ? ["Agendamento", "Negociação", "Documentação", "Rejeitado"]
+    : ["Agendamento", "Negociação", "Documentação", "Concluído"];
 
-  const currentStep = statusSteps[process.status];
+  const currentStep = statusSteps[process.status] ?? 0;
 
   return (
     <div
@@ -133,8 +146,17 @@ export default function ProcessCard({
             {process.status === "PROCESSING_CONTRACT" && (
               <Loader size={18} className="animate-spin text-orange-600" />
             )}
-            <p className="text-sm text-gray-700 font-medium">
-              {getContextualStatusMessage(process.status, completionReason)}
+            {isRejected && <X size={18} className="text-red-600" />}
+            <p
+              className={`text-sm font-medium ${
+                isRejected ? "text-red-600" : "text-gray-700"
+              }`}
+            >
+              {getContextualStatusMessage(
+                process.status,
+                completionReason,
+                process.rejection_reason
+              )}
             </p>
           </div>
         </div>
@@ -205,6 +227,7 @@ export default function ProcessCard({
           {stepLabels.map((label, index) => {
             const isCompleted = index <= currentStep;
             const isActive = index === currentStep;
+            const isRejectedStep = isRejected && index === 3; // Último step quando rejeitado
 
             return (
               <React.Fragment key={index}>
@@ -212,17 +235,32 @@ export default function ProcessCard({
                 <div className="flex flex-col items-center">
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
-                      isCompleted
+                      isRejectedStep
+                        ? "bg-red-500 text-white"
+                        : isCompleted
                         ? "bg-green-500 text-white"
                         : "bg-gray-300 text-gray-600"
-                    } ${isActive ? "ring-2 ring-green-300 ring-offset-2" : ""}`}
+                    } ${
+                      isActive && !isRejectedStep
+                        ? "ring-2 ring-green-300 ring-offset-2"
+                        : ""
+                    } ${
+                      isRejectedStep ? "ring-2 ring-red-300 ring-offset-2" : ""
+                    }`}
                   >
-                    {isCompleted && <Check size={20} />}
-                    {!isCompleted && <span>{index + 1}</span>}
+                    {isRejectedStep && <X size={20} />}
+                    {!isRejectedStep && isCompleted && <Check size={20} />}
+                    {!isRejectedStep && !isCompleted && (
+                      <span>{index + 1}</span>
+                    )}
                   </div>
                   <span
                     className={`text-xs font-medium mt-2 text-center max-w-20 ${
-                      isCompleted ? "text-gray-900" : "text-gray-500"
+                      isRejectedStep
+                        ? "text-red-600"
+                        : isCompleted
+                        ? "text-gray-900"
+                        : "text-gray-500"
                     }`}
                   >
                     {label}
@@ -233,7 +271,11 @@ export default function ProcessCard({
                 {index < stepLabels.length - 1 && (
                   <div
                     className={`flex-1 h-1 mx-2 transition-all ${
-                      index < currentStep ? "bg-green-500" : "bg-gray-300"
+                      isRejected && index >= currentStep - 1
+                        ? "bg-red-400"
+                        : index < currentStep
+                        ? "bg-green-500"
+                        : "bg-gray-300"
                     }`}
                     style={{ minWidth: "40px" }}
                   />
@@ -248,6 +290,7 @@ export default function ProcessCard({
           {stepLabels.map((label, index) => {
             const isCompleted = index <= currentStep;
             const isActive = index === currentStep;
+            const isRejectedStep = isRejected && index === 3; // Último step quando rejeitado
 
             return (
               <div key={index} className="flex gap-3">
@@ -255,13 +298,22 @@ export default function ProcessCard({
                   {/* Step Circle */}
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold transition-all shrink-0 ${
-                      isCompleted
+                      isRejectedStep
+                        ? "bg-red-500 text-white"
+                        : isCompleted
                         ? "bg-green-500 text-white"
                         : "bg-gray-300 text-gray-600"
-                    } ${isActive ? "ring-2 ring-green-300 ring-offset-1" : ""}`}
+                    } ${
+                      isActive && !isRejectedStep
+                        ? "ring-2 ring-green-300 ring-offset-1"
+                        : ""
+                    } ${
+                      isRejectedStep ? "ring-2 ring-red-300 ring-offset-1" : ""
+                    }`}
                   >
-                    {isCompleted && <Check size={16} />}
-                    {!isCompleted && (
+                    {isRejectedStep && <X size={16} />}
+                    {!isRejectedStep && isCompleted && <Check size={16} />}
+                    {!isRejectedStep && !isCompleted && (
                       <span className="text-xs">{index + 1}</span>
                     )}
                   </div>
@@ -270,7 +322,11 @@ export default function ProcessCard({
                   {index < stepLabels.length - 1 && (
                     <div
                       className={`w-1 h-6 transition-all ${
-                        index < currentStep ? "bg-green-500" : "bg-gray-300"
+                        isRejected && index >= currentStep - 1
+                          ? "bg-red-400"
+                          : index < currentStep
+                          ? "bg-green-500"
+                          : "bg-gray-300"
                       }`}
                     />
                   )}
@@ -280,7 +336,11 @@ export default function ProcessCard({
                 <div className="pb-6 flex items-center md:hidden">
                   <span
                     className={`text-xs font-medium ${
-                      isCompleted ? "text-gray-900" : "text-gray-500"
+                      isRejectedStep
+                        ? "text-red-600"
+                        : isCompleted
+                        ? "text-gray-900"
+                        : "text-gray-500"
                     }`}
                   >
                     {label}
