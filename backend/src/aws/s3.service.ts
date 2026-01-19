@@ -1,6 +1,10 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
@@ -10,13 +14,24 @@ export class S3Service {
 
   constructor(private readonly configService: ConfigService) {
     this.bucketName = this.configService.getOrThrow('AWS_BUCKET_NAME');
-    this.s3Client = new S3Client({
+
+    // Configuração S3 compatível com Cloudflare R2
+    const s3Config: any = {
       region: this.configService.getOrThrow('AWS_REGION'),
       credentials: {
         accessKeyId: this.configService.getOrThrow('AWS_ACCESS_KEY_ID'),
         secretAccessKey: this.configService.getOrThrow('AWS_SECRET_ACCESS_KEY'),
       },
-    });
+    };
+
+    // Se AWS_ENDPOINT está definido, use-o (para Cloudflare R2)
+    const endpoint = this.configService.get<string>('AWS_ENDPOINT');
+    if (endpoint) {
+      s3Config.endpoint = endpoint;
+      s3Config.forcePathStyle = true; // Necessário para R2
+    }
+
+    this.s3Client = new S3Client(s3Config);
   }
 
   /**
@@ -92,8 +107,9 @@ export class S3Service {
     });
 
     try {
-      
-      const signedUrl = await getSignedUrl(this.s3Client, command, { expiresIn: 3600 });
+      const signedUrl = await getSignedUrl(this.s3Client, command, {
+        expiresIn: 3600,
+      });
       return signedUrl;
     } catch (error) {
       console.error('Failed to get signed URL', error);
@@ -121,10 +137,12 @@ export class S3Service {
       }
 
       const contentType = response.headers.get('content-type') || 'image/jpeg';
-      
+
       // Validar que é uma imagem
       if (!contentType.startsWith('image/')) {
-        throw new Error(`URL não é uma imagem válida. Content-Type: ${contentType}`);
+        throw new Error(
+          `URL não é uma imagem válida. Content-Type: ${contentType}`,
+        );
       }
 
       const arrayBuffer = await response.arrayBuffer();
@@ -146,7 +164,9 @@ export class S3Service {
       return key;
     } catch (error) {
       console.error('Failed to upload image from URL to S3', error);
-      throw new InternalServerErrorException(`Failed to upload image from URL: ${error.message}`);
+      throw new InternalServerErrorException(
+        `Failed to upload image from URL: ${error.message}`,
+      );
     }
   }
 
@@ -161,7 +181,7 @@ export class S3Service {
     if (imageData.startsWith('http://') || imageData.startsWith('https://')) {
       return this.uploadFromUrl(imageData, key);
     }
-    
+
     // Caso contrário, assume que é base64
     return this.uploadBase64Image(imageData, key);
   }

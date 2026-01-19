@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
 import { X } from "lucide-react";
 import {
   fetchClients,
@@ -7,11 +7,7 @@ import {
 } from "../services/select-options.service";
 import { createProcess } from "../services/processes.service";
 import { useAuth } from "../store/authStateManager";
-
-interface SelectOption {
-  id: string | number;
-  label: string;
-}
+import InfiniteScrollSelect from "./InfiniteScrollSelect";
 
 interface CreateProcessFormData {
   client_id: string;
@@ -27,6 +23,7 @@ interface CreateProcessModalProps {
 /**
  * Modal for creating a new process with client and product selection
  * Products are automatically filtered by specialist's speciality
+ * Uses InfiniteScrollSelect for better performance with many records
  */
 export default function CreateProcessModal({
   isOpen,
@@ -34,18 +31,15 @@ export default function CreateProcessModal({
   onSuccess,
 }: CreateProcessModalProps) {
   const { user } = useAuth();
-  const [clients, setClients] = useState<SelectOption[]>([]);
-  const [products, setProducts] = useState<SelectOption[]>([]);
-  const [isLoadingClients, setIsLoadingClients] = useState(false);
-  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const {
-    control,
     handleSubmit,
     reset,
     formState: { errors },
+    setValue,
+    watch,
   } = useForm<CreateProcessFormData>({
     defaultValues: {
       client_id: "",
@@ -53,56 +47,23 @@ export default function CreateProcessModal({
     },
   });
 
-  // Fetch clients on component mount
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const loadClients = async () => {
-      try {
-        setIsLoadingClients(true);
-        setError(null);
-        const clientList = await fetchClients();
-        setClients(clientList);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Erro ao carregar clientes"
-        );
-      } finally {
-        setIsLoadingClients(false);
-      }
-    };
-
-    loadClients();
-  }, [isOpen]);
-
-  // Fetch products when product_type changes
-  useEffect(() => {
-    if (!isOpen || !user?.speciality) return;
-
-    const loadProducts = async () => {
-      try {
-        setIsLoadingProducts(true);
-        setError(null);
-        const productList = await fetchAvailableProducts(
-          user.speciality as "CAR" | "BOAT" | "AIRCRAFT"
-        );
-        setProducts(productList);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Erro ao carregar produtos"
-        );
-      } finally {
-        setIsLoadingProducts(false);
-      }
-    };
-
-    loadProducts();
-  }, [isOpen, user?.speciality]);
+  const clientId = watch("client_id");
+  const productId = watch("product_id");
 
   const onSubmit = async (data: CreateProcessFormData) => {
     try {
       setIsSubmitting(true);
       setError(null);
+
+      // Validação manual adicional
+      if (!data.client_id) {
+        setError("Por favor, selecione um cliente");
+        return;
+      }
+      if (!data.product_id) {
+        setError("Por favor, selecione um produto");
+        return;
+      }
 
       await createProcess({
         client_id: data.client_id,
@@ -158,89 +119,67 @@ export default function CreateProcessModal({
             </div>
           )}
 
-          {/* Client Select */}
-          <div>
-            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
-              Cliente <span className="text-red-500">*</span>
-            </label>
-            <Controller
-              name="client_id"
-              control={control}
-              rules={{ required: "Cliente é obrigatório" }}
-              render={({ field }) => (
-                <select
-                  {...field}
-                  disabled={isLoadingClients}
-                  className={`w-full px-3 py-2 sm:py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent transition ${
-                    errors.client_id
-                      ? "border-red-500 bg-red-50"
-                      : "border-gray-300"
-                  } ${isLoadingClients ? "opacity-50 cursor-not-allowed" : ""}`}
-                >
-                  <option value="">
-                    {isLoadingClients
-                      ? "Carregando clientes..."
-                      : "Selecione um cliente"}
-                  </option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-            />
-            {errors.client_id && (
-              <p className="text-xs sm:text-sm text-red-600 mt-1">
-                {errors.client_id.message}
-              </p>
-            )}
-          </div>
+          {/* Client Select - Infinite Scroll */}
+          <InfiniteScrollSelect
+            label="Cliente"
+            placeholder="Selecione um cliente"
+            value={clientId}
+            onChange={(value) => {
+              setValue("client_id", value);
+              setError(null);
+            }}
+            onLoadMore={async (page) => {
+              try {
+                const clients = await fetchClients(page, 20);
+                return clients;
+              } catch (err) {
+                setError(
+                  err instanceof Error
+                    ? err.message
+                    : "Erro ao carregar clientes"
+                );
+                return [];
+              }
+            }}
+            error={errors.client_id?.message}
+            required
+          />
 
-          {/* Product Select */}
-          <div>
-            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
-              Produto <span className="text-red-500">*</span>
-            </label>
-            <Controller
-              name="product_id"
-              control={control}
-              rules={{ required: "Produto é obrigatório" }}
-              render={({ field }) => (
-                <select
-                  {...field}
-                  disabled={isLoadingProducts || !user?.speciality}
-                  className={`w-full px-3 py-2 sm:py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent transition ${
-                    errors.product_id
-                      ? "border-red-500 bg-red-50"
-                      : "border-gray-300"
-                  } ${
-                    isLoadingProducts || !user?.speciality
-                      ? "opacity-50 cursor-not-allowed"
-                      : ""
-                  }`}
-                >
-                  <option value="">
-                    {isLoadingProducts
-                      ? "Carregando produtos..."
-                      : !user?.speciality
-                      ? "Especialidade não configurada"
-                      : "Selecione um produto"}
-                  </option>
-                  {products.map((product) => (
-                    <option key={product.id} value={String(product.id)}>
-                      {product.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-            />
-            {errors.product_id && (
-              <p className="text-xs sm:text-sm text-red-600 mt-1">
-                {errors.product_id.message}
-              </p>
-            )}
-          </div>
+          {/* Product Select - Infinite Scroll */}
+          <InfiniteScrollSelect
+            label="Produto"
+            placeholder={
+              !user?.speciality
+                ? "Especialidade não configurada"
+                : "Selecione um produto"
+            }
+            value={productId}
+            onChange={(value) => {
+              setValue("product_id", value);
+              setError(null);
+            }}
+            onLoadMore={async (page) => {
+              if (!user?.speciality) return [];
+              try {
+                const products = await fetchAvailableProducts(
+                  user.speciality as "CAR" | "BOAT" | "AIRCRAFT",
+                  page,
+                  20
+                );
+                return products;
+              } catch (err) {
+                setError(
+                  err instanceof Error
+                    ? err.message
+                    : "Erro ao carregar produtos"
+                );
+                return [];
+              }
+            }}
+            disabled={!user?.speciality}
+            error={errors.product_id?.message}
+            required
+          />
 
           {/* Form Actions */}
           <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4">

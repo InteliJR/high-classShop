@@ -19,10 +19,13 @@ async function main() {
   await prisma.aircraft.deleteMany();
   await prisma.user.deleteMany();
 
-  console.log("👥 Seeding users...");
+  // === STEP 1: Create Users ===
+  console.log('👥 Seeding users...');
+  const createdUsers = new Map<string, string>(); // email -> id mapping
+
   for (const userMock of mockUsers) {
     const user = await prisma.user.create({
-        data: {
+      data: {
         name: userMock.name,
         surname: userMock.surname,
         email: userMock.email,
@@ -38,12 +41,19 @@ async function main() {
         address_id: userMock.address_id ?? null,
         consultant_id: userMock.consultant_id ?? null,
         company_id: userMock.company_id ?? null,
-        },
+      },
     });
 
-  console.log(`➡️ Created user: ${user.email}`);
-}
-  // Seed Cars
+    createdUsers.set(user.email, user.id);
+    console.log(`➡️ Created user: ${user.email} (ID: ${user.id})`);
+  }
+
+  // Get specialist IDs
+  const carSpecialistId = createdUsers.get('carlos.car@example.com');
+  const boatSpecialistId = createdUsers.get('marina.boat@example.com');
+  const aircraftSpecialistId = createdUsers.get('pedro.aircraft@example.com');
+
+  // === STEP 2: Seed Cars ===
   console.log('🚗 Seeding cars...');
   for (const carMock of mockCars) {
     const car = await prisma.car.create({
@@ -59,6 +69,7 @@ async function main() {
         cambio: carMock.cambio,
         combustivel: carMock.combustivel,
         tipo_categoria: carMock.tipo_categoria,
+        specialist_id: carSpecialistId, // Associate with car specialist
       },
     });
 
@@ -76,7 +87,7 @@ async function main() {
     console.log(`  ✅ Created car: ${car.marca} ${car.modelo}`);
   }
 
-  // Seed Boats
+  // === STEP 3: Seed Boats ===
   console.log('⛵ Seeding boats...');
   for (const boatMock of mockBoats) {
     const boat = await prisma.boat.create({
@@ -95,6 +106,7 @@ async function main() {
         acessorios: boatMock.acessorios,
         estado: boatMock.estado,
         tipo_embarcacao: boatMock.tipo_embarcacao,
+        specialist_id: boatSpecialistId, // Associate with boat specialist
       },
     });
 
@@ -112,20 +124,21 @@ async function main() {
     console.log(`  ✅ Created boat: ${boat.marca} ${boat.modelo}`);
   }
 
-  // Seed Aircrafts
+  // === STEP 4: Seed Aircrafts ===
   console.log('✈️  Seeding aircrafts...');
   for (const aircraftMock of mockAircrafts) {
     const aircraft = await prisma.aircraft.create({
       data: {
-        categoria: aircraftMock.categoria,
         ano: aircraftMock.ano,
         marca: aircraftMock.marca,
         modelo: aircraftMock.modelo,
-        assentos: aircraftMock.assentos,
+        assentos: aircraftMock.capacidade_passageiros,
         estado: aircraftMock.estado,
         descricao: aircraftMock.descricao,
         valor: aircraftMock.valor,
         tipo_aeronave: aircraftMock.tipo_aeronave,
+        categoria: null, // Optional field
+        specialist_id: aircraftSpecialistId, // Associate with aircraft specialist
       },
     });
 
@@ -154,7 +167,9 @@ async function main() {
 
   console.log(`  🚗 Cars: ${carsCount} (${carImagesCount} images)`);
   console.log(`  ⛵ Boats: ${boatsCount} (${boatImagesCount} images)`);
-  console.log(`  ✈️  Aircrafts: ${aircraftsCount} (${aircraftImagesCount} images)`);
+  console.log(
+    `  ✈️  Aircrafts: ${aircraftsCount} (${aircraftImagesCount} images)`,
+  );
   console.log('');
   console.log('✅ Seed completed successfully!');
 }

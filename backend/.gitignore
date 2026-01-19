@@ -41,6 +41,10 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 .env.local
+.env.production
+
+# IMPORTANT: Never commit production secrets!
+# Use .env.production as template only
 
 # temp directory
 .temp

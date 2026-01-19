@@ -24,11 +24,17 @@ export interface ProductOption extends SelectOption {
 /**
  * Fetch all clients (CUSTOMER users)
  * Used to populate Client select in CreateProcessModal
+ * @param page - Page number for pagination
+ * @param perPage - Number of items per page
  */
-export async function fetchClients(): Promise<ClientOption[]> {
+export async function fetchClients(
+  page = 1,
+  perPage = 20
+): Promise<ClientOption[]> {
   try {
-    const response = await api.get("/users?role=CUSTOMER", {
+    const response = await api.get("/users", {
       withCredentials: true,
+      params: { role: "CUSTOMER", page, perPage },
     });
 
     return (response.data.data || []).map(
@@ -58,9 +64,13 @@ export async function fetchClients(): Promise<ClientOption[]> {
  * Fetch products by type (CAR, BOAT, AIRCRAFT)
  * Used to populate Product select in CreateProcessModal
  * @param productType - Type of product to fetch (CAR, BOAT, AIRCRAFT)
+ * @param page - Page number for pagination
+ * @param perPage - Number of items per page
  */
 export async function fetchAvailableProducts(
-  productType: "CAR" | "BOAT" | "AIRCRAFT"
+  productType: "CAR" | "BOAT" | "AIRCRAFT",
+  page = 1,
+  perPage = 20
 ): Promise<ProductOption[]> {
   try {
     const endpointMap: Record<"CAR" | "BOAT" | "AIRCRAFT", string> = {
@@ -72,7 +82,7 @@ export async function fetchAvailableProducts(
     const endpoint = endpointMap[productType];
     const response = await api.get(`/${endpoint}`, {
       withCredentials: true,
-      params: {page: 1, perPage:20}
+      params: { page, perPage },
     });
 
     const products = response.data.data || [];

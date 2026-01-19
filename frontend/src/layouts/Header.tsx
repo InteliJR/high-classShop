@@ -10,14 +10,13 @@ import { useIsMobile } from "../hooks/use-is-mobile";
 import { useAuth } from "../store/authStateManager";
 import { AppContext } from "../contexts/AppContext";
 import { useNavigate, useLocation } from "react-router-dom";
-import { AuthContext } from "../contexts/AuthContext";
+import UserDropdown from "../components/UserDropdown";
 
 export default function Header() {
   const { isSidebarCollapsed, setSidebarCollapsed, searchTerm, setSearchTerm } =
     useContext(AppContext);
   const isMobile = useIsMobile();
   const { user } = useAuth();
-  const { logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -86,38 +85,31 @@ export default function Header() {
 
           {/* Barra de pesquisa para quando tiver um usuário logado */}
           {user ? (
-            <div className="flex sm:justify-around sm:w-full">
-              {showSearch && (
-                <div className="flex justify-center items-center sm:w-full">
-                  <div className="relative flex items-center">
-                    <Search
-                      size={18}
-                      className="absolute translate-x-3 text-black"
+            <div className="flex items-center w-full">
+              <div className="flex-1">
+                {/* {showSearch && (
+                  <div className="flex justify-start items-center">
+                    <div className="relative flex items-center">
+                      <Search
+                        size={18}
+                        className="absolute translate-x-3 text-black"
+                      />
+                    </div>
+                    <input
+                      className="bg-white rounded-full w-64 sm:w-2/3 h-10 text-black px-10"
+                      type="text"
+                      placeholder="Buscar..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
-                  <input
-                    className=" bg-white rounded-full w-2/3 h-10 text-black px-10"
-                    type="text"
-                    placeholder="Buscar..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-              )}
+                )} */}
+              </div>
 
-              <button
-                onClick={async () => {
-                  try {
-                    await logout(); // limpa user e accessToken
-                  } catch (err) {
-                    console.log("Ocorreu um erro: ", err);
-                  } finally {
-                    navigate("/login"); // redireciona para a tela de login
-                  }
-                }}
-              >
-                <UserCircle2 size={40} />
-              </button>
+              {/* Dropdown do usuário - sempre no canto direito com margem */}
+              <div className="ml-2 mr-2 sm:mr-4 shrink-0">
+                <UserDropdown />
+              </div>
             </div>
           ) : (
             <img src={Logo} className="w-25 sm:w-35 h-auto" />

@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProcessDTO } from './dto/create-process.dto';
@@ -19,6 +20,8 @@ import { ProcessWithHistory } from './entity/process-history.response';
 
 @Injectable()
 export class ProcessesService {
+  private readonly logger = new Logger(ProcessesService.name);
+
   constructor(private readonly prismaService: PrismaService) {}
 
   /**
@@ -57,6 +60,9 @@ export class ProcessesService {
    * @returns {Promise<ProcessResponse>} - Entidade do processo
    */
   async create(createProcessDto: CreateProcessDTO): Promise<ProcessResponse> {
+    this.logger.log(
+      `[create] Iniciando criação de processo para cliente ${createProcessDto.client_id}`,
+    );
     const { product_id, client_id, specialist_id, ...dataToSave } =
       createProcessDto;
 
@@ -84,10 +90,14 @@ export class ProcessesService {
     };
 
     // Verificar se o processo já existe
+    this.logger.debug('[create] Verificando se processo já existe');
     const processAlreadyExists = await this.prismaService.process.findFirst({
       where: whereClause,
     });
     if (processAlreadyExists) {
+      this.logger.warn(
+        `[create] Processo já existe para cliente ${client_id} e produto ${product_id}`,
+      );
       throw new BadRequestException();
     }
 
@@ -513,5 +523,164 @@ export class ProcessesService {
       created_at: process.created_at,
       updated_at: process.updated_at,
     };
+  }
+
+  /**
+   * Get all processes for a specific client
+   *
+   * @param {string} clientId - The ID of the client
+   * @param {QueryDto} queryDto - Query parameters (page, perPage)
+   * @returns {Promise<{processes: ProcessResponse[], count: number}>} - Paginated list of client's processes
+   */
+  async getByClientId(
+    clientId: string,
+    { page, perPage }: QueryDto,
+  ): Promise<{
+    processes: (ProcessResponse & { rejection_reason?: string | null })[];
+    count: number;
+  }> {
+    const pageNum = Number(page) || 1;
+    const perPageNum = Number(perPage) || 20;
+    const skip = (pageNum - 1) * perPageNum;
+
+    const [processes, count] = await Promise.all([
+      this.prismaService.process.findMany({
+        where: {
+          client_id: clientId,
+        },
+        include: {
+          client: true,
+          car: true,
+          boat: true,
+          aircraft: true,
+          specialist: true,
+          rejections: {
+            orderBy: { rejected_at: 'desc' },
+            take: 1,
+          },
+        },
+        orderBy: { created_at: 'desc' },
+        skip,
+        take: perPageNum,
+      }),
+      this.prismaService.process.count({
+        where: {
+          client_id: clientId,
+        },
+      }),
+    ]);
+
+    const processEntities = processes.map((process: any) => ({
+      id: process.id,
+      status: process.status,
+      product_type: process.product_type,
+      client: {
+        id: process.client_id,
+        email: process.client?.email,
+        name: process.client?.name,
+      },
+      specialist: {
+        especialidade: process.specialist.speciality,
+        id: process.specialist.id,
+        name: process.specialist.name,
+      },
+      product: this.buildProduct(process),
+      created_at: process.created_at,
+      notes: process.notes,
+      rejection_reason:
+        process.status === 'REJECTED' && process.rejections?.length > 0
+          ? process.rejections[0].rejection_reason
+          : null,
+    }));
+
+    return {
+      processes: processEntities,
+      count,
+    };
+  }
+
+  /**
+   * Rejects a process with an optional reason
+   *
+   * @param {string} processId - The ID of the process to reject
+   * @param {string} rejectedById - The ID of the user rejecting
+   * @param {string} rejectionReason - Optional reason for rejection
+   * @returns {Promise<ProcessWithHistory>} - Updated process with history
+   * @throws {NotFoundException} - Process not found
+   * @throws {BadRequestException} - Process already rejected
+   */
+  async rejectProcess(
+    processId: string,
+    rejectedById: string,
+    rejectionReason?: string,
+  ): Promise<ProcessWithHistory> {
+    try {
+      const [updatedProcess, updatedStatusHistory] =
+        await this.prismaService.$transaction(async (tx) => {
+          // Verificar se o processo existe
+          const existingProcess = await tx.process.findUniqueOrThrow({
+            where: { id: processId },
+          });
+
+          // Verificar se já está rejeitado
+          if (existingProcess.status === 'REJECTED') {
+            throw new BadRequestException('Processo já está rejeitado');
+          }
+
+          // Atualizar status para REJECTED
+          const process = await tx.process.update({
+            data: {
+              status: 'REJECTED',
+              updated_at: new Date(),
+            },
+            where: {
+              id: processId,
+            },
+          });
+
+          // Criar registro de histórico
+          await tx.processStatusHistory.create({
+            data: {
+              processId,
+              status: 'REJECTED',
+              changed_at: process.updated_at,
+            },
+          });
+
+          // Criar registro de rejeição (se houver motivo ou não)
+          if (rejectedById) {
+            await tx.processRejection.create({
+              data: {
+                process_id: processId,
+                rejected_by_id: rejectedById,
+                rejection_reason: rejectionReason || 'Sem motivo informado',
+              },
+            });
+          }
+
+          // Buscar histórico atualizado
+          const statusHistory = await tx.processStatusHistory.findMany({
+            where: { processId },
+          });
+
+          return [process, statusHistory];
+        });
+
+      return {
+        id: updatedProcess.id,
+        notes: updatedProcess.notes,
+        status: updatedProcess.status,
+        updated_at: updatedProcess.updated_at,
+        status_history: updatedStatusHistory,
+      };
+    } catch (err) {
+      if (err.code === 'P2025') {
+        throw new NotFoundException('Processo não encontrado');
+      }
+      if (err.status === 400) {
+        throw new BadRequestException(err.message);
+      }
+      throw new InternalServerErrorException('Erro ao rejeitar processo');
+    }
   }
 }

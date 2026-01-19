@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { getCars } from "../services/cars.service.ts";
 import { getBoats } from "../services/boats.service.ts";
 import { getAircrafts } from "../services/aircrafts.service.ts";
@@ -17,13 +17,11 @@ import {
   ChevronsLeft,
   ChevronsRight,
   FunnelIcon,
-  X,
 } from "lucide-react";
 import Button from "../components/ui/button.tsx";
 import Modal from "../components/ui/Modal.tsx";
 import ProductCard from "../components/ProductCard.tsx";
 import Loading from "../components/ui/Loading.tsx";
-import ProductDetails from "../components/product/ProductDetails.tsx";
 
 // Mapeamento dos títulos de acordo com a rota passada
 const titles: { [key: string]: string } = {
@@ -35,6 +33,7 @@ const titles: { [key: string]: string } = {
 export default function Catalog() {
   // Coleta a categoria passada na rota
   const { category } = useParams();
+  const navigate = useNavigate();
 
   //Gerenciamento dos estados dos produtos, carregamento, e páginas
   const [products, setProducts] = useState<Product[]>([]);
@@ -48,8 +47,6 @@ export default function Catalog() {
     | null
   >(null);
   const [filterModal, setFilterModal] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [showProductDetails, setShowProductDetails] = useState(false);
 
   //Consumir a api
   useEffect(() => {
@@ -127,18 +124,28 @@ export default function Catalog() {
 
       {/* Apresentação dos produtos */}
       {products.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-10 min-h-screen">
-          {products.map((element) => (
-            <div
-              key={element.id}
-              onClick={() => {
-                setSelectedProduct(element);
-                setShowProductDetails(true);
-              }}
-            >
-              <ProductCard {...element} />
-            </div>
-          ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-10 min-h-screen auto-rows-max">
+          {products.map((element) => {
+            // Mapear categoria para productType da URL
+            const productTypeMap: Record<string, string> = {
+              cars: "car",
+              boats: "boat",
+              aircrafts: "aircraft",
+            };
+            const productType = productTypeMap[category || "cars"];
+
+            return (
+              <div
+                key={element.id}
+                onClick={() =>
+                  navigate(`/catalog/${productType}/${element.id}`)
+                }
+                className="cursor-pointer w-full"
+              >
+                <ProductCard {...element} />
+              </div>
+            );
+          })}
         </div>
       ) : (
         <p className="min-h-screen">Nenhum produto encontrado.</p>
@@ -181,28 +188,6 @@ export default function Catalog() {
       >
         Inserir informações
       </Modal>
-
-      {/* Modal de Detalhes do Produto */}
-      {showProductDetails && selectedProduct && (
-        <div className="fixed inset-0 bg-white/10 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex justify-between items-center rounded-t-lg">
-              <h2 className="text-2xl font-bold text-gray-900">
-                {selectedProduct.marca} {selectedProduct.modelo}
-              </h2>
-              <button
-                onClick={() => setShowProductDetails(false)}
-                className="p-1 hover:bg-gray-100 rounded-lg transition"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            <div className="p-6">
-              <ProductDetails product={selectedProduct} />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

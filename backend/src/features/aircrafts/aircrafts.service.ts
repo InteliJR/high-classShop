@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { CreateAircraftDto } from './dto/create-aircraft.dto';
 import { UpdateAircraftDto } from './dto/update-aircraft.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -13,13 +18,21 @@ import {
 import { Prisma } from '@prisma/client';
 import { Aircraft } from './entity/aircraft.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
-import { CsvImportService, CsvColumnDefinition } from 'src/shared/services/csv-import.service';
-import { CsvImportResponseDto, CsvErrorRow } from 'src/shared/dto/csv-import-response.dto';
+import {
+  CsvImportService,
+  CsvColumnDefinition,
+} from 'src/shared/services/csv-import.service';
+import {
+  CsvImportResponseDto,
+  CsvErrorRow,
+} from 'src/shared/dto/csv-import-response.dto';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class AircraftsService {
+  private readonly logger = new Logger(AircraftsService.name);
+
   // Definição das colunas do CSV para aeronaves
   private readonly csvColumns: CsvColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
@@ -41,6 +54,7 @@ export class AircraftsService {
   ) {}
 
   async create(createAircraftDto: CreateAircraftDto) {
+    this.logger.log('[create] Iniciando criação de nova aeronave');
     const { specialist_id, images, ...aircraftData } = createAircraftDto;
 
     const payload: Prisma.AircraftUncheckedCreateInput = {
@@ -58,17 +72,34 @@ export class AircraftsService {
 
     try {
       // 1. Criar a aeronave
-      const aircraft = await this.prismaService.aircraft.create({ data: payload });
+      this.logger.debug(
+        `[create] Criando aeronave: ${aircraftData.marca} ${aircraftData.modelo}`,
+      );
+      const aircraft = await this.prismaService.aircraft.create({
+        data: payload,
+      });
+      this.logger.log(
+        `[create] Aeronave criada com sucesso - ID: ${aircraft.id}`,
+      );
 
       // 2. Processar e fazer upload das imagens, se existirem
       if (images && images.length > 0) {
+        this.logger.log(
+          `[create] Processando ${images.length} imagens para a aeronave ${aircraft.id}`,
+        );
         for (let i = 0; i < images.length; i++) {
           const image = images[i];
 
           const timestamp = Date.now();
           const key = `aircrafts/${aircraft.id}/${timestamp}-${i}.jpg`;
 
-          const imageKey = await this.s3Service.uploadBase64Image(image.data, key);
+          this.logger.debug(
+            `[create] Fazendo upload da imagem ${i + 1}/${images.length} para S3`,
+          );
+          const imageKey = await this.s3Service.uploadBase64Image(
+            image.data,
+            key,
+          );
 
           await this.prismaService.aircraft_image.create({
             data: {
@@ -78,15 +109,30 @@ export class AircraftsService {
               product_type: 'AIRCRAFT',
             },
           });
+          this.logger.debug(`[create] Imagem ${i + 1} salva com sucesso`);
         }
+        this.logger.log(
+          `[create] Todas as ${images.length} imagens processadas com sucesso`,
+        );
       }
 
       // 3. Retornar a aeronave com as imagens
-      return await this.prismaService.aircraft.findUnique({
+      const aircraftWithImages = await this.prismaService.aircraft.findUnique({
         where: { id: aircraft.id },
         include: { images: true },
       });
+      if (!aircraftWithImages) {
+        throw new Error('Erro ao buscar aeronave criada');
+      }
+      this.logger.log(
+        `[create] Aeronave ${aircraft.id} criada com sucesso com ${aircraftWithImages.images.length} imagens`,
+      );
+      return aircraftWithImages;
     } catch (error) {
+      this.logger.error(
+        `[create] Erro ao criar aeronave: ${error.message}`,
+        error.stack,
+      );
       throw new Error(`Erro ao criar aeronave: ${error.message}`);
     }
   }
@@ -185,7 +231,7 @@ export class AircraftsService {
             aircraft.images.map(async (image) => ({
               ...image,
               image_url: await this.s3Service.getSignedUrl(image.image_url),
-            }))
+            })),
           );
         }
 
@@ -197,7 +243,7 @@ export class AircraftsService {
             ? UserEntity.fromPrisma(aircraft.specialist)
             : null,
         };
-      })
+      }),
     );
 
     return {
@@ -208,13 +254,16 @@ export class AircraftsService {
   }
 
   async findOne(id: number) {
+    this.logger.log(`[findOne] Buscando aeronave - ID: ${id}`);
     const aircraft = await this.prismaService.aircraft.findUnique({
       where: { id },
       include: { images: true },
     });
     if (!aircraft) {
-      throw new NotFoundException('Car not found');
+      this.logger.warn(`[findOne] Aeronave não encontrada - ID: ${id}`);
+      throw new NotFoundException('Aircraft not found');
     }
+    this.logger.log(`[findOne] Aeronave encontrada - ID: ${id}`);
 
     // Converter as keys do S3 em URLs assinadas
     if (aircraft.images && aircraft.images.length > 0) {
@@ -222,7 +271,7 @@ export class AircraftsService {
         aircraft.images.map(async (image) => ({
           ...image,
           image_url: await this.s3Service.getSignedUrl(image.image_url),
-        }))
+        })),
       );
       return { ...aircraft, images: imagesWithUrls };
     }
@@ -273,7 +322,10 @@ export class AircraftsService {
 
     try {
       // 1. Atualizar dados da aeronave
-      await this.prismaService.aircraft.update({ where: { id }, data: payload });
+      await this.prismaService.aircraft.update({
+        where: { id },
+        data: payload,
+      });
 
       // 2. Se houver novas imagens, processar
       if (images && images.length > 0) {
@@ -289,7 +341,10 @@ export class AircraftsService {
           const timestamp = Date.now();
           const key = `aircrafts/${id}/${timestamp}-${i}.jpg`;
 
-          const imageKey = await this.s3Service.uploadBase64Image(image.data, key);
+          const imageKey = await this.s3Service.uploadBase64Image(
+            image.data,
+            key,
+          );
 
           await this.prismaService.aircraft_image.create({
             data: {
@@ -327,11 +382,16 @@ export class AircraftsService {
    * Retorna o template CSV para importação de aeronaves
    */
   getCsvTemplate() {
-    const requiredColumns = this.csvColumns.filter(c => c.required).map(c => c.name);
-    const optionalColumns = this.csvColumns.filter(c => !c.required).map(c => c.name);
-    
-    const templateHeader = this.csvColumns.map(c => c.name).join(',');
-    const exampleRow = 'Embraer,Phenom 300,15000000,São Paulo,2021,Light Jet,8,Jato Executivo,Aeronave com baixas horas de voo e interior renovado,https://example.com/imagem.jpg';
+    const requiredColumns = this.csvColumns
+      .filter((c) => c.required)
+      .map((c) => c.name);
+    const optionalColumns = this.csvColumns
+      .filter((c) => !c.required)
+      .map((c) => c.name);
+
+    const templateHeader = this.csvColumns.map((c) => c.name).join(',');
+    const exampleRow =
+      'Embraer,Phenom 300,15000000,São Paulo,2021,Light Jet,8,Jato Executivo,Aeronave com baixas horas de voo e interior renovado,https://example.com/imagem.jpg';
 
     return {
       template: `${templateHeader}\n${exampleRow}`,
@@ -347,7 +407,8 @@ export class AircraftsService {
         ano: 'Ano de fabricação (número)',
         categoria: 'Categoria: Light Jet, Midsize, Large Cabin, etc (opcional)',
         assentos: 'Número de assentos (número, opcional)',
-        tipo_aeronave: 'Tipo: Jato Executivo, Turboélice, Helicóptero, etc (opcional)',
+        tipo_aeronave:
+          'Tipo: Jato Executivo, Turboélice, Helicóptero, etc (opcional)',
         descricao: 'Descrição detalhada da aeronave (texto, opcional)',
         imagem: 'URL da imagem ou string base64 (opcional)',
       },
@@ -369,10 +430,16 @@ export class AircraftsService {
   /**
    * Importa aeronaves a partir de um CSV
    */
-  async importFromCsv(csvContent: string, user: UserEntity): Promise<CsvImportResponseDto> {
+  async importFromCsv(
+    csvContent: string,
+    user: UserEntity,
+  ): Promise<CsvImportResponseDto> {
     // 1. Validar estrutura do CSV
-    const structureValidation = this.csvImportService.validateStructure(csvContent, this.csvColumns);
-    
+    const structureValidation = this.csvImportService.validateStructure(
+      csvContent,
+      this.csvColumns,
+    );
+
     if (!structureValidation.valid) {
       throw new BadRequestException({
         message: 'Estrutura do CSV inválida',
@@ -384,7 +451,7 @@ export class AircraftsService {
 
     // 2. Parsear o CSV
     const rows = this.csvImportService.parseCSV(csvContent);
-    
+
     const insertedIds: number[] = [];
     const errorRows: CsvErrorRow[] = [];
 
@@ -415,11 +482,13 @@ export class AircraftsService {
         const validationErrors = await validate(dto, { whitelist: true });
 
         if (validationErrors.length > 0) {
-          const errorMessages = validationErrors.map(err => {
-            const constraints = err.constraints ? Object.values(err.constraints) : [];
+          const errorMessages = validationErrors.map((err) => {
+            const constraints = err.constraints
+              ? Object.values(err.constraints)
+              : [];
             return `${err.property}: ${constraints.join(', ')}`;
           });
-          
+
           errorRows.push({
             row: rowNumber,
             reason: errorMessages.join('; '),
@@ -429,7 +498,7 @@ export class AircraftsService {
         }
 
         // Criar a aeronave
-        const aircraft = await this.prismaService.aircraft.create({ 
+        const aircraft = await this.prismaService.aircraft.create({
           data: {
             categoria: aircraftData.categoria,
             ano: aircraftData.ano,
@@ -441,7 +510,7 @@ export class AircraftsService {
             valor: aircraftData.valor,
             tipo_aeronave: aircraftData.tipo_aeronave,
             specialist_id: aircraftData.specialist_id ?? null,
-          }
+          },
         });
 
         // Processar imagem se fornecida
@@ -449,7 +518,10 @@ export class AircraftsService {
           try {
             const timestamp = Date.now();
             const key = `aircrafts/${aircraft.id}/${timestamp}-0.jpg`;
-            const imageKey = await this.s3Service.uploadImageAuto(row.imagem, key);
+            const imageKey = await this.s3Service.uploadImageAuto(
+              row.imagem,
+              key,
+            );
 
             await this.prismaService.aircraft_image.create({
               data: {
@@ -460,7 +532,9 @@ export class AircraftsService {
               },
             });
           } catch (imageError) {
-            console.warn(`Erro ao processar imagem para aeronave ${aircraft.id}: ${imageError.message}`);
+            console.warn(
+              `Erro ao processar imagem para aeronave ${aircraft.id}: ${imageError.message}`,
+            );
           }
         }
 

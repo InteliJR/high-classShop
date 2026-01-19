@@ -1,6 +1,17 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  Param,
+  Patch,
+  Body,
+  ParseUUIDPipe,
+  UseGuards,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import { GetUsersDto } from './dto/get-users.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { AuthGuard } from 'src/auth/auth.guard';
 
 @Controller('users')
 export class UsersController {
@@ -24,6 +35,54 @@ export class UsersController {
       meta: {
         pagination: result.pagination,
       },
+    };
+  }
+
+  /**
+   * GET /api/users/:id
+   * Get a single user by ID
+   * @param userId - The ID of the user (UUID)
+   * @returns User data with full details
+   */
+  @Get(':id')
+  @UseGuards(AuthGuard)
+  async getById(@Param('id', new ParseUUIDPipe()) userId: string) {
+    const user = await this.usersService.getById(userId);
+
+    return {
+      success: true,
+      message: 'Usuário obtido com sucesso',
+      data: user,
+    };
+  }
+
+  /**
+   * PATCH /api/users/:id
+   * Update user data (name, surname, cpf, rg, calendly_url)
+   *
+   * @param userId - The ID of the user to update
+   * @param updateUserDto - Data to update
+   * @returns Updated user data
+   *
+   * @throws 404 - User not found
+   * @throws 409 - CPF or RG already exists
+   *
+   * @example
+   * PATCH /api/users/123e4567-e89b-12d3-a456-426614174000
+   * Body: { "name": "João", "calendly_url": "https://calendly.com/joao" }
+   */
+  @Patch(':id')
+  @UseGuards(AuthGuard)
+  async update(
+    @Param('id', new ParseUUIDPipe()) userId: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    const updatedUser = await this.usersService.update(userId, updateUserDto);
+
+    return {
+      success: true,
+      message: 'Usuário atualizado com sucesso',
+      data: updatedUser,
     };
   }
 }

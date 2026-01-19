@@ -9,6 +9,8 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
 import { ProcessesService } from './processes.service';
 import { CreateProcessDTO } from './dto/create-process.dto';
@@ -18,7 +20,9 @@ import { QueryDto } from 'src/shared/dto/query.dto';
 import { ProcessSummary } from 'src/shared/dto/summary.dto';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { UpdateProcessDto } from './dto/update-process.dto';
+import { RejectProcessDto } from './dto/reject-process.dto';
 import { ProcessWithHistory } from './entity/process-history.response';
+import { AuthGuard } from 'src/auth/auth.guard';
 
 @Controller('processes')
 export class ProcessesController {
@@ -221,6 +225,82 @@ export class ProcessesController {
       sucess: true,
       message: 'Processo com contrato ativo obtido com sucesso',
       data: processWithContract,
+    };
+  }
+
+  /**
+   * GET /api/processes/client/:clientId
+   * Retorna processos de um cliente específico
+   *
+   * @param {string} clientId - Id do cliente
+   * @param {QueryDto} - Parâmetros de paginação
+   * @returns {Promise<ApiResponseDto<ProcessResponse[], unknown>>} - Processos do cliente de forma paginada
+   */
+  @Get('client/:clientId')
+  @UseGuards(AuthGuard)
+  async getByClient(
+    @Param('clientId', new ParseUUIDPipe()) clientId: string,
+    @Query() { perPage, page }: QueryDto,
+  ): Promise<ApiResponseDto<ProcessResponse[], unknown>> {
+    page = Number(page);
+    perPage = Number(perPage);
+
+    const { processes, count } = await this.processesService.getByClientId(
+      clientId,
+      { page, perPage },
+    );
+
+    const skip = (page - 1) * perPage;
+    const pagination = new PaginationDto();
+    pagination.current_page = page;
+    pagination.total_pages = Math.ceil(count / perPage);
+    pagination.has_next = skip + perPage < count;
+    pagination.has_prev = skip > 0;
+    pagination.total = count;
+
+    return {
+      sucess: true,
+      message: 'Processos do cliente listados com sucesso',
+      data: processes,
+      meta: {
+        pagination,
+        summary: {
+          total_client_processes: count,
+        },
+      },
+    };
+  }
+
+  /**
+   * PATCH /api/processes/:id/reject
+   * Rejeita um processo com motivo opcional
+   *
+   * @param {string} processId - Id do processo
+   * @param {RejectProcessDto} rejectProcessDto - Motivo da rejeição (opcional)
+   * @param {Request} req - Request com dados do usuário autenticado
+   * @returns {Promise<ApiResponseDto<ProcessWithHistory>>}
+   * @throws {NotFoundException} - Processo não encontrado
+   * @throws {BadRequestException} - Processo já está rejeitado
+   */
+  @Patch(':id/reject')
+  @UseGuards(AuthGuard)
+  async rejectProcess(
+    @Param('id', new ParseUUIDPipe()) processId: string,
+    @Body() rejectProcessDto: RejectProcessDto,
+    @Req() req: any,
+  ): Promise<ApiResponseDto<ProcessWithHistory>> {
+    const userId = req.user?.sub || req.user?.id;
+
+    const result = await this.processesService.rejectProcess(
+      processId,
+      userId,
+      rejectProcessDto.rejection_reason,
+    );
+
+    return {
+      sucess: true,
+      message: 'Processo rejeitado com sucesso',
+      data: result,
     };
   }
 }

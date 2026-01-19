@@ -18,12 +18,16 @@ import { DashboardModule } from './features/dashboard/dashboard.module';
 import { DocusignModule } from './providers/docusign/docusign.module';
 import { UsersModule } from './features/users/users.module';
 import { AuthGuard } from './auth/auth.guard';
+import { AppointmentsModule } from './features/appointments/appointments.module';
+import { ProposalsModule } from './features/proposals/proposals.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    HealthModule,
     ConsultantsModule,
     SpecialistsModule,
     CompaniesModule,
@@ -33,6 +37,8 @@ import { AuthGuard } from './auth/auth.guard';
     AuthModule,
     ConsultantModule,
     ProcessesModule,
+    AppointmentsModule,
+    ProposalsModule,
     ContractsModule,
     DashboardModule,
     DocusignModule,
