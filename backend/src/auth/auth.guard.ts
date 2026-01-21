@@ -3,6 +3,7 @@ import {
   ExecutionContext,
   Injectable,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { jwtConstants } from './constants';
@@ -14,6 +15,8 @@ import { IS_PUBLIC_KEY } from 'src/shared/decorators/public.decorator';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
+  private readonly logger = new Logger(AuthGuard.name);
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly prismaService: PrismaService,
@@ -33,7 +36,11 @@ export class AuthGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<any>();
     const token = this.extractTokenFromHeader(request);
+    
+    this.logger.log(`[AuthGuard] Token fornecido? ${!!token}`);
+    
     if (!token) {
+      this.logger.error(`[AuthGuard] ERRO: Token não fornecido`);
       throw new UnauthorizedException('Unauthorized');
     }
     
@@ -41,6 +48,8 @@ export class AuthGuard implements CanActivate {
       const payload = await this.jwtService.verifyAsync(token, {
         secret: jwtConstants.access,
       });
+
+      this.logger.log(`[AuthGuard] Token verificado. User ID: ${payload.sub}`);
 
       // Adicionar as informações do usuario que estão no banco de dados
       const user = await this.prismaService.user.findUnique({
@@ -50,12 +59,20 @@ export class AuthGuard implements CanActivate {
         },
       });
 
+      this.logger.log(`[AuthGuard] Usuário encontrado no banco? ${!!user}`);
+      if (user) {
+        this.logger.log(`[AuthGuard] Usuário: ${user.email}, Role: ${user.role}`);
+      }
+
       if (!user) {
+        this.logger.error(`[AuthGuard] ERRO: Usuário não encontrado no banco de dados`);
         throw new UnauthorizedException('Unauthorized');
       }
 
       request['user'] = UserEntity.fromPrisma(user);
-    } catch {
+      this.logger.log(`[AuthGuard] User entity atribuído ao request`);
+    } catch (error) {
+      this.logger.error(`[AuthGuard] ERRO ao verificar token: ${error?.message}`);
       throw new UnauthorizedException('Unauthorized');
     }
 

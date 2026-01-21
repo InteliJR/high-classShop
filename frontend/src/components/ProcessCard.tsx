@@ -6,6 +6,8 @@ import {
   Loader,
   X,
   MessageSquare,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -17,6 +19,8 @@ import { getContextualStatusMessage } from "../utils/processStatusMessages";
 import {
   getProcessCompletionReason,
   getProcessWithActiveContract,
+  confirmAppointment,
+  cancelAppointment,
 } from "../services/processes.service";
 
 interface ProcessCardProps {
@@ -55,6 +59,8 @@ export default function ProcessCard({
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [completionReason, setCompletionReason] = useState<string | null>(null);
   const [activeContract, setActiveContract] = useState<any>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   // Load completion reason and active contract on mount and when process changes
   useEffect(() => {
@@ -74,6 +80,46 @@ export default function ProcessCard({
 
     loadDetails();
   }, [process.id]);
+
+  // Handle confirm appointment
+  const handleConfirmAppointment = async () => {
+    if (isConfirming) return;
+
+    try {
+      setIsConfirming(true);
+      await confirmAppointment(process.id);
+      onStatusUpdated?.();
+    } catch (error) {
+      console.error("Error confirming appointment:", error);
+      alert("Erro ao confirmar agendamento. Tente novamente.");
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  // Handle cancel appointment
+  const handleCancelAppointment = async () => {
+    if (isCancelling) return;
+
+    const confirmed = window.confirm(
+      isClientView
+        ? "Deseja cancelar este agendamento? Esta ação não pode ser desfeita."
+        : "Deseja recusar este agendamento? Esta ação não pode ser desfeita.",
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setIsCancelling(true);
+      await cancelAppointment(process.id);
+      onStatusUpdated?.();
+    } catch (error) {
+      console.error("Error cancelling appointment:", error);
+      alert("Erro ao cancelar agendamento. Tente novamente.");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   // Map process status to step index
   // REJECTED substitui o último passo (COMPLETED)
@@ -129,7 +175,7 @@ export default function ProcessCard({
           </div>
         )}
       {/* Upload Documents Button: Fixed bottom right with margin, only when not expanded */}
-      
+
       {/* Header: Process Title with Client and Product */}
       <div className="px-3 py-2 md:px-6 md:py-4 border-b border-gray-100 flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -171,11 +217,74 @@ export default function ProcessCard({
               {getContextualStatusMessage(
                 process.status,
                 completionReason,
-                process.rejection_reason
+                process.rejection_reason,
               )}
             </p>
           </div>
         </div>
+
+        {/* Appointment Confirmation Buttons - SCHEDULING Status */}
+        {process.status === "SCHEDULING" && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-amber-900 mb-2">
+                {isClientView
+                  ? "Aguardando confirmação do especialista"
+                  : "Solicitação de agendamento"}
+              </p>
+
+              {!isClientView ? (
+                // Specialist view - Confirm or Reject buttons
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCancelAppointment}
+                    disabled={isCancelling || isConfirming}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition disabled:opacity-50"
+                  >
+                    {isCancelling ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
+                    ) : (
+                      <>
+                        <XCircle size={16} />
+                        Recusar
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={handleConfirmAppointment}
+                    disabled={isConfirming || isCancelling}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50"
+                  >
+                    {isConfirming ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <>
+                        <CheckCircle size={16} />
+                        Confirmar
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                // Client view - Only Cancel button
+                <button
+                  onClick={handleCancelAppointment}
+                  disabled={isCancelling}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-50 border border-red-300 text-red-700 rounded-lg font-medium hover:bg-red-100 transition disabled:opacity-50"
+                >
+                  {isCancelling ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-700"></div>
+                  ) : (
+                    <>
+                      <XCircle size={16} />
+                      Cancelar Agendamento
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Mobile: botões logo abaixo do status, antes do stepper */}
         {process.status === "NEGOTIATION" && !isExpanded && (
@@ -256,8 +365,8 @@ export default function ProcessCard({
                       isRejectedStep
                         ? "bg-red-500 text-white"
                         : isCompleted
-                        ? "bg-green-500 text-white"
-                        : "bg-gray-300 text-gray-600"
+                          ? "bg-green-500 text-white"
+                          : "bg-gray-300 text-gray-600"
                     } ${
                       isActive && !isRejectedStep
                         ? "ring-2 ring-green-300 ring-offset-2"
@@ -277,8 +386,8 @@ export default function ProcessCard({
                       isRejectedStep
                         ? "text-red-600"
                         : isCompleted
-                        ? "text-gray-900"
-                        : "text-gray-500"
+                          ? "text-gray-900"
+                          : "text-gray-500"
                     }`}
                   >
                     {label}
@@ -292,8 +401,8 @@ export default function ProcessCard({
                       isRejected && index >= currentStep - 1
                         ? "bg-red-400"
                         : index < currentStep
-                        ? "bg-green-500"
-                        : "bg-gray-300"
+                          ? "bg-green-500"
+                          : "bg-gray-300"
                     }`}
                     style={{ minWidth: "40px" }}
                   />
@@ -319,8 +428,8 @@ export default function ProcessCard({
                       isRejectedStep
                         ? "bg-red-500 text-white"
                         : isCompleted
-                        ? "bg-green-500 text-white"
-                        : "bg-gray-300 text-gray-600"
+                          ? "bg-green-500 text-white"
+                          : "bg-gray-300 text-gray-600"
                     } ${
                       isActive && !isRejectedStep
                         ? "ring-2 ring-green-300 ring-offset-1"
@@ -343,8 +452,8 @@ export default function ProcessCard({
                         isRejected && index >= currentStep - 1
                           ? "bg-red-400"
                           : index < currentStep
-                          ? "bg-green-500"
-                          : "bg-gray-300"
+                            ? "bg-green-500"
+                            : "bg-gray-300"
                       }`}
                     />
                   )}
@@ -357,8 +466,8 @@ export default function ProcessCard({
                       isRejectedStep
                         ? "text-red-600"
                         : isCompleted
-                        ? "text-gray-900"
-                        : "text-gray-500"
+                          ? "text-gray-900"
+                          : "text-gray-500"
                     }`}
                   >
                     {label}
@@ -382,8 +491,8 @@ export default function ProcessCard({
                     {process.product_type === "CAR"
                       ? "Carro"
                       : process.product_type === "BOAT"
-                      ? "Barco"
-                      : "Aeronave"}
+                        ? "Barco"
+                        : "Aeronave"}
                   </p>
                 </div>
                 <div>

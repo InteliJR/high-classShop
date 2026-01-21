@@ -21,6 +21,7 @@ import { AuthGuard } from './auth/auth.guard';
 import { AppointmentsModule } from './features/appointments/appointments.module';
 import { ProposalsModule } from './features/proposals/proposals.module';
 import { HealthModule } from './health/health.module';
+import { SettingsModule } from './features/settings/settings.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { HealthModule } from './health/health.module';
     DashboardModule,
     DocusignModule,
     UsersModule,
+    SettingsModule,
   ],
   providers: [
     PrismaService,
@@ -52,11 +54,11 @@ import { HealthModule } from './health/health.module';
     },
     {
       provide: APP_GUARD,
-      useClass: RolesGuard,
+      useClass: AuthGuard,
     },
     {
       provide: APP_GUARD,
-      useClass: AuthGuard,
+      useClass: RolesGuard,
     },
   ],
 })

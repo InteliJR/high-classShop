@@ -9,6 +9,7 @@ import DashboardPage from "../pages/admin/DashboardPage";
 import CompaniesPage from "../pages/admin/CompaniesPage";
 import SpecialistsPage from "../pages/admin/SpecialistsPage";
 import ConsultantsPage from "../pages/admin/ConsultantsPage";
+import SettingsPage from "../pages/admin/SettingsPage";
 import ProductsPage from "../pages/specialist/ProductsPage";
 import ProductFormPage from "../pages/specialist/ProductFormPage";
 import SpecialistDashboard from "../pages/specialist/SpecialistDashboard";
@@ -149,6 +150,16 @@ export default function RouterApp() {
         <MainLayout>
           <ProtectedRoute allowedRoles={["ADMIN"]}>
             <ConsultantsPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/admin/settings",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <SettingsPage />
           </ProtectedRoute>
         </MainLayout>
       ),

@@ -12,6 +12,7 @@ import {
   ProposalListResponseEntity,
 } from './entities/proposal.entity';
 import { ProposalStatus, ProcessStatus } from '@prisma/client';
+import { SettingsService } from 'src/features/settings/settings.service';
 
 /**
  * ProposalsService
@@ -19,7 +20,7 @@ import { ProposalStatus, ProcessStatus } from '@prisma/client';
  * Serviço responsável pela lógica de negócio de propostas de negociação
  *
  * Fluxo de negociação:
- * 1. Cliente envia proposta inicial (valor >= 80% do produto)
+ * 1. Cliente envia proposta inicial (valor >= 80% do produto, se ativado)
  * 2. Especialista pode: ACEITAR, REJEITAR ou CONTRAPROPOR
  * 3. Se aceitar: processo move para PROCESSING_CONTRACT
  * 4. Se rejeitar: cliente pode enviar nova proposta
@@ -27,7 +28,7 @@ import { ProposalStatus, ProcessStatus } from '@prisma/client';
  * 6. Ciclo continua até acordo ou desistência
  *
  * Regras:
- * - Valor mínimo: 80% do valor original do produto
+ * - Valor mínimo: configurável via Settings (minimum_proposal_enabled/percentage)
  * - Alternância: após proposta, outro participante deve responder
  * - Apenas participantes do processo podem criar/responder propostas
  * - Apenas em status NEGOTIATION
@@ -36,10 +37,13 @@ import { ProposalStatus, ProcessStatus } from '@prisma/client';
 export class ProposalsService {
   private readonly logger = new Logger(ProposalsService.name);
 
-  // Porcentagem mínima do valor do produto que pode ser proposta
-  private readonly MINIMUM_VALUE_PERCENTAGE = 0.8; // 80%
+  // Porcentagem mínima padrão (usado como fallback)
+  private readonly DEFAULT_MINIMUM_PERCENTAGE = 0.8; // 80%
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private settingsService: SettingsService,
+  ) {}
 
   /**
    * Cria uma nova proposta de negociação
@@ -167,26 +171,34 @@ export class ProposalsService {
     }
 
     const productValue = Number(product.valor);
-    const minimumValue = productValue * this.MINIMUM_VALUE_PERCENTAGE;
 
-    // 6. Validar valor mínimo (80%)
-    if (dto.proposed_value < minimumValue) {
-      this.logger.warn(
-        `[create] Valor proposto ${dto.proposed_value} abaixo do mínimo ${minimumValue}`,
-      );
-      throw new BadRequestException({
-        success: false,
-        error: {
-          code: 400,
-          message: `Valor proposto deve ser no mínimo 80% do valor do produto`,
-          details: {
-            proposed_value: dto.proposed_value,
-            minimum_value: minimumValue,
-            product_value: productValue,
-            minimum_percentage: '80%',
+    // 6. Validar valor mínimo (se ativado nas configurações)
+    const isMinimumEnabled =
+      await this.settingsService.isMinimumProposalEnabled();
+
+    if (isMinimumEnabled) {
+      const minimumPercentage =
+        await this.settingsService.getMinimumProposalPercentage();
+      const minimumValue = productValue * minimumPercentage;
+
+      if (dto.proposed_value < minimumValue) {
+        this.logger.warn(
+          `[create] Valor proposto ${dto.proposed_value} abaixo do mínimo ${minimumValue}`,
+        );
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message: `Valor proposto deve ser no mínimo ${Math.round(minimumPercentage * 100)}% do valor do produto`,
+            details: {
+              proposed_value: dto.proposed_value,
+              minimum_value: minimumValue,
+              product_value: productValue,
+              minimum_percentage: `${Math.round(minimumPercentage * 100)}%`,
+            },
           },
-        },
-      });
+        });
+      }
     }
 
     // 7. Validar counter_to_id se fornecido
@@ -340,7 +352,14 @@ export class ProposalsService {
     // 3. Calcular valores
     const product = process.car || process.boat || process.aircraft;
     const productValue = product ? Number(product.valor) : 0;
-    const minimumValue = productValue * this.MINIMUM_VALUE_PERCENTAGE;
+
+    // Get minimum value based on settings (async)
+    const isMinimumEnabled =
+      await this.settingsService.isMinimumProposalEnabled();
+    const minimumPercentage = isMinimumEnabled
+      ? await this.settingsService.getMinimumProposalPercentage()
+      : 0;
+    const minimumValue = productValue * minimumPercentage;
 
     // 4. Determinar quem deve responder
     const lastPendingProposal = process.proposals.find(

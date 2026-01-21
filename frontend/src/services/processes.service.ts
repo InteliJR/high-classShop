@@ -43,6 +43,13 @@ export interface ApiResponse<T> {
   data: T;
 }
 
+export interface ProcessFilters {
+  status?: string;
+  search?: string;
+  sortBy?: "created_at" | "updated_at" | "status";
+  order?: "asc" | "desc";
+}
+
 /**
  * Get all processes
  * Filters based on user role and permissions
@@ -60,18 +67,27 @@ export async function getProcesses(page = 1, perPage = 20): Promise<Process[]> {
  * @param specialistId - The ID of the specialist
  * @param page - Page number
  * @param perPage - Items per page
+ * @param filters - Optional filters (status, search, sortBy, order)
  */
 export async function getProcessesBySpecialist(
   specialistId: string,
   page = 1,
-  perPage = 20
+  perPage = 20,
+  filters?: ProcessFilters,
 ): Promise<Process[]> {
   const response = await api.get<ApiResponse<Process[]>>(
     `/processes/specialist/${specialistId}`,
     {
       withCredentials: true,
-      params: { page, perPage },
-    }
+      params: {
+        page,
+        perPage,
+        ...(filters?.status && { status: filters.status }),
+        ...(filters?.search && { search: filters.search }),
+        ...(filters?.sortBy && { sortBy: filters.sortBy }),
+        ...(filters?.order && { order: filters.order }),
+      },
+    },
   );
   return response.data.data;
 }
@@ -83,7 +99,7 @@ export async function getProcessesBySpecialist(
 export async function getProcessById(processId: string): Promise<Process> {
   const response = await api.get<ApiResponse<Process>>(
     `/processes/${processId}`,
-    { withCredentials: true }
+    { withCredentials: true },
   );
   return response.data.data;
 }
@@ -100,7 +116,7 @@ export interface CreateProcessRequest {
  * @param data - Process data
  */
 export async function createProcess(
-  data: CreateProcessRequest
+  data: CreateProcessRequest,
 ): Promise<Process> {
   const response = await api.post<ApiResponse<Process>>("/processes", data, {
     withCredentials: true,
@@ -117,12 +133,12 @@ export async function createProcess(
 export async function updateProcessStatus(
   processId: string,
   status: Process["status"],
-  notes?: string
+  notes?: string,
 ): Promise<Process> {
   const response = await api.patch<ApiResponse<Process>>(
     `/processes/${processId}/status`,
     { status, notes },
-    { withCredentials: true }
+    { withCredentials: true },
   );
   return response.data.data;
 }
@@ -132,11 +148,11 @@ export async function updateProcessStatus(
  * @param processId - ID of the process
  */
 export async function getProcessCompletionReason(
-  processId: string
+  processId: string,
 ): Promise<string | null> {
   const response = await api.get<ApiResponse<{ reason: string | null }>>(
     `/processes/${processId}/completion-reason`,
-    { withCredentials: true }
+    { withCredentials: true },
   );
   return response.data.data.reason;
 }
@@ -146,11 +162,11 @@ export async function getProcessCompletionReason(
  * @param processId - ID of the process
  */
 export async function getProcessWithActiveContract(
-  processId: string
+  processId: string,
 ): Promise<any> {
   const response = await api.get<ApiResponse<any>>(
     `/processes/${processId}/with-contract`,
-    { withCredentials: true }
+    { withCredentials: true },
   );
   return response.data.data;
 }
@@ -164,14 +180,14 @@ export async function getProcessWithActiveContract(
 export async function getProcessesByClient(
   clientId: string,
   page = 1,
-  perPage = 20
+  perPage = 20,
 ): Promise<Process[]> {
   const response = await api.get<ApiResponse<Process[]>>(
     `/processes/client/${clientId}`,
     {
       withCredentials: true,
       params: { page, perPage },
-    }
+    },
   );
   return response.data.data;
 }
@@ -183,12 +199,44 @@ export async function getProcessesByClient(
  */
 export async function rejectProcess(
   processId: string,
-  rejectionReason?: string
+  rejectionReason?: string,
 ): Promise<Process> {
   const response = await api.patch<ApiResponse<Process>>(
     `/processes/${processId}/reject`,
     { rejection_reason: rejectionReason },
-    { withCredentials: true }
+    { withCredentials: true },
+  );
+  return response.data.data;
+}
+
+/**
+ * Confirm appointment for a process in SCHEDULING status
+ * Moves process to NEGOTIATION and updates appointment to SCHEDULED
+ * @param processId - ID of the process
+ */
+export async function confirmAppointment(
+  processId: string,
+): Promise<{ processId: string; status: string }> {
+  const response = await api.post<ApiResponse<any>>(
+    `/processes/${processId}/confirm-appointment`,
+    {},
+    { withCredentials: true },
+  );
+  return response.data.data;
+}
+
+/**
+ * Cancel appointment for a process in SCHEDULING status
+ * Deletes both the appointment and the process
+ * @param processId - ID of the process
+ */
+export async function cancelAppointment(
+  processId: string,
+): Promise<{ success: boolean; message: string }> {
+  const response = await api.post<ApiResponse<any>>(
+    `/processes/${processId}/cancel-appointment`,
+    {},
+    { withCredentials: true },
   );
   return response.data.data;
 }
@@ -207,7 +255,7 @@ export interface CreateAppointmentRequest {
  * @param data - Appointment data from Calendly
  */
 export async function createAppointment(
-  data: CreateAppointmentRequest
+  data: CreateAppointmentRequest,
 ): Promise<any> {
   const response = await api.post<ApiResponse<any>>("/appointments", data, {
     withCredentials: true,
