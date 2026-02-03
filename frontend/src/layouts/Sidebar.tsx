@@ -10,6 +10,7 @@ import {
   Package,
   Home,
   FilePen,
+  Settings,
 } from "lucide-react";
 import { useContext } from "react";
 import { AppContext } from "../contexts/AppContext";
@@ -110,6 +111,11 @@ export default function Sidebar() {
             to: "/admin/specialists",
             label: "Especialistas",
             icon: <UserCog size={20} />,
+          },
+          {
+            to: "/admin/settings",
+            label: "Configurações",
+            icon: <Settings size={20} />
           }
         );
         break;

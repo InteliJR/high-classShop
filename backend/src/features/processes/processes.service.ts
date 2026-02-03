@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
   Logger,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProcessDTO } from './dto/create-process.dto';
@@ -13,7 +14,7 @@ import {
   Product,
 } from './entity/process.response.entity';
 import { QueryDto } from 'src/shared/dto/query.dto';
-import { ProcessStatus } from '@prisma/client';
+import { ProcessStatus, StatusAgendamento } from '@prisma/client';
 import { ProcessesByStatus } from 'src/shared/dto/summary.dto';
 import { UpdateProcessDto } from './dto/update-process.dto';
 import { ProcessWithHistory } from './entity/process-history.response';
@@ -374,6 +375,108 @@ export class ProcessesService {
   }
 
   /**
+   * Get all processes by specialist with filters
+   *
+   * @param {string} specialistId - The ID of the specialist
+   * @param options - Filter options: page, perPage, status, search, sortBy, order
+   * @returns {Promise<{processes: ProcessResponse[], count: number}>} - Filtered paginated list
+   */
+  async getBySpecialistIdWithFilters(
+    specialistId: string,
+    options: {
+      page?: number;
+      perPage?: number;
+      status?: string;
+      search?: string;
+      sortBy?: string;
+      order?: 'asc' | 'desc';
+    },
+  ): Promise<{
+    processes: ProcessResponse[];
+    count: number;
+  }> {
+    const pageNum = Number(options.page) || 1;
+    const perPageNum = Number(options.perPage) || 20;
+    const skip = (pageNum - 1) * perPageNum;
+    const sortBy = options.sortBy || 'created_at';
+    const order = options.order || 'desc';
+
+    // Build where clause
+    const where: any = {
+      specialist_id: specialistId,
+    };
+
+    // Add status filter
+    if (options.status) {
+      where.status = options.status;
+    }
+
+    // Add search filter (client name/email, product marca/modelo)
+    if (options.search && options.search.trim()) {
+      const searchTerm = options.search.trim();
+      where.OR = [
+        { client: { name: { contains: searchTerm, mode: 'insensitive' } } },
+        { client: { email: { contains: searchTerm, mode: 'insensitive' } } },
+        { car: { marca: { contains: searchTerm, mode: 'insensitive' } } },
+        { car: { modelo: { contains: searchTerm, mode: 'insensitive' } } },
+        { boat: { marca: { contains: searchTerm, mode: 'insensitive' } } },
+        { boat: { modelo: { contains: searchTerm, mode: 'insensitive' } } },
+        { aircraft: { marca: { contains: searchTerm, mode: 'insensitive' } } },
+        { aircraft: { modelo: { contains: searchTerm, mode: 'insensitive' } } },
+      ];
+    }
+
+    this.logger.log(
+      `[getBySpecialistIdWithFilters] Buscando processos com filtros: ${JSON.stringify(options)}`,
+    );
+
+    // Fetch processes and count in parallel
+    const [processes, count] = await Promise.all([
+      this.prismaService.process.findMany({
+        where,
+        include: {
+          client: true,
+          car: true,
+          boat: true,
+          aircraft: true,
+          specialist: true,
+        },
+        orderBy: { [sortBy]: order },
+        skip,
+        take: perPageNum,
+      }),
+      this.prismaService.process.count({ where }),
+    ]);
+
+    // Map processes to response entities
+    const processEntities: ProcessResponse[] = processes.map(
+      (process: any) => ({
+        id: process.id,
+        status: process.status,
+        product_type: process.product_type,
+        client: {
+          id: process.client_id,
+          email: process.client?.email,
+          name: process.client?.name,
+        },
+        specialist: {
+          especialidade: process.specialist.speciality,
+          id: process.specialist.id,
+          name: process.specialist.name,
+        },
+        product: this.buildProduct(process),
+        created_at: process.created_at,
+        notes: process.notes,
+      }),
+    );
+
+    return {
+      processes: processEntities,
+      count,
+    };
+  }
+
+  /**
    * Atualiza os status de um processo
    *
    * @param {string} processId - id do processo para ser atualizado
@@ -682,5 +785,170 @@ export class ProcessesService {
       }
       throw new InternalServerErrorException('Erro ao rejeitar processo');
     }
+  }
+
+  /**
+   * Confirma um agendamento de um processo em status SCHEDULING
+   * Atualiza o appointment para SCHEDULED e move o processo para NEGOTIATION
+   * Apenas o especialista pode confirmar
+   *
+   * @param {string} processId - Id do processo
+   * @param {string} userId - Id do usuário autenticado
+   * @returns {Promise<any>}
+   * @throws {NotFoundException} - Processo ou appointment não encontrado
+   * @throws {ForbiddenException} - Usuário não autorizado
+   * @throws {BadRequestException} - Processo não está em status SCHEDULING
+   */
+  async confirmAppointment(processId: string, userId: string): Promise<any> {
+    this.logger.log(
+      `[confirmAppointment] Confirmando agendamento do processo ${processId}`,
+    );
+
+    // Buscar processo com appointment
+    const process = await this.prismaService.process.findUnique({
+      where: { id: processId },
+      include: { appointment: true },
+    });
+
+    if (!process) {
+      throw new NotFoundException('Processo não encontrado');
+    }
+
+    // Verificar se o usuário é o especialista
+    if (process.specialist_id !== userId) {
+      throw new ForbiddenException(
+        'Apenas o especialista pode confirmar o agendamento',
+      );
+    }
+
+    // Verificar se está em status SCHEDULING
+    if (process.status !== 'SCHEDULING') {
+      throw new BadRequestException(
+        'Apenas processos em status SCHEDULING podem ter o agendamento confirmado',
+      );
+    }
+
+    // Verificar se tem appointment
+    if (!process.appointment) {
+      throw new NotFoundException(
+        'Agendamento não encontrado para este processo',
+      );
+    }
+
+    // Confirmar appointment e atualizar process em transação
+    await this.prismaService.$transaction(async (tx) => {
+      // Atualizar appointment para SCHEDULED
+      await tx.appointment.update({
+        where: { id: process.appointment!.id },
+        data: {
+          status: StatusAgendamento.SCHEDULED,
+          confirmed_at: new Date(),
+          confirmed_by_id: userId,
+        },
+      });
+
+      // Atualizar process para NEGOTIATION
+      await tx.process.update({
+        where: { id: processId },
+        data: {
+          status: 'NEGOTIATION',
+          notes: process.notes
+            ? `${process.notes}\n\nAgendamento confirmado pelo especialista (${new Date().toISOString()})`
+            : `Agendamento confirmado pelo especialista (${new Date().toISOString()})`,
+        },
+      });
+
+      // Criar histórico
+      await tx.processStatusHistory.create({
+        data: {
+          processId,
+          status: 'NEGOTIATION',
+          changed_by: userId,
+          changed_at: new Date(),
+        },
+      });
+    });
+
+    this.logger.log(
+      `[confirmAppointment] Agendamento confirmado para processo ${processId}`,
+    );
+
+    return { processId, status: 'NEGOTIATION' };
+  }
+
+  /**
+   * Cancela um agendamento de um processo em status SCHEDULING
+   * Deleta tanto o appointment quanto o processo
+   * Cliente ou especialista podem cancelar
+   *
+   * @param {string} processId - Id do processo
+   * @param {string} userId - Id do usuário autenticado
+   * @returns {Promise<any>}
+   * @throws {NotFoundException} - Processo ou appointment não encontrado
+   * @throws {ForbiddenException} - Usuário não autorizado
+   * @throws {BadRequestException} - Processo não está em status SCHEDULING
+   */
+  async cancelAppointment(processId: string, userId: string): Promise<any> {
+    this.logger.log(
+      `[cancelAppointment] Cancelando agendamento do processo ${processId}`,
+    );
+
+    // Buscar processo com appointment
+    const process = await this.prismaService.process.findUnique({
+      where: { id: processId },
+      include: { appointment: true },
+    });
+
+    if (!process) {
+      throw new NotFoundException('Processo não encontrado');
+    }
+
+    // Verificar se o usuário é o cliente ou especialista
+    const isClient = process.client_id === userId;
+    const isSpecialist = process.specialist_id === userId;
+
+    if (!isClient && !isSpecialist) {
+      throw new ForbiddenException(
+        'Sem permissão para cancelar este agendamento',
+      );
+    }
+
+    // Verificar se está em status SCHEDULING
+    if (process.status !== 'SCHEDULING') {
+      throw new BadRequestException(
+        'Apenas processos em status SCHEDULING podem ter o agendamento cancelado',
+      );
+    }
+
+    // Verificar se tem appointment
+    if (!process.appointment) {
+      throw new NotFoundException(
+        'Agendamento não encontrado para este processo',
+      );
+    }
+
+    // Deletar appointment e process em transação
+    await this.prismaService.$transaction(async (tx) => {
+      // Deletar histórico do processo
+      await tx.processStatusHistory.deleteMany({
+        where: { processId },
+      });
+
+      // Deletar processo
+      await tx.process.delete({
+        where: { id: processId },
+      });
+
+      // Deletar appointment
+      await tx.appointment.delete({
+        where: { id: process.appointment!.id },
+      });
+    });
+
+    this.logger.log(
+      `[cancelAppointment] Agendamento e processo ${processId} deletados`,
+    );
+
+    return { success: true, message: 'Agendamento cancelado com sucesso' };
   }
 }

@@ -392,4 +392,111 @@ export class AppointmentsController {
       data: appointment,
     };
   }
+
+  /**
+   * POST /api/appointments/pending
+   *
+   * Cria um agendamento em status PENDING
+   * Usado quando cliente clica no link do Calendly e retorna à plataforma
+   * NÃO cria Process ainda - apenas registra intenção do cliente
+   *
+   * Request Body:
+   * {
+   *   "client_id": "uuid-cliente",
+   *   "specialist_id": "uuid-especialista",
+   *   "product_type": "CAR",
+   *   "product_id": 1,
+   *   "notes": "Acessei o calendário do especialista"
+   * }
+   *
+   * Respostas:
+   * - 201 Created: Agendamento PENDING criado
+   * - 409 Conflict: Já existe agendamento PENDING ou SCHEDULED
+   * - 403 Forbidden: Apenas o próprio cliente pode criar
+   */
+  @Post('pending')
+  async createPending(@Body() dto: CreateAppointmentDto, @Request() req: any) {
+    const userId = req.user.id;
+
+    const appointment = await this.appointmentsService.createPending(
+      dto,
+      userId,
+    );
+
+    return {
+      success: true,
+      message: 'Agendamento pendente criado com sucesso',
+      data: appointment,
+    };
+  }
+
+  /**
+   * GET /api/appointments/pending
+   *
+   * Lista agendamentos PENDING do especialista autenticado
+   * Usado para o especialista ver quem acessou seu link
+   *
+   * Query Parameters:
+   * - page (default: 1)
+   * - limit (default: 20)
+   */
+  @Get('pending')
+  async getPending(@Query() query: any, @Request() req: any) {
+    const userId = req.user.id;
+    const page = parseInt(query.page || '1', 10);
+    const limit = parseInt(query.limit || '20', 10);
+
+    return this.appointmentsService.getPendingBySpecialist(userId, page, limit);
+  }
+
+  /**
+   * POST /api/appointments/pending/:id/confirm
+   *
+   * Confirma um agendamento PENDING (transforma em SCHEDULED)
+   * Apenas o especialista pode confirmar
+   * Também cria o Process vinculado
+   *
+   * Request Body (opcional):
+   * {
+   *   "appointment_datetime": "2024-10-10T14:00:00Z"
+   * }
+   */
+  @Post('pending/:id/confirm')
+  async confirmPending(
+    @Param('id') id: string,
+    @Body() body: { appointment_datetime?: string },
+    @Request() req: any,
+  ) {
+    const userId = req.user.id;
+    const appointmentDatetime = body.appointment_datetime
+      ? new Date(body.appointment_datetime)
+      : undefined;
+
+    const appointment = await this.appointmentsService.confirmPending(
+      id,
+      userId,
+      appointmentDatetime,
+    );
+
+    return {
+      success: true,
+      message: 'Agendamento confirmado com sucesso',
+      data: appointment,
+    };
+  }
+
+  /**
+   * POST /api/appointments/pending/:id/cancel
+   *
+   * Cancela um agendamento PENDING e deleta o processo associado
+   * Cliente ou especialista podem cancelar
+   */
+  @Post('pending/:id/cancel')
+  async cancelPending(@Param('id') id: string, @Request() req: any) {
+    const userId = req.user.id;
+
+    const result = await this.appointmentsService.cancelPending(id, userId);
+
+    return result;
+  }
 }

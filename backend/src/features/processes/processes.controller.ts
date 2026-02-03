@@ -23,6 +23,7 @@ import { UpdateProcessDto } from './dto/update-process.dto';
 import { RejectProcessDto } from './dto/reject-process.dto';
 import { ProcessWithHistory } from './entity/process-history.response';
 import { AuthGuard } from 'src/auth/auth.guard';
+import { GetProcessesFilterDto } from './dto/get-processes-filter.dto';
 
 @Controller('processes')
 export class ProcessesController {
@@ -114,25 +115,29 @@ export class ProcessesController {
 
   /**
    * GET /api/processes/specialist/:specialistId
-   * Get all processes created by a specific specialist
+   * Get all processes created by a specific specialist with optional filters
    *
    * @param {string} specialistId - The ID of the specialist
-   * @param {QueryDto} - Parâmetros de paginação
+   * @param {GetProcessesFilterDto} - Filter parameters (page, perPage, status, search, sortBy, order)
    * @returns {Promise<ApiResponseDto<ProcessResponse[], unknown, unknown>>} - Processos do especialista de forma paginada
    */
   @Get('specialist/:specialistId')
   async getBySpecialist(
     @Param('specialistId', new ParseUUIDPipe()) specialistId: string,
-    @Query() { perPage, page }: QueryDto,
+    @Query() filters: GetProcessesFilterDto,
   ): Promise<ApiResponseDto<ProcessResponse[], unknown>> {
-    // Tratamento de variáveis do front
-    page = Number(page);
-    perPage = Number(perPage);
+    const page = Number(filters.page) || 1;
+    const perPage = Number(filters.perPage) || 20;
 
-    const { processes, count } = await this.processesService.getBySpecialistId(
-      specialistId,
-      { page, perPage },
-    );
+    const { processes, count } =
+      await this.processesService.getBySpecialistIdWithFilters(specialistId, {
+        page,
+        perPage,
+        status: filters.status,
+        search: filters.search,
+        sortBy: filters.sortBy,
+        order: filters.order,
+      });
 
     // Criação do objeto de pagination
     const skip = (page - 1) * perPage;
@@ -300,6 +305,70 @@ export class ProcessesController {
     return {
       sucess: true,
       message: 'Processo rejeitado com sucesso',
+      data: result,
+    };
+  }
+
+  /**
+   * POST /api/processes/:id/confirm-appointment
+   * Confirma o agendamento de um processo em status SCHEDULING
+   * Move o processo para NEGOTIATION e atualiza o appointment para SCHEDULED
+   * Apenas o especialista pode confirmar
+   *
+   * @param {string} processId - Id do processo
+   * @param {Request} req - Request com dados do usuário autenticado
+   * @returns {Promise<ApiResponseDto<any>>}
+   * @throws {NotFoundException} - Processo ou appointment não encontrado
+   * @throws {ForbiddenException} - Usuário não autorizado
+   */
+  @Post(':id/confirm-appointment')
+  @UseGuards(AuthGuard)
+  async confirmAppointment(
+    @Param('id', new ParseUUIDPipe()) processId: string,
+    @Req() req: any,
+  ): Promise<ApiResponseDto<any>> {
+    const userId = req.user?.sub || req.user?.id;
+
+    const result = await this.processesService.confirmAppointment(
+      processId,
+      userId,
+    );
+
+    return {
+      sucess: true,
+      message: 'Agendamento confirmado com sucesso',
+      data: result,
+    };
+  }
+
+  /**
+   * POST /api/processes/:id/cancel-appointment
+   * Cancela o agendamento de um processo em status SCHEDULING
+   * Deleta tanto o appointment quanto o processo
+   * Cliente ou especialista podem cancelar
+   *
+   * @param {string} processId - Id do processo
+   * @param {Request} req - Request com dados do usuário autenticado
+   * @returns {Promise<ApiResponseDto<any>>}
+   * @throws {NotFoundException} - Processo ou appointment não encontrado
+   * @throws {ForbiddenException} - Usuário não autorizado
+   */
+  @Post(':id/cancel-appointment')
+  @UseGuards(AuthGuard)
+  async cancelAppointment(
+    @Param('id', new ParseUUIDPipe()) processId: string,
+    @Req() req: any,
+  ): Promise<ApiResponseDto<any>> {
+    const userId = req.user?.sub || req.user?.id;
+
+    const result = await this.processesService.cancelAppointment(
+      processId,
+      userId,
+    );
+
+    return {
+      sucess: true,
+      message: 'Agendamento cancelado com sucesso',
       data: result,
     };
   }

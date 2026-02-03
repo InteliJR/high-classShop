@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Mail, CheckCircle } from "lucide-react";
+import { ArrowLeft, Mail, CheckCircle, ExternalLink } from "lucide-react";
 import { getCarById, type RawCar } from "../services/cars.service";
 import { getBoatById, type RawBoat } from "../services/boats.service";
 import {
@@ -8,9 +8,8 @@ import {
   type RawAircraft,
 } from "../services/aircrafts.service";
 import { getUserById } from "../services/users.service";
+import { createPendingAppointment } from "../services/appointments.service";
 import ProductDetails from "../components/product/ProductDetails";
-import CalendlyEmbed from "../components/CalendlyEmbed";
-import ConfirmAppointmentModal from "../components/ConfirmAppointmentModal";
 import Loading from "../components/ui/Loading";
 import { useAuth } from "../store/authStateManager";
 import { useCheckAppointment } from "../hooks/useCheckAppointment";
@@ -52,9 +51,7 @@ export default function ProductPage() {
   const [specialist, setSpecialist] = useState<Specialist | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
-  const [showEmailConfirmationModal, setShowEmailConfirmationModal] =
-    useState(false);
+  const [isCreatingPending, setIsCreatingPending] = useState(false);
 
   // Hook para verificar agendamentos existentes
   // APENAS dispara verificação após specialist ser carregado com sucesso
@@ -180,8 +177,63 @@ export default function ProductPage() {
     loadProduct();
   }, [productType, id]);
 
-  const handleEmailClick = () => {
-    if (specialist?.email) {
+  /**
+   * Abre o link do Calendly em nova aba e cria agendamento PENDING
+   * Redireciona cliente para página de processos após criar
+   */
+  const handleCalendlyClick = async () => {
+    if (!specialist?.calendly_url || !user || !product) return;
+
+    setIsCreatingPending(true);
+    try {
+      // Criar agendamento PENDING
+      await createPendingAppointment({
+        client_id: user.id,
+        specialist_id: specialist.id,
+        product_type:
+          (productType?.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT") || "CAR",
+        product_id: product.id,
+        notes: "Cliente acessou link do Calendly",
+      });
+
+      // Abrir Calendly em nova aba
+      window.open(specialist.calendly_url, "_blank");
+
+      // Redirecionar para página de processos do cliente
+      navigate("/customer/processes", {
+        state: {
+          message: "Agendamento pendente criado! O especialista irá confirmar em breve.",
+        },
+      });
+    } catch (err: any) {
+      // Se já existe agendamento, apenas abrir o Calendly
+      if (err.response?.status === 409) {
+        window.open(specialist.calendly_url, "_blank");
+      } else {
+        console.error("Erro ao criar agendamento pendente:", err);
+        alert("Erro ao criar agendamento. Tente novamente.");
+      }
+    } finally {
+      setIsCreatingPending(false);
+    }
+  };
+
+  const handleEmailClick = async () => {
+    if (!specialist?.email || !user || !product) return;
+
+    setIsCreatingPending(true);
+    try {
+      // Criar agendamento PENDING
+      await createPendingAppointment({
+        client_id: user.id,
+        specialist_id: specialist.id,
+        product_type:
+          (productType?.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT") || "CAR",
+        product_id: product.id,
+        notes: "Cliente entrou em contato por email",
+      });
+
+      // Abrir email
       const subject = encodeURIComponent(
         `Interesse em ${product?.marca} ${product?.modelo}`
       );
@@ -189,6 +241,31 @@ export default function ProductPage() {
         `Olá ${specialist.name},\n\nTenho interesse no ${product?.marca} ${product?.modelo} e gostaria de agendar uma reunião.\n\nAtenciosamente.`
       );
       window.location.href = `mailto:${specialist.email}?subject=${subject}&body=${body}`;
+
+      // Redirecionar para página de processos do cliente
+      setTimeout(() => {
+        navigate("/customer/processes", {
+          state: {
+            message: "Solicitação de agendamento criada! O especialista irá confirmar em breve.",
+          },
+        });
+      }, 500);
+    } catch (err: any) {
+      // Se já existe agendamento, apenas abrir o email
+      if (err.response?.status === 409) {
+        const subject = encodeURIComponent(
+          `Interesse em ${product?.marca} ${product?.modelo}`
+        );
+        const body = encodeURIComponent(
+          `Olá ${specialist.name},\n\nTenho interesse no ${product?.marca} ${product?.modelo} e gostaria de agendar uma reunião.\n\nAtenciosamente.`
+        );
+        window.location.href = `mailto:${specialist.email}?subject=${subject}&body=${body}`;
+      } else {
+        console.error("Erro ao criar agendamento pendente:", err);
+        alert("Erro ao criar agendamento. Tente novamente.");
+      }
+    } finally {
+      setIsCreatingPending(false);
     }
   };
 
@@ -276,11 +353,14 @@ export default function ProductPage() {
               />
               <div>
                 <p className="font-semibold text-green-900">
-                  Agendamento já realizado
+                  {existingAppointment.status === "PENDING"
+                    ? "Aguardando confirmação do especialista"
+                    : "Agendamento já realizado"}
                 </p>
                 <p className="text-sm text-green-800 mt-1">
-                  Você já possui um agendamento marcado com este especialista
-                  para este produto.
+                  {existingAppointment.status === "PENDING"
+                    ? "Você já demonstrou interesse neste produto. O especialista irá confirmar seu agendamento em breve."
+                    : "Você já possui um agendamento marcado com este especialista para este produto."}
                   {existingAppointment.appointment_datetime && (
                     <>
                       <br />
@@ -301,91 +381,73 @@ export default function ProductPage() {
               </div>
             </div>
           ) : specialist.calendly_url ? (
-            /* Com Calendly URL - Embed Inline */
+            /* Com Calendly URL - Botão para acessar e criar PENDING */
             <div className="space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm text-blue-800">
-                  <strong>💡 Dica:</strong> Agende uma reunião diretamente
-                  abaixo e receba confirmação por e-mail.
+                  <strong>💡 Dica:</strong> Clique no botão abaixo para agendar
+                  uma reunião. O especialista será notificado e confirmará seu
+                  agendamento.
                 </p>
               </div>
 
-              {/* Botão de Confirmação */}
               <button
-                onClick={() => setShowConfirmationModal(true)}
-                className="w-full px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors shadow-md"
+                onClick={handleCalendlyClick}
+                disabled={isCreatingPending || !user}
+                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ✓ Confirmar que agendei
+                {isCreatingPending ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Criando solicitação...
+                  </>
+                ) : (
+                  <>
+                    <ExternalLink size={20} />
+                    Acessar Calendário do Especialista
+                  </>
+                )}
               </button>
 
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-                <CalendlyEmbed
-                  url={specialist.calendly_url}
-                  prefill={{
-                    name: user?.name
-                      ? `${user.name} ${user.surname || ""}`.trim()
-                      : undefined,
-                    email: user?.email,
-                  }}
-                />
-              </div>
+              {!user && (
+                <p className="text-sm text-center text-gray-500">
+                  Faça login para agendar uma reunião
+                </p>
+              )}
             </div>
           ) : (
-            /* Sem Calendly URL - fallback email com confirmação button */
+            /* Sem Calendly URL - fallback email */
             <div className="space-y-4">
               <p className="text-gray-600">
                 Este especialista não possui agenda online. Entre em contato por
-                e-mail e, após agendar, volte para confirmar o agendamento.
+                e-mail para agendar uma reunião.
               </p>
-              <div className="flex flex-col gap-3">
-                <button
-                  onClick={handleEmailClick}
-                  className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors font-medium"
-                >
-                  <Mail size={20} />
-                  Enviar E-mail para o Especialista
-                </button>
-                <button
-                  onClick={() => setShowEmailConfirmationModal(true)}
-                  className="w-full px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors shadow-md"
-                >
-                  ✓ Confirmar que agendei
-                </button>
-              </div>
+              <button
+                onClick={handleEmailClick}
+                disabled={isCreatingPending || !user}
+                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isCreatingPending ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Criando solicitação...
+                  </>
+                ) : (
+                  <>
+                    <Mail size={20} />
+                    Enviar E-mail para o Especialista
+                  </>
+                )}
+              </button>
+
+              {!user && (
+                <p className="text-sm text-center text-gray-500">
+                  Faça login para agendar uma reunião
+                </p>
+              )}
             </div>
           )}
         </div>
-      )}
-
-      {/* Modal de Confirmação de Agendamento (Calendly) */}
-      {product && specialist && user && (
-        <ConfirmAppointmentModal
-          isOpen={showConfirmationModal}
-          onClose={() => setShowConfirmationModal(false)}
-          specialistId={specialist.id}
-          clientId={user.id}
-          productType={
-            (productType?.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT") || "CAR"
-          }
-          productId={product.id}
-          specialistName={`${specialist.name} ${specialist.surname}`}
-        />
-      )}
-
-      {/* Modal de Confirmação de Agendamento (E-mail) */}
-      {product && specialist && user && (
-        <ConfirmAppointmentModal
-          isOpen={showEmailConfirmationModal}
-          onClose={() => setShowEmailConfirmationModal(false)}
-          specialistId={specialist.id}
-          clientId={user.id}
-          productType={
-            (productType?.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT") || "CAR"
-          }
-          productId={product.id}
-          specialistName={`${specialist.name} ${specialist.surname}`}
-          isEmailOnly={true}
-        />
       )}
     </div>
   );

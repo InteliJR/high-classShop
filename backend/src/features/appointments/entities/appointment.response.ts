@@ -140,6 +140,7 @@ export class AppointmentResponseEntity {
   /**
    * Data e hora do agendamento em UTC (ISO 8601)
    * Exemplo: "2024-10-10T14:00:00Z"
+   * Pode ser null para agendamentos PENDING (data ainda não definida)
    *
    * Frontend DEVE converter para horário local:
    * - Receber: "2024-10-10T14:00:00Z" (UTC)
@@ -147,7 +148,7 @@ export class AppointmentResponseEntity {
    * - Exibir: "10/10/2024 - 14:00"
    */
   @Expose()
-  appointment_datetime: Date;
+  appointment_datetime: Date | null;
 
   /**
    * Status atual do agendamento

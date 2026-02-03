@@ -111,7 +111,7 @@ export default function NegotiationPage() {
       setFormError(
         `O valor mínimo permitido é ${formatCurrency(
           processInfo.minimum_value
-        )} (80% do valor do produto)`
+        )}`
       );
       return;
     }
@@ -359,7 +359,7 @@ export default function NegotiationPage() {
               </div>
               <div className="flex items-center gap-2">
                 <AlertCircle size={16} className="text-orange-500" />
-                <span className="text-gray-600">Valor mínimo (80%):</span>
+                <span className="text-gray-600">Valor mínimo:</span>
                 <span className="font-semibold text-orange-600">
                   {formatCurrency(processInfo.minimum_value)}
                 </span>
@@ -582,8 +582,7 @@ export default function NegotiationPage() {
             {processInfo && (
               <p className="mt-2 text-xs text-gray-500 text-center md:text-left">
                 💡 O valor mínimo aceito é{" "}
-                {formatCurrency(processInfo.minimum_value)} (80% do valor do
-                produto)
+                {formatCurrency(processInfo.minimum_value)}
               </p>
             )}
           </div>

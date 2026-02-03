@@ -183,7 +183,12 @@ enum TipoProdutoAgendamento {
 }
 
 // StatusAgendamento: ciclo de vida do agendamento
+// PENDING: cliente clicou no link do Calendly, aguardando confirmação do especialista
+// SCHEDULED: especialista confirmou o agendamento
+// COMPLETED: reunião realizada
+// CANCELLED: agendamento cancelado
 enum StatusAgendamento {
+  PENDING   @map("pending")
   SCHEDULED @map("scheduled")
   COMPLETED @map("completed")
   CANCELLED @map("cancelled")
@@ -833,13 +838,24 @@ model Appointment {
   // Data e hora do agendamento em UTC (ISO 8601)
   // Exemplo: "2024-10-10T14:00:00Z"
   // Frontend: converte para horário local do usuário ao exibir
-  appointment_datetime DateTime
+  // Opcional para status PENDING (cliente ainda não informou)
+  appointment_datetime DateTime?
 
-  // Status do agendamento
-  status StatusAgendamento @default(SCHEDULED)
+  // Status do agendamento (default PENDING para novo fluxo)
+  status StatusAgendamento @default(PENDING)
 
   // Anotações sobre o agendamento (ex: "Test drive do Ferrari F8")
   notes String?
+
+  // Campos para fluxo PENDING:
+  // - user_clicked_at: momento que cliente clicou no link do Calendly
+  // - pending_expires_at: expiração do pending (opcional, 7 dias após criação)
+  // - confirmed_at: momento da confirmação pelo especialista
+  // - confirmed_by_id: UUID do especialista que confirmou
+  user_clicked_at   DateTime  @default(now())
+  pending_expires_at DateTime?
+  confirmed_at      DateTime?
+  confirmed_by_id   String?   @db.Uuid
 
   // Rastreabilidade e auditoria
   created_at DateTime @default(now())
@@ -945,6 +961,26 @@ model Aircraft_interest {
   client User? @relation(fields: [client_id], references: [id])
 
   @@index([client_id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ CONFIGURAÇÕES DO SISTEMA (Settings)
+// ─────────────────────────────────────────────────────────────────────────────
+// Settings: configurações key-value para administração do sistema
+// Permite ativar/desativar funcionalidades e configurar parâmetros
+// Chaves importantes:
+// - minimum_proposal_enabled: ativa validação de valor mínimo em propostas
+// - minimum_proposal_percentage: porcentagem mínima (ex: 0.8 = 80%)
+
+model Settings {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique
+  value       String
+  description String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([key])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
