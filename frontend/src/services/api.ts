@@ -13,6 +13,9 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
 
+  // Sempre incluir cookies nas requisições
+  config.withCredentials = true;
+
   return config;
 });
 
@@ -50,7 +53,7 @@ api.interceptors.response.use(
     }
 
     return Promise.reject(err);
-  }
+  },
 );
 
 export default api;

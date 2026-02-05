@@ -128,3 +128,6 @@ logs/
 .dockerignore
 Dockerfile.prod
 .github/copilot-instructions.md
+
+# Templates
+Contratodevenda.json

@@ -58,8 +58,8 @@ export class AuthController {
     response.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production', // true apenas em produção (HTTPS)
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // strict apenas em produção
-      path: '/api/auth/refresh',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' em produção para cross-site
+      path: '/', // Enviar cookie em todas as requisições
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
     });
 
@@ -73,21 +73,25 @@ export class AuthController {
     };
   }
 
+  @Public()
   @Post('refresh')
   async refresh(
     @Req() request: express.Request,
     @Res({ passthrough: true }) response: express.Response,
   ) {
     const refreshToken = request.cookies.refreshToken;
-    const { accessToken, refreshToken: newRefreshToken, user } =
-      await this.authService.refresh(refreshToken);
+    const {
+      accessToken,
+      refreshToken: newRefreshToken,
+      user,
+    } = await this.authService.refresh(refreshToken);
 
     // Set new refresh token cookie
     response.cookie('refreshToken', newRefreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production', // true apenas em produção (HTTPS)
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // strict apenas em produção
-      path: '/api/auth/refresh',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' em produção para cross-site
+      path: '/', // Enviar cookie em todas as requisições
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
     });
 
@@ -113,13 +117,13 @@ export class AuthController {
     @Res({ passthrough: true }) response: express.Response,
   ) {
     const refreshToken = request.cookies.refreshToken;
-    
+
     if (refreshToken) {
       await this.authService.logout(refreshToken);
     }
 
     // Clear cookie
-    response.clearCookie('refreshToken', { path: '/api/auth/refresh' });
+    response.clearCookie('refreshToken', { path: '/' });
 
     return {
       success: true,
