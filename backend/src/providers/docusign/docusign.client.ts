@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import { Injectable, Logger } from '@nestjs/common';
 
 import { CreateEnvelopeDto } from './dto/request/create-envelope.dto';
+import { CreateTemplateEnvelopeDto } from './dto/request/create-template-envelope.dto';
 import { CreateEnvelopeResponseDto } from './dto/response/create-envelope-response.dto';
 import {
   ProviderUnavailableException,
@@ -182,6 +183,10 @@ export class DocuSignClient {
    * @returns {Promise<any>} Response da API
    */
   private async post(url: string, body: any, token: string): Promise<any> {
+    // Log detalhado do payload para debug
+    this.logger.debug(`[POST] Payload being sent to DocuSign:`);
+    this.logger.debug(JSON.stringify(body, null, 2));
+
     return this.makeRequest(
       async () => {
         const response = await axios.post(this.getFullUrl(url), body, {
@@ -370,6 +375,125 @@ export class DocuSignClient {
     const token = await this.getAccessToken();
     return this.get(
       `/v2.1/accounts/${this.accountId}/envelopes/${envelopeId}`,
+      token,
+    );
+  }
+
+  /**
+   * Cria um envelope a partir de um template DocuSign
+   *
+   * Usado para contratos baseados em formulário onde os campos
+   * são pré-preenchidos via textTabs nos templateRoles.
+   *
+   * @param {CreateTemplateEnvelopeDto} dto - DTO com template ID, roles e tabs
+   * @returns {Promise<CreateEnvelopeResponseDto>} Response com ID do envelope
+   * @throws ProviderUnavailableException - Se DocuSign está indisponível
+   * @throws ProviderTimeoutException - Se timeout na requisição
+   */
+  async createEnvelopeFromTemplate(
+    dto: CreateTemplateEnvelopeDto,
+  ): Promise<CreateEnvelopeResponseDto> {
+    const token = await this.getAccessToken();
+    return this.post(`/v2.1/accounts/${this.accountId}/envelopes`, dto, token);
+  }
+
+  /**
+   * Realiza requisição PUT com retry automático
+   *
+   * @param {string} url - Caminho relativo da API
+   * @param {any} body - Body da requisição
+   * @param {string} token - Access token
+   * @returns {Promise<any>} Response da API
+   */
+  private async put(url: string, body: any, token: string): Promise<any> {
+    // Log detalhado do payload para debug
+    this.logger.debug(`[PUT] Payload being sent to DocuSign:`);
+    this.logger.debug(JSON.stringify(body, null, 2));
+
+    return this.makeRequest(
+      async () => {
+        const response = await axios.put(this.getFullUrl(url), body, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          timeout: this.REQUEST_TIMEOUT_MS,
+        });
+        return response.data;
+      },
+      'PUT',
+      url,
+    );
+  }
+
+  /**
+   * Obtém os campos DocGen de um envelope
+   *
+   * Usado para templates DocGen (AceGen) onde os campos são preenchidos
+   * via fluxo assíncrono de 4 etapas.
+   *
+   * @param {string} envelopeId - ID do envelope
+   * @returns {Promise<any>} Lista de documentos com campos DocGen
+   */
+  async getEnvelopeDocGenFormFields(envelopeId: string): Promise<any> {
+    const token = await this.getAccessToken();
+    this.logger.log(`Getting DocGen form fields for envelope ${envelopeId}`);
+    return this.get(
+      `/v2.1/accounts/${this.accountId}/envelopes/${envelopeId}/docGenFormFields`,
+      token,
+    );
+  }
+
+  /**
+   * Atualiza os campos DocGen de um envelope
+   *
+   * Usado para templates DocGen (AceGen) onde os campos são preenchidos
+   * via fluxo assíncrono de 4 etapas.
+   *
+   * @param {string} envelopeId - ID do envelope
+   * @param {any} docGenFormFields - Campos DocGen para atualizar
+   * @returns {Promise<any>} Response da API
+   */
+  async updateEnvelopeDocGenFormFields(
+    envelopeId: string,
+    docGenFormFields: any,
+  ): Promise<any> {
+    const token = await this.getAccessToken();
+    this.logger.log(`Updating DocGen form fields for envelope ${envelopeId}`);
+    return this.put(
+      `/v2.1/accounts/${this.accountId}/envelopes/${envelopeId}/docGenFormFields`,
+      docGenFormFields,
+      token,
+    );
+  }
+
+  /**
+   * Atualiza o status de um envelope (ex: de 'created' para 'sent')
+   *
+   * Usado no fluxo DocGen para enviar o envelope após preencher os campos.
+   *
+   * @param {string} envelopeId - ID do envelope
+   * @param {string} status - Novo status ('sent', 'voided', etc)
+   * @param {string} voidedReason - Motivo de cancelamento (se status = 'voided')
+   * @returns {Promise<any>} Response da API
+   */
+  async updateEnvelopeStatus(
+    envelopeId: string,
+    status: string,
+    voidedReason?: string,
+  ): Promise<any> {
+    const token = await this.getAccessToken();
+    this.logger.log(`Updating envelope ${envelopeId} status to ${status}`);
+
+    const body: any = { status };
+    if (voidedReason && status === 'voided') {
+      body.voidedReason = voidedReason;
+    }
+
+    return this.put(
+      `/v2.1/accounts/${this.accountId}/envelopes/${envelopeId}`,
+      body,
       token,
     );
   }

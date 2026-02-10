@@ -6,15 +6,26 @@ import {
   type SubmitHandler,
 } from "react-hook-form";
 import { AuthContext } from "../../contexts/AuthContext";
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
 import type { LoginValues } from "../../types/types";
 import { useNavigate } from "react-router-dom";
 import { getRoleBasedRoute } from "../../utils/roleUtils";
+import { useAuth } from "../../store/authStateManager";
 
 export default function Login() {
   // Criação do contexto no navegador
   const auth = useContext(AuthContext);
   const navigate = useNavigate();
+  const user = useAuth((state) => state.user);
+  const { loading } = auth;
+
+  // Se o usuário já está autenticado, redireciona para a página correta
+  useEffect(() => {
+    if (!loading && user) {
+      const redirectPath = getRoleBasedRoute(user.role);
+      navigate(redirectPath, { replace: true });
+    }
+  }, [loading, user, navigate]);
 
   // Lógica de submissão do formulário
   // Funções para registrar o input e a submissão do formulário
@@ -28,7 +39,7 @@ export default function Login() {
   const onSubmit: SubmitHandler<LoginValues> = async (data: LoginValues) => {
     try {
       const result = await auth.login(data);
-      
+
       // Redirect based on user role
       if (result?.user?.role) {
         const redirectPath = getRoleBasedRoute(result.user.role);

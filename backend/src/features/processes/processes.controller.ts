@@ -52,22 +52,27 @@ export class ProcessesController {
 
   /**
    * GET /api/processes
-   * Retorna os processos de maneira paginada
+   * Retorna os processos de maneira paginada com filtros opcionais
    *
    * @param {QueryDto} - Parâmetros de paginação
+   * @param {GetProcessesFilterDto} - Parâmetros de filtro (status, search, etc)
    * @returns {Promise<ApiResponseDto<ProcessResponse[], unknown, ProcessSummary>>} - Listagem de processos de maneira paginada e sumário
    */
   @Get()
   async getAll(
-    @Query() { perPage, page }: QueryDto,
+    @Query() queryDto: QueryDto & GetProcessesFilterDto,
   ): Promise<ApiResponseDto<ProcessResponse[], unknown, ProcessSummary>> {
     // Tratamento de variáveis do front
-    page = Number(page);
-    perPage = Number(perPage);
+    const page = Number(queryDto.page);
+    const perPage = Number(queryDto.perPage);
 
     const { count, processes, byStatus } = await this.processesService.getAll({
       perPage,
       page,
+      status: queryDto.status,
+      search: queryDto.search,
+      sortBy: queryDto.sortBy,
+      order: queryDto.order,
     });
 
     // Criação do objeto de pagination

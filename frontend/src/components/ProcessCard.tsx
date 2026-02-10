@@ -342,7 +342,7 @@ export default function ProcessCard({
                   </a>
                 ) : (
                   <span className="text-xs text-gray-500 italic">
-                    Documento ainda não disponível para download
+                    Documento disponível para download na plataforma Docusign
                   </span>
                 )}
               </div>

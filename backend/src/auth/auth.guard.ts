@@ -16,19 +16,21 @@ import { IS_PUBLIC_KEY } from 'src/shared/decorators/public.decorator';
 @Injectable()
 export class AuthGuard implements CanActivate {
   private readonly logger = new Logger(AuthGuard.name);
+  private lastNoTokenLogTime: number = 0;
+  private readonly LOG_THROTTLE_MS = 30000; // Log "Token não fornecido" apenas a cada 30 segundos
 
   constructor(
     private readonly jwtService: JwtService,
     private readonly prismaService: PrismaService,
-    private readonly reflector: Reflector
+    private readonly reflector: Reflector,
   ) {}
 
   // Implementar a função de can activate do guard
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
-      context.getClass()
-    ])
+      context.getClass(),
+    ]);
 
     if (isPublic) {
       return true;
@@ -36,20 +38,27 @@ export class AuthGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<any>();
     const token = this.extractTokenFromHeader(request);
-    
-    this.logger.log(`[AuthGuard] Token fornecido? ${!!token}`);
-    
+
     if (!token) {
-      this.logger.error(`[AuthGuard] ERRO: Token não fornecido`);
+      // Throttle dos logs para evitar spam - log apenas a cada 30 segundos
+      const now = Date.now();
+      if (now - this.lastNoTokenLogTime > this.LOG_THROTTLE_MS) {
+        this.logger.debug(
+          `[AuthGuard] Token não fornecido em requisição protegida (${request.method} ${request.url})`,
+        );
+        this.lastNoTokenLogTime = now;
+      }
       throw new UnauthorizedException('Unauthorized');
     }
-    
+
     try {
       const payload = await this.jwtService.verifyAsync(token, {
         secret: jwtConstants.access,
       });
 
-      this.logger.log(`[AuthGuard] Token verificado. User ID: ${payload.sub}`);
+      this.logger.debug(
+        `[AuthGuard] Token verificado. User ID: ${payload.sub}`,
+      );
 
       // Adicionar as informações do usuario que estão no banco de dados
       const user = await this.prismaService.user.findUnique({
@@ -59,20 +68,21 @@ export class AuthGuard implements CanActivate {
         },
       });
 
-      this.logger.log(`[AuthGuard] Usuário encontrado no banco? ${!!user}`);
-      if (user) {
-        this.logger.log(`[AuthGuard] Usuário: ${user.email}, Role: ${user.role}`);
-      }
-
       if (!user) {
-        this.logger.error(`[AuthGuard] ERRO: Usuário não encontrado no banco de dados`);
+        this.logger.error(
+          `[AuthGuard] ERRO: Usuário não encontrado no banco de dados (ID: ${payload.sub})`,
+        );
         throw new UnauthorizedException('Unauthorized');
       }
 
       request['user'] = UserEntity.fromPrisma(user);
-      this.logger.log(`[AuthGuard] User entity atribuído ao request`);
+      this.logger.debug(
+        `[AuthGuard] Usuário autenticado: ${user.email} (${user.role})`,
+      );
     } catch (error) {
-      this.logger.error(`[AuthGuard] ERRO ao verificar token: ${error?.message}`);
+      this.logger.error(
+        `[AuthGuard] ERRO ao verificar token: ${error?.message}`,
+      );
       throw new UnauthorizedException('Unauthorized');
     }
 

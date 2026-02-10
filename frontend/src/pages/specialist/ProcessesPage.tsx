@@ -1,15 +1,26 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Filter, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import {
+  Plus,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  X,
+} from "lucide-react";
 import ProcessCard from "../../components/ProcessCard.tsx";
 import CreateProcessModal from "../../components/CreateProcessModal.tsx";
-import { getProcessesBySpecialist, type ProcessFilters } from "../../services/processes.service";
+import {
+  getProcessesBySpecialist,
+  type ProcessFilters,
+} from "../../services/processes.service";
 import type { Process } from "../../services/processes.service";
 import { useAuth } from "../../store/authStateManager.ts";
 
 // Status labels for filter dropdown
 const STATUS_OPTIONS = [
   { value: "", label: "Todos os status" },
+  { value: "SCHEDULING", label: "Agendamento" },
   { value: "NEGOTIATION", label: "Negociação" },
   { value: "DOCUMENTATION", label: "Documentação" },
   { value: "PROCESSING_CONTRACT", label: "Processando Contrato" },
@@ -45,7 +56,7 @@ export default function ProcessesPage() {
 
   const [processes, setProcesses] = useState<ProcessWithProduct[]>([]);
   const [expandedProcessId, setExpandedProcessId] = useState<string | null>(
-    null
+    null,
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,46 +88,49 @@ export default function ProcessesPage() {
       (p) =>
         p.status === "NEGOTIATION" ||
         p.status === "PROCESSING_CONTRACT" ||
-        p.status === "DOCUMENTATION"
+        p.status === "DOCUMENTATION",
     );
   };
 
   // Fetch processes by specialist
-  const loadProcesses = useCallback(async (page: number) => {
-    try {
-      setIsLoading(true);
-      setError(null);
+  const loadProcesses = useCallback(
+    async (page: number) => {
+      try {
+        setIsLoading(true);
+        setError(null);
 
-      const filters: ProcessFilters = {};
-      if (statusFilter) {
-        filters.status = statusFilter;
+        const filters: ProcessFilters = {};
+        if (statusFilter) {
+          filters.status = statusFilter;
+        }
+        if (searchQuery) {
+          filters.search = searchQuery;
+        }
+
+        const processes = await getProcessesBySpecialist(
+          user.id,
+          page,
+          itemsPerPage,
+          filters,
+        );
+
+        setProcesses(processes);
+        setCurrentPage(page);
+        // Calculate pagination based on returned data
+        const hasMore = processes.length === itemsPerPage;
+        setHasNextPage(hasMore);
+        setHasPreviousPage(page > 1);
+        setTotalPages(page + (hasMore ? 1 : 0));
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Erro ao carregar processos",
+        );
+      } finally {
+        setIsLoading(false);
       }
-      if (searchQuery) {
-        filters.search = searchQuery;
-      }
-
-      const processes = await getProcessesBySpecialist(
-        user.id,
-        page,
-        itemsPerPage,
-        filters
-      );
-
-      setProcesses(processes);
-      setCurrentPage(page);
-      // Calculate pagination based on returned data
-      const hasMore = processes.length === itemsPerPage;
-      setHasNextPage(hasMore);
-      setHasPreviousPage(page > 1);
-      setTotalPages(page + (hasMore ? 1 : 0));
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Erro ao carregar processos"
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user.id, statusFilter, searchQuery, itemsPerPage]);
+    },
+    [user.id, statusFilter, searchQuery, itemsPerPage],
+  );
 
   // Load processes on mount or when user changes
   useEffect(() => {
@@ -341,7 +355,10 @@ export default function ProcessesPage() {
                 Filtros ativos:{" "}
                 {statusFilter && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 rounded mr-2">
-                    {STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label}
+                    {
+                      STATUS_OPTIONS.find((o) => o.value === statusFilter)
+                        ?.label
+                    }
                     <button onClick={() => setStatusFilter("")}>
                       <X size={12} />
                     </button>

@@ -773,27 +773,80 @@ model NegotiationProposal {
 }
 
 // Contract: documentos digitais com integração a provedores de assinatura (DocuSign, etc.)
+// Atualizado para suportar geração via formulário (form-based) além de upload PDF
 model Contract {
   id          String  @id @default(uuid()) @db.Uuid
   process_id  String  @db.Uuid
   description String?
 
+  // Provider (DocuSign)
   provider_name   String?
   provider_id     String?
   provider_status ProviderStatus?
   provider_meta   Json?
 
-  file_name        String
-  file_path        String
-  file_type        String
-  file_size        Int
-  original_pdf_url String
+  // Campos de arquivo (opcionais - para retrocompatibilidade com upload PDF)
+  file_name        String?
+  file_path        String?
+  file_type        String?
+  file_size        Int?
+  original_pdf_url String?
 
+  // === DADOS DO FORMULÁRIO DE CONTRATO (form-based) ===
+  // Vendedor (Seller) - inicialmente pré-preenchido com dados do especialista
+  seller_name             String?
+  seller_cpf              String? @db.VarChar(14)
+  seller_rg               String?
+  seller_address          String?
+  seller_cep              String? @db.VarChar(9)
+  seller_bank             String?
+  seller_agency           String?
+  seller_checking_account String?
+
+  // Comprador (Buyer) - pré-preenchido com dados do cliente
+  buyer_name    String?
+  buyer_cpf     String? @db.VarChar(14)
+  buyer_rg      String?
+  buyer_address String?
+  buyer_cep     String? @db.VarChar(9)
+
+  // Veículo/Produto
+  vehicle_model                 String?
+  vehicle_year                  String?
+  vehicle_registration_id       String? // placa (CAR), inscrição (BOAT), prefixo (AIRCRAFT)
+  vehicle_serial_number         String? // chassi (CAR), hull_number (BOAT), serial (AIRCRAFT)
+  vehicle_technical_information String?
+  vehicle_price                 Decimal? @db.Decimal(15, 2)
+  vehicle_price_written         String?  @db.VarChar(500)
+
+  // Pagamento ao Vendedor
+  payment_seller_value         Decimal? @db.Decimal(15, 2)
+  payment_seller_value_written String?  @db.VarChar(500)
+
+  // Comissão da Plataforma
+  commission_value            Decimal? @db.Decimal(15, 2)
+  commission_value_written    String?  @db.VarChar(500)
+  commission_name             String?
+  commission_cpf              String?  @db.VarChar(18) // CNPJ formatado
+  commission_bank             String?
+  commission_agency           String?
+  commission_checking_account String?
+
+  // Cidade de assinatura
+  city String?
+
+  // Template usado (DocuSign template ID)
+  template_id    String?
+  // URL do PDF assinado (após assinatura no DocuSign)
+  signed_pdf_url String?
+
+  // Status do contrato
   status          ContractStatus @default(PENDING)
   rejected_reason String?
   signed_at       DateTime?
   signature_type  SignatureType?
 
+  // Relacionamentos
   active_of_process Process? @relation("process_active_contract")
   process           Process  @relation("process_contracts", fields: [process_id], references: [id])
 
@@ -852,10 +905,10 @@ model Appointment {
   // - pending_expires_at: expiração do pending (opcional, 7 dias após criação)
   // - confirmed_at: momento da confirmação pelo especialista
   // - confirmed_by_id: UUID do especialista que confirmou
-  user_clicked_at   DateTime  @default(now())
+  user_clicked_at    DateTime  @default(now())
   pending_expires_at DateTime?
-  confirmed_at      DateTime?
-  confirmed_by_id   String?   @db.Uuid
+  confirmed_at       DateTime?
+  confirmed_by_id    String?   @db.Uuid
 
   // Rastreabilidade e auditoria
   created_at DateTime @default(now())

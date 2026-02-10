@@ -5,12 +5,12 @@ import { CreateEnvelopeResponseDto } from './dto/response/create-envelope-respon
 import { EnvelopeStatus } from './enums/envelope-status.enum';
 import { DocumentDto } from './dto/request/document.dto';
 import { TabsDto } from './dto/request/tabs/tabs.dto';
-import { $Enums } from '@prisma/client';
 import {
   EnvelopeCreationFailedException,
   ProviderUnavailableException,
   ProviderTimeoutException,
 } from 'src/shared/exceptions/custom-exceptions';
+import { CreateTemplateEnvelopeDto } from './dto/request/create-template-envelope.dto';
 
 /**
  * Serviço de integração com DocuSign
@@ -270,5 +270,231 @@ export class DocuSignService {
         `Falha ao cancelar envelope`,
       );
     }
+  }
+
+  /**
+   * Cria um envelope a partir de um template DocuSign com campos pré-preenchidos
+   *
+   * IMPORTANTE: Este método usa o fluxo DocGen (AceGen) de 4 etapas:
+   * 1. Criar envelope como DRAFT (status: 'created')
+   * 2. GET docGenFormFields para obter os IDs internos dos campos
+   * 3. PUT docGenFormFields com os valores mapeados por label
+   * 4. PUT status: 'sent' para enviar o envelope
+   *
+   * @param params.templateId - ID do template no DocuSign
+   * @param params.buyerEmail - Email do comprador
+   * @param params.buyerName - Nome do comprador
+   * @param params.sellerEmail - Email do vendedor
+   * @param params.sellerName - Nome do vendedor
+   * @param params.formFields - Campos do formulário para preencher no contrato
+   * @param params.processId - ID do processo para rastreabilidade
+   * @returns Promise<{envelopeId: string; status: EnvelopeStatus}>
+   *
+   * @throws EnvelopeCreationFailedException - Falha ao criar envelope
+   * @throws ProviderUnavailableException - DocuSign indisponível
+   * @throws ProviderTimeoutException - Timeout na requisição
+   */
+  async createEnvelopeFromTemplate(params: {
+    templateId: string;
+    buyerEmail: string;
+    buyerName: string;
+    sellerEmail: string;
+    sellerName: string;
+    formFields: Record<string, string>;
+    processId: string;
+  }): Promise<{ envelopeId: string; status: EnvelopeStatus }> {
+    const {
+      templateId,
+      buyerEmail,
+      buyerName,
+      sellerEmail,
+      sellerName,
+      formFields,
+      processId,
+    } = params;
+
+    try {
+      // 1. Validações básicas
+      if (!templateId || templateId.trim().length === 0) {
+        throw new EnvelopeCreationFailedException('Template ID é obrigatório');
+      }
+
+      if (!buyerEmail || buyerEmail.trim().length === 0) {
+        throw new EnvelopeCreationFailedException(
+          'Email do comprador é obrigatório',
+        );
+      }
+
+      if (!sellerEmail || sellerEmail.trim().length === 0) {
+        throw new EnvelopeCreationFailedException(
+          'Email do vendedor é obrigatório',
+        );
+      }
+
+      this.logger.log(`=== INICIANDO FLUXO DOCGEN DE 4 ETAPAS ===`);
+      this.logger.log(`Buyer: ${buyerEmail}, Seller: ${sellerEmail}`);
+      this.logger.debug(`Template ID: ${templateId}`);
+      this.logger.debug(`Process ID: ${processId}`);
+      this.logger.debug(`Form fields count: ${Object.keys(formFields).length}`);
+
+      // ===== ETAPA 1: CRIAR ENVELOPE COMO DRAFT =====
+      this.logger.log('ETAPA 1: Criando envelope como DRAFT...');
+
+      const createEnvelopeDto: CreateTemplateEnvelopeDto = {
+        templateId,
+        status: 'created', // DRAFT - não envia ainda
+        emailSubject: 'Contrato de Compra e Venda - Assinatura Digital',
+        templateRoles: [
+          {
+            roleName: 'Buyer',
+            name: buyerName,
+            email: buyerEmail,
+          },
+          {
+            roleName: 'Seller',
+            name: sellerName,
+            email: sellerEmail,
+          },
+        ],
+        customFields: {
+          textCustomFields: [
+            {
+              name: 'processId',
+              value: processId,
+            },
+          ],
+        },
+      };
+
+      const draftResponse =
+        await this.client.createEnvelopeFromTemplate(createEnvelopeDto);
+      const envelopeId = draftResponse.envelopeId;
+
+      this.logger.log(`✓ Envelope DRAFT criado. ID: ${envelopeId}`);
+
+      // ===== ETAPA 2: BUSCAR CAMPOS DOCGEN =====
+      this.logger.log('ETAPA 2: Buscando campos DocGen do envelope...');
+
+      const docGenFieldsResponse =
+        await this.client.getEnvelopeDocGenFormFields(envelopeId);
+
+      this.logger.debug(
+        `DocGen fields response: ${JSON.stringify(docGenFieldsResponse, null, 2)}`,
+      );
+
+      // ===== ETAPA 3: MAPEAR E ATUALIZAR CAMPOS =====
+      this.logger.log('ETAPA 3: Mapeando e atualizando campos DocGen...');
+
+      // docGenFieldsResponse.docGenFormFields é array de documentos
+      // Cada documento tem docGenFormFieldList com os campos
+      const updatedDocGenFormFields = this.mapFormFieldsToDocGen(
+        docGenFieldsResponse.docGenFormFields,
+        formFields,
+      );
+
+      this.logger.debug(
+        `Updated DocGen fields: ${JSON.stringify(updatedDocGenFormFields, null, 2)}`,
+      );
+
+      await this.client.updateEnvelopeDocGenFormFields(envelopeId, {
+        docGenFormFields: updatedDocGenFormFields,
+      });
+
+      this.logger.log(`✓ Campos DocGen atualizados`);
+
+      // ===== ETAPA 4: ENVIAR ENVELOPE =====
+      this.logger.log('ETAPA 4: Enviando envelope (status: sent)...');
+
+      await this.client.updateEnvelopeStatus(envelopeId, 'sent');
+
+      this.logger.log(`✓ Envelope enviado com sucesso!`);
+      this.logger.log(`=== FLUXO DOCGEN CONCLUÍDO ===`);
+
+      return {
+        envelopeId,
+        status: EnvelopeStatus.SENT,
+      };
+    } catch (error) {
+      // Tratamento de erros com categorização
+
+      if (
+        error instanceof ProviderUnavailableException ||
+        error instanceof ProviderTimeoutException
+      ) {
+        this.logger.error(
+          `Erro de resiliência ao criar envelope via template: ${error.message}`,
+        );
+        throw error;
+      }
+
+      if (error instanceof EnvelopeCreationFailedException) {
+        this.logger.error(`Validação falhou: ${error.message}`);
+        throw error;
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      this.logger.error(
+        `Erro inesperado ao criar envelope via template: ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      throw new EnvelopeCreationFailedException(
+        `Falha ao criar envelope via template: ${errorMessage}`,
+      );
+    }
+  }
+
+  /**
+   * Mapeia os campos do formulário para a estrutura DocGen
+   *
+   * A API DocuSign retorna os campos com 'name' (ID interno) e 'label'.
+   * Precisamos encontrar o 'name' correspondente ao 'label' e atribuir o valor.
+   *
+   * @param docGenFormFields - Array de documentos com campos DocGen da API
+   * @param formFields - Mapa de label -> valor do formulário
+   * @returns Array de documentos com campos DocGen atualizados
+   */
+  private mapFormFieldsToDocGen(
+    docGenFormFields: any[],
+    formFields: Record<string, string>,
+  ): any[] {
+    if (!docGenFormFields || !Array.isArray(docGenFormFields)) {
+      this.logger.warn('docGenFormFields está vazio ou não é um array');
+      return [];
+    }
+
+    return docGenFormFields.map((doc: any) => {
+      const docGenFormFieldList = (doc.docGenFormFieldList || []).map(
+        (field: any) => {
+          const label = field.label;
+          const value = formFields[label];
+
+          if (value !== undefined) {
+            this.logger.debug(
+              `Mapeando campo: label="${label}" -> name="${field.name}" = "${value}"`,
+            );
+            return {
+              name: field.name,
+              value: String(value),
+            };
+          } else {
+            this.logger.debug(
+              `Campo não encontrado no formulário: label="${label}"`,
+            );
+            return {
+              name: field.name,
+              value: field.value || '', // Manter valor existente ou vazio
+            };
+          }
+        },
+      );
+
+      return {
+        documentId: doc.documentId,
+        docGenFormFieldList,
+      };
+    });
   }
 }

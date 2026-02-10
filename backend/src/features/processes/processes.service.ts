@@ -185,21 +185,85 @@ export class ProcessesService {
    *  byStatus: Record<ProcessStatus, number>
    * }>} - Objeto com numero total de elementos, array de processos e contagem de processos por status
    */
-  async getAll({ page, perPage }: QueryDto): Promise<{
+  async getAll({
+    page,
+    perPage,
+    status,
+    search,
+    sortBy = 'created_at',
+    order = 'desc',
+  }: QueryDto & {
+    status?: ProcessStatus;
+    search?: string;
+    sortBy?: 'created_at' | 'updated_at' | 'status';
+    order?: 'asc' | 'desc';
+  }): Promise<{
     count: number;
     processes: ProcessResponse[];
     byStatus: Record<ProcessStatus, number>;
   }> {
-    // Criação pde variáveis para a paginação de get
+    // Criação de variáveis para a paginação
     const take = perPage;
     const skip = page && take ? (page - 1) * take : 0;
+
+    // Construir filtros WHERE
+    const where: any = {};
+
+    // Filtro de status
+    if (status) {
+      where.status = status;
+    }
+
+    // Filtro de busca textual (nome cliente, email, marca/modelo produto)
+    if (search && search.trim()) {
+      where.OR = [
+        {
+          client: {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+            ],
+          },
+        },
+        {
+          car: {
+            OR: [
+              { marca: { contains: search, mode: 'insensitive' } },
+              { modelo: { contains: search, mode: 'insensitive' } },
+            ],
+          },
+        },
+        {
+          boat: {
+            OR: [
+              { marca: { contains: search, mode: 'insensitive' } },
+              { modelo: { contains: search, mode: 'insensitive' } },
+            ],
+          },
+        },
+        {
+          aircraft: {
+            OR: [
+              { marca: { contains: search, mode: 'insensitive' } },
+              { modelo: { contains: search, mode: 'insensitive' } },
+            ],
+          },
+        },
+      ];
+    }
+
+    // Construir ordenação
+    const orderBy: any = {};
+    orderBy[sortBy] = order;
 
     // Buscar os processos, a quantidade total e a quantidade por status de processo
     const [processes, count, rawStatusCount] =
       await this.prismaService.$transaction([
         this.prismaService.process.findMany({
+          where,
           skip,
           take,
+          orderBy,
           include: {
             client: true,
             aircraft: true,
@@ -208,7 +272,7 @@ export class ProcessesService {
             specialist: true,
           },
         }),
-        this.prismaService.process.count(),
+        this.prismaService.process.count({ where }),
         this.prismaService.process.groupBy({
           by: ['status'],
           orderBy: {
