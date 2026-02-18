@@ -574,6 +574,15 @@ export class DocuSignClient {
         templateSettings: {
           showMatchingTemplatesPrompt: 'false', // Esconde diálogo de template matching
         },
+        // IMPORTANTE: Esconde a tela de edição de campos do remetente (seller_name, seller_cpf, etc)
+        // Isso impede que o usuário altere dados sensíveis pré-preenchidos
+        prefillSettings: {
+          showPrefillTags: 'false', // Esconde a edição de sender field data
+        },
+        taggerSettings: {
+          showTagLibrary: 'false', // Esconde biblioteca de tags
+          showTagBulkSend: 'false', // Esconde envio em massa
+        },
       },
     };
 
@@ -584,6 +593,47 @@ export class DocuSignClient {
       requestBody,
       token,
     );
+  }
+
+  /**
+   * Baixa o documento combinado do envelope como PDF
+   *
+   * Retorna o PDF como base64 para ser exibido diretamente no frontend,
+   * evitando a necessidade de usar o Sender View do DocuSign.
+   *
+   * @param {string} envelopeId - ID do envelope
+   * @returns {Promise<{ pdfBase64: string }>} PDF em formato base64
+   * @throws ProviderUnavailableException - Se DocuSign está indisponível
+   */
+  async getCombinedDocument(envelopeId: string): Promise<{ pdfBase64: string }> {
+    const token = await this.getAccessToken();
+
+    this.logger.log(`Downloading combined document for envelope ${envelopeId}`);
+
+    const url = this.getFullUrl(
+      `/v2.1/accounts/${this.accountId}/envelopes/${envelopeId}/documents/combined`,
+    );
+
+    const response = await this.makeRequest(
+      async () => {
+        return axios.get(url, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          responseType: 'arraybuffer',
+          timeout: this.REQUEST_TIMEOUT_MS,
+        });
+      },
+      'getCombinedDocument',
+      url,
+    );
+
+    // Converter ArrayBuffer para base64
+    const pdfBase64 = Buffer.from(response.data).toString('base64');
+
+    this.logger.log(`Combined document downloaded (${pdfBase64.length} chars base64)`);
+
+    return { pdfBase64 };
   }
 
   /**
@@ -600,4 +650,3 @@ export class DocuSignClient {
     return this.updateEnvelopeStatus(envelopeId, 'voided', reason);
   }
 }
-

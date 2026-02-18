@@ -17,7 +17,7 @@ import {
   applyCepMask,
   formatBRL,
 } from "../../services/contracts.service";
-import DocuSignPreviewModal from "../../components/DocuSignPreviewModal";
+import ContractPreviewModal from "../../components/ContractPreviewModal";
 
 interface ContractFormData {
   // Vendedor
@@ -217,6 +217,11 @@ export default function CreateContractPage() {
             "commission_checking_account",
             data.commission.checking_account || "",
           );
+
+          // Auto-preencher valor da comissão calculado automaticamente
+          if (data.commission.value != null) {
+            setValue("commission_value", data.commission.value);
+          }
         }
       } catch (error: unknown) {
         console.error("Erro ao carregar dados do contrato:", error);
@@ -298,12 +303,8 @@ export default function CreateContractPage() {
     try {
       const contractData = buildContractData(formData);
 
-      // URL de callback para o DocuSign
-      const returnUrl = `${window.location.origin}/specialist/contracts/preview-callback`;
-
       const previewPayload: PreviewContractData = {
         ...contractData,
-        return_url: returnUrl,
       };
 
       const result = await previewContract(previewPayload);
@@ -413,6 +414,14 @@ export default function CreateContractPage() {
       setValue("payment_seller_value", sellerValue > 0 ? sellerValue : 0);
     }
   }, [vehiclePrice, commissionValue, setValue]);
+
+  // Recalcular valor da comissão quando o preço muda (usa taxa do prefill)
+  useEffect(() => {
+    if (prefillData?.commission?.rate != null && vehiclePrice > 0) {
+      const newCommission = Math.round(vehiclePrice * prefillData.commission.rate) / 100;
+      setValue("commission_value", newCommission);
+    }
+  }, [vehiclePrice, prefillData, setValue]);
 
   const getProductTypeLabel = (type?: string) => {
     switch (type) {
@@ -971,6 +980,11 @@ export default function CreateContractPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Comissão da Plataforma *
+                  {prefillData?.commission?.rate != null && (
+                    <span className="text-xs text-gray-500 ml-1">
+                      ({prefillData.commission.rate}%)
+                    </span>
+                  )}
                 </label>
                 <input
                   type="number"
@@ -980,7 +994,8 @@ export default function CreateContractPage() {
                     valueAsNumber: true,
                     min: { value: 0, message: "Valor deve ser positivo" },
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                 />
                 {commissionValue > 0 && (
                   <p className="text-sm text-gray-500 mt-1">
@@ -1019,6 +1034,9 @@ export default function CreateContractPage() {
             <h2 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">
               Dados da Plataforma (Comissão)
             </h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Preenchido automaticamente com os dados cadastrados pelo administrador.
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1029,7 +1047,8 @@ export default function CreateContractPage() {
                   {...register("commission_name", {
                     required: "Razão social é obrigatória",
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                 />
                 {errors.commission_name && (
                   <p className="text-red-500 text-sm mt-1">
@@ -1050,12 +1069,10 @@ export default function CreateContractPage() {
                     <input
                       type="text"
                       {...field}
-                      onChange={(e) =>
-                        field.onChange(applyCnpjMask(e.target.value))
-                      }
+                      readOnly
                       maxLength={18}
                       placeholder="00.000.000/0000-00"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                     />
                   )}
                 />
@@ -1075,7 +1092,8 @@ export default function CreateContractPage() {
                   {...register("commission_bank", {
                     required: "Banco é obrigatório",
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                 />
                 {errors.commission_bank && (
                   <p className="text-red-500 text-sm mt-1">
@@ -1093,7 +1111,8 @@ export default function CreateContractPage() {
                   {...register("commission_agency", {
                     required: "Agência é obrigatória",
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                 />
                 {errors.commission_agency && (
                   <p className="text-red-500 text-sm mt-1">
@@ -1111,7 +1130,8 @@ export default function CreateContractPage() {
                   {...register("commission_checking_account", {
                     required: "Conta é obrigatória",
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                 />
                 {errors.commission_checking_account && (
                   <p className="text-red-500 text-sm mt-1">
@@ -1227,10 +1247,10 @@ export default function CreateContractPage() {
         </form>
       </div>
 
-      {/* Modal de Preview do DocuSign */}
+      {/* Modal de Preview do Contrato */}
       {showPreviewModal && previewData && (
-        <DocuSignPreviewModal
-          previewUrl={previewData.preview_url}
+        <ContractPreviewModal
+          pdfBase64={previewData.pdf_base64}
           envelopeId={previewData.envelope_id}
           expiresAt={previewData.expires_at}
           onConfirm={handleConfirmSend}

@@ -469,8 +469,7 @@ export class DocuSignService {
    * @param params.sellerName - Nome do vendedor
    * @param params.formFields - Campos do formulário para preencher no contrato
    * @param params.processId - ID do processo para rastreabilidade
-   * @param params.returnUrl - URL de callback após ação no Sender View
-   * @returns Promise<{ envelopeId, previewUrl, expiresAt }>
+   * @returns Promise<{ envelopeId, pdfBase64, expiresAt }>
    */
   async createEnvelopePreview(params: {
     templateId: string;
@@ -480,10 +479,9 @@ export class DocuSignService {
     sellerName: string;
     formFields: Record<string, string>;
     processId: string;
-    returnUrl: string;
   }): Promise<{
     envelopeId: string;
-    previewUrl: string;
+    pdfBase64: string;
     expiresAt: string;
   }> {
     const {
@@ -494,7 +492,6 @@ export class DocuSignService {
       sellerName,
       formFields,
       processId,
-      returnUrl,
     } = params;
 
     try {
@@ -515,15 +512,10 @@ export class DocuSignService {
         );
       }
 
-      if (!returnUrl || returnUrl.trim().length === 0) {
-        throw new EnvelopeCreationFailedException('Return URL é obrigatório');
-      }
-
       this.logger.log(`=== INICIANDO FLUXO DE PREVIEW (3 ETAPAS) ===`);
       this.logger.log(`Buyer: ${buyerEmail}, Seller: ${sellerEmail}`);
       this.logger.debug(`Template ID: ${templateId}`);
       this.logger.debug(`Process ID: ${processId}`);
-      this.logger.debug(`Return URL: ${returnUrl}`);
 
       // ===== ETAPA 1: CRIAR ENVELOPE COMO DRAFT =====
       this.logger.log('PREVIEW ETAPA 1: Criando envelope como DRAFT...');
@@ -577,31 +569,21 @@ export class DocuSignService {
 
       this.logger.log(`✓ Campos DocGen atualizados`);
 
-      // ===== ETAPA 3: CRIAR URL DO SENDER VIEW =====
-      this.logger.log('PREVIEW ETAPA 3: Criando URL do Sender View...');
+      // ===== ETAPA 3: BAIXAR DOCUMENTO COMBINADO COMO PDF =====
+      this.logger.log('PREVIEW ETAPA 3: Baixando documento combinado...');
 
-      const senderViewResponse = await this.client.createSenderView(
-        envelopeId,
-        returnUrl,
-        {
-          startingScreen: 'Tagger',
-          showBackButton: 'false',
-          showEditRecipients: 'false',
-          showEditDocuments: 'true',
-          showDiscardAction: 'false',
-          sendButtonAction: 'send',
-        },
-      );
+      const documentResponse = await this.client.getCombinedDocument(envelopeId);
 
-      // A URL expira em 10 minutos
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      // O envelope permanece em DRAFT até o usuário confirmar o envio
+      // Expira em 24 horas (envelopes draft expiram automaticamente)
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-      this.logger.log(`✓ Sender View URL criada`);
+      this.logger.log(`✓ Documento PDF baixado`);
       this.logger.log(`=== PREVIEW PRONTO ===`);
 
       return {
         envelopeId,
-        previewUrl: senderViewResponse.url,
+        pdfBase64: documentResponse.pdfBase64,
         expiresAt,
       };
     } catch (error) {

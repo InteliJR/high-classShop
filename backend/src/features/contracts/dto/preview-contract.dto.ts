@@ -28,18 +28,6 @@ export class PreviewContractDto {
   @IsNotEmpty({ message: 'process_id é obrigatório' })
   process_id: string;
 
-  /**
-   * URL de retorno após ação no DocuSign Sender View
-   * O DocuSign irá redirecionar para esta URL com parâmetros de evento
-   * @example "https://app.example.com/contracts/preview-callback"
-   */
-  @IsUrl(
-    { require_tld: false, require_protocol: true },
-    { message: 'return_url deve ser uma URL válida' },
-  )
-  @IsNotEmpty({ message: 'return_url é obrigatório' })
-  return_url: string;
-
   // === VENDEDOR (SELLER) ===
 
   @IsString({ message: 'seller_name deve ser uma string' })

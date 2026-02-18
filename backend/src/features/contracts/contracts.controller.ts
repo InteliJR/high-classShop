@@ -219,7 +219,6 @@ export class ContractsController {
    * Body:
    * {
    *   "process_id": "uuid",
-   *   "return_url": "https://app.example.com/contracts/preview-callback",
    *   "seller_name": "Maria Santos",
    *   ...
    * }
@@ -229,9 +228,9 @@ export class ContractsController {
    *   "success": true,
    *   "message": "Preview criado com sucesso",
    *   "data": {
-   *     "preview_url": "https://demo.docusign.net/...",
+   *     "pdf_base64": "JVBERi0xLjQK...",
    *     "envelope_id": "uuid",
-   *     "expires_at": "2026-02-18T10:35:00.000Z",
+   *     "expires_at": "2026-02-19T10:35:00.000Z",
    *     "process_id": "uuid"
    *   }
    * }
@@ -250,7 +249,7 @@ export class ContractsController {
       `Criando preview de contrato para usuário ${userId} (${userEmail})`,
     );
     this.logger.debug(
-      `Process: ${previewContractDto.process_id}, Return URL: ${previewContractDto.return_url}`,
+      `Process: ${previewContractDto.process_id}`,
     );
 
     const preview = await this.contractsService.previewContract(

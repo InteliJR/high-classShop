@@ -44,6 +44,9 @@ export interface PrefillCommission {
   bank?: string;
   agency?: string;
   checking_account?: string;
+  rate?: number;
+  value?: number;
+  source?: string;
 }
 
 export interface PrefillContractResponse {
@@ -118,12 +121,12 @@ export interface ContractResponse {
 
 // === TIPOS PARA PREVIEW ===
 
-export interface PreviewContractData extends GenerateContractData {
-  return_url: string;
-}
+// PreviewContractData não precisa mais de return_url
+// O preview agora retorna o PDF diretamente em base64
+export type PreviewContractData = GenerateContractData;
 
 export interface PreviewContractResponse {
-  preview_url: string;
+  pdf_base64: string;
   envelope_id: string;
   expires_at: string;
   process_id: string;

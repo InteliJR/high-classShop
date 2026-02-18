@@ -1,16 +1,16 @@
 /**
  * Response DTO para a criação de preview de contrato
  *
- * Contém a URL do DocuSign Sender View para embedding
- * e informações de controle do envelope.
+ * Contém o PDF do contrato em base64 para visualização direta
+ * no frontend, sem interface do DocuSign.
  */
 export class PreviewContractResponseDto {
   /**
-   * URL do DocuSign Sender View para embed
-   * Esta URL expira em 10 minutos
-   * @example "https://demo.docusign.net/Signing/StartInSession.aspx?..."
+   * PDF do contrato codificado em base64
+   * Pode ser exibido diretamente em um viewer de PDF no frontend
+   * @example "JVBERi0xLjQKJ..." (base64 encoded PDF)
    */
-  preview_url: string;
+  pdf_base64: string;
 
   /**
    * ID do envelope no DocuSign (formato GUID)
@@ -20,9 +20,9 @@ export class PreviewContractResponseDto {
   envelope_id: string;
 
   /**
-   * Timestamp de quando a URL de preview expira
-   * A URL do DocuSign Sender View expira em 10 minutos
-   * @example "2026-02-18T10:35:00.000Z"
+   * Timestamp de quando o envelope expira (24h para drafts)
+   * Após esse tempo, o envelope draft é descartado automaticamente
+   * @example "2026-02-19T10:35:00.000Z"
    */
   expires_at: string;
 

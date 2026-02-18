@@ -22,6 +22,7 @@ import { AppointmentsModule } from './features/appointments/appointments.module'
 import { ProposalsModule } from './features/proposals/proposals.module';
 import { HealthModule } from './health/health.module';
 import { SettingsModule } from './features/settings/settings.module';
+import { PlatformCompanyModule } from './features/platform-company/platform-company.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { SettingsModule } from './features/settings/settings.module';
     DocusignModule,
     UsersModule,
     SettingsModule,
+    PlatformCompanyModule,
   ],
   providers: [
     PrismaService,

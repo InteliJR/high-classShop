@@ -1,4 +1,16 @@
-import { IsString, IsNotEmpty, IsEmail, Length, Matches, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsEmail,
+  Length,
+  Matches,
+  IsEnum,
+  IsOptional,
+  IsUUID,
+  IsNumber,
+  Min,
+  Max,
+} from 'class-validator';
 
 export enum SpecialityEnum {
   CAR = 'CAR',
@@ -35,7 +47,19 @@ export class CreateSpecialistDto {
   @IsNotEmpty({ message: 'Senha é obrigatória' })
   password_hash: string;
 
-  @IsEnum(SpecialityEnum, { message: 'Especialidade deve ser CAR, BOAT ou AIRCRAFT' })
+  @IsEnum(SpecialityEnum, {
+    message: 'Especialidade deve ser CAR, BOAT ou AIRCRAFT',
+  })
   @IsNotEmpty({ message: 'Especialidade é obrigatória' })
   speciality: SpecialityEnum;
+
+  @IsUUID('4', { message: 'company_id deve ser um UUID válido' })
+  @IsOptional()
+  company_id?: string;
+
+  @IsNumber({}, { message: 'Taxa de comissão deve ser um número' })
+  @IsOptional()
+  @Min(0, { message: 'Taxa de comissão deve ser >= 0' })
+  @Max(100, { message: 'Taxa de comissão deve ser <= 100' })
+  commission_rate?: number;
 }

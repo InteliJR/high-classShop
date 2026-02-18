@@ -33,6 +33,7 @@ import {
 } from 'src/shared/utils/format.utils';
 import { ProductType } from '@prisma/client';
 import { NotificationService } from 'src/features/notifications/notification.service';
+import { PlatformCompanyService } from 'src/features/platform-company/platform-company.service';
 
 /**
  * Serviço de Contratos - Geração via Formulário
@@ -56,6 +57,7 @@ export class ContractsService {
     private readonly prismaService: PrismaService,
     private readonly docuSignService: DocuSignService,
     private readonly notificationService: NotificationService,
+    private readonly platformCompanyService: PlatformCompanyService,
   ) {}
 
   /**
@@ -209,12 +211,26 @@ export class ContractsService {
       return `${addr.street}, ${addr.number} - ${addr.neighborhood}, ${addr.city} - ${addr.state}`;
     };
 
-    // Buscar configurações de comissão da plataforma
-    const commissionSettings = await this.getCommissionSettings();
+    // Buscar dados da empresa da plataforma + calcular comissão
+    const platformCompany = await this.platformCompanyService.findOne();
+    const commissionData = await this.calculateCommission(
+      processData.specialist,
+      platformCompany,
+    );
 
     this.logger.debug(
       `Prefill data loaded successfully for process ${processId}`,
     );
+
+    // Valor da proposta ou do produto
+    const proposalValue = processData.accepted_proposal
+      ? Number(processData.accepted_proposal.proposed_value)
+      : product.price;
+
+    // Calcular valor da comissão com base na taxa
+    const commissionValue = commissionData.rate
+      ? (proposalValue * commissionData.rate) / 100
+      : 0;
 
     return {
       process_id: processData.id,
@@ -244,47 +260,61 @@ export class ContractsService {
             value: Number(processData.accepted_proposal.proposed_value),
           }
         : undefined,
-      commission: commissionSettings,
+      commission: platformCompany
+        ? {
+            name: platformCompany.name,
+            cpf: platformCompany.cnpj,
+            bank: platformCompany.bank,
+            agency: platformCompany.agency,
+            checking_account: platformCompany.checking_account,
+            rate: commissionData.rate,
+            value: Math.round(commissionValue * 100) / 100,
+            source: commissionData.source,
+          }
+        : undefined,
     };
   }
 
   /**
-   * Busca configurações de comissão da plataforma (Settings)
+   * Calcula a taxa de comissão com base na cadeia de prioridade:
+   * 1. Empresa do especialista (company.commission_rate)
+   * 2. Taxa individual do especialista (user.commission_rate)
+   * 3. Taxa padrão da plataforma (platformCompany.default_commission_rate)
    */
-  private async getCommissionSettings(): Promise<{
-    name?: string;
-    cpf?: string;
-    bank?: string;
-    agency?: string;
-    checking_account?: string;
-  }> {
-    const settings = await this.prismaService.settings.findMany({
-      where: {
-        key: {
-          in: [
-            'commission_name',
-            'commission_cpf',
-            'commission_bank',
-            'commission_agency',
-            'commission_checking_account',
-          ],
-        },
-      },
-    });
-
-    const result: Record<string, string> = {};
-    for (const setting of settings) {
-      const key = setting.key.replace('commission_', '');
-      result[key] = setting.value;
+  private async calculateCommission(
+    specialist: { company_id?: string | null; commission_rate?: any },
+    platformCompany: { default_commission_rate: number } | null,
+  ): Promise<{ rate: number; source: string }> {
+    // 1. Verificar taxa da empresa do especialista
+    if (specialist.company_id) {
+      const company = await this.prismaService.company.findUnique({
+        where: { id: specialist.company_id },
+      });
+      if (company?.commission_rate) {
+        return {
+          rate: Number(company.commission_rate),
+          source: 'company',
+        };
+      }
     }
 
-    return {
-      name: result.name,
-      cpf: result.cpf,
-      bank: result.bank,
-      agency: result.agency,
-      checking_account: result.checking_account,
-    };
+    // 2. Verificar taxa individual do especialista
+    if (specialist.commission_rate) {
+      return {
+        rate: Number(specialist.commission_rate),
+        source: 'specialist',
+      };
+    }
+
+    // 3. Fallback: taxa padrão da plataforma
+    if (platformCompany) {
+      return {
+        rate: platformCompany.default_commission_rate,
+        source: 'platform',
+      };
+    }
+
+    return { rate: 0, source: 'none' };
   }
 
   /**
@@ -852,7 +882,6 @@ export class ContractsService {
         sellerName: dto.seller_name,
         formFields,
         processId: dto.process_id,
-        returnUrl: dto.return_url,
       });
 
       this.logger.log(
@@ -861,7 +890,7 @@ export class ContractsService {
       this.logger.log(`=== PREVIEW CONCLUÍDO COM SUCESSO ===`);
 
       return {
-        preview_url: previewResponse.previewUrl,
+        pdf_base64: previewResponse.pdfBase64,
         envelope_id: previewResponse.envelopeId,
         expires_at: previewResponse.expiresAt,
         process_id: dto.process_id,

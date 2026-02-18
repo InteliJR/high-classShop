@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
@@ -10,7 +15,11 @@ export class CompaniesService {
 
   // Busca todas as empresas.
   async findAll() {
-    return this.prisma.company.findMany();
+    const companies = await this.prisma.company.findMany();
+    return companies.map((c) => ({
+      ...c,
+      commission_rate: c.commission_rate ? Number(c.commission_rate) : null,
+    }));
   }
 
   // Cria uma nova empresa na base de dados.
@@ -22,7 +31,9 @@ export class CompaniesService {
       });
 
       if (existingCompany) {
-        throw new ConflictException('Já existe uma empresa cadastrada com este CNPJ');
+        throw new ConflictException(
+          'Já existe uma empresa cadastrada com este CNPJ',
+        );
       }
 
       return await this.prisma.company.create({ data });
@@ -34,11 +45,15 @@ export class CompaniesService {
       // Tratamento de erros do Prisma
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
-          throw new ConflictException('Já existe uma empresa cadastrada com este CNPJ');
+          throw new ConflictException(
+            'Já existe uma empresa cadastrada com este CNPJ',
+          );
         }
       }
 
-      throw new BadRequestException('Erro ao criar empresa. Verifique os dados e tente novamente.');
+      throw new BadRequestException(
+        'Erro ao criar empresa. Verifique os dados e tente novamente.',
+      );
     }
   }
 
@@ -48,7 +63,12 @@ export class CompaniesService {
     if (!company) {
       throw new NotFoundException('Empresa não encontrada');
     }
-    return company;
+    return {
+      ...company,
+      commission_rate: company.commission_rate
+        ? Number(company.commission_rate)
+        : null,
+    };
   }
 
   // Atualiza os dados de uma empresa existente.
@@ -66,23 +86,32 @@ export class CompaniesService {
         });
 
         if (existingCompany) {
-          throw new ConflictException('Já existe outra empresa cadastrada com este CNPJ');
+          throw new ConflictException(
+            'Já existe outra empresa cadastrada com este CNPJ',
+          );
         }
       }
 
       return await this.prisma.company.update({ where: { id }, data });
     } catch (error) {
-      if (error instanceof NotFoundException || error instanceof ConflictException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException
+      ) {
         throw error;
       }
 
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
-          throw new ConflictException('Já existe outra empresa cadastrada com este CNPJ');
+          throw new ConflictException(
+            'Já existe outra empresa cadastrada com este CNPJ',
+          );
         }
       }
 
-      throw new BadRequestException('Erro ao atualizar empresa. Verifique os dados e tente novamente.');
+      throw new BadRequestException(
+        'Erro ao atualizar empresa. Verifique os dados e tente novamente.',
+      );
     }
   }
 

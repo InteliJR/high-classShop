@@ -2,12 +2,35 @@ import { PrismaClient } from '@prisma/client';
 import { mockCars } from '../src/mocks/car.mock';
 import { mockBoats } from '../src/mocks/boat.mock';
 import { mockAircrafts } from '../src/mocks/aircrafts.mock';
-import { mockUsers } from '../src/mocks/user.mock';
+import {
+  mockUsers,
+  mockCompanies,
+  GENIUS_COMPANY_REF,
+} from '../src/mocks/user.mock';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Starting seed...');
+
+  // === STEP 0: Seed PlatformCompany (singleton) ===
+  console.log('🏢 Seeding platform company...');
+  await prisma.platformCompany.upsert({
+    where: { id: '00000000-0000-0000-0000-000000000001' },
+    update: {},
+    create: {
+      id: '00000000-0000-0000-0000-000000000001',
+      name: 'BMF LUX BROKERAGE',
+      cnpj: '00000000000100',
+      bank: 'Banco do Brasil',
+      agency: '0001',
+      checking_account: '12345-6',
+      address: 'Av. Paulista, 1000 - São Paulo/SP',
+      cep: '01310-100',
+      default_commission_rate: 10.0,
+    },
+  });
+  console.log('  ✅ Platform company seeded');
 
   // Clear existing data
   console.log('🧹 Cleaning existing data...');
@@ -18,12 +41,41 @@ async function main() {
   await prisma.boat.deleteMany();
   await prisma.aircraft.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.company.deleteMany();
 
-  // === STEP 1: Create Users ===
+  // === STEP 1: Create Companies ===
+  console.log('🏢 Seeding companies...');
+  const createdCompanies = new Map<string, string>(); // company name -> id mapping
+
+  for (const companyMock of mockCompanies) {
+    const company = await prisma.company.create({
+      data: {
+        name: companyMock.name,
+        cnpj: companyMock.cnpj,
+        logo: companyMock.logo ?? null,
+        description: companyMock.description ?? null,
+        commission_rate: companyMock.commission_rate ?? null,
+      },
+    });
+
+    createdCompanies.set(companyMock.name, company.id);
+    console.log(
+      `  ✅ Created company: ${company.name} (Rate: ${companyMock.commission_rate}%)`,
+    );
+  }
+
+  // === STEP 2: Create Users ===
   console.log('👥 Seeding users...');
   const createdUsers = new Map<string, string>(); // email -> id mapping
+  const geniusCompanyId = createdCompanies.get('Genius Assessoria Automotiva');
 
   for (const userMock of mockUsers) {
+    // Replace mock company reference with real UUID if applicable
+    let company_id = userMock.company_id ?? null;
+    if (company_id === GENIUS_COMPANY_REF) {
+      company_id = geniusCompanyId ?? null;
+    }
+
     const user = await prisma.user.create({
       data: {
         name: userMock.name,
@@ -37,15 +89,19 @@ async function main() {
         civil_state: userMock.civil_state ?? null,
         speciality: userMock.speciality ?? null,
         identification_number: userMock.identification_number ?? null,
+        commission_rate: userMock.commission_rate ?? null,
 
         address_id: userMock.address_id ?? null,
         consultant_id: userMock.consultant_id ?? null,
-        company_id: userMock.company_id ?? null,
+        company_id: company_id,
       },
     });
 
     createdUsers.set(user.email, user.id);
-    console.log(`➡️ Created user: ${user.email} (ID: ${user.id})`);
+    const companyInfo = company_id ? ` (Company: ${company_id})` : '';
+    console.log(
+      `  ➡️  Created user: ${user.email} (ID: ${user.id})${companyInfo}`,
+    );
   }
 
   // Get specialist IDs
@@ -53,7 +109,7 @@ async function main() {
   const boatSpecialistId = createdUsers.get('marina.boat@example.com');
   const aircraftSpecialistId = createdUsers.get('pedro.aircraft@example.com');
 
-  // === STEP 2: Seed Cars ===
+  // === STEP 3: Seed Cars ===
   console.log('🚗 Seeding cars...');
   for (const carMock of mockCars) {
     const car = await prisma.car.create({
@@ -87,7 +143,7 @@ async function main() {
     console.log(`  ✅ Created car: ${car.marca} ${car.modelo}`);
   }
 
-  // === STEP 3: Seed Boats ===
+  // === STEP 4: Seed Boats ===
   console.log('⛵ Seeding boats...');
   for (const boatMock of mockBoats) {
     const boat = await prisma.boat.create({
@@ -124,7 +180,7 @@ async function main() {
     console.log(`  ✅ Created boat: ${boat.marca} ${boat.modelo}`);
   }
 
-  // === STEP 4: Seed Aircrafts ===
+  // === STEP 5: Seed Aircrafts ===
   console.log('✈️  Seeding aircrafts...');
   for (const aircraftMock of mockAircrafts) {
     const aircraft = await prisma.aircraft.create({
