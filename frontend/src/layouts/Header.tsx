@@ -30,7 +30,6 @@ export default function Header() {
 
   // Lista de itens do menu para visitantes
   const menuItems = [
-    { label: "Sobre nós", path: "/catalog/login" }, // Trocar para a landing page posteriormentes
     { label: "Aeronave", path: "/catalog/aircrafts" },
     { label: "Barco", path: "/catalog/boats" },
     { label: "Carro", path: "/catalog/cars" },

@@ -22,9 +22,13 @@ import { Roles } from 'src/shared/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from 'src/shared/decorators/current-user.decorator';
 import { UserEntity } from 'src/auth/entities/user.entity';
-import { assertSpecialistCanCreate, assertSpecialistCanModify } from 'src/shared/helpers/specialist-auth.helper';
+import {
+  assertSpecialistCanCreate,
+  assertSpecialistCanModify,
+} from 'src/shared/helpers/specialist-auth.helper';
 import { CsvImportService } from 'src/shared/services/csv-import.service';
 import { CsvImportResponseDto } from 'src/shared/dto/csv-import-response.dto';
+import { Public } from 'src/shared/decorators/public.decorator';
 
 @Controller('aircrafts')
 export class AircraftsController {
@@ -35,7 +39,10 @@ export class AircraftsController {
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
-  create(@Body() createAircraftDto: CreateAircraftDto, @CurrentUser() user: UserEntity) {
+  create(
+    @Body() createAircraftDto: CreateAircraftDto,
+    @CurrentUser() user: UserEntity,
+  ) {
     assertSpecialistCanCreate('AIRCRAFT', user);
     createAircraftDto.specialist_id = user.id;
     return this.aircraftsService.create(createAircraftDto);
@@ -65,6 +72,7 @@ export class AircraftsController {
   }
 
   @Get()
+  @Public()
   async getAllAircrafts(@Query() query: any) {
     //Tratamento das variáveis recebidas do front
     let { page, perPage, ...rawFilters } = query;
@@ -111,6 +119,7 @@ export class AircraftsController {
   }
 
   @Get(':id')
+  @Public()
   findOne(@Param('id') id: string) {
     return this.aircraftsService.findOne(+id);
   }

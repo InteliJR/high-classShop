@@ -23,10 +23,11 @@ import ProfilePage from "../pages/ProfilePage";
 import ProductPage from "../pages/ProductPage";
 import CustomerProcessesPage from "../pages/customer/CustomerProcessesPage";
 import NegotiationPage from "../pages/negotiation/NegotiationPage";
+import LandingPage from "../pages/LandingPage";
 
 export default function RouterApp() {
   const routerApp = createBrowserRouter([
-    { path: "/", element: <Login /> },
+    { path: "/", element: <LandingPage /> },
     {
       path: "/catalog/:category",
       element: (

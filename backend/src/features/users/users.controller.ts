@@ -12,6 +12,7 @@ import { UsersService } from './users.service';
 import { GetUsersDto } from './dto/get-users.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuthGuard } from 'src/auth/auth.guard';
+import { Public } from 'src/shared/decorators/public.decorator';
 
 @Controller('users')
 export class UsersController {
@@ -40,12 +41,12 @@ export class UsersController {
 
   /**
    * GET /api/users/:id
-   * Get a single user by ID
+   * Get a single user by ID (public - used for specialist info on product pages)
    * @param userId - The ID of the user (UUID)
    * @returns User data with full details
    */
   @Get(':id')
-  @UseGuards(AuthGuard)
+  @Public()
   async getById(@Param('id', new ParseUUIDPipe()) userId: string) {
     const user = await this.usersService.getById(userId);
 
