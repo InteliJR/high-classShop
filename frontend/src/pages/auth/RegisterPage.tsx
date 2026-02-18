@@ -9,10 +9,13 @@ import { useContext, useEffect, useState } from "react";
 import type { RegisterValues } from "../../types/types";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+type RegistrationMode = 'referral' | 'public';
+
 export default function RegisterPage() {
   const auth = useContext(AuthContext);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [registrationMode, setRegistrationMode] = useState<RegistrationMode>('public');
   const [consultantName, setConsultantName] = useState<string>("");
   const [consultantId, setConsultantId] = useState<string>("");
   const [isValidatingToken, setIsValidatingToken] = useState(true);
@@ -64,12 +67,16 @@ export default function RegisterPage() {
     const validateToken = async () => {
       const token = searchParams.get("ref");
       
+      // Modo público: sem token de referência
       if (!token) {
-        setTokenError("Link de convite não encontrado. Você precisa de um convite de um consultor para se cadastrar.");
+        setRegistrationMode('public');
         setIsValidatingToken(false);
         return;
       }
 
+      // Modo referência: valida token do consultor
+      setRegistrationMode('referral');
+      
       try {
         const payload = await auth.validateReferralToken(token);
         setConsultantId(payload.consultantId);
@@ -92,12 +99,18 @@ export default function RegisterPage() {
       const cpfClean = data.cpf.replace(/\D/g, "");
       const rgClean = data.rg.replace(/\D/g, "");
       
-      await auth.register({
+      const registerData: any = {
         ...data,
         cpf: cpfClean,
         rg: rgClean,
-        consultant_id: consultantId,
-      });
+      };
+      
+      // Só inclui consultant_id se for modo referência
+      if (registrationMode === 'referral' && consultantId) {
+        registerData.consultant_id = consultantId;
+      }
+      
+      await auth.register(registerData);
       
       alert("Cadastro realizado com sucesso! Faça login para continuar.");
       navigate("/login");
@@ -189,9 +202,13 @@ export default function RegisterPage() {
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
                 Criar Conta
               </h1>
-              {consultantName && (
+              {registrationMode === 'referral' && consultantName ? (
                 <p className="text-sm text-gray-600">
                   <span className="font-semibold text-gray-900">{consultantName}</span> convidou você
+                </p>
+              ) : (
+                <p className="text-sm text-gray-600">
+                  Preencha seus dados para criar sua conta
                 </p>
               )}
             </div>
@@ -249,15 +266,27 @@ export default function RegisterPage() {
               {/* E-mail */}
               <div>
                 <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">
-                  E-mail <span className="text-gray-500 font-normal">(vinculado ao convite)</span>
+                  E-mail {registrationMode === 'referral' && <span className="text-gray-500 font-normal">(vinculado ao convite)</span>}
                 </label>
                 <input
                   id="email"
                   type="email"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-                  disabled
-                  {...register("email", { required: true })}
+                  placeholder={registrationMode === 'public' ? "seu@email.com" : undefined}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg ${
+                    registrationMode === 'referral' 
+                      ? 'border-gray-300 bg-gray-50 text-gray-600' 
+                      : 'border-gray-300 focus:ring-2 focus:ring-gray-900 focus:border-transparent'
+                  }`}
+                  disabled={registrationMode === 'referral'}
+                  {...register("email", { 
+                    required: "E-mail é obrigatório",
+                    pattern: {
+                      value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                      message: "E-mail inválido"
+                    }
+                  })}
                 />
+                {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email.message}</p>}
               </div>
 
               {/* CPF e RG - Lado a lado */}
