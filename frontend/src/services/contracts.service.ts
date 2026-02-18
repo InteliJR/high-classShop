@@ -116,6 +116,27 @@ export interface ContractResponse {
   created_at: string;
 }
 
+// === TIPOS PARA PREVIEW ===
+
+export interface PreviewContractData extends GenerateContractData {
+  return_url: string;
+}
+
+export interface PreviewContractResponse {
+  preview_url: string;
+  envelope_id: string;
+  expires_at: string;
+  process_id: string;
+}
+
+export interface SendContractResponse {
+  id: string;
+  envelope_id: string;
+  process_id: string;
+  status: string;
+  created_at: string;
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   message: string;
@@ -196,6 +217,90 @@ export async function listContracts(): Promise<ContractResponse[]> {
     { withCredentials: true },
   );
   return response.data.data;
+}
+
+// === FUNÇÕES DE PREVIEW ===
+
+/**
+ * Cria um preview do contrato via DocuSign Sender View
+ * @param data - Dados do formulário de contrato + returnUrl
+ * @returns URL do preview, envelopeId e data de expiração
+ */
+export async function previewContract(
+  data: PreviewContractData,
+): Promise<PreviewContractResponse> {
+  // Remover formatação dos campos numéricos antes de enviar
+  const cleanData = {
+    ...data,
+    seller_cpf: stripFormatting(data.seller_cpf),
+    seller_rg: data.seller_rg ? stripFormatting(data.seller_rg) : undefined,
+    seller_cep: stripFormatting(data.seller_cep),
+    buyer_cpf: stripFormatting(data.buyer_cpf),
+    buyer_rg: data.buyer_rg ? stripFormatting(data.buyer_rg) : undefined,
+    buyer_cep: stripFormatting(data.buyer_cep),
+    commission_cpf: stripFormatting(data.commission_cpf),
+  };
+
+  const response = await api.post<ApiResponse<PreviewContractResponse>>(
+    "/contracts/preview",
+    cleanData,
+    {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      withCredentials: true,
+    },
+  );
+
+  return response.data.data;
+}
+
+/**
+ * Envia o contrato após preview
+ * @param envelopeId - ID do envelope no DocuSign
+ * @param data - Dados originais do formulário
+ * @returns Contrato criado
+ */
+export async function sendContractAfterPreview(
+  envelopeId: string,
+  data: PreviewContractData,
+): Promise<SendContractResponse> {
+  // Remover formatação dos campos numéricos antes de enviar
+  const cleanData = {
+    ...data,
+    seller_cpf: stripFormatting(data.seller_cpf),
+    seller_rg: data.seller_rg ? stripFormatting(data.seller_rg) : undefined,
+    seller_cep: stripFormatting(data.seller_cep),
+    buyer_cpf: stripFormatting(data.buyer_cpf),
+    buyer_rg: data.buyer_rg ? stripFormatting(data.buyer_rg) : undefined,
+    buyer_cep: stripFormatting(data.buyer_cep),
+    commission_cpf: stripFormatting(data.commission_cpf),
+  };
+
+  const response = await api.post<ApiResponse<SendContractResponse>>(
+    `/contracts/send/${envelopeId}`,
+    cleanData,
+    {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      withCredentials: true,
+    },
+  );
+
+  return response.data.data;
+}
+
+/**
+ * Cancela um preview de contrato
+ * @param envelopeId - ID do envelope no DocuSign
+ */
+export async function cancelContractPreview(envelopeId: string): Promise<void> {
+  await api.post(
+    `/contracts/cancel-preview/${envelopeId}`,
+    {},
+    { withCredentials: true },
+  );
 }
 
 // === HELPERS DE FORMATAÇÃO ===

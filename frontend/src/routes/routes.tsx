@@ -14,6 +14,7 @@ import ProductsPage from "../pages/specialist/ProductsPage";
 import ProductFormPage from "../pages/specialist/ProductFormPage";
 import SpecialistDashboard from "../pages/specialist/SpecialistDashboard";
 import CreateContractPage from "../pages/specialist/CreateContractPage";
+import ContractPreviewCallback from "../pages/specialist/ContractPreviewCallback";
 import ProcessesPage from "../pages/specialist/ProcessesPage";
 import CustomerHomePage from "../pages/customer/CustomerHomePage";
 import ConsultoriaPage from "../pages/customer/ConsultoriaPage";
@@ -203,6 +204,10 @@ export default function RouterApp() {
           </ProtectedRoute>
         </MainLayout>
       ),
+    },
+    {
+      path: "/specialist/contracts/preview-callback",
+      element: <ContractPreviewCallback />,
     },
     {
       path: "/specialist/processes",

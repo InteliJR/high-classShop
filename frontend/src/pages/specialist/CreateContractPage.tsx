@@ -1,18 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { AlertCircle, CheckCircle, Loader, FileText } from "lucide-react";
+import { AlertCircle, CheckCircle, Loader, FileText, Eye } from "lucide-react";
 import { useIsMobile } from "../../hooks/use-is-mobile";
 import {
   prefillContract,
-  generateContract,
+  previewContract,
+  sendContractAfterPreview,
+  cancelContractPreview,
   type GenerateContractData,
   type PrefillContractResponse,
+  type PreviewContractData,
+  type PreviewContractResponse,
   applyCpfMask,
   applyCnpjMask,
   applyCepMask,
   formatBRL,
 } from "../../services/contracts.service";
+import DocuSignPreviewModal from "../../components/DocuSignPreviewModal";
 
 interface ContractFormData {
   // Vendedor
@@ -116,6 +121,14 @@ export default function CreateContractPage() {
     type: "success" | "error" | null;
     message: string;
   }>({ type: null, message: "" });
+
+  // Preview states
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewData, setPreviewData] =
+    useState<PreviewContractResponse | null>(null);
+  const [previewFormData, setPreviewFormData] =
+    useState<PreviewContractData | null>(null);
+  const [isSendingAfterPreview, setIsSendingAfterPreview] = useState(false);
 
   const vehiclePrice = watch("vehicle_price");
   const commissionValue = watch("commission_value");
@@ -238,59 +251,69 @@ export default function CreateContractPage() {
     }
   }, [processId, setValue]);
 
-  const onSubmit = async (formData: ContractFormData) => {
+  // Build contract data from form
+  const buildContractData = (
+    formData: ContractFormData,
+  ): GenerateContractData => ({
+    process_id: processId!,
+    seller_name: formData.seller_name,
+    seller_email: formData.seller_email,
+    seller_cpf: formData.seller_cpf,
+    seller_rg: formData.seller_rg || undefined,
+    seller_address: formData.seller_address,
+    seller_cep: formData.seller_cep,
+    seller_bank: formData.seller_bank,
+    seller_agency: formData.seller_agency,
+    seller_checking_account: formData.seller_checking_account,
+    buyer_name: formData.buyer_name,
+    buyer_email: formData.buyer_email,
+    buyer_cpf: formData.buyer_cpf,
+    buyer_rg: formData.buyer_rg || undefined,
+    buyer_address: formData.buyer_address,
+    buyer_cep: formData.buyer_cep,
+    vehicle_model: formData.vehicle_model,
+    vehicle_year: formData.vehicle_year,
+    vehicle_registration_id: formData.vehicle_registration_id,
+    vehicle_serial_number: formData.vehicle_serial_number,
+    vehicle_technical_info: formData.vehicle_technical_info || undefined,
+    vehicle_price: formData.vehicle_price,
+    payment_seller_value: formData.payment_seller_value,
+    commission_value: formData.commission_value,
+    commission_name: formData.commission_name,
+    commission_cpf: formData.commission_cpf,
+    commission_bank: formData.commission_bank,
+    commission_agency: formData.commission_agency,
+    commission_checking_account: formData.commission_checking_account,
+    city: formData.city,
+    description: formData.description || undefined,
+  });
+
+  // Handler para preview do contrato
+  const onPreview = async (formData: ContractFormData) => {
     if (!processId) return;
 
     setIsSubmitting(true);
     setSubmitStatus({ type: null, message: "" });
 
     try {
-      const contractData: GenerateContractData = {
-        process_id: processId,
-        seller_name: formData.seller_name,
-        seller_email: formData.seller_email,
-        seller_cpf: formData.seller_cpf,
-        seller_rg: formData.seller_rg || undefined,
-        seller_address: formData.seller_address,
-        seller_cep: formData.seller_cep,
-        seller_bank: formData.seller_bank,
-        seller_agency: formData.seller_agency,
-        seller_checking_account: formData.seller_checking_account,
-        buyer_name: formData.buyer_name,
-        buyer_email: formData.buyer_email,
-        buyer_cpf: formData.buyer_cpf,
-        buyer_rg: formData.buyer_rg || undefined,
-        buyer_address: formData.buyer_address,
-        buyer_cep: formData.buyer_cep,
-        vehicle_model: formData.vehicle_model,
-        vehicle_year: formData.vehicle_year,
-        vehicle_registration_id: formData.vehicle_registration_id,
-        vehicle_serial_number: formData.vehicle_serial_number,
-        vehicle_technical_info: formData.vehicle_technical_info || undefined,
-        vehicle_price: formData.vehicle_price,
-        payment_seller_value: formData.payment_seller_value,
-        commission_value: formData.commission_value,
-        commission_name: formData.commission_name,
-        commission_cpf: formData.commission_cpf,
-        commission_bank: formData.commission_bank,
-        commission_agency: formData.commission_agency,
-        commission_checking_account: formData.commission_checking_account,
-        city: formData.city,
-        description: formData.description || undefined,
+      const contractData = buildContractData(formData);
+
+      // URL de callback para o DocuSign
+      const returnUrl = `${window.location.origin}/specialist/contracts/preview-callback`;
+
+      const previewPayload: PreviewContractData = {
+        ...contractData,
+        return_url: returnUrl,
       };
 
-      const result = await generateContract(contractData);
+      const result = await previewContract(previewPayload);
 
-      setSubmitStatus({
-        type: "success",
-        message: `Contrato gerado com sucesso! ID: ${result.id}`,
-      });
-
-      setTimeout(() => {
-        navigate("/specialist/processes");
-      }, 2000);
+      // Salvar dados para usar ao confirmar
+      setPreviewData(result);
+      setPreviewFormData(previewPayload);
+      setShowPreviewModal(true);
     } catch (error: any) {
-      console.error("Erro ao gerar contrato:", error);
+      console.error("Erro ao criar preview:", error);
 
       if (
         error.response?.status === 409 ||
@@ -301,18 +324,87 @@ export default function CreateContractPage() {
           message:
             "Já existe um contrato ativo para este processo. Aguarde a assinatura, recusa ou cancelamento antes de criar um novo.",
         });
+      } else if (error.response?.status === 429) {
+        setSubmitStatus({
+          type: "error",
+          message:
+            "Muitas requisições. Aguarde um momento antes de tentar novamente.",
+        });
       } else {
         setSubmitStatus({
           type: "error",
           message:
             error.response?.data?.message ||
-            "Erro ao gerar contrato. Tente novamente.",
+            "Erro ao criar preview. Tente novamente.",
         });
       }
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // Handler para confirmar envio após preview
+  const handleConfirmSend = useCallback(async () => {
+    if (!previewData || !previewFormData) return;
+
+    setIsSendingAfterPreview(true);
+
+    try {
+      const result = await sendContractAfterPreview(
+        previewData.envelope_id,
+        previewFormData,
+      );
+
+      setShowPreviewModal(false);
+      setSubmitStatus({
+        type: "success",
+        message: `Contrato enviado com sucesso! ID: ${result.id}`,
+      });
+
+      setTimeout(() => {
+        navigate("/specialist/processes");
+      }, 2000);
+    } catch (error: any) {
+      console.error("Erro ao enviar contrato:", error);
+      setShowPreviewModal(false);
+      setSubmitStatus({
+        type: "error",
+        message:
+          error.response?.data?.message ||
+          "Erro ao enviar contrato. Tente novamente.",
+      });
+    } finally {
+      setIsSendingAfterPreview(false);
+    }
+  }, [previewData, previewFormData, navigate]);
+
+  // Handler para cancelar preview
+  const handleCancelPreview = useCallback(async () => {
+    setShowPreviewModal(false);
+
+    if (previewData?.envelope_id) {
+      try {
+        await cancelContractPreview(previewData.envelope_id);
+      } catch (error) {
+        console.error("Erro ao cancelar preview (não crítico):", error);
+      }
+    }
+
+    setPreviewData(null);
+    setPreviewFormData(null);
+  }, [previewData]);
+
+  // Handler para preview expirado
+  const handlePreviewExpired = useCallback(() => {
+    setShowPreviewModal(false);
+    setPreviewData(null);
+    setPreviewFormData(null);
+    setSubmitStatus({
+      type: "error",
+      message:
+        "O preview expirou após 10 minutos. Por favor, gere um novo preview.",
+    });
+  }, []);
 
   // Calcular valor do vendedor automaticamente
   useEffect(() => {
@@ -424,7 +516,7 @@ export default function CreateContractPage() {
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+        <form onSubmit={handleSubmit(onPreview)} className="space-y-8">
           {/* Seção: Vendedor */}
           <section className="bg-white rounded-lg border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">
@@ -1098,9 +1190,9 @@ export default function CreateContractPage() {
             <div className="flex gap-3">
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || submitStatus.type === "success"}
                 className={`flex-1 px-6 py-3 rounded-lg font-medium text-white transition ${
-                  isSubmitting
+                  isSubmitting || submitStatus.type === "success"
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-slate-700 hover:bg-slate-800"
                 }`}
@@ -1108,10 +1200,18 @@ export default function CreateContractPage() {
                 {isSubmitting ? (
                   <span className="flex items-center justify-center gap-2">
                     <Loader className="w-4 h-4 animate-spin" />
-                    Gerando contrato...
+                    Preparando preview...
+                  </span>
+                ) : submitStatus.type === "success" ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <CheckCircle className="w-4 h-4" />
+                    Contrato Enviado
                   </span>
                 ) : (
-                  "Gerar e Enviar Contrato"
+                  <span className="flex items-center justify-center gap-2">
+                    <Eye className="w-4 h-4" />
+                    Pré-visualizar Contrato
+                  </span>
                 )}
               </button>
               <button
@@ -1126,6 +1226,19 @@ export default function CreateContractPage() {
           </div>
         </form>
       </div>
+
+      {/* Modal de Preview do DocuSign */}
+      {showPreviewModal && previewData && (
+        <DocuSignPreviewModal
+          previewUrl={previewData.preview_url}
+          envelopeId={previewData.envelope_id}
+          expiresAt={previewData.expires_at}
+          onConfirm={handleConfirmSend}
+          onCancel={handleCancelPreview}
+          onExpired={handlePreviewExpired}
+          isLoading={isSendingAfterPreview}
+        />
+      )}
     </div>
   );
 }

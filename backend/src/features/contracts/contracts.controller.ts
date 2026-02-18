@@ -8,13 +8,23 @@ import {
   HttpStatus,
   Logger,
   ParseUUIDPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { ContractsService } from './contracts.service';
 import { GenerateContractDto } from './dto/generate-contract.dto';
+import { PreviewContractDto } from './dto/preview-contract.dto';
+import {
+  PreviewContractResponseDto,
+  SendContractResponseDto,
+} from './dto/preview-contract-response.dto';
 import { PrefillContractResponseDto } from './dto/prefill-contract-response.dto';
 import { ApiResponseDto } from 'src/shared/dto/api-response.dto';
 import { ContractResponse } from './entity/contracts.response';
 import type { RequestWithUser } from 'src/auth/dto/auth';
+import { Roles } from 'src/shared/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
+import { RateLimitGuard } from 'src/shared/guards/rate-limit.guard';
+import { RateLimit } from 'src/shared/decorators/rate-limit.decorator';
 
 /**
  * Controller para gerenciar contratos via formulário.
@@ -181,6 +191,195 @@ export class ContractsController {
       sucess: true,
       message: 'Contrato gerado e enviado para assinatura com sucesso',
       data: contract,
+    };
+  }
+
+  /**
+   * POST /api/contracts/preview
+   *
+   * Cria um preview do contrato via DocuSign Sender View.
+   *
+   * O preview permite ao especialista visualizar e editar o contrato
+   * antes de enviá-lo definitivamente para assinatura.
+   *
+   * Segurança:
+   * - Apenas SPECIALIST e ADMIN podem acessar
+   * - Rate limit: 10 requisições por minuto
+   *
+   * A URL retornada expira em 10 minutos.
+   *
+   * @param previewContractDto - DTO com dados do contrato e returnUrl
+   * @param req - Requisição com usuário autenticado
+   * @returns ApiResponseDto<PreviewContractResponseDto>
+   *
+   * @example
+   * POST /contracts/preview
+   * Authorization: Bearer <JWT_TOKEN>
+   *
+   * Body:
+   * {
+   *   "process_id": "uuid",
+   *   "return_url": "https://app.example.com/contracts/preview-callback",
+   *   "seller_name": "Maria Santos",
+   *   ...
+   * }
+   *
+   * Response (201 Created):
+   * {
+   *   "success": true,
+   *   "message": "Preview criado com sucesso",
+   *   "data": {
+   *     "preview_url": "https://demo.docusign.net/...",
+   *     "envelope_id": "uuid",
+   *     "expires_at": "2026-02-18T10:35:00.000Z",
+   *     "process_id": "uuid"
+   *   }
+   * }
+   */
+  @Post('preview')
+  @Roles(UserRole.SPECIALIST, UserRole.ADMIN)
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ windowMs: 60, max: 10 })
+  async previewContract(
+    @Body() previewContractDto: PreviewContractDto,
+    @Request() req: RequestWithUser,
+  ): Promise<ApiResponseDto<PreviewContractResponseDto>> {
+    const { id: userId, email: userEmail } = req.user;
+
+    this.logger.log(
+      `Criando preview de contrato para usuário ${userId} (${userEmail})`,
+    );
+    this.logger.debug(
+      `Process: ${previewContractDto.process_id}, Return URL: ${previewContractDto.return_url}`,
+    );
+
+    const preview = await this.contractsService.previewContract(
+      previewContractDto,
+      userId,
+    );
+
+    this.logger.log(
+      `Preview criado com sucesso. EnvelopeID: ${preview.envelope_id}`,
+    );
+
+    return {
+      sucess: true,
+      message: 'Preview criado com sucesso. A URL expira em 10 minutos.',
+      data: preview,
+    };
+  }
+
+  /**
+   * POST /api/contracts/send/:envelopeId
+   *
+   * Envia um contrato que está em modo preview (draft) e salva no banco.
+   *
+   * Este endpoint é chamado após o usuário visualizar e confirmar o preview.
+   * Ele envia o envelope no DocuSign e persiste o contrato no banco de dados.
+   *
+   * Segurança:
+   * - Apenas SPECIALIST e ADMIN podem acessar
+   * - Rate limit: 10 requisições por minuto
+   *
+   * @param envelopeId - ID do envelope no DocuSign
+   * @param previewContractDto - Dados originais do contrato
+   * @param req - Requisição com usuário autenticado
+   * @returns ApiResponseDto<SendContractResponseDto>
+   *
+   * @example
+   * POST /contracts/send/93be49ab-xxxx-xxxx-xxxx-f752070d71ec
+   * Authorization: Bearer <JWT_TOKEN>
+   *
+   * Body:
+   * {
+   *   "process_id": "uuid",
+   *   "return_url": "...",
+   *   "seller_name": "Maria Santos",
+   *   ...
+   * }
+   *
+   * Response (201 Created):
+   * {
+   *   "success": true,
+   *   "message": "Contrato enviado com sucesso",
+   *   "data": {
+   *     "id": "uuid",
+   *     "envelope_id": "uuid",
+   *     "process_id": "uuid",
+   *     "status": "PENDING",
+   *     "created_at": "2026-02-18T10:30:00.000Z"
+   *   }
+   * }
+   */
+  @Post('send/:envelopeId')
+  @Roles(UserRole.SPECIALIST, UserRole.ADMIN)
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ windowMs: 60, max: 10 })
+  async sendContractAfterPreview(
+    @Param('envelopeId') envelopeId: string,
+    @Body() previewContractDto: PreviewContractDto,
+    @Request() req: RequestWithUser,
+  ): Promise<ApiResponseDto<SendContractResponseDto>> {
+    const { id: userId, email: userEmail } = req.user;
+
+    this.logger.log(
+      `Enviando contrato após preview para usuário ${userId} (${userEmail})`,
+    );
+    this.logger.debug(
+      `EnvelopeID: ${envelopeId}, Process: ${previewContractDto.process_id}`,
+    );
+
+    const result = await this.contractsService.sendContractAfterPreview(
+      envelopeId,
+      previewContractDto,
+      userId,
+    );
+
+    this.logger.log(
+      `Contrato enviado com sucesso. ID: ${result.id}, EnvelopeID: ${result.envelope_id}`,
+    );
+
+    return {
+      sucess: true,
+      message: 'Contrato enviado para assinatura com sucesso',
+      data: result,
+    };
+  }
+
+  /**
+   * POST /api/contracts/cancel-preview/:envelopeId
+   *
+   * Cancela um envelope de preview que não será enviado.
+   *
+   * Este endpoint deve ser chamado se o usuário decidir não enviar
+   * o contrato após visualizar o preview.
+   *
+   * @param envelopeId - ID do envelope no DocuSign
+   * @param req - Requisição com usuário autenticado
+   * @returns ApiResponseDto<void>
+   */
+  @Post('cancel-preview/:envelopeId')
+  @Roles(UserRole.SPECIALIST, UserRole.ADMIN)
+  async cancelPreview(
+    @Param('envelopeId') envelopeId: string,
+    @Request() req: RequestWithUser,
+  ): Promise<ApiResponseDto<null>> {
+    const { id: userId, email: userEmail } = req.user;
+
+    this.logger.log(`Cancelando preview para usuário ${userId} (${userEmail})`);
+    this.logger.debug(`EnvelopeID: ${envelopeId}`);
+
+    await this.contractsService.cancelPreview(
+      envelopeId,
+      `Cancelado pelo usuário ${userEmail}`,
+    );
+
+    this.logger.log(`Preview cancelado com sucesso. EnvelopeID: ${envelopeId}`);
+
+    return {
+      sucess: true,
+      message: 'Preview cancelado com sucesso',
+      data: null,
     };
   }
 }
