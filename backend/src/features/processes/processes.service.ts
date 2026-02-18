@@ -899,8 +899,12 @@ export class ProcessesService {
       where: { id: processId },
       include: {
         appointment: true,
-        client: { select: { id: true, email: true, name: true, surname: true } },
-        specialist: { select: { id: true, email: true, name: true, surname: true } },
+        client: {
+          select: { id: true, email: true, name: true, surname: true },
+        },
+        specialist: {
+          select: { id: true, email: true, name: true, surname: true },
+        },
         car: true,
         boat: true,
         aircraft: true,
@@ -975,9 +979,12 @@ export class ProcessesService {
       this.notificationService
         .sendAppointmentConfirmedEmail({
           clientEmail: process.client.email,
-          clientName: `${process.client.name} ${process.client.surname || ''}`.trim(),
-          specialistName: `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
-          appointmentDate: process.appointment!.appointment_datetime || new Date(),
+          clientName:
+            `${process.client.name} ${process.client.surname || ''}`.trim(),
+          specialistName:
+            `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+          appointmentDate:
+            process.appointment!.appointment_datetime || new Date(),
           productDetails: this.getProductDetails(process),
           processId,
         })
@@ -1015,8 +1022,12 @@ export class ProcessesService {
       where: { id: processId },
       include: {
         appointment: true,
-        client: { select: { id: true, email: true, name: true, surname: true } },
-        specialist: { select: { id: true, email: true, name: true, surname: true } },
+        client: {
+          select: { id: true, email: true, name: true, surname: true },
+        },
+        specialist: {
+          select: { id: true, email: true, name: true, surname: true },
+        },
         car: true,
         boat: true,
         aircraft: true,
@@ -1078,14 +1089,15 @@ export class ProcessesService {
       const recipientId = isClient ? process.specialist_id : process.client_id;
       const recipient = isClient ? process.specialist : process.client;
       const canceller = isClient ? process.client : process.specialist;
-      
+
       this.notificationService
         .sendAppointmentCancelledEmail({
           recipientEmail: recipient.email,
           recipientName: `${recipient.name} ${recipient.surname || ''}`.trim(),
           cancellerName: `${canceller.name} ${canceller.surname || ''}`.trim(),
           wasClient: isClient,
-          appointmentDate: process.appointment!.appointment_datetime || new Date(),
+          appointmentDate:
+            process.appointment!.appointment_datetime || new Date(),
           productDetails: this.getProductDetails(process),
         })
         .catch((err) => {

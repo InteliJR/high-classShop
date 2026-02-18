@@ -22,7 +22,7 @@ import {
 
 /**
  * NotificationService - Sistema de Notificações por Email com Fire-and-Forget
- * 
+ *
  * Características:
  * - Totalmente assíncrono (não bloqueia transações)
  * - 3 camadas de proteção de erro:
@@ -58,12 +58,21 @@ export class NotificationService {
   ) {
     // Reuse SES client from SesService
     this.sesClient = (this.sesService as any).sesClient;
-    this.fromEmail = this.configService.get('EMAIL_FROM', 'noreply@highclass.com');
-    this.frontendUrl = this.configService.get('FRONTEND_URL', 'http://localhost:5173');
-    this.notificationsEnabled = this.configService.get('NOTIFICATIONS_ENABLED', 'true') === 'true';
+    this.fromEmail = this.configService.get(
+      'EMAIL_FROM',
+      'noreply@highclass.com',
+    );
+    this.frontendUrl = this.configService.get(
+      'FRONTEND_URL',
+      'http://localhost:5173',
+    );
+    this.notificationsEnabled =
+      this.configService.get('NOTIFICATIONS_ENABLED', 'true') === 'true';
 
     if (!this.notificationsEnabled) {
-      this.logger.warn('⚠️ Notifications DISABLED via NOTIFICATIONS_ENABLED config');
+      this.logger.warn(
+        '⚠️ Notifications DISABLED via NOTIFICATIONS_ENABLED config',
+      );
     }
   }
 
@@ -98,7 +107,10 @@ export class NotificationService {
     return Promise.race([
       promise,
       new Promise<T>((_, reject) =>
-        setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms`)), timeoutMs)
+        setTimeout(
+          () => reject(new Error(`Timeout after ${timeoutMs}ms`)),
+          timeoutMs,
+        ),
       ),
     ]);
   }
@@ -107,16 +119,16 @@ export class NotificationService {
    * Delay assíncrono para retry
    */
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
    * Core: Envio de email com 3 camadas de proteção
-   * 
+   *
    * Layer 1: Circuit Breaker - Fail fast se sistema está instável
    * Layer 2: Timeout Protection - Cancela após 5s
    * Layer 3: Exponential Backoff Retry - 3 tentativas com delays crescentes
-   * 
+   *
    * NUNCA lança exceções - graceful degradation
    */
   private async sendEmailSafely(
@@ -146,11 +158,14 @@ export class NotificationService {
 
       for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
         try {
-          this.logger.debug(`Sending email attempt ${attempt}/${this.MAX_RETRIES}`, {
-            correlationId,
-            type,
-            recipient: recipientEmail,
-          });
+          this.logger.debug(
+            `Sending email attempt ${attempt}/${this.MAX_RETRIES}`,
+            {
+              correlationId,
+              type,
+              recipient: recipientEmail,
+            },
+          );
 
           // Wrap SES call with timeout
           const sendCommand = new SendEmailCommand({
@@ -231,9 +246,13 @@ export class NotificationService {
    * Event 2: Appointment Confirmed
    * Notifica cliente que especialista confirmou o agendamento
    */
-  async sendAppointmentConfirmedEmail(data: AppointmentConfirmedEmailDto): Promise<void> {
+  async sendAppointmentConfirmedEmail(
+    data: AppointmentConfirmedEmailDto,
+  ): Promise<void> {
     if (!this.notificationsEnabled) {
-      this.logger.debug('Notifications disabled - skipping sendAppointmentConfirmedEmail');
+      this.logger.debug(
+        'Notifications disabled - skipping sendAppointmentConfirmedEmail',
+      );
       return;
     }
 
@@ -255,11 +274,19 @@ export class NotificationService {
             confirmou sua reunião.
           </p>
           <div style="background-color: #f0f9ff; padding: 20px; border-left: 4px solid #3b82f6; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #1e40af;"><strong>📅 Data:</strong> ${new Date(data.appointmentDate).toLocaleDateString('pt-BR', { 
-              weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+            <p style="margin: 8px 0; color: #1e40af;"><strong>📅 Data:</strong> ${new Date(
+              data.appointmentDate,
+            ).toLocaleDateString('pt-BR', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
             })}</p>
-            <p style="margin: 8px 0; color: #1e40af;"><strong>🕐 Horário:</strong> ${new Date(data.appointmentDate).toLocaleTimeString('pt-BR', { 
-              hour: '2-digit', minute: '2-digit' 
+            <p style="margin: 8px 0; color: #1e40af;"><strong>🕐 Horário:</strong> ${new Date(
+              data.appointmentDate,
+            ).toLocaleTimeString('pt-BR', {
+              hour: '2-digit',
+              minute: '2-digit',
             })}</p>
             <p style="margin: 8px 0; color: #1e40af;"><strong>🚗 Produto:</strong> ${data.productDetails}</p>
           </div>
@@ -298,20 +325,33 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para ver detalhes e inici
 © 2026 High-class Shop
     `.trim();
 
-    await this.sendEmailSafely('APPOINTMENT_CONFIRMED', data.clientEmail, subject, html, text);
+    await this.sendEmailSafely(
+      'APPOINTMENT_CONFIRMED',
+      data.clientEmail,
+      subject,
+      html,
+      text,
+    );
   }
 
   /**
    * Event 4: New Proposal Received
    * Notifica destinatário sobre nova proposta ou contraproposta
    */
-  async sendProposalReceivedEmail(data: ProposalReceivedEmailDto): Promise<void> {
+  async sendProposalReceivedEmail(
+    data: ProposalReceivedEmailDto,
+  ): Promise<void> {
     if (!this.notificationsEnabled) {
-      this.logger.debug('Notifications disabled - skipping sendProposalReceivedEmail');
+      this.logger.debug(
+        'Notifications disabled - skipping sendProposalReceivedEmail',
+      );
       return;
     }
 
-    const percentageOfOriginal = ((data.proposedValue / data.originalValue) * 100).toFixed(1);
+    const percentageOfOriginal = (
+      (data.proposedValue / data.originalValue) *
+      100
+    ).toFixed(1);
     const subject = `💰 Nova proposta recebida - High-class Shop`;
 
     const html = `
@@ -369,7 +409,13 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para responde
 © 2026 High-class Shop
     `.trim();
 
-    await this.sendEmailSafely('PROPOSAL_RECEIVED', data.recipientEmail, subject, html, text);
+    await this.sendEmailSafely(
+      'PROPOSAL_RECEIVED',
+      data.recipientEmail,
+      subject,
+      html,
+      text,
+    );
   }
 
   /**
@@ -379,7 +425,9 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para responde
    */
   async sendContractSignedEmail(data: ContractSignedEmailDto): Promise<void> {
     if (!this.notificationsEnabled) {
-      this.logger.debug('Notifications disabled - skipping sendContractSignedEmail');
+      this.logger.debug(
+        'Notifications disabled - skipping sendContractSignedEmail',
+      );
       return;
     }
 
@@ -422,7 +470,9 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para responde
             <p style="margin: 8px 0; color: #166534;"><strong>🤝 ${isBuyer ? 'Vendedor' : 'Comprador'}:</strong> ${otherPartyName}</p>
             <p style="margin: 8px 0; color: #166534;"><strong>📄 Contrato ID:</strong> ${data.contractId}</p>
           </div>
-          ${data.signedPdfUrl ? `
+          ${
+            data.signedPdfUrl
+              ? `
           <div style="text-align: center; margin: 30px 0;">
             <a href="${data.signedPdfUrl}" 
                style="display: inline-block; background-color: #3b82f6; color: #fff; 
@@ -431,11 +481,14 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para responde
               📥 Baixar Contrato Assinado
             </a>
           </div>
-          ` : ''}
+          `
+              : ''
+          }
           <p style="font-size: 16px; color: #334155;">
-            ${isBuyer 
-              ? 'Os próximos passos para recebimento do veículo serão coordenados pelo especialista.'
-              : 'A comissão será processada conforme acordado no contrato.'
+            ${
+              isBuyer
+                ? 'Os próximos passos para recebimento do veículo serão coordenados pelo especialista.'
+                : 'A comissão será processada conforme acordado no contrato.'
             }
           </p>
         </div>
@@ -460,9 +513,10 @@ Contrato ID: ${data.contractId}
 
 ${data.signedPdfUrl ? `Baixar contrato: ${data.signedPdfUrl}` : ''}
 
-${isBuyer 
-  ? 'Os próximos passos para recebimento do veículo serão coordenados pelo especialista.'
-  : 'A comissão será processada conforme acordado no contrato.'
+${
+  isBuyer
+    ? 'Os próximos passos para recebimento do veículo serão coordenados pelo especialista.'
+    : 'A comissão será processada conforme acordado no contrato.'
 }
 
 © 2026 High-class Shop
@@ -485,9 +539,13 @@ ${isBuyer
    * Event 1: Appointment Created
    * Notifica especialista sobre novo agendamento criado pelo cliente
    */
-  async sendAppointmentCreatedEmail(data: AppointmentCreatedEmailDto): Promise<void> {
+  async sendAppointmentCreatedEmail(
+    data: AppointmentCreatedEmailDto,
+  ): Promise<void> {
     if (!this.notificationsEnabled) {
-      this.logger.debug('Notifications disabled - skipping sendAppointmentCreatedEmail');
+      this.logger.debug(
+        'Notifications disabled - skipping sendAppointmentCreatedEmail',
+      );
       return;
     }
 
@@ -508,11 +566,19 @@ ${isBuyer
             O cliente <strong>${data.clientName}</strong> criou um novo agendamento com você.
           </p>
           <div style="background-color: #fef3c7; padding: 20px; border-left: 4px solid #f59e0b; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #92400e;"><strong>📅 Data:</strong> ${new Date(data.appointmentDate).toLocaleDateString('pt-BR', { 
-              weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+            <p style="margin: 8px 0; color: #92400e;"><strong>📅 Data:</strong> ${new Date(
+              data.appointmentDate,
+            ).toLocaleDateString('pt-BR', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
             })}</p>
-            <p style="margin: 8px 0; color: #92400e;"><strong>🕐 Horário:</strong> ${new Date(data.appointmentDate).toLocaleTimeString('pt-BR', { 
-              hour: '2-digit', minute: '2-digit' 
+            <p style="margin: 8px 0; color: #92400e;"><strong>🕐 Horário:</strong> ${new Date(
+              data.appointmentDate,
+            ).toLocaleTimeString('pt-BR', {
+              hour: '2-digit',
+              minute: '2-digit',
             })}</p>
             <p style="margin: 8px 0; color: #92400e;"><strong>👤 Cliente:</strong> ${data.clientName}</p>
             <p style="margin: 8px 0; color: #92400e;"><strong>🚗 Produto:</strong> ${data.productDetails}</p>
@@ -553,16 +619,26 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para confirmar.
 © 2026 High-class Shop
     `.trim();
 
-    await this.sendEmailSafely('APPOINTMENT_CREATED', data.specialistEmail, subject, html, text);
+    await this.sendEmailSafely(
+      'APPOINTMENT_CREATED',
+      data.specialistEmail,
+      subject,
+      html,
+      text,
+    );
   }
 
   /**
    * Event 3: Appointment Cancelled
    * Notifica a outra parte sobre cancelamento de agendamento
    */
-  async sendAppointmentCancelledEmail(data: AppointmentCancelledEmailDto): Promise<void> {
+  async sendAppointmentCancelledEmail(
+    data: AppointmentCancelledEmailDto,
+  ): Promise<void> {
     if (!this.notificationsEnabled) {
-      this.logger.debug('Notifications disabled - skipping sendAppointmentCancelledEmail');
+      this.logger.debug(
+        'Notifications disabled - skipping sendAppointmentCancelledEmail',
+      );
       return;
     }
 
@@ -583,24 +659,36 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para confirmar.
             Informamos que <strong>${data.cancellerName}</strong> cancelou o agendamento.
           </p>
           <div style="background-color: #fef2f2; padding: 20px; border-left: 4px solid #ef4444; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #991b1b;"><strong>📅 Data Original:</strong> ${new Date(data.appointmentDate).toLocaleDateString('pt-BR', { 
-              weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+            <p style="margin: 8px 0; color: #991b1b;"><strong>📅 Data Original:</strong> ${new Date(
+              data.appointmentDate,
+            ).toLocaleDateString('pt-BR', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
             })}</p>
-            <p style="margin: 8px 0; color: #991b1b;"><strong>🕐 Horário:</strong> ${new Date(data.appointmentDate).toLocaleTimeString('pt-BR', { 
-              hour: '2-digit', minute: '2-digit' 
+            <p style="margin: 8px 0; color: #991b1b;"><strong>🕐 Horário:</strong> ${new Date(
+              data.appointmentDate,
+            ).toLocaleTimeString('pt-BR', {
+              hour: '2-digit',
+              minute: '2-digit',
             })}</p>
             <p style="margin: 8px 0; color: #991b1b;"><strong>🚗 Produto:</strong> ${data.productDetails}</p>
             <p style="margin: 8px 0; color: #991b1b;"><strong>Cancelado por:</strong> ${data.wasClient ? 'Cliente' : 'Especialista'}</p>
           </div>
-          ${data.wasClient ? `
+          ${
+            data.wasClient
+              ? `
           <p style="font-size: 16px; color: #334155;">
             O processo continua disponível. Você pode reagendar quando quiser.
           </p>
-          ` : `
+          `
+              : `
           <p style="font-size: 16px; color: #334155;">
             Entre em contato conosco se tiver dúvidas ou quiser marcar uma nova reunião.
           </p>
-          `}
+          `
+          }
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
           <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
@@ -621,15 +709,22 @@ Horário: ${new Date(data.appointmentDate).toLocaleTimeString('pt-BR')}
 Produto: ${data.productDetails}
 Cancelado por: ${data.wasClient ? 'Cliente' : 'Especialista'}
 
-${data.wasClient 
-  ? 'O processo continua disponível. Você pode reagendar quando quiser.'
-  : 'Entre em contato conosco se tiver dúvidas ou quiser marcar uma nova reunião.'
+${
+  data.wasClient
+    ? 'O processo continua disponível. Você pode reagendar quando quiser.'
+    : 'Entre em contato conosco se tiver dúvidas ou quiser marcar uma nova reunião.'
 }
 
 © 2026 High-class Shop
     `.trim();
 
-    await this.sendEmailSafely('APPOINTMENT_CANCELLED', data.recipientEmail, subject, html, text);
+    await this.sendEmailSafely(
+      'APPOINTMENT_CANCELLED',
+      data.recipientEmail,
+      subject,
+      html,
+      text,
+    );
   }
 
   // ==========================================================================
@@ -640,9 +735,13 @@ ${data.wasClient
    * Event 5: Proposal Accepted
    * Notifica proponente que sua proposta foi aceita
    */
-  async sendProposalAcceptedEmail(data: ProposalAcceptedEmailDto): Promise<void> {
+  async sendProposalAcceptedEmail(
+    data: ProposalAcceptedEmailDto,
+  ): Promise<void> {
     if (!this.notificationsEnabled) {
-      this.logger.debug('Notifications disabled - skipping sendProposalAcceptedEmail');
+      this.logger.debug(
+        'Notifications disabled - skipping sendProposalAcceptedEmail',
+      );
       return;
     }
 
@@ -700,16 +799,26 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
 © 2026 High-class Shop
     `.trim();
 
-    await this.sendEmailSafely('PROPOSAL_ACCEPTED', data.proposerEmail, subject, html, text);
+    await this.sendEmailSafely(
+      'PROPOSAL_ACCEPTED',
+      data.proposerEmail,
+      subject,
+      html,
+      text,
+    );
   }
 
   /**
    * Event 6: Proposal Rejected
    * Notifica proponente que sua proposta foi rejeitada
    */
-  async sendProposalRejectedEmail(data: ProposalRejectedEmailDto): Promise<void> {
+  async sendProposalRejectedEmail(
+    data: ProposalRejectedEmailDto,
+  ): Promise<void> {
     if (!this.notificationsEnabled) {
-      this.logger.debug('Notifications disabled - skipping sendProposalRejectedEmail');
+      this.logger.debug(
+        'Notifications disabled - skipping sendProposalRejectedEmail',
+      );
       return;
     }
 
@@ -771,14 +880,22 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para continua
 © 2026 High-class Shop
     `.trim();
 
-    await this.sendEmailSafely('PROPOSAL_REJECTED', data.proposerEmail, subject, html, text);
+    await this.sendEmailSafely(
+      'PROPOSAL_REJECTED',
+      data.proposerEmail,
+      subject,
+      html,
+      text,
+    );
   }
 
   /**
    * Event 7: Counter Proposal (uses same data as ProposalReceived)
    * Notifica sobre contraproposta - reutiliza lógica de ProposalReceived com subject diferente
    */
-  async sendCounterProposalEmail(data: ProposalReceivedEmailDto): Promise<void> {
+  async sendCounterProposalEmail(
+    data: ProposalReceivedEmailDto,
+  ): Promise<void> {
     // Counter proposals são tratados como proposals normais, apenas com subject diferente
     await this.sendProposalReceivedEmail(data);
   }
@@ -791,9 +908,13 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para continua
    * Event 8: Contract Generated
    * Notifica ambas as partes que contrato foi gerado e será enviado em breve
    */
-  async sendContractGeneratedEmail(data: ContractGeneratedEmailDto): Promise<void> {
+  async sendContractGeneratedEmail(
+    data: ContractGeneratedEmailDto,
+  ): Promise<void> {
     if (!this.notificationsEnabled) {
-      this.logger.debug('Notifications disabled - skipping sendContractGeneratedEmail');
+      this.logger.debug(
+        'Notifications disabled - skipping sendContractGeneratedEmail',
+      );
       return;
     }
 
@@ -887,7 +1008,9 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
    */
   async sendContractSentEmail(data: ContractSentEmailDto): Promise<void> {
     if (!this.notificationsEnabled) {
-      this.logger.debug('Notifications disabled - skipping sendContractSentEmail');
+      this.logger.debug(
+        'Notifications disabled - skipping sendContractSentEmail',
+      );
       return;
     }
 
@@ -981,9 +1104,13 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
    * Event 11: Contract Declined
    * Notifica ambas as partes que contrato foi recusado
    */
-  async sendContractDeclinedEmail(data: ContractStatusChangedEmailDto): Promise<void> {
+  async sendContractDeclinedEmail(
+    data: ContractStatusChangedEmailDto,
+  ): Promise<void> {
     if (!this.notificationsEnabled) {
-      this.logger.debug('Notifications disabled - skipping sendContractDeclinedEmail');
+      this.logger.debug(
+        'Notifications disabled - skipping sendContractDeclinedEmail',
+      );
       return;
     }
 
@@ -1000,9 +1127,13 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
    * Event 12: Contract Voided
    * Notifica ambas as partes que contrato foi anulado
    */
-  async sendContractVoidedEmail(data: ContractStatusChangedEmailDto): Promise<void> {
+  async sendContractVoidedEmail(
+    data: ContractStatusChangedEmailDto,
+  ): Promise<void> {
     if (!this.notificationsEnabled) {
-      this.logger.debug('Notifications disabled - skipping sendContractVoidedEmail');
+      this.logger.debug(
+        'Notifications disabled - skipping sendContractVoidedEmail',
+      );
       return;
     }
 
@@ -1019,9 +1150,13 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
    * Event 13: Contract Timeout
    * Notifica ambas as partes que contrato expirou por timeout
    */
-  async sendContractTimeoutEmail(data: ContractStatusChangedEmailDto): Promise<void> {
+  async sendContractTimeoutEmail(
+    data: ContractStatusChangedEmailDto,
+  ): Promise<void> {
     if (!this.notificationsEnabled) {
-      this.logger.debug('Notifications disabled - skipping sendContractTimeoutEmail');
+      this.logger.debug(
+        'Notifications disabled - skipping sendContractTimeoutEmail',
+      );
       return;
     }
 
@@ -1042,7 +1177,9 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
   ): Promise<void> {
     const isSpecialist = role === 'specialist';
     const recipientName = isSpecialist ? data.specialistName : data.clientName;
-    const recipientEmail = isSpecialist ? data.specialistEmail : data.clientEmail;
+    const recipientEmail = isSpecialist
+      ? data.specialistEmail
+      : data.clientEmail;
     const otherPartyName = isSpecialist ? data.clientName : data.specialistName;
 
     const statusConfig = {
@@ -1053,7 +1190,8 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
         bgColor: '#fef2f2',
         textColor: '#991b1b',
         message: `O contrato foi recusado ${data.declinedBy ? `por ${data.declinedBy}` : ''}.`,
-        action: 'Entre em contato para discutir os próximos passos ou iniciar uma nova negociação.',
+        action:
+          'Entre em contato para discutir os próximos passos ou iniciar uma nova negociação.',
       },
       voided: {
         icon: '🚫',
@@ -1062,7 +1200,8 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
         bgColor: '#fff7ed',
         textColor: '#9a3412',
         message: 'O contrato foi anulado pelo sistema.',
-        action: 'Entre em contato com o suporte para mais informações ou iniciar uma nova negociação.',
+        action:
+          'Entre em contato com o suporte para mais informações ou iniciar uma nova negociação.',
       },
       timeout: {
         icon: '⏰',
@@ -1071,7 +1210,8 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
         bgColor: '#fef3c7',
         textColor: '#92400e',
         message: 'O prazo para assinatura do contrato expirou.',
-        action: 'Se ainda houver interesse, você pode solicitar a geração de um novo contrato.',
+        action:
+          'Se ainda houver interesse, você pode solicitar a geração de um novo contrato.',
       },
     };
 
