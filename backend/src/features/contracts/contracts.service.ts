@@ -25,6 +25,7 @@ import {
   numberToWords,
 } from 'src/shared/utils/format.utils';
 import { ProductType } from '@prisma/client';
+import { NotificationService } from 'src/features/notifications/notification.service';
 
 /**
  * Serviço de Contratos - Geração via Formulário
@@ -47,6 +48,7 @@ export class ContractsService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly docuSignService: DocuSignService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -545,6 +547,27 @@ export class ContractsService {
         `✓ Contrato criado no banco com ID: ${createdContract.id}`,
       );
       this.logger.log(`=== GERAÇÃO DE CONTRATO CONCLUÍDA COM SUCESSO ===`);
+
+      // Fire-and-forget: Enviar notificação de contrato gerado
+      setImmediate(() => {
+        this.notificationService
+          .sendContractGeneratedEmail({
+            buyerEmail: dto.buyer_email,
+            buyerName: dto.buyer_name,
+            sellerEmail: dto.seller_email,
+            sellerName: dto.seller_name,
+            contractId: createdContract.id,
+            vehicleDetails: `${dto.vehicle_model} ${dto.vehicle_year}`,
+            processId: dto.process_id,
+          })
+          .catch((err) => {
+            this.logger.error('Notification failed (non-critical)', {
+              method: 'generateContract',
+              contractId: createdContract.id,
+              error: err.message,
+            });
+          });
+      });
 
       // ===== RETORNAR RESPOSTA =====
       return {

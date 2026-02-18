@@ -18,12 +18,16 @@ import { ProcessStatus, StatusAgendamento } from '@prisma/client';
 import { ProcessesByStatus } from 'src/shared/dto/summary.dto';
 import { UpdateProcessDto } from './dto/update-process.dto';
 import { ProcessWithHistory } from './entity/process-history.response';
+import { NotificationService } from 'src/features/notifications/notification.service';
 
 @Injectable()
 export class ProcessesService {
   private readonly logger = new Logger(ProcessesService.name);
 
-  constructor(private readonly prismaService: PrismaService) {}
+  constructor(
+    private readonly prismaService: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
   /**
    * Cria um objeto "product" de acordo com o processo enviado
@@ -52,6 +56,28 @@ export class ProcessesService {
       marca: product.marca,
       modelo: product.modelo,
     };
+  }
+
+  /**
+   * Helper: Retorna descrição formatada do produto para emails
+   *
+   * @param process - processo com produto incluído
+   * @returns string formatada "Marca Modelo"
+   */
+  private getProductDetails(process: any): string {
+    const productMap: Record<string, string> = {
+      CAR: 'car',
+      BOAT: 'boat',
+      AIRCRAFT: 'aircraft',
+    };
+
+    const relation = productMap[process.product_type];
+    if (!relation || !process[relation]) {
+      return 'Produto não especificado';
+    }
+
+    const product = process[relation];
+    return `${product.marca || ''} ${product.modelo || ''}`.trim() || 'Produto';
   }
 
   /**
@@ -868,10 +894,17 @@ export class ProcessesService {
       `[confirmAppointment] Confirmando agendamento do processo ${processId}`,
     );
 
-    // Buscar processo com appointment
+    // Buscar processo com appointment, client, specialist e produtos
     const process = await this.prismaService.process.findUnique({
       where: { id: processId },
-      include: { appointment: true },
+      include: {
+        appointment: true,
+        client: { select: { id: true, email: true, name: true, surname: true } },
+        specialist: { select: { id: true, email: true, name: true, surname: true } },
+        car: true,
+        boat: true,
+        aircraft: true,
+      },
     });
 
     if (!process) {
@@ -937,6 +970,26 @@ export class ProcessesService {
       `[confirmAppointment] Agendamento confirmado para processo ${processId}`,
     );
 
+    // Fire-and-forget email notification (async, non-blocking)
+    setImmediate(() => {
+      this.notificationService
+        .sendAppointmentConfirmedEmail({
+          clientEmail: process.client.email,
+          clientName: `${process.client.name} ${process.client.surname || ''}`.trim(),
+          specialistName: `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+          appointmentDate: process.appointment!.appointment_datetime || new Date(),
+          productDetails: this.getProductDetails(process),
+          processId,
+        })
+        .catch((err) => {
+          this.logger.error('Notification failed (non-critical)', {
+            method: 'confirmAppointment',
+            processId,
+            error: err.message,
+          });
+        });
+    });
+
     return { processId, status: 'NEGOTIATION' };
   }
 
@@ -957,10 +1010,17 @@ export class ProcessesService {
       `[cancelAppointment] Cancelando agendamento do processo ${processId}`,
     );
 
-    // Buscar processo com appointment
+    // Buscar processo com appointment, client, specialist e produtos
     const process = await this.prismaService.process.findUnique({
       where: { id: processId },
-      include: { appointment: true },
+      include: {
+        appointment: true,
+        client: { select: { id: true, email: true, name: true, surname: true } },
+        specialist: { select: { id: true, email: true, name: true, surname: true } },
+        car: true,
+        boat: true,
+        aircraft: true,
+      },
     });
 
     if (!process) {
@@ -1012,6 +1072,30 @@ export class ProcessesService {
     this.logger.log(
       `[cancelAppointment] Agendamento e processo ${processId} deletados`,
     );
+
+    // Fire-and-forget email notification (async, non-blocking)
+    setImmediate(() => {
+      const recipientId = isClient ? process.specialist_id : process.client_id;
+      const recipient = isClient ? process.specialist : process.client;
+      const canceller = isClient ? process.client : process.specialist;
+      
+      this.notificationService
+        .sendAppointmentCancelledEmail({
+          recipientEmail: recipient.email,
+          recipientName: `${recipient.name} ${recipient.surname || ''}`.trim(),
+          cancellerName: `${canceller.name} ${canceller.surname || ''}`.trim(),
+          wasClient: isClient,
+          appointmentDate: process.appointment!.appointment_datetime || new Date(),
+          productDetails: this.getProductDetails(process),
+        })
+        .catch((err) => {
+          this.logger.error('Notification failed (non-critical)', {
+            method: 'cancelAppointment',
+            processId,
+            error: err.message,
+          });
+        });
+    });
 
     return { success: true, message: 'Agendamento cancelado com sucesso' };
   }

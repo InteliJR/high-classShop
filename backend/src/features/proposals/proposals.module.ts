@@ -4,6 +4,7 @@ import { ProposalsService } from './proposals.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { JwtModule } from '@nestjs/jwt';
 import { SettingsModule } from 'src/features/settings/settings.module';
+import { NotificationModule } from 'src/features/notifications/notification.module';
 
 /**
  * ProposalsModule
@@ -17,7 +18,7 @@ import { SettingsModule } from 'src/features/settings/settings.module';
  * - Validar regras de negócio (80% mínimo, alternância)
  */
 @Module({
-  imports: [JwtModule, SettingsModule],
+  imports: [JwtModule, SettingsModule, NotificationModule],
   controllers: [ProposalsController],
   providers: [ProposalsService, PrismaService],
   exports: [ProposalsService],

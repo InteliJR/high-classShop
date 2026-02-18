@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { mapDocusignStatusToProviderStatus } from '../mappers/envelope-status.mapper';
 import { ProcessCompletionReason } from '@prisma/client';
+import { NotificationService } from 'src/features/notifications/notification.service';
 
 /**
  * Tipos de eventos suportados na webhooks v2.1 event-based
@@ -73,7 +74,10 @@ const PROVIDER_STATUS_TO_CONTRACT_STATUS: Record<string, string> = {
 export class DocuSignWebhookService {
   private readonly logger = new Logger(DocuSignWebhookService.name);
 
-  constructor(private readonly prismaService: PrismaService) {}
+  constructor(
+    private readonly prismaService: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
   /**
    * Valida se o payload é um webhook v2.1 event-based válido
@@ -373,7 +377,134 @@ export class DocuSignWebhookService {
         return updatedContract;
       });
 
-      // ===== ETAPA 8: LOG DE AUDITORIA =====
+      // ===== ETAPA 8: ENVIAR NOTIFICAÇÕES (Fire-and-forget) =====
+
+      // Buscar dados do contrato para notificações
+      const contractWithDetails = await this.prismaService.contract.findUnique({
+        where: { id: contract.id },
+        select: {
+          id: true,
+          buyer_name: true,
+          seller_name: true,
+          vehicle_model: true,
+          vehicle_year: true,
+          vehicle_price: true,
+          process: {
+            select: {
+              client: { select: { email: true, name: true, surname: true } },
+              specialist: { select: { email: true, name: true, surname: true } },
+            },
+          },
+        },
+      });
+
+      if (contractWithDetails) {
+        const buyerEmail = contractWithDetails.process?.client?.email;
+        const buyerName = contractWithDetails.buyer_name || 
+          `${contractWithDetails.process?.client?.name || ''} ${contractWithDetails.process?.client?.surname || ''}`.trim();
+        const sellerEmail = contractWithDetails.process?.specialist?.email;
+        const sellerName = contractWithDetails.seller_name ||
+          `${contractWithDetails.process?.specialist?.name || ''} ${contractWithDetails.process?.specialist?.surname || ''}`.trim();
+        const vehicleDetails = `${contractWithDetails.vehicle_model || ''} ${contractWithDetails.vehicle_year || ''}`.trim();
+
+        setImmediate(() => {
+          // Notificar baseado no status
+          if (providerStatus === 'SENT' && buyerEmail && sellerEmail) {
+            this.notificationService
+              .sendContractSentEmail({
+                buyerEmail,
+                buyerName,
+                sellerEmail,
+                sellerName,
+                docusignLink: `https://app.docusign.com/documents/details/${envelopeId}`,
+                contractId: contract.id,
+              })
+              .catch((err) => {
+                this.logger.error('Notification failed (non-critical)', {
+                  method: 'handleEnvelopeStatusChanged',
+                  event: 'SENT',
+                  contractId: contract.id,
+                  error: err.message,
+                });
+              });
+          } else if (providerStatus === 'COMPLETED' && buyerEmail && sellerEmail) {
+            this.notificationService
+              .sendContractSignedEmail({
+                buyerEmail,
+                buyerName,
+                sellerEmail,
+                sellerName,
+                contractId: contract.id,
+                vehicleModel: vehicleDetails,
+                finalPrice: Number(contractWithDetails.vehicle_price) || 0,
+              })
+              .catch((err) => {
+                this.logger.error('Notification failed (non-critical)', {
+                  method: 'handleEnvelopeStatusChanged',
+                  event: 'COMPLETED',
+                  contractId: contract.id,
+                  error: err.message,
+                });
+              });
+          } else if (providerStatus === 'DECLINED' && sellerEmail) {
+            this.notificationService
+              .sendContractDeclinedEmail({
+                specialistEmail: sellerEmail,
+                specialistName: sellerName,
+                clientEmail: buyerEmail || '',
+                clientName: buyerName,
+                contractId: contract.id,
+                vehicleDetails,
+              })
+              .catch((err) => {
+                this.logger.error('Notification failed (non-critical)', {
+                  method: 'handleEnvelopeStatusChanged',
+                  event: 'DECLINED',
+                  contractId: contract.id,
+                  error: err.message,
+                });
+              });
+          } else if (providerStatus === 'VOIDED' && sellerEmail) {
+            this.notificationService
+              .sendContractVoidedEmail({
+                specialistEmail: sellerEmail,
+                specialistName: sellerName,
+                clientEmail: buyerEmail || '',
+                clientName: buyerName,
+                contractId: contract.id,
+                vehicleDetails,
+              })
+              .catch((err) => {
+                this.logger.error('Notification failed (non-critical)', {
+                  method: 'handleEnvelopeStatusChanged',
+                  event: 'VOIDED',
+                  contractId: contract.id,
+                  error: err.message,
+                });
+              });
+          } else if (providerStatus === 'TIMEDOUT' && sellerEmail) {
+            this.notificationService
+              .sendContractTimeoutEmail({
+                specialistEmail: sellerEmail,
+                specialistName: sellerName,
+                clientEmail: buyerEmail || '',
+                clientName: buyerName,
+                contractId: contract.id,
+                vehicleDetails,
+              })
+              .catch((err) => {
+                this.logger.error('Notification failed (non-critical)', {
+                  method: 'handleEnvelopeStatusChanged',
+                  event: 'TIMEDOUT',
+                  contractId: contract.id,
+                  error: err.message,
+                });
+              });
+          }
+        });
+      }
+
+      // ===== ETAPA 9: LOG DE AUDITORIA =====
 
       this.logger.debug(`Estado anterior vs novo:`, {
         before: {

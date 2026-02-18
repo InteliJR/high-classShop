@@ -10,9 +10,10 @@ import { DocuSignWebhookService } from './webhook/webhook.service';
 import { WebhookSignatureValidator } from './webhook/webhook-signature.validator';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AwsModule } from 'src/aws/aws.module';
+import { NotificationModule } from 'src/features/notifications/notification.module';
 
 @Module({
-  imports: [ConfigModule, AwsModule],
+  imports: [ConfigModule, AwsModule, NotificationModule],
   providers: [
     DocuSignService,
     PdfService,

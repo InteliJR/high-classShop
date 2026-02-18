@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AppointmentsController } from './appointments.controller';
 import { AppointmentsService } from './appointments.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { NotificationModule } from 'src/features/notifications/notification.module';
 
 /**
  * AppointmentsModule
@@ -23,6 +24,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
  * - PUT    /api/appointments/:id/status   → atualizar status
  */
 @Module({
+  imports: [NotificationModule],
   controllers: [AppointmentsController],
   providers: [AppointmentsService, PrismaService],
   exports: [AppointmentsService],
