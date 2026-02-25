@@ -497,4 +497,156 @@ export class DocuSignClient {
       token,
     );
   }
+
+  /**
+   * Cria uma URL de Sender View para pré-visualização do envelope
+   *
+   * O Sender View permite ao usuário visualizar e editar o envelope
+   * antes de enviá-lo. A URL retornada expira em 10 minutos.
+   *
+   * Requisitos:
+   * - O envelope deve estar em status 'created' (draft)
+   * - viewAccess deve ser 'envelope'
+   *
+   * Eventos de retorno possíveis (via query param na returnUrl):
+   * - send: usuário enviou o envelope
+   * - save: usuário salvou o envelope
+   * - cancel: usuário cancelou
+   * - error: erro durante a operação
+   * - sessionEnd: sessão expirou
+   *
+   * @param {string} envelopeId - ID do envelope em modo draft
+   * @param {string} returnUrl - URL de callback após ação do usuário
+   * @param {object} settings - Configurações de UI do Sender View
+   * @returns {Promise<{ url: string }>} URL do Sender View para embed
+   * @throws ProviderUnavailableException - Se DocuSign está indisponível
+   * @throws ProviderTimeoutException - Se timeout na requisição
+   */
+  async createSenderView(
+    envelopeId: string,
+    returnUrl: string,
+    settings?: {
+      startingScreen?: 'Prepare' | 'Tagger';
+      showBackButton?: 'true' | 'false';
+      showEditRecipients?: 'true' | 'false';
+      showEditDocuments?: 'true' | 'false';
+      showDiscardAction?: 'true' | 'false';
+      sendButtonAction?: 'send' | 'redirect';
+    },
+  ): Promise<{ url: string }> {
+    const token = await this.getAccessToken();
+
+    this.logger.log(`Creating Sender View for envelope ${envelopeId}`);
+
+    // Configurações padrão para o Sender View
+    // IMPORTANTE: sendButtonAction='redirect' impede o envio direto pelo DocuSign
+    // O usuário deve confirmar o envio pelo nosso sistema
+    const defaultSettings = {
+      startingScreen: 'Tagger',
+      showBackButton: 'false',
+      showEditRecipients: 'false',
+      showEditDocuments: 'false',
+      showDiscardAction: 'false',
+      sendButtonAction: 'redirect', // Muda botão para "Continuar" em vez de "Enviar"
+    };
+
+    const viewSettings = { ...defaultSettings, ...settings };
+
+    const requestBody = {
+      returnUrl,
+      viewAccess: 'envelope',
+      locale: 'pt_BR',
+      settings: {
+        startingScreen: viewSettings.startingScreen,
+        showBackButton: viewSettings.showBackButton,
+        showHeaderActions: 'false', // Esconde menu avançado (editar mensagem, docs, etc)
+        showDiscardAction: viewSettings.showDiscardAction,
+        sendButtonAction: viewSettings.sendButtonAction,
+        recipientSettings: {
+          showEditRecipients: viewSettings.showEditRecipients,
+          showContactsList: 'false',
+        },
+        documentSettings: {
+          showEditDocuments: viewSettings.showEditDocuments,
+          showEditPages: 'false', // Impede deletar/rotacionar páginas
+          showEditDocumentVisibility: 'false',
+        },
+        templateSettings: {
+          showMatchingTemplatesPrompt: 'false', // Esconde diálogo de template matching
+        },
+        // IMPORTANTE: Esconde a tela de edição de campos do remetente (seller_name, seller_cpf, etc)
+        // Isso impede que o usuário altere dados sensíveis pré-preenchidos
+        prefillSettings: {
+          showPrefillTags: 'false', // Esconde a edição de sender field data
+        },
+        taggerSettings: {
+          showTagLibrary: 'false', // Esconde biblioteca de tags
+          showTagBulkSend: 'false', // Esconde envio em massa
+        },
+      },
+    };
+
+    this.logger.debug(`Sender View request body: ${JSON.stringify(requestBody, null, 2)}`);
+
+    return this.post(
+      `/v2.1/accounts/${this.accountId}/envelopes/${envelopeId}/views/sender`,
+      requestBody,
+      token,
+    );
+  }
+
+  /**
+   * Baixa o documento combinado do envelope como PDF
+   *
+   * Retorna o PDF como base64 para ser exibido diretamente no frontend,
+   * evitando a necessidade de usar o Sender View do DocuSign.
+   *
+   * @param {string} envelopeId - ID do envelope
+   * @returns {Promise<{ pdfBase64: string }>} PDF em formato base64
+   * @throws ProviderUnavailableException - Se DocuSign está indisponível
+   */
+  async getCombinedDocument(envelopeId: string): Promise<{ pdfBase64: string }> {
+    const token = await this.getAccessToken();
+
+    this.logger.log(`Downloading combined document for envelope ${envelopeId}`);
+
+    const url = this.getFullUrl(
+      `/v2.1/accounts/${this.accountId}/envelopes/${envelopeId}/documents/combined`,
+    );
+
+    const response = await this.makeRequest(
+      async () => {
+        return axios.get(url, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          responseType: 'arraybuffer',
+          timeout: this.REQUEST_TIMEOUT_MS,
+        });
+      },
+      'getCombinedDocument',
+      url,
+    );
+
+    // Converter ArrayBuffer para base64
+    const pdfBase64 = Buffer.from(response.data).toString('base64');
+
+    this.logger.log(`Combined document downloaded (${pdfBase64.length} chars base64)`);
+
+    return { pdfBase64 };
+  }
+
+  /**
+   * Exclui um envelope em modo draft
+   *
+   * Usado para limpar envelopes de preview que foram cancelados.
+   * Só pode excluir envelopes em status 'created' (draft).
+   *
+   * @param {string} envelopeId - ID do envelope
+   * @returns {Promise<void>}
+   */
+  async voidEnvelope(envelopeId: string, reason: string): Promise<any> {
+    this.logger.log(`Voiding envelope ${envelopeId}: ${reason}`);
+    return this.updateEnvelopeStatus(envelopeId, 'voided', reason);
+  }
 }

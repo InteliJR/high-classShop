@@ -1,4 +1,13 @@
-import { IsString, IsNotEmpty, IsOptional, Length, Matches } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  Length,
+  Matches,
+  IsNumber,
+  Min,
+  Max,
+} from 'class-validator';
 
 export class CreateCompanyDto {
   @IsString() // valida se é uma string
@@ -18,4 +27,10 @@ export class CreateCompanyDto {
   @IsString()
   @IsOptional()
   logo?: string;
+
+  @IsNumber({}, { message: 'Taxa de comissão deve ser um número' })
+  @IsOptional()
+  @Min(0, { message: 'Taxa de comissão deve ser >= 0' })
+  @Max(100, { message: 'Taxa de comissão deve ser <= 100' })
+  commission_rate?: number;
 }

@@ -6,7 +6,7 @@ export interface UserMock {
   rg: string;
   role: 'CUSTOMER' | 'CONSULTANT' | 'SPECIALIST' | 'ADMIN';
   password_hash: string;
-  
+
   // Propriedades opcionais...
   civil_state?:
     | 'SINGLE'
@@ -18,6 +18,7 @@ export interface UserMock {
     | null;
   speciality?: 'CAR' | 'BOAT' | 'AIRCRAFT' | null;
   identification_number?: string | null;
+  commission_rate?: number | null;
 
   address_id?: string | null;
   consultant_id?: string | null;
@@ -36,6 +37,37 @@ export interface UserMock {
   refreshTokens?: any[];
 }
 
+// Interface para mock de empresas
+export interface CompanyMock {
+  name: string;
+  cnpj: string;
+  logo?: string;
+  description?: string;
+  commission_rate?: number;
+}
+
+// Mock de empresas fictícias
+export const mockCompanies: CompanyMock[] = [
+  {
+    name: 'Genius Assessoria Automotiva',
+    cnpj: '12345678000190',
+    description: 'Especialistas em avaliação e consultoria de veículos de luxo',
+    commission_rate: 12.5,
+  },
+  {
+    name: 'Oceano Marítimo',
+    cnpj: '98765432000150',
+    description: 'Consultoria e avaliação de embarcações de luxo',
+    commission_rate: 15.0,
+  },
+  {
+    name: 'Skyline Aviação',
+    cnpj: '55555555000111',
+    description: 'Especialistas em avaliação de aeronaves',
+    commission_rate: 18.0,
+  },
+];
+
 // Lógica de Segurança:
 // 1. Tenta ler a variável de ambiente.
 // 2. Se não existir, define como string vazia.
@@ -46,9 +78,13 @@ const COMMON_PASSWORD_HASH = process.env.MOCK_PASSWORD_HASH || '';
 if (!COMMON_PASSWORD_HASH) {
   console.warn(
     '\x1b[33m%s\x1b[0m', // Cor amarela no console
-    '⚠️  [SECURITY] MOCK_PASSWORD_HASH não encontrado no .env. Os usuários de teste serão criados, mas o login estará BLOQUEADO.'
+    '⚠️  [SECURITY] MOCK_PASSWORD_HASH não encontrado no .env. Os usuários de teste serão criados, mas o login estará BLOQUEADO.',
   );
 }
+
+// Referência compartilhada para empresa do Carlos
+// A seed.ts criará essa empresa e preencherá o UUID real
+export const GENIUS_COMPANY_REF = 'genius-company-ref';
 
 export const mockUsers: UserMock[] = [
   {
@@ -78,6 +114,8 @@ export const mockUsers: UserMock[] = [
     role: 'SPECIALIST',
     speciality: 'CAR',
     password_hash: COMMON_PASSWORD_HASH,
+    company_id: GENIUS_COMPANY_REF, // Será preenchido com UUID real na seed
+    commission_rate: undefined, // Usará taxa da empresa (Genius: 12.5%)
   },
   {
     name: 'Marina',

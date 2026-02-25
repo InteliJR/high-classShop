@@ -13,6 +13,7 @@ import {
 } from './entities/proposal.entity';
 import { ProposalStatus, ProcessStatus } from '@prisma/client';
 import { SettingsService } from 'src/features/settings/settings.service';
+import { NotificationService } from 'src/features/notifications/notification.service';
 
 /**
  * ProposalsService
@@ -43,6 +44,7 @@ export class ProposalsService {
   constructor(
     private prisma: PrismaService,
     private settingsService: SettingsService,
+    private notificationService: NotificationService,
   ) {}
 
   /**
@@ -67,9 +69,9 @@ export class ProposalsService {
     const process = await this.prisma.process.findUnique({
       where: { id: dto.process_id },
       include: {
-        client: { select: { id: true, name: true, surname: true, role: true } },
+        client: { select: { id: true, email: true, name: true, surname: true, role: true } },
         specialist: {
-          select: { id: true, name: true, surname: true, role: true },
+          select: { id: true, email: true, name: true, surname: true, role: true },
         },
         car: { select: { id: true, valor: true } },
         boat: { select: { id: true, valor: true } },
@@ -277,6 +279,36 @@ export class ProposalsService {
       `[create] Proposta ${proposal.id} criada com sucesso (valor: ${dto.proposed_value})`,
     );
 
+    // Fire-and-forget: Enviar notificação de nova proposta
+    // Reutiliza productValue já calculado acima
+    const recipientName = isClient
+      ? `${process.specialist.name} ${process.specialist.surname || ''}`.trim()
+      : `${process.client.name} ${process.client.surname || ''}`.trim();
+    const proposerName = isClient
+      ? `${process.client.name} ${process.client.surname || ''}`.trim()
+      : `${process.specialist.name} ${process.specialist.surname || ''}`.trim();
+    const recipientEmail = isClient ? process.specialist.email! : process.client.email!;
+
+    setImmediate(() => {
+      this.notificationService
+        .sendProposalReceivedEmail({
+          recipientEmail,
+          recipientName,
+          proposerName,
+          proposedValue: dto.proposed_value,
+          originalValue: productValue,
+          message: dto.message,
+          processId: dto.process_id,
+        })
+        .catch((err) => {
+          this.logger.error('Notification failed (non-critical)', {
+            method: 'create',
+            proposalId: proposal.id,
+            error: err.message,
+          });
+        });
+    });
+
     return this.mapToResponseEntity(proposal);
   }
 
@@ -418,6 +450,15 @@ export class ProposalsService {
 
     const proposal = await this.validateProposalAction(proposalId, userId);
 
+    // Buscar dados adicionais para notificação (email do proposer)
+    const proposalWithEmails = await this.prisma.negotiationProposal.findUnique({
+      where: { id: proposalId },
+      include: {
+        proposed_by: { select: { id: true, email: true, name: true, surname: true } },
+        proposed_to: { select: { id: true, email: true, name: true, surname: true } },
+      },
+    });
+
     // Atualizar proposta e processo em transação
     const updated = await this.prisma.$transaction(async (tx) => {
       // 1. Marcar proposta como ACCEPTED
@@ -459,6 +500,29 @@ export class ProposalsService {
       return acceptedProposal;
     });
 
+    // Fire-and-forget: Enviar notificação de proposta aceita
+    if (proposalWithEmails) {
+      const proposer = proposalWithEmails.proposed_by;
+      const accepter = proposalWithEmails.proposed_to;
+      setImmediate(() => {
+        this.notificationService
+          .sendProposalAcceptedEmail({
+            proposerEmail: proposer.email!,
+            proposerName: `${proposer.name} ${proposer.surname || ''}`.trim(),
+            recipientName: `${accepter.name} ${accepter.surname || ''}`.trim(),
+            acceptedValue: Number(proposal.proposed_value),
+            processId: proposal.process_id,
+          })
+          .catch((err) => {
+            this.logger.error('Notification failed (non-critical)', {
+              method: 'accept',
+              proposalId,
+              error: err.message,
+            });
+          });
+      });
+    }
+
     return this.mapToResponseEntity(updated);
   }
 
@@ -480,6 +544,15 @@ export class ProposalsService {
 
     const proposal = await this.validateProposalAction(proposalId, userId);
 
+    // Buscar dados adicionais para notificação (email do proposer)
+    const proposalWithEmails = await this.prisma.negotiationProposal.findUnique({
+      where: { id: proposalId },
+      include: {
+        proposed_by: { select: { id: true, email: true, name: true, surname: true } },
+        proposed_to: { select: { id: true, email: true, name: true, surname: true } },
+      },
+    });
+
     const updated = await this.prisma.negotiationProposal.update({
       where: { id: proposalId },
       data: {
@@ -497,6 +570,29 @@ export class ProposalsService {
     });
 
     this.logger.log(`[reject] Proposta ${proposalId} rejeitada`);
+
+    // Fire-and-forget: Enviar notificação de proposta rejeitada
+    if (proposalWithEmails) {
+      const proposer = proposalWithEmails.proposed_by;
+      const rejecter = proposalWithEmails.proposed_to;
+      setImmediate(() => {
+        this.notificationService
+          .sendProposalRejectedEmail({
+            proposerEmail: proposer.email!,
+            proposerName: `${proposer.name} ${proposer.surname || ''}`.trim(),
+            recipientName: `${rejecter.name} ${rejecter.surname || ''}`.trim(),
+            rejectedValue: Number(proposal.proposed_value),
+            processId: proposal.process_id,
+          })
+          .catch((err) => {
+            this.logger.error('Notification failed (non-critical)', {
+              method: 'reject',
+              proposalId,
+              error: err.message,
+            });
+          });
+      });
+    }
 
     return this.mapToResponseEntity(updated);
   }

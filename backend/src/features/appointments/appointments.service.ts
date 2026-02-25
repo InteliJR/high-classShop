@@ -34,6 +34,7 @@ import {
   formatToISO,
   suggestNextAvailableSlots,
 } from 'src/shared/utils/date.utils';
+import { NotificationService } from 'src/features/notifications/notification.service';
 
 /**
  * AppointmentsService
@@ -60,7 +61,10 @@ import {
 export class AppointmentsService {
   private readonly logger = new Logger(AppointmentsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationService: NotificationService,
+  ) {}
 
   /**
    * Cria novo agendamento
@@ -348,6 +352,30 @@ export class AppointmentsService {
         status: 'SCHEDULING', // ProcessStatus enum
         notes: `Criado via agendamento (Calendly integration). Cliente agendou em ${appointment.appointment_datetime?.toISOString() || 'data pendente'}`,
       },
+    });
+
+    // Fire-and-forget: Notificar especialista sobre novo agendamento
+    const productDetails = product
+      ? `${(product as any).marca || ''} ${(product as any).modelo || ''}`.trim()
+      : `Produto ${dto.product_type}`;
+
+    setImmediate(() => {
+      this.notificationService
+        .sendAppointmentCreatedEmail({
+          specialistEmail: specialist.email,
+          specialistName: `${specialist.name} ${specialist.surname || ''}`.trim(),
+          clientName: `${client.name} ${client.surname || ''}`.trim(),
+          appointmentDate: appointment.appointment_datetime || new Date(),
+          productDetails,
+          processId: process.id,
+        })
+        .catch((err) => {
+          this.logger.error('Notification failed (non-critical)', {
+            method: 'create',
+            appointmentId: appointment.id,
+            error: err.message,
+          });
+        });
     });
 
     // Montar resposta com dados completos

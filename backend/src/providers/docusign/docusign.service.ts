@@ -447,6 +447,229 @@ export class DocuSignService {
   }
 
   /**
+   * Cria um envelope em modo DRAFT e retorna URL do Sender View para preview
+   *
+   * Este método reutiliza a lógica do createEnvelopeFromTemplate até a etapa 3
+   * (preenchimento dos campos DocGen), mas em vez de enviar o envelope,
+   * cria uma URL do Sender View para que o usuário possa visualizar e editar
+   * antes de confirmar o envio.
+   *
+   * Fluxo:
+   * 1. Criar envelope como DRAFT
+   * 2. Preencher campos DocGen
+   * 3. Criar URL do Sender View (em vez de enviar)
+   * 4. Retornar URL + envelopeId + expiresAt
+   *
+   * A URL retornada expira em 10 minutos (limitação da API DocuSign).
+   *
+   * @param params.templateId - ID do template no DocuSign
+   * @param params.buyerEmail - Email do comprador
+   * @param params.buyerName - Nome do comprador
+   * @param params.sellerEmail - Email do vendedor
+   * @param params.sellerName - Nome do vendedor
+   * @param params.formFields - Campos do formulário para preencher no contrato
+   * @param params.processId - ID do processo para rastreabilidade
+   * @returns Promise<{ envelopeId, pdfBase64, expiresAt }>
+   */
+  async createEnvelopePreview(params: {
+    templateId: string;
+    buyerEmail: string;
+    buyerName: string;
+    sellerEmail: string;
+    sellerName: string;
+    formFields: Record<string, string>;
+    processId: string;
+  }): Promise<{
+    envelopeId: string;
+    pdfBase64: string;
+    expiresAt: string;
+  }> {
+    const {
+      templateId,
+      buyerEmail,
+      buyerName,
+      sellerEmail,
+      sellerName,
+      formFields,
+      processId,
+    } = params;
+
+    try {
+      // Validações básicas
+      if (!templateId || templateId.trim().length === 0) {
+        throw new EnvelopeCreationFailedException('Template ID é obrigatório');
+      }
+
+      if (!buyerEmail || buyerEmail.trim().length === 0) {
+        throw new EnvelopeCreationFailedException(
+          'Email do comprador é obrigatório',
+        );
+      }
+
+      if (!sellerEmail || sellerEmail.trim().length === 0) {
+        throw new EnvelopeCreationFailedException(
+          'Email do vendedor é obrigatório',
+        );
+      }
+
+      this.logger.log(`=== INICIANDO FLUXO DE PREVIEW (3 ETAPAS) ===`);
+      this.logger.log(`Buyer: ${buyerEmail}, Seller: ${sellerEmail}`);
+      this.logger.debug(`Template ID: ${templateId}`);
+      this.logger.debug(`Process ID: ${processId}`);
+
+      // ===== ETAPA 1: CRIAR ENVELOPE COMO DRAFT =====
+      this.logger.log('PREVIEW ETAPA 1: Criando envelope como DRAFT...');
+
+      const createEnvelopeDto: CreateTemplateEnvelopeDto = {
+        templateId,
+        status: 'created', // DRAFT - não envia
+        emailSubject: 'Contrato de Compra e Venda - Assinatura Digital',
+        templateRoles: [
+          {
+            roleName: 'Buyer',
+            name: buyerName,
+            email: buyerEmail,
+          },
+          {
+            roleName: 'Seller',
+            name: sellerName,
+            email: sellerEmail,
+          },
+        ],
+        customFields: {
+          textCustomFields: [
+            {
+              name: 'processId',
+              value: processId,
+            },
+          ],
+        },
+      };
+
+      const draftResponse =
+        await this.client.createEnvelopeFromTemplate(createEnvelopeDto);
+      const envelopeId = draftResponse.envelopeId;
+
+      this.logger.log(`✓ Envelope DRAFT criado. ID: ${envelopeId}`);
+
+      // ===== ETAPA 2: BUSCAR E ATUALIZAR CAMPOS DOCGEN =====
+      this.logger.log('PREVIEW ETAPA 2: Preenchendo campos DocGen...');
+
+      const docGenFieldsResponse =
+        await this.client.getEnvelopeDocGenFormFields(envelopeId);
+
+      const updatedDocGenFormFields = this.mapFormFieldsToDocGen(
+        docGenFieldsResponse.docGenFormFields,
+        formFields,
+      );
+
+      await this.client.updateEnvelopeDocGenFormFields(envelopeId, {
+        docGenFormFields: updatedDocGenFormFields,
+      });
+
+      this.logger.log(`✓ Campos DocGen atualizados`);
+
+      // ===== ETAPA 3: BAIXAR DOCUMENTO COMBINADO COMO PDF =====
+      this.logger.log('PREVIEW ETAPA 3: Baixando documento combinado...');
+
+      const documentResponse = await this.client.getCombinedDocument(envelopeId);
+
+      // O envelope permanece em DRAFT até o usuário confirmar o envio
+      // Expira em 24 horas (envelopes draft expiram automaticamente)
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+      this.logger.log(`✓ Documento PDF baixado`);
+      this.logger.log(`=== PREVIEW PRONTO ===`);
+
+      return {
+        envelopeId,
+        pdfBase64: documentResponse.pdfBase64,
+        expiresAt,
+      };
+    } catch (error) {
+      if (
+        error instanceof ProviderUnavailableException ||
+        error instanceof ProviderTimeoutException
+      ) {
+        this.logger.error(`Erro de resiliência no preview: ${error.message}`);
+        throw error;
+      }
+
+      if (error instanceof EnvelopeCreationFailedException) {
+        this.logger.error(`Validação falhou no preview: ${error.message}`);
+        throw error;
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      this.logger.error(
+        `Erro inesperado no preview: ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      throw new EnvelopeCreationFailedException(
+        `Falha ao criar preview do envelope: ${errorMessage}`,
+      );
+    }
+  }
+
+  /**
+   * Envia um envelope que está em modo DRAFT (após preview)
+   *
+   * Usado quando o usuário confirma o envio após visualizar o preview.
+   *
+   * @param envelopeId - ID do envelope em modo draft
+   * @returns Promise<{ envelopeId, status }>
+   */
+  async sendDraftEnvelope(
+    envelopeId: string,
+  ): Promise<{ envelopeId: string; status: EnvelopeStatus }> {
+    this.logger.log(`Enviando envelope DRAFT ${envelopeId}...`);
+
+    try {
+      await this.client.updateEnvelopeStatus(envelopeId, 'sent');
+
+      this.logger.log(`✓ Envelope ${envelopeId} enviado com sucesso`);
+
+      return {
+        envelopeId,
+        status: EnvelopeStatus.SENT,
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      this.logger.error(`Erro ao enviar envelope draft: ${errorMessage}`);
+
+      throw new EnvelopeCreationFailedException(
+        `Falha ao enviar envelope: ${errorMessage}`,
+      );
+    }
+  }
+
+  /**
+   * Cancela (void) um envelope draft que não será enviado
+   *
+   * @param envelopeId - ID do envelope
+   * @param reason - Motivo do cancelamento
+   */
+  async voidDraftEnvelope(envelopeId: string, reason: string): Promise<void> {
+    this.logger.log(`Cancelando envelope draft ${envelopeId}: ${reason}`);
+
+    try {
+      await this.client.voidEnvelope(envelopeId, reason);
+      this.logger.log(`✓ Envelope ${envelopeId} cancelado`);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      this.logger.error(`Erro ao cancelar envelope: ${errorMessage}`);
+      // Não relançamos o erro - cancelamento é best-effort
+    }
+  }
+
+  /**
    * Mapeia os campos do formulário para a estrutura DocGen
    *
    * A API DocuSign retorna os campos com 'name' (ID interno) e 'label'.

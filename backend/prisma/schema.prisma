@@ -408,6 +408,7 @@ model User {
   civil_state           CivilState?
   speciality            ProductType?
   identification_number String?      @unique @db.VarChar(50)
+  commission_rate       Decimal?     @db.Decimal(5, 2) // Taxa individual (especialistas sem empresa)
 
   address_id    String? @db.Uuid
   consultant_id String? @db.Uuid
@@ -476,17 +477,34 @@ model Address {
   users User[]
 }
 
-// Company: organizações que empregam consultores
+// Company: organizações / escritórios que empregam consultores e especialistas
 model Company {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String
-  cnpj        String   @unique
-  logo        String?
-  description String?
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String
+  cnpj            String   @unique
+  logo            String?
+  description     String?
+  commission_rate Decimal? @db.Decimal(5, 2) // Taxa de comissão do escritório (ex: 15.00 = 15%)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
 
-  consultants User[]
+  users User[] // Consultores e Especialistas associados
+}
+
+// PlatformCompany: dados da empresa dona da plataforma (singleton)
+// Usada para preencher automaticamente a seção "Dados da Plataforma" nos contratos
+model PlatformCompany {
+  id                      String   @id @default(uuid()) @db.Uuid
+  name                    String // Razão Social
+  cnpj                    String   @db.VarChar(18)
+  bank                    String
+  agency                  String   @db.VarChar(10)
+  checking_account        String   @db.VarChar(20)
+  address                 String?
+  cep                     String?  @db.VarChar(9)
+  default_commission_rate Decimal  @db.Decimal(5, 2) // Taxa padrão de comissão (fallback)
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -315,3 +315,75 @@ export class TransactionFailedException extends HttpException {
     );
   }
 }
+
+/**
+ * PREVIEW DE CONTRATO
+ */
+
+/**
+ * Falha ao gerar preview do contrato no DocuSign
+ * Status HTTP: 502
+ */
+export class PreviewGenerationFailedException extends HttpException {
+  constructor(reason: string) {
+    super(
+      {
+        statusCode: HttpStatus.BAD_GATEWAY,
+        error: 'PREVIEW_GENERATION_FAILED',
+        message: `Não foi possível gerar o preview do contrato: ${reason}`,
+      },
+      HttpStatus.BAD_GATEWAY,
+    );
+  }
+}
+
+/**
+ * Envelope não está em status DRAFT (created) para operações de preview
+ * Status HTTP: 400
+ */
+export class EnvelopeNotInDraftException extends HttpException {
+  constructor(envelopeId: string, currentStatus: string) {
+    super(
+      {
+        statusCode: HttpStatus.BAD_REQUEST,
+        error: 'ENVELOPE_NOT_IN_DRAFT',
+        message: `O envelope '${envelopeId}' não está em modo rascunho (status atual: ${currentStatus}). Não é possível modificar ou enviar.`,
+      },
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+}
+
+/**
+ * URL de preview expirou (URLs do DocuSign expiram em 10 minutos)
+ * Status HTTP: 410 Gone
+ */
+export class PreviewUrlExpiredException extends HttpException {
+  constructor(envelopeId: string) {
+    super(
+      {
+        statusCode: HttpStatus.GONE,
+        error: 'PREVIEW_URL_EXPIRED',
+        message: `A URL de preview para o envelope '${envelopeId}' expirou. Por favor, gere um novo preview.`,
+      },
+      HttpStatus.GONE,
+    );
+  }
+}
+
+/**
+ * Envelope não encontrado no DocuSign
+ * Status HTTP: 404
+ */
+export class EnvelopeNotFoundException extends HttpException {
+  constructor(envelopeId: string) {
+    super(
+      {
+        statusCode: HttpStatus.NOT_FOUND,
+        error: 'ENVELOPE_NOT_FOUND',
+        message: `Envelope '${envelopeId}' não encontrado no DocuSign. Pode ter sido excluído ou nunca existiu.`,
+      },
+      HttpStatus.NOT_FOUND,
+    );
+  }
+}

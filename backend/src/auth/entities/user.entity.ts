@@ -53,6 +53,9 @@ export class UserEntity
   @Expose()
   calendly_url: string | null;
 
+  @Expose()
+  commission_rate: any | null;
+
   @Exclude()
   password_hash: string;
 

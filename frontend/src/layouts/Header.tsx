@@ -30,7 +30,6 @@ export default function Header() {
 
   // Lista de itens do menu para visitantes
   const menuItems = [
-    { label: "Sobre nós", path: "/catalog/login" }, // Trocar para a landing page posteriormentes
     { label: "Aeronave", path: "/catalog/aircrafts" },
     { label: "Barco", path: "/catalog/boats" },
     { label: "Carro", path: "/catalog/cars" },
@@ -72,14 +71,22 @@ export default function Header() {
                 </ul>
               </nav>
 
-              {/* BOTÃO LOGIN */}
-              <button
-                onClick={() => navigate("/login")}
-                className="flex p-2 gap-3 bg-white text-black rounded-md cursor-pointer"
-              >
-                <UserCircle2 size={25} />
-                Login
-              </button>
+              {/* BOTÕES LOGIN E CADASTRAR */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => navigate("/register")}
+                  className="flex p-2 gap-2 bg-transparent border border-white text-white rounded-md cursor-pointer hover:bg-white/10 transition-colors"
+                >
+                  Cadastrar-se
+                </button>
+                <button
+                  onClick={() => navigate("/login")}
+                  className="flex p-2 gap-3 bg-white text-black rounded-md cursor-pointer"
+                >
+                  <UserCircle2 size={25} />
+                  Login
+                </button>
+              </div>
             </div>
           )}
 

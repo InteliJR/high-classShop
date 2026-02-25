@@ -22,9 +22,13 @@ import { Roles } from 'src/shared/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from 'src/shared/decorators/current-user.decorator';
 import { UserEntity } from 'src/auth/entities/user.entity';
-import { assertSpecialistCanCreate, assertSpecialistCanModify } from 'src/shared/helpers/specialist-auth.helper';
+import {
+  assertSpecialistCanCreate,
+  assertSpecialistCanModify,
+} from 'src/shared/helpers/specialist-auth.helper';
 import { CsvImportService } from 'src/shared/services/csv-import.service';
 import { CsvImportResponseDto } from 'src/shared/dto/csv-import-response.dto';
+import { Public } from 'src/shared/decorators/public.decorator';
 
 @Controller('boats')
 export class BoatsController {
@@ -35,7 +39,10 @@ export class BoatsController {
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
-  create(@Body() createBoatDto: CreateBoatDto, @CurrentUser() user: UserEntity) {
+  create(
+    @Body() createBoatDto: CreateBoatDto,
+    @CurrentUser() user: UserEntity,
+  ) {
     assertSpecialistCanCreate('BOAT', user);
     createBoatDto.specialist_id = user.id;
     return this.boatsService.create(createBoatDto);
@@ -65,6 +72,7 @@ export class BoatsController {
   }
 
   @Get()
+  @Public()
   async getAllBoats(@Query() query: any) {
     // Tratamento das varíaveis recebidas do front
     let { page, perPage, ...rawFilters } = query;
@@ -74,7 +82,11 @@ export class BoatsController {
     const appliedFilters: FiltersBoatMeta = rawFilters;
 
     // Chama o serviço para obter os dados
-    const { data, count, filters = {} } = await this.boatsService.getAllBoats({
+    const {
+      data,
+      count,
+      filters = {},
+    } = await this.boatsService.getAllBoats({
       page,
       perPage,
       appliedFilters,
@@ -101,12 +113,13 @@ export class BoatsController {
         filters: {
           applied_filters: filters,
           total_without_filters: count,
-        }
+        },
       },
     };
   }
 
   @Get(':id')
+  @Public()
   findOne(@Param('id') id: string) {
     return this.boatsService.findOne(+id);
   }

@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSpecialistDto } from './dto/create-specialist.dto';
 import { UpdateSpecialistDto } from './dto/update-specialist.dto';
@@ -11,9 +16,14 @@ export class SpecialistsService {
 
   // Busca todos os especialistas.
   async findAll() {
-    return this.prisma.user.findMany({
+    const specialists = await this.prisma.user.findMany({
       where: { role: 'SPECIALIST' },
+      include: { company: true },
     });
+    return specialists.map((s) => ({
+      ...s,
+      commission_rate: s.commission_rate ? Number(s.commission_rate) : null,
+    }));
   }
 
   // Cria um novo especialista na base de dados.
@@ -25,7 +35,9 @@ export class SpecialistsService {
       });
 
       if (existingUserByEmail) {
-        throw new ConflictException('Já existe um usuário cadastrado com este email');
+        throw new ConflictException(
+          'Já existe um usuário cadastrado com este email',
+        );
       }
 
       // Verifica se já existe usuário com o mesmo CPF
@@ -34,7 +46,9 @@ export class SpecialistsService {
       });
 
       if (existingUserByCpf) {
-        throw new ConflictException('Já existe um usuário cadastrado com este CPF');
+        throw new ConflictException(
+          'Já existe um usuário cadastrado com este CPF',
+        );
       }
 
       // Hash da senha antes de salvar no banco de dados
@@ -50,6 +64,8 @@ export class SpecialistsService {
           password_hash: hashedPassword,
           speciality: data.speciality,
           role: 'SPECIALIST',
+          company_id: data.company_id || null,
+          commission_rate: data.commission_rate ?? null,
         },
       });
     } catch (error) {
@@ -62,16 +78,24 @@ export class SpecialistsService {
         if (error.code === 'P2002') {
           const target = (error.meta?.target as string[]) || [];
           if (target.includes('email')) {
-            throw new ConflictException('Já existe um usuário cadastrado com este email');
+            throw new ConflictException(
+              'Já existe um usuário cadastrado com este email',
+            );
           }
           if (target.includes('cpf')) {
-            throw new ConflictException('Já existe um usuário cadastrado com este CPF');
+            throw new ConflictException(
+              'Já existe um usuário cadastrado com este CPF',
+            );
           }
-          throw new ConflictException('Já existe um usuário cadastrado com estes dados');
+          throw new ConflictException(
+            'Já existe um usuário cadastrado com estes dados',
+          );
         }
       }
 
-      throw new BadRequestException('Erro ao criar especialista. Verifique os dados e tente novamente.');
+      throw new BadRequestException(
+        'Erro ao criar especialista. Verifique os dados e tente novamente.',
+      );
     }
   }
 
@@ -79,11 +103,17 @@ export class SpecialistsService {
   async findOne(id: string) {
     const specialist = await this.prisma.user.findUnique({
       where: { id },
+      include: { company: true },
     });
     if (!specialist || specialist.role !== 'SPECIALIST') {
       throw new NotFoundException('Especialista não encontrado');
     }
-    return specialist;
+    return {
+      ...specialist,
+      commission_rate: specialist.commission_rate
+        ? Number(specialist.commission_rate)
+        : null,
+    };
   }
 
   // Atualiza os dados de um especialista existente.
@@ -101,7 +131,9 @@ export class SpecialistsService {
         });
 
         if (existingUser) {
-          throw new ConflictException('Já existe outro usuário cadastrado com este email');
+          throw new ConflictException(
+            'Já existe outro usuário cadastrado com este email',
+          );
         }
       }
 
@@ -115,7 +147,9 @@ export class SpecialistsService {
         });
 
         if (existingUser) {
-          throw new ConflictException('Já existe outro usuário cadastrado com este CPF');
+          throw new ConflictException(
+            'Já existe outro usuário cadastrado com este CPF',
+          );
         }
       }
 
@@ -130,7 +164,10 @@ export class SpecialistsService {
         data: updateData,
       });
     } catch (error) {
-      if (error instanceof NotFoundException || error instanceof ConflictException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException
+      ) {
         throw error;
       }
 
@@ -138,15 +175,21 @@ export class SpecialistsService {
         if (error.code === 'P2002') {
           const target = (error.meta?.target as string[]) || [];
           if (target.includes('email')) {
-            throw new ConflictException('Já existe outro usuário cadastrado com este email');
+            throw new ConflictException(
+              'Já existe outro usuário cadastrado com este email',
+            );
           }
           if (target.includes('cpf')) {
-            throw new ConflictException('Já existe outro usuário cadastrado com este CPF');
+            throw new ConflictException(
+              'Já existe outro usuário cadastrado com este CPF',
+            );
           }
         }
       }
 
-      throw new BadRequestException('Erro ao atualizar especialista. Verifique os dados e tente novamente.');
+      throw new BadRequestException(
+        'Erro ao atualizar especialista. Verifique os dados e tente novamente.',
+      );
     }
   }
 
@@ -169,6 +212,8 @@ export class SpecialistsService {
         cpf: true,
         rg: true,
         speciality: true,
+        company_id: true,
+        commission_rate: true,
       },
     });
 

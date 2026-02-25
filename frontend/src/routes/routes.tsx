@@ -10,10 +10,12 @@ import CompaniesPage from "../pages/admin/CompaniesPage";
 import SpecialistsPage from "../pages/admin/SpecialistsPage";
 import ConsultantsPage from "../pages/admin/ConsultantsPage";
 import SettingsPage from "../pages/admin/SettingsPage";
+import MyCompanyPage from "../pages/admin/MyCompanyPage";
 import ProductsPage from "../pages/specialist/ProductsPage";
 import ProductFormPage from "../pages/specialist/ProductFormPage";
 import SpecialistDashboard from "../pages/specialist/SpecialistDashboard";
 import CreateContractPage from "../pages/specialist/CreateContractPage";
+import ContractPreviewCallback from "../pages/specialist/ContractPreviewCallback";
 import ProcessesPage from "../pages/specialist/ProcessesPage";
 import CustomerHomePage from "../pages/customer/CustomerHomePage";
 import ConsultoriaPage from "../pages/customer/ConsultoriaPage";
@@ -21,10 +23,11 @@ import ProfilePage from "../pages/ProfilePage";
 import ProductPage from "../pages/ProductPage";
 import CustomerProcessesPage from "../pages/customer/CustomerProcessesPage";
 import NegotiationPage from "../pages/negotiation/NegotiationPage";
+import LandingPage from "../pages/LandingPage";
 
 export default function RouterApp() {
   const routerApp = createBrowserRouter([
-    { path: "/", element: <Login /> },
+    { path: "/", element: <LandingPage /> },
     {
       path: "/catalog/:category",
       element: (
@@ -165,6 +168,16 @@ export default function RouterApp() {
       ),
     },
     {
+      path: "/admin/my-company",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <MyCompanyPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
       path: "/specialist/products",
       element: (
         <MainLayout>
@@ -203,6 +216,10 @@ export default function RouterApp() {
           </ProtectedRoute>
         </MainLayout>
       ),
+    },
+    {
+      path: "/specialist/contracts/preview-callback",
+      element: <ContractPreviewCallback />,
     },
     {
       path: "/specialist/processes",

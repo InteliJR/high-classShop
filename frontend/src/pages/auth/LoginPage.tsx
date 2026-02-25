@@ -8,7 +8,7 @@ import {
 import { AuthContext } from "../../contexts/AuthContext";
 import { useContext, useEffect } from "react";
 import type { LoginValues } from "../../types/types";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { getRoleBasedRoute } from "../../utils/roleUtils";
 import { useAuth } from "../../store/authStateManager";
 
@@ -119,7 +119,9 @@ export default function Login() {
               className="text-sm bg-background-secondary p-2 w-full text-color-text-secondary rounded-md sm:text-2xl sm:rounded-lg hover:bg-gray-500"
               placeholder="Entrar"
             />
-            <a className="text-xs text-color-a sm:text-base">Cadastre-se</a>
+            <Link to="/register" className="text-xs text-color-a sm:text-base hover:underline">
+              Cadastre-se
+            </Link>
           </div>
         </form>
       </div>

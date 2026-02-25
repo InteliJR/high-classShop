@@ -61,7 +61,7 @@ export default function Sidebar() {
             to: "/catalog/aircrafts",
             label: "Aviões",
             icon: <Plane size={20} />,
-          }
+          },
         );
         break;
       case "CONSULTANT":
@@ -87,7 +87,7 @@ export default function Sidebar() {
             to: "/specialist/processes",
             label: "Meus processos",
             icon: <FilePen size={20} />,
-          }
+          },
         );
         break;
       case "ADMIN":
@@ -115,8 +115,13 @@ export default function Sidebar() {
           {
             to: "/admin/settings",
             label: "Configurações",
-            icon: <Settings size={20} />
-          }
+            icon: <Settings size={20} />,
+          },
+          {
+            to: "/admin/my-company",
+            label: "Minha Empresa",
+            icon: <Building2 size={20} />,
+          },
         );
         break;
     }

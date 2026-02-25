@@ -60,7 +60,7 @@ export default function ProductPage() {
       user?.id && specialist?.id ? user.id : undefined, // Só passa se ambos existem
       specialist?.id,
       (productType?.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT") || undefined,
-      product?.id
+      product?.id,
     );
 
   // Mapear productType para categoria do catálogo
@@ -162,7 +162,7 @@ export default function ProductPage() {
           } catch (err) {
             console.warn(
               "Não foi possível carregar dados do especialista:",
-              err
+              err,
             );
           }
         }
@@ -202,7 +202,8 @@ export default function ProductPage() {
       // Redirecionar para página de processos do cliente
       navigate("/customer/processes", {
         state: {
-          message: "Agendamento pendente criado! O especialista irá confirmar em breve.",
+          message:
+            "Agendamento pendente criado! O especialista irá confirmar em breve.",
         },
       });
     } catch (err: any) {
@@ -235,10 +236,10 @@ export default function ProductPage() {
 
       // Abrir email
       const subject = encodeURIComponent(
-        `Interesse em ${product?.marca} ${product?.modelo}`
+        `Interesse em ${product?.marca} ${product?.modelo}`,
       );
       const body = encodeURIComponent(
-        `Olá ${specialist.name},\n\nTenho interesse no ${product?.marca} ${product?.modelo} e gostaria de agendar uma reunião.\n\nAtenciosamente.`
+        `Olá ${specialist.name},\n\nTenho interesse no ${product?.marca} ${product?.modelo} e gostaria de agendar uma reunião.\n\nAtenciosamente.`,
       );
       window.location.href = `mailto:${specialist.email}?subject=${subject}&body=${body}`;
 
@@ -246,7 +247,8 @@ export default function ProductPage() {
       setTimeout(() => {
         navigate("/customer/processes", {
           state: {
-            message: "Solicitação de agendamento criada! O especialista irá confirmar em breve.",
+            message:
+              "Solicitação de agendamento criada! O especialista irá confirmar em breve.",
           },
         });
       }, 500);
@@ -254,10 +256,10 @@ export default function ProductPage() {
       // Se já existe agendamento, apenas abrir o email
       if (err.response?.status === 409) {
         const subject = encodeURIComponent(
-          `Interesse em ${product?.marca} ${product?.modelo}`
+          `Interesse em ${product?.marca} ${product?.modelo}`,
         );
         const body = encodeURIComponent(
-          `Olá ${specialist.name},\n\nTenho interesse no ${product?.marca} ${product?.modelo} e gostaria de agendar uma reunião.\n\nAtenciosamente.`
+          `Olá ${specialist.name},\n\nTenho interesse no ${product?.marca} ${product?.modelo} e gostaria de agendar uma reunião.\n\nAtenciosamente.`,
         );
         window.location.href = `mailto:${specialist.email}?subject=${subject}&body=${body}`;
       } else {
@@ -339,7 +341,45 @@ export default function ProductPage() {
           </div>
 
           {/* Verifica se existe agendamento e mostra mensagem se houver */}
-          {isCheckingAppointment ? (
+          {!user ? (
+            /* Usuário não logado - mostrar botão para cadastro */
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <p className="text-sm text-amber-800">
+                  <strong>🔐 Atenção:</strong> Para agendar uma reunião com o
+                  especialista, você precisa criar uma conta ou fazer login.
+                </p>
+              </div>
+
+              <button
+                onClick={() =>
+                  navigate("/register", {
+                    state: {
+                      from: `/catalog/${productType}/${id}`,
+                      message: "Crie sua conta para agendar uma reunião",
+                    },
+                  })
+                }
+                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+              >
+                Criar Conta para Agendar
+              </button>
+
+              <p className="text-sm text-center text-gray-500">
+                Já tem uma conta?{" "}
+                <button
+                  onClick={() =>
+                    navigate("/login", {
+                      state: { from: `/catalog/${productType}/${id}` },
+                    })
+                  }
+                  className="text-blue-600 hover:underline font-medium"
+                >
+                  Fazer login
+                </button>
+              </p>
+            </div>
+          ) : isCheckingAppointment ? (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-800">
                 Verificando agendamentos...
@@ -366,7 +406,7 @@ export default function ProductPage() {
                       <br />
                       Data:{" "}
                       {new Date(
-                        existingAppointment.appointment_datetime
+                        existingAppointment.appointment_datetime,
                       ).toLocaleDateString("pt-BR", {
                         weekday: "long",
                         year: "numeric",
@@ -393,7 +433,7 @@ export default function ProductPage() {
 
               <button
                 onClick={handleCalendlyClick}
-                disabled={isCreatingPending || !user}
+                disabled={isCreatingPending}
                 className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isCreatingPending ? (
@@ -408,12 +448,6 @@ export default function ProductPage() {
                   </>
                 )}
               </button>
-
-              {!user && (
-                <p className="text-sm text-center text-gray-500">
-                  Faça login para agendar uma reunião
-                </p>
-              )}
             </div>
           ) : (
             /* Sem Calendly URL - fallback email */
@@ -424,7 +458,7 @@ export default function ProductPage() {
               </p>
               <button
                 onClick={handleEmailClick}
-                disabled={isCreatingPending || !user}
+                disabled={isCreatingPending}
                 className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isCreatingPending ? (
@@ -439,12 +473,6 @@ export default function ProductPage() {
                   </>
                 )}
               </button>
-
-              {!user && (
-                <p className="text-sm text-center text-gray-500">
-                  Faça login para agendar uma reunião
-                </p>
-              )}
             </div>
           )}
         </div>

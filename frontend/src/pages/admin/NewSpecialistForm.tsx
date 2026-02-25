@@ -2,14 +2,22 @@
 
 import React, { useState, useEffect } from "react";
 import Button from "../../components/ui/button";
-import { createSpecialist, updateSpecialist, type Specialist } from "../../services/specialists.service";
+import {
+  createSpecialist,
+  updateSpecialist,
+  type Specialist,
+} from "../../services/specialists.service";
+import { getCompanies, type Company } from "../../services/companies.service";
 
 interface NewSpecialistFormProps {
   onSuccess: () => void;
   specialistToEdit?: Specialist | null;
 }
 
-export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSpecialistFormProps) {
+export default function NewSpecialistForm({
+  onSuccess,
+  specialistToEdit,
+}: NewSpecialistFormProps) {
   // Guarda o valor do campo "Nome".
   const [name, setName] = useState("");
   // Guarda o valor do campo "Sobrenome".
@@ -23,11 +31,26 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
   // Guarda o valor do campo "Senha".
   const [password_hash, setPasswordHash] = useState("");
   // Guarda o valor do campo "Especialidade".
-  const [speciality, setSpeciality] = useState<"CAR" | "BOAT" | "AIRCRAFT">("CAR");
+  const [speciality, setSpeciality] = useState<"CAR" | "BOAT" | "AIRCRAFT">(
+    "CAR",
+  );
+  // Empresa (escritório) vinculada ao especialista (opcional)
+  const [companyId, setCompanyId] = useState("");
+  // Lista de empresas para o dropdown
+  const [companies, setCompanies] = useState<Company[]>([]);
+  // Taxa de comissão individual (somente se não for vinculado a empresa)
+  const [commissionRate, setCommissionRate] = useState("");
   // Controla se o formulário está a ser enviado, para desativar o botão e evitar cliques duplos.
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Guarda qualquer mensagem de erro que ocorra durante a validação ou o envio.
   const [error, setError] = useState<string | null>(null);
+
+  // Carrega lista de empresas para o dropdown
+  useEffect(() => {
+    getCompanies()
+      .then(setCompanies)
+      .catch(() => {});
+  }, []);
 
   // Preenche o formulário com os dados do especialista sendo editado
   useEffect(() => {
@@ -39,6 +62,12 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
       setRg(specialistToEdit.rg);
       setPasswordHash(specialistToEdit.password_hash);
       setSpeciality(specialistToEdit.speciality);
+      setCompanyId(specialistToEdit.company_id || "");
+      setCommissionRate(
+        specialistToEdit.commission_rate != null
+          ? String(specialistToEdit.commission_rate)
+          : "",
+      );
     } else {
       setName("");
       setSurname("");
@@ -47,6 +76,8 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
       setRg("");
       setPasswordHash("");
       setSpeciality("CAR");
+      setCompanyId("");
+      setCommissionRate("");
     }
   }, [specialistToEdit]);
 
@@ -54,7 +85,7 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
    * Valida o formato do CPF (apenas números, 11 dígitos)
    */
   const validateCPF = (cpf: string): boolean => {
-    const cleanCPF = cpf.replace(/\D/g, '');
+    const cleanCPF = cpf.replace(/\D/g, "");
     return cleanCPF.length === 11;
   };
 
@@ -62,7 +93,7 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
    * Valida o formato do RG (apenas números, 9 dígitos)
    */
   const validateRG = (rg: string): boolean => {
-    const cleanRG = rg.replace(/\D/g, '');
+    const cleanRG = rg.replace(/\D/g, "");
     return cleanRG.length === 9;
   };
 
@@ -113,8 +144,8 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
 
     try {
       // Remove formatação do CPF e RG antes de enviar
-      const cleanCPF = cpf.replace(/\D/g, '');
-      const cleanRG = rg.replace(/\D/g, '');
+      const cleanCPF = cpf.replace(/\D/g, "");
+      const cleanRG = rg.replace(/\D/g, "");
 
       if (specialistToEdit) {
         // Modo de edição
@@ -125,7 +156,11 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
           cpf: cleanCPF,
           rg: cleanRG,
           password_hash,
-          speciality
+          speciality,
+          company_id: companyId || undefined,
+          commission_rate: commissionRate
+            ? parseFloat(commissionRate)
+            : undefined,
         });
       } else {
         // Modo de criação
@@ -136,14 +171,19 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
           cpf: cleanCPF,
           rg: cleanRG,
           password_hash,
-          speciality
+          speciality,
+          company_id: companyId || undefined,
+          commission_rate: commissionRate
+            ? parseFloat(commissionRate)
+            : undefined,
         });
       }
       onSuccess();
     } catch (err) {
       console.error("Erro capturado:", err);
       setError(
-        (err as Error).message || "Falha ao salvar o especialista. Tente novamente."
+        (err as Error).message ||
+          "Falha ao salvar o especialista. Tente novamente.",
       );
     } finally {
       setIsSubmitting(false);
@@ -228,7 +268,9 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
           className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
           required
         />
-        <p className="text-xs text-gray-500 mt-1">Digite 11 dígitos numéricos</p>
+        <p className="text-xs text-gray-500 mt-1">
+          Digite 11 dígitos numéricos
+        </p>
       </div>
 
       <div>
@@ -283,7 +325,9 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
         <select
           id="speciality"
           value={speciality}
-          onChange={(e) => setSpeciality(e.target.value as "CAR" | "BOAT" | "AIRCRAFT")}
+          onChange={(e) =>
+            setSpeciality(e.target.value as "CAR" | "BOAT" | "AIRCRAFT")
+          }
           className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
           required
         >
@@ -292,6 +336,65 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
           <option value="AIRCRAFT">Aeronaves</option>
         </select>
       </div>
+
+      <div>
+        {/* --- CAMPO EMPRESA (ESCRITÓRIO) --- */}
+        <label
+          htmlFor="company_id"
+          className="block text-sm font-medium text-text-secondary"
+        >
+          Escritório (opcional)
+        </label>
+        <select
+          id="company_id"
+          value={companyId}
+          onChange={(e) => {
+            setCompanyId(e.target.value);
+            // Se selecionou empresa, limpa comissão individual
+            if (e.target.value) {
+              setCommissionRate("");
+            }
+          }}
+          className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
+        >
+          <option value="">Sem escritório</option>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}{" "}
+              {c.commission_rate != null ? `(${c.commission_rate}%)` : ""}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-gray-500 mt-1">
+          Se vinculado a um escritório, usará a taxa de comissão do escritório.
+        </p>
+      </div>
+
+      {/* --- CAMPO TAXA DE COMISSÃO (somente se sem empresa) --- */}
+      {!companyId && (
+        <div>
+          <label
+            htmlFor="commission_rate"
+            className="block text-sm font-medium text-text-secondary"
+          >
+            Taxa de Comissão Individual (%)
+          </label>
+          <input
+            id="commission_rate"
+            type="number"
+            step="0.01"
+            min="0"
+            max="100"
+            value={commissionRate}
+            onChange={(e) => setCommissionRate(e.target.value)}
+            placeholder="Ex: 10.00"
+            className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Opcional. Se vazio, usará a taxa padrão da plataforma.
+          </p>
+        </div>
+      )}
 
       {/* Exibe a mensagem de erro apenas se o estado 'error' tiver algum conteúdo. */}
       {error && <p className="text-red-500 text-sm">{error}</p>}
@@ -303,11 +406,9 @@ export default function NewSpecialistForm({ onSuccess, specialistToEdit }: NewSp
             ? "Salvando..."
             : specialistToEdit
               ? "Atualizar Especialista"
-              : "Salvar Especialista"
-          }
+              : "Salvar Especialista"}
         </Button>
       </div>
     </form>
   );
 }
-
