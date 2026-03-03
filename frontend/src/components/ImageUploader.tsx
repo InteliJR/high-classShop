@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { ZoomIn, ZoomOut, RotateCw } from "lucide-react";
+import { ZoomIn, ZoomOut } from "lucide-react";
 
 export interface ImageData {
   data: string; // base64 ou URL do S3
@@ -63,7 +63,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     for (const file of files) {
       if (file.size > maxSizeBytes) {
         setError(
-          `A imagem "${file.name}" ultrapassa o limite de ${maxSizeMB} MB.`
+          `A imagem "${file.name}" ultrapassa o limite de ${maxSizeMB} MB.`,
         );
         return;
       }
@@ -124,30 +124,24 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     if (cropImageIndex === null || !canvasRef.current) return;
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     const img = new Image();
     img.onload = () => {
       canvas.width = 400;
       canvas.height = 300;
-      
-      ctx.fillStyle = 'white';
+
+      ctx.fillStyle = "white";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
+
       const scaledWidth = img.width * zoomLevel;
       const scaledHeight = img.height * zoomLevel;
-      
-      ctx.drawImage(
-        img,
-        offsetX,
-        offsetY,
-        scaledWidth,
-        scaledHeight,
-      );
 
-      const croppedBase64 = canvas.toDataURL('image/jpeg', 0.9);
-      
+      ctx.drawImage(img, offsetX, offsetY, scaledWidth, scaledHeight);
+
+      const croppedBase64 = canvas.toDataURL("image/jpeg", 0.9);
+
       const newImages = [...images];
       newImages[cropImageIndex] = {
         ...newImages[cropImageIndex],
@@ -184,8 +178,9 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
             cursor-pointer"
         />
         <p className="mt-1 text-xs text-gray-500">
-          Máximo de {maxImages} imagens. Tamanho máximo: {maxSizeMB} MB por imagem.
-          Dica: Clique em "Ajustar" para recortar imagens mal proporcionadas.
+          Máximo de {maxImages} imagens. Tamanho máximo: {maxSizeMB} MB por
+          imagem. Dica: Clique em "Ajustar" para recortar imagens mal
+          proporcionadas.
         </p>
       </div>
 
@@ -260,16 +255,21 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
               </button>
             </div>
 
-            <div className="bg-gray-100 rounded-lg p-4 flex justify-center items-center" style={{ height: '300px' }}>
+            <div
+              className="bg-gray-100 rounded-lg p-4 flex justify-center items-center"
+              style={{ height: "300px" }}
+            >
               <img
-                src={images[cropImageIndex].preview || images[cropImageIndex].data}
+                src={
+                  images[cropImageIndex].preview || images[cropImageIndex].data
+                }
                 alt="Crop preview"
                 style={{
-                  maxWidth: '100%',
-                  maxHeight: '100%',
-                  objectFit: 'contain',
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                  objectFit: "contain",
                   transform: `scale(${zoomLevel}) translate(${offsetX}px, ${offsetY}px)`,
-                  transition: 'transform 0.2s',
+                  transition: "transform 0.2s",
                 }}
               />
             </div>
@@ -303,7 +303,8 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
               </div>
 
               <div className="bg-blue-50 p-3 rounded text-sm text-blue-800">
-                💡 Use o zoom para enquadrar a imagem. A imagem será cortada em proporção 4:3 (400x300px).
+                💡 Use o zoom para enquadrar a imagem. A imagem será cortada em
+                proporção 4:3 (400x300px).
               </div>
             </div>
 
@@ -324,11 +325,10 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
               </button>
             </div>
 
-            <canvas ref={canvasRef} style={{ display: 'none' }} />
+            <canvas ref={canvasRef} style={{ display: "none" }} />
           </div>
         </div>
       )}
     </div>
   );
 };
-

@@ -1,12 +1,27 @@
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { useEffect, useState, useContext } from 'react';
-import { getDashboardStats, type DashboardStats } from '../../services/dashboard.service';
-import { getSpecialists } from '../../services/specialists.service';
-import { AppContext } from '../../contexts/AppContext';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
+import { useEffect, useState, useContext } from "react";
+import {
+  getDashboardStats,
+  type DashboardStats,
+} from "../../services/dashboard.service";
+import { getSpecialists } from "../../services/specialists.service";
+import { AppContext } from "../../contexts/AppContext";
 
 export default function DashboardPage() {
   const { setSearchTerm } = useContext(AppContext);
-  
+
   // Estado para armazenar as estatísticas reais
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -14,7 +29,7 @@ export default function DashboardPage() {
 
   // Limpar barra de pesquisa ao entrar no Dashboard
   useEffect(() => {
-    setSearchTerm('');
+    setSearchTerm("");
   }, [setSearchTerm]);
 
   // Buscar estatísticas ao carregar a página
@@ -24,7 +39,7 @@ export default function DashboardPage() {
         const data = await getDashboardStats();
         setStats(data);
       } catch (error) {
-        console.error('Erro ao carregar estatísticas:', error);
+        console.error("Erro ao carregar estatísticas:", error);
       } finally {
         setIsLoading(false);
       }
@@ -39,45 +54,45 @@ export default function DashboardPage() {
         const specialists = await getSpecialists();
         setSpecialistsCount(specialists.length);
       } catch (error) {
-        console.error('Erro ao carregar especialistas:', error);
+        console.error("Erro ao carregar especialistas:", error);
       }
     }
     fetchSpecialists();
   }, []);
   // Mock data para gráfico de vendas
   const vendidosData = [
-    { month: 'Jan', vendidos: 400, naoVendidos: 240 },
-    { month: 'Fev', vendidos: 300, naoVendidos: 221 },
-    { month: 'Mar', vendidos: 200, naoVendidos: 229 },
-    { month: 'Abr', vendidos: 278, naoVendidos: 200 },
-    { month: 'Mai', vendidos: 189, naoVendidos: 220 },
-    { month: 'Jun', vendidos: 239, naoVendidos: 229 },
-    { month: 'Jul', vendidos: 349, naoVendidos: 200 },
-    { month: 'Ago', vendidos: 430, naoVendidos: 210 },
-    { month: 'Set', vendidos: 490, naoVendidos: 229 },
-    { month: 'Out', vendidos: 490, naoVendidos: 200 },
-    { month: 'Nov', vendidos: 590, naoVendidos: 200 },
-    { month: 'Dez', vendidos: 690, naoVendidos: 229 },
+    { month: "Jan", vendidos: 400, naoVendidos: 240 },
+    { month: "Fev", vendidos: 300, naoVendidos: 221 },
+    { month: "Mar", vendidos: 200, naoVendidos: 229 },
+    { month: "Abr", vendidos: 278, naoVendidos: 200 },
+    { month: "Mai", vendidos: 189, naoVendidos: 220 },
+    { month: "Jun", vendidos: 239, naoVendidos: 229 },
+    { month: "Jul", vendidos: 349, naoVendidos: 200 },
+    { month: "Ago", vendidos: 430, naoVendidos: 210 },
+    { month: "Set", vendidos: 490, naoVendidos: 229 },
+    { month: "Out", vendidos: 490, naoVendidos: 200 },
+    { month: "Nov", vendidos: 590, naoVendidos: 200 },
+    { month: "Dez", vendidos: 690, naoVendidos: 229 },
   ];
 
   // Mock data para gráfico de desempenho por consultor
   const desempenhoData = [
-    { name: 'User Name', value: 1200000, percentage: '+8.2%' },
-    { name: 'User Name', value: 800000, percentage: '+7%' },
-    { name: 'User Name', value: 645000, percentage: '+23%' },
-    { name: 'User Name', value: 590000, percentage: '+15%' },
-    { name: 'User Name', value: 534200, percentage: '+17%' },
+    { name: "User Name", value: 1200000, percentage: "+8.2%" },
+    { name: "User Name", value: 800000, percentage: "+7%" },
+    { name: "User Name", value: 645000, percentage: "+23%" },
+    { name: "User Name", value: 590000, percentage: "+15%" },
+    { name: "User Name", value: 534200, percentage: "+17%" },
   ];
 
   const pieData = [
-    { name: 'User Name', value: 1200000 },
-    { name: 'User Name', value: 800000 },
-    { name: 'User Name', value: 645000 },
-    { name: 'User Name', value: 590000 },
-    { name: 'User Name', value: 534200 },
+    { name: "User Name", value: 1200000 },
+    { name: "User Name", value: 800000 },
+    { name: "User Name", value: 645000 },
+    { name: "User Name", value: 590000 },
+    { name: "User Name", value: 534200 },
   ];
 
-  const COLORS = ['#3B82F6', '#1E40AF', '#1E3A8A', '#0C2340', '#051E3E'];
+  const COLORS = ["#3B82F6", "#1E40AF", "#1E3A8A", "#0C2340", "#051E3E"];
 
   return (
     <div className="w-full">
@@ -87,7 +102,8 @@ export default function DashboardPage() {
           Seja bem vindo de volta, Administrador!
         </h1>
         <p className="text-gray-600">
-          Lorem ipsum dolor sit amet. Quo recusant accusamus quo lorem repudiandae quo sed
+          Lorem ipsum dolor sit amet. Quo recusant accusamus quo lorem
+          repudiandae quo sed
         </p>
       </div>
 
@@ -97,10 +113,14 @@ export default function DashboardPage() {
         <div className="bg-gray-300 rounded-lg p-6">
           <p className="text-gray-700 font-semibold mb-2">Processos Ativos</p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-gray-900 mb-2">Carregando...</p>
+            <p className="text-2xl font-bold text-gray-900 mb-2">
+              Carregando...
+            </p>
           ) : (
             <>
-              <p className="text-4xl font-bold text-gray-900 mb-2">{stats?.activeProcesses || 0}</p>
+              <p className="text-4xl font-bold text-gray-900 mb-2">
+                {stats?.activeProcesses || 0}
+              </p>
               <p className="text-sm text-gray-600">Processos em andamento</p>
             </>
           )}
@@ -110,10 +130,14 @@ export default function DashboardPage() {
         <div className="bg-gray-300 rounded-lg p-6">
           <p className="text-gray-700 font-semibold mb-2">Taxa de Conversão</p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-gray-900 mb-2">Carregando...</p>
+            <p className="text-2xl font-bold text-gray-900 mb-2">
+              Carregando...
+            </p>
           ) : (
             <>
-              <p className="text-4xl font-bold text-gray-900 mb-2">{stats?.conversionRate || 0}%</p>
+              <p className="text-4xl font-bold text-gray-900 mb-2">
+                {stats?.conversionRate || 0}%
+              </p>
               <p className="text-sm text-gray-600">Meta 80%</p>
             </>
           )}
@@ -123,10 +147,14 @@ export default function DashboardPage() {
         <div className="bg-gray-300 rounded-lg p-6">
           <p className="text-gray-700 font-semibold mb-2">Escritórios Ativos</p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-gray-900 mb-2">Carregando...</p>
+            <p className="text-2xl font-bold text-gray-900 mb-2">
+              Carregando...
+            </p>
           ) : (
             <>
-              <p className="text-4xl font-bold text-gray-900 mb-2">{stats?.activeCompanies || 0}</p>
+              <p className="text-4xl font-bold text-gray-900 mb-2">
+                {stats?.activeCompanies || 0}
+              </p>
               <p className="text-sm text-gray-600">Empresas parceiras</p>
             </>
           )}
@@ -134,13 +162,21 @@ export default function DashboardPage() {
 
         {/* Card 4: Especialistas Ativos - DADOS REAIS */}
         <div className="bg-gray-300 rounded-lg p-6">
-          <p className="text-gray-700 font-semibold mb-2">Especialistas Ativos</p>
+          <p className="text-gray-700 font-semibold mb-2">
+            Especialistas Ativos
+          </p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-gray-900 mb-2">Carregando...</p>
+            <p className="text-2xl font-bold text-gray-900 mb-2">
+              Carregando...
+            </p>
           ) : (
             <>
-              <p className="text-4xl font-bold text-gray-900 mb-2">{specialistsCount}</p>
-              <p className="text-sm text-gray-600">Carros, Lanchas, Helicópteros</p>
+              <p className="text-4xl font-bold text-gray-900 mb-2">
+                {specialistsCount}
+              </p>
+              <p className="text-sm text-gray-600">
+                Carros, Lanchas, Helicópteros
+              </p>
             </>
           )}
         </div>
@@ -190,8 +226,11 @@ export default function DashboardPage() {
                 paddingAngle={2}
                 dataKey="value"
               >
-                {pieData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                {pieData.map((_, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={COLORS[index % COLORS.length]}
+                  />
                 ))}
               </Pie>
             </PieChart>
@@ -200,7 +239,10 @@ export default function DashboardPage() {
           {/* Legenda do gráfico */}
           <div className="mt-4 space-y-2">
             {desempenhoData.map((item, index) => (
-              <div key={index} className="flex justify-between items-center text-sm">
+              <div
+                key={index}
+                className="flex justify-between items-center text-sm"
+              >
                 <div className="flex items-center gap-2">
                   <div
                     className="w-2 h-2 rounded-full"
@@ -212,7 +254,9 @@ export default function DashboardPage() {
                   <span className="text-gray-900 font-semibold">
                     ${(item.value / 1000).toFixed(1)}K
                   </span>
-                  <span className="text-green-600 font-semibold">{item.percentage}</span>
+                  <span className="text-green-600 font-semibold">
+                    {item.percentage}
+                  </span>
                 </div>
               </div>
             ))}
@@ -222,4 +266,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

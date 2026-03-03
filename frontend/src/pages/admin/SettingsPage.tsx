@@ -1,17 +1,12 @@
 import { useState, useEffect } from "react";
 import { Settings, Check, AlertCircle, Save } from "lucide-react";
-import {
-  getSettings,
-  updateSetting,
-  type Setting,
-} from "../../services/settings.service";
+import { getSettings, updateSetting } from "../../services/settings.service";
 
 /**
  * Admin Settings Page
  * Allows admins to configure system-wide settings
  */
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Setting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<string | null>(null);
@@ -30,14 +25,13 @@ export default function SettingsPage() {
         setError(null);
 
         const data = await getSettings();
-        setSettings(data);
 
         // Set local state from loaded settings
         const enabledSetting = data.find(
-          (s) => s.key === "minimum_proposal_enabled"
+          (s) => s.key === "minimum_proposal_enabled",
         );
         const percentageSetting = data.find(
-          (s) => s.key === "minimum_proposal_percentage"
+          (s) => s.key === "minimum_proposal_percentage",
         );
 
         if (enabledSetting) {
@@ -48,9 +42,7 @@ export default function SettingsPage() {
         }
       } catch (err) {
         setError(
-          err instanceof Error
-            ? err.message
-            : "Erro ao carregar configurações"
+          err instanceof Error ? err.message : "Erro ao carregar configurações",
         );
       } finally {
         setIsLoading(false);
@@ -73,7 +65,7 @@ export default function SettingsPage() {
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Erro ao salvar configuração"
+        err instanceof Error ? err.message : "Erro ao salvar configuração",
       );
     } finally {
       setIsSaving(null);
@@ -93,14 +85,14 @@ export default function SettingsPage() {
 
       await updateSetting(
         "minimum_proposal_percentage",
-        minimumProposalPercentage
+        minimumProposalPercentage,
       );
 
       setSuccessMessage("Porcentagem atualizada com sucesso!");
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Erro ao salvar configuração"
+        err instanceof Error ? err.message : "Erro ao salvar configuração",
       );
     } finally {
       setIsSaving(null);
@@ -261,7 +253,10 @@ export default function SettingsPage() {
             {/* Info Box */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-start gap-3">
-                <AlertCircle size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
+                <AlertCircle
+                  size={20}
+                  className="text-blue-600 flex-shrink-0 mt-0.5"
+                />
                 <div>
                   <h4 className="text-sm font-medium text-blue-900">
                     Sobre as configurações

@@ -94,7 +94,7 @@ export default function Header() {
           {user ? (
             <div className="flex items-center w-full">
               <div className="flex-1">
-                {/* {showSearch && (
+                {showSearch && (
                   <div className="flex justify-start items-center">
                     <div className="relative flex items-center">
                       <Search
@@ -110,7 +110,7 @@ export default function Header() {
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
-                )} */}
+                )}
               </div>
 
               {/* Dropdown do usuário - sempre no canto direito com margem */}
