@@ -3,7 +3,6 @@ import { Building2, Save, AlertCircle, Check, Loader } from "lucide-react";
 import {
   getPlatformCompany,
   updatePlatformCompany,
-  type PlatformCompany,
 } from "../../services/platform-company.service";
 import Button from "../../components/ui/button";
 

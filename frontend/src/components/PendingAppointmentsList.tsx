@@ -30,13 +30,13 @@ export default function PendingAppointmentsList({
     try {
       setIsLoading(true);
       setError(null);
-      const data = await getPendingAppointments();
+      const { data } = await getPendingAppointments();
       setAppointments(data);
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Erro ao carregar agendamentos pendentes"
+          : "Erro ao carregar agendamentos pendentes",
       );
     } finally {
       setIsLoading(false);
@@ -59,7 +59,7 @@ export default function PendingAppointmentsList({
       onRefresh?.();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Erro ao confirmar agendamento"
+        err instanceof Error ? err.message : "Erro ao confirmar agendamento",
       );
     } finally {
       setProcessingId(null);
@@ -75,7 +75,7 @@ export default function PendingAppointmentsList({
       setAppointments((prev) => prev.filter((a) => a.id !== appointmentId));
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Erro ao cancelar agendamento"
+        err instanceof Error ? err.message : "Erro ao cancelar agendamento",
       );
     } finally {
       setProcessingId(null);
@@ -164,7 +164,10 @@ export default function PendingAppointmentsList({
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <Package size={14} className="text-gray-400 flex-shrink-0" />
+                    <Package
+                      size={14}
+                      className="text-gray-400 flex-shrink-0"
+                    />
                     <span className="truncate">
                       {getProductTypeLabel(appointment.product_type)} -{" "}
                       {appointment.product?.marca} {appointment.product?.modelo}
