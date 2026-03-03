@@ -48,7 +48,7 @@ export class BoatsService {
     { name: 'tipo_embarcacao', required: false, type: 'string' },
     { name: 'descricao_completa', required: false, type: 'string' },
     { name: 'acessorios', required: false, type: 'string' },
-    { name: 'imagem', required: false, type: 'string' }, // URL ou base64
+    { name: 'imagens', required: false, type: 'string' }, // URLs ou base64 separadas por | (pipe)
   ];
 
   constructor(
@@ -335,7 +335,7 @@ export class BoatsService {
 
     const templateHeader = this.csvColumns.map((c) => c.name).join(',');
     const exampleRow =
-      'Azimut,55 Fly,3500000,São Paulo,2022,Azimut,55 pés,Flybridge,Diesel,Volvo Penta D6,2022,Lancha,Embarcação em excelente estado com todos os opcionais,GPS Garmin - Ar condicionado - Gerador,https://example.com/imagem.jpg';
+      'Azimut,55 Fly,3500000,São Paulo,2022,Azimut,55 pés,Flybridge,Diesel,Volvo Penta D6,2022,Lancha,Embarcação em excelente estado com todos os opcionais,GPS Garmin - Ar condicionado - Gerador,https://example.com/img1.jpg|https://example.com/img2.jpg';
 
     return {
       template: `${templateHeader}\n${exampleRow}`,
@@ -359,7 +359,8 @@ export class BoatsService {
         descricao_completa:
           'Descrição detalhada da embarcação (texto, opcional)',
         acessorios: 'Lista de acessórios separados por hífen (opcional)',
-        imagem: 'URL da imagem ou string base64 (opcional)',
+        imagens:
+          'URLs de imagens separadas por | (pipe). Primeira imagem será a principal. Ex: https://img1.jpg|https://img2.jpg (opcional)',
       },
       example: {
         marca: 'Azimut',
@@ -377,7 +378,7 @@ export class BoatsService {
         descricao_completa:
           'Embarcação em excelente estado com todos os opcionais',
         acessorios: 'GPS Garmin - Ar condicionado - Gerador',
-        imagem: 'https://example.com/imagem.jpg',
+        imagens: 'https://example.com/img1.jpg|https://example.com/img2.jpg',
       },
     };
   }
@@ -409,6 +410,7 @@ export class BoatsService {
 
     const insertedIds: number[] = [];
     const errorRows: CsvErrorRow[] = [];
+    const warningRows: CsvErrorRow[] = [];
 
     // 3. Processar cada linha
     for (let i = 0; i < rows.length; i++) {
@@ -461,28 +463,47 @@ export class BoatsService {
         // Criar o barco
         const boat = await this.prismaService.boat.create({ data: boatData });
 
-        // Processar imagem se fornecida
-        if (row.imagem && row.imagem.trim()) {
-          try {
-            const timestamp = Date.now();
-            const key = `boats/${boat.id}/${timestamp}-0.jpg`;
-            const imageKey = await this.s3Service.uploadImageAuto(
-              row.imagem,
-              key,
-            );
+        // Processar imagens (suporte a múltiplas URLs separadas por |)
+        const imageUrls = this.csvImportService.parseDelimitedImages(
+          row.imagens || row.imagem, // retrocompatível com coluna 'imagem'
+        );
 
-            await this.prismaService.boat_image.create({
-              data: {
-                boat_id: boat.id,
-                image_url: imageKey,
-                is_primary: true,
-                product_type: 'BOAT',
-              },
+        if (imageUrls.length > 0) {
+          const imageErrors: string[] = [];
+          let successCount = 0;
+
+          for (let imgIdx = 0; imgIdx < imageUrls.length; imgIdx++) {
+            try {
+              const timestamp = Date.now();
+              const key = `boats/${boat.id}/${timestamp}-${imgIdx}.jpg`;
+              const imageKey = await this.s3Service.uploadImageAuto(
+                imageUrls[imgIdx],
+                key,
+              );
+
+              await this.prismaService.boat_image.create({
+                data: {
+                  boat_id: boat.id,
+                  image_url: imageKey,
+                  is_primary: imgIdx === 0,
+                  product_type: 'BOAT',
+                },
+              });
+              successCount++;
+            } catch (imageError) {
+              imageErrors.push(
+                `Imagem ${imgIdx + 1}: ${imageError.message || 'Erro desconhecido'}`,
+              );
+            }
+          }
+
+          if (imageErrors.length > 0) {
+            warningRows.push({
+              row: rowNumber,
+              reason: `Produto criado (${successCount}/${imageUrls.length} imagens processadas)`,
+              fields: row,
+              imageWarnings: imageErrors,
             });
-          } catch (imageError) {
-            console.warn(
-              `Erro ao processar imagem para barco ${boat.id}: ${imageError.message}`,
-            );
           }
         }
 
@@ -496,6 +517,10 @@ export class BoatsService {
       }
     }
 
-    return this.csvImportService.createResponse(insertedIds, errorRows);
+    return this.csvImportService.createResponse(
+      insertedIds,
+      errorRows,
+      warningRows,
+    );
   }
 }

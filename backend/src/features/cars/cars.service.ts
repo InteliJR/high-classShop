@@ -45,7 +45,7 @@ export class CarsService {
     { name: 'combustivel', required: false, type: 'string' },
     { name: 'tipo_categoria', required: false, type: 'string' },
     { name: 'descricao', required: false, type: 'string' },
-    { name: 'imagem', required: false, type: 'string' }, // URL ou base64
+    { name: 'imagens', required: false, type: 'string' }, // URLs ou base64 separadas por | (pipe)
   ];
 
   constructor(
@@ -312,7 +312,7 @@ export class CarsService {
 
     const templateHeader = this.csvColumns.map((c) => c.name).join(',');
     const exampleRow =
-      'BMW,X5,450000,São Paulo,2023,Preto,15000,Automático,Gasolina,SUV,Carro em excelente estado,https://example.com/imagem.jpg';
+      'BMW,X5,450000,São Paulo,2023,Preto,15000,Automático,Gasolina,SUV,Carro em excelente estado,https://example.com/img1.jpg|https://example.com/img2.jpg';
 
     return {
       template: `${templateHeader}\n${exampleRow}`,
@@ -333,7 +333,8 @@ export class CarsService {
           'Tipo de combustível: Gasolina, Etanol, Flex, Diesel, Elétrico, Híbrido (opcional)',
         tipo_categoria: 'Categoria: Sedan, SUV, Hatch, Pickup, etc (opcional)',
         descricao: 'Descrição detalhada do veículo (texto, opcional)',
-        imagem: 'URL da imagem ou string base64 (opcional)',
+        imagens:
+          'URLs de imagens separadas por | (pipe). Primeira imagem será a principal. Ex: https://img1.jpg|https://img2.jpg (opcional)',
       },
       example: {
         marca: 'BMW',
@@ -347,7 +348,7 @@ export class CarsService {
         combustivel: 'Gasolina',
         tipo_categoria: 'SUV',
         descricao: 'Carro em excelente estado',
-        imagem: 'https://example.com/imagem.jpg',
+        imagens: 'https://example.com/img1.jpg|https://example.com/img2.jpg',
       },
     };
   }
@@ -379,6 +380,7 @@ export class CarsService {
 
     const insertedIds: number[] = [];
     const errorRows: CsvErrorRow[] = [];
+    const warningRows: CsvErrorRow[] = [];
 
     // 3. Processar cada linha
     for (let i = 0; i < rows.length; i++) {
@@ -427,29 +429,47 @@ export class CarsService {
         // Criar o carro
         const car = await this.prismaService.car.create({ data: carData });
 
-        // Processar imagem se fornecida
-        if (row.imagem && row.imagem.trim()) {
-          try {
-            const timestamp = Date.now();
-            const key = `cars/${car.id}/${timestamp}-0.jpg`;
-            const imageKey = await this.s3Service.uploadImageAuto(
-              row.imagem,
-              key,
-            );
+        // Processar imagens (suporte a múltiplas URLs separadas por |)
+        const imageUrls = this.csvImportService.parseDelimitedImages(
+          row.imagens || row.imagem, // retrocompatível com coluna 'imagem'
+        );
 
-            await this.prismaService.car_image.create({
-              data: {
-                car_id: car.id,
-                image_url: imageKey,
-                is_primary: true,
-                product_type: 'CAR',
-              },
+        if (imageUrls.length > 0) {
+          const imageErrors: string[] = [];
+          let successCount = 0;
+
+          for (let imgIdx = 0; imgIdx < imageUrls.length; imgIdx++) {
+            try {
+              const timestamp = Date.now();
+              const key = `cars/${car.id}/${timestamp}-${imgIdx}.jpg`;
+              const imageKey = await this.s3Service.uploadImageAuto(
+                imageUrls[imgIdx],
+                key,
+              );
+
+              await this.prismaService.car_image.create({
+                data: {
+                  car_id: car.id,
+                  image_url: imageKey,
+                  is_primary: imgIdx === 0,
+                  product_type: 'CAR',
+                },
+              });
+              successCount++;
+            } catch (imageError) {
+              imageErrors.push(
+                `Imagem ${imgIdx + 1}: ${imageError.message || 'Erro desconhecido'}`,
+              );
+            }
+          }
+
+          if (imageErrors.length > 0) {
+            warningRows.push({
+              row: rowNumber,
+              reason: `Produto criado (${successCount}/${imageUrls.length} imagens processadas)`,
+              fields: row,
+              imageWarnings: imageErrors,
             });
-          } catch (imageError) {
-            // Não falha a inserção se a imagem falhar, apenas registra
-            console.warn(
-              `Erro ao processar imagem para carro ${car.id}: ${imageError.message}`,
-            );
           }
         }
 
@@ -463,6 +483,10 @@ export class CarsService {
       }
     }
 
-    return this.csvImportService.createResponse(insertedIds, errorRows);
+    return this.csvImportService.createResponse(
+      insertedIds,
+      errorRows,
+      warningRows,
+    );
   }
 }

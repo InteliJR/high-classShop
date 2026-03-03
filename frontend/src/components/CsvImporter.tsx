@@ -1,6 +1,20 @@
 import { useState, useRef, useCallback } from "react";
-import { Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, AlertTriangle, Trash2, Info, Loader2 } from "lucide-react";
-import type { CsvImportResponse, CsvTemplateResponse, CsvErrorRow } from "../services/cars.service";
+import {
+  Upload,
+  Download,
+  FileSpreadsheet,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Trash2,
+  Info,
+  Loader2,
+} from "lucide-react";
+import type {
+  CsvImportResponse,
+  CsvTemplateResponse,
+  CsvErrorRow,
+} from "../services/cars.service";
 
 type ProductType = "CAR" | "BOAT" | "AIRCRAFT";
 
@@ -13,18 +27,46 @@ interface CsvImporterProps {
 }
 
 // Definições de colunas por tipo de produto (para validação local)
-const COLUMN_DEFINITIONS: Record<ProductType, { required: string[]; optional: string[] }> = {
+const COLUMN_DEFINITIONS: Record<
+  ProductType,
+  { required: string[]; optional: string[] }
+> = {
   CAR: {
     required: ["marca", "modelo", "valor", "estado", "ano"],
-    optional: ["cor", "km", "cambio", "combustivel", "tipo_categoria", "descricao", "imagem"],
+    optional: [
+      "cor",
+      "km",
+      "cambio",
+      "combustivel",
+      "tipo_categoria",
+      "descricao",
+      "imagens",
+    ],
   },
   BOAT: {
     required: ["marca", "modelo", "valor", "estado", "ano"],
-    optional: ["fabricante", "tamanho", "estilo", "combustivel", "motor", "ano_motor", "tipo_embarcacao", "descricao_completa", "acessorios", "imagem"],
+    optional: [
+      "fabricante",
+      "tamanho",
+      "estilo",
+      "combustivel",
+      "motor",
+      "ano_motor",
+      "tipo_embarcacao",
+      "descricao_completa",
+      "acessorios",
+      "imagens",
+    ],
   },
   AIRCRAFT: {
     required: ["marca", "modelo", "valor", "estado", "ano"],
-    optional: ["categoria", "assentos", "tipo_aeronave", "descricao", "imagem"],
+    optional: [
+      "categoria",
+      "assentos",
+      "tipo_aeronave",
+      "descricao",
+      "imagens",
+    ],
   },
 };
 
@@ -42,117 +84,162 @@ interface LocalValidationResult {
   foundColumns: string[];
 }
 
-export function CsvImporter({ productType, onImport, onGetTemplate, disabled, onSuccess }: CsvImporterProps) {
+export function CsvImporter({
+  productType,
+  onImport,
+  onGetTemplate,
+  disabled,
+  onSuccess,
+}: CsvImporterProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
-  const [importResult, setImportResult] = useState<CsvImportResponse | null>(null);
-  const [localValidation, setLocalValidation] = useState<LocalValidationResult | null>(null);
+  const [importResult, setImportResult] = useState<CsvImportResponse | null>(
+    null,
+  );
+  const [localValidation, setLocalValidation] =
+    useState<LocalValidationResult | null>(null);
   const [structureError, setStructureError] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const columns = COLUMN_DEFINITIONS[productType];
 
   // Validação local do CSV antes de enviar
-  const validateCsvLocally = useCallback((content: string): LocalValidationResult => {
-    const lines = content.split(/\r?\n/).filter(line => line.trim());
-    const errors: string[] = [];
-    const warnings: string[] = [];
+  const validateCsvLocally = useCallback(
+    (content: string): LocalValidationResult => {
+      const lines = content.split(/\r?\n/).filter((line) => line.trim());
+      const errors: string[] = [];
+      const warnings: string[] = [];
 
-    if (lines.length === 0) {
-      return { valid: false, errors: ["CSV está vazio"], warnings: [], rowCount: 0, foundColumns: [] };
-    }
-
-    // Detectar delimitador
-    const delimiter = lines[0].includes(";") ? ";" : ",";
-    
-    // Parse do header
-    const headerLine = lines[0];
-    const foundColumns = headerLine
-      .split(delimiter)
-      .map(col => col.trim().toLowerCase().replace(/^"|"$/g, ""));
-
-    // Verificar colunas obrigatórias
-    const missingRequired = columns.required.filter(col => !foundColumns.includes(col));
-    if (missingRequired.length > 0) {
-      errors.push(`Colunas obrigatórias faltando: ${missingRequired.join(", ")}`);
-    }
-
-    // Verificar colunas não reconhecidas
-    const allKnown = [...columns.required, ...columns.optional];
-    const unknownColumns = foundColumns.filter(col => !allKnown.includes(col) && col !== "");
-    if (unknownColumns.length > 0) {
-      warnings.push(`Colunas não reconhecidas (serão ignoradas): ${unknownColumns.join(", ")}`);
-    }
-
-    // Verificar se há linhas de dados
-    const dataLines = lines.slice(1).filter(line => line.trim());
-    if (dataLines.length === 0) {
-      errors.push("CSV não contém linhas de dados (apenas cabeçalho)");
-    }
-
-    // Validar número de colunas em cada linha
-    const expectedCols = foundColumns.length;
-    dataLines.forEach((line, index) => {
-      const cols = line.split(delimiter).length;
-      if (cols !== expectedCols) {
-        errors.push(`Linha ${index + 2}: número incorreto de colunas (esperado ${expectedCols}, encontrado ${cols})`);
+      if (lines.length === 0) {
+        return {
+          valid: false,
+          errors: ["CSV está vazio"],
+          warnings: [],
+          rowCount: 0,
+          foundColumns: [],
+        };
       }
-    });
 
-    // Validar campos numéricos obrigatórios nas primeiras 5 linhas como amostra
-    const sampleLines = dataLines.slice(0, 5);
-    const numericFields = ["valor", "ano"];
-    
-    sampleLines.forEach((line, lineIndex) => {
-      const values = line.split(delimiter).map(v => v.trim().replace(/^"|"$/g, ""));
-      
-      numericFields.forEach(field => {
-        const colIndex = foundColumns.indexOf(field);
-        if (colIndex >= 0 && values[colIndex]) {
-          const value = values[colIndex];
-          if (isNaN(Number(value))) {
-            errors.push(`Linha ${lineIndex + 2}: campo '${field}' deve ser numérico, encontrado: "${value}"`);
-          }
+      // Detectar delimitador
+      const delimiter = lines[0].includes(";") ? ";" : ",";
+
+      // Parse do header
+      const headerLine = lines[0];
+      const foundColumns = headerLine
+        .split(delimiter)
+        .map((col) => col.trim().toLowerCase().replace(/^"|"$/g, ""));
+
+      // Verificar colunas obrigatórias
+      const missingRequired = columns.required.filter(
+        (col) => !foundColumns.includes(col),
+      );
+      if (missingRequired.length > 0) {
+        errors.push(
+          `Colunas obrigatórias faltando: ${missingRequired.join(", ")}`,
+        );
+      }
+
+      // Verificar colunas não reconhecidas (aceitar 'imagem' como alias de 'imagens')
+      const allKnown = [...columns.required, ...columns.optional, "imagem"];
+      const unknownColumns = foundColumns.filter(
+        (col) => !allKnown.includes(col) && col !== "",
+      );
+      if (unknownColumns.length > 0) {
+        warnings.push(
+          `Colunas não reconhecidas (serão ignoradas): ${unknownColumns.join(", ")}`,
+        );
+      }
+
+      // Aviso se usou 'imagem' (singular) ao invés de 'imagens'
+      if (
+        foundColumns.includes("imagem") &&
+        !foundColumns.includes("imagens")
+      ) {
+        warnings.push(
+          `Coluna 'imagem' encontrada — use 'imagens' para suporte a múltiplas URLs separadas por |`,
+        );
+      }
+
+      // Verificar se há linhas de dados
+      const dataLines = lines.slice(1).filter((line) => line.trim());
+      if (dataLines.length === 0) {
+        errors.push("CSV não contém linhas de dados (apenas cabeçalho)");
+      }
+
+      // Validar número de colunas em cada linha
+      const expectedCols = foundColumns.length;
+      dataLines.forEach((line, index) => {
+        const cols = line.split(delimiter).length;
+        if (cols !== expectedCols) {
+          errors.push(
+            `Linha ${index + 2}: número incorreto de colunas (esperado ${expectedCols}, encontrado ${cols})`,
+          );
         }
       });
-    });
 
-    return {
-      valid: errors.length === 0,
-      errors,
-      warnings,
-      rowCount: dataLines.length,
-      foundColumns,
-    };
-  }, [columns]);
+      // Validar campos numéricos obrigatórios nas primeiras 5 linhas como amostra
+      const sampleLines = dataLines.slice(0, 5);
+      const numericFields = ["valor", "ano"];
 
-  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (!selectedFile) return;
+      sampleLines.forEach((line, lineIndex) => {
+        const values = line
+          .split(delimiter)
+          .map((v) => v.trim().replace(/^"|"$/g, ""));
 
-    // Reset estados
-    setImportResult(null);
-    setStructureError(null);
-    setLocalValidation(null);
+        numericFields.forEach((field) => {
+          const colIndex = foundColumns.indexOf(field);
+          if (colIndex >= 0 && values[colIndex]) {
+            const value = values[colIndex];
+            if (isNaN(Number(value))) {
+              errors.push(
+                `Linha ${lineIndex + 2}: campo '${field}' deve ser numérico, encontrado: "${value}"`,
+              );
+            }
+          }
+        });
+      });
 
-    // Validar tipo de arquivo
-    if (!selectedFile.name.endsWith(".csv")) {
-      setStructureError({ message: "Apenas arquivos .csv são aceitos" });
-      return;
-    }
+      return {
+        valid: errors.length === 0,
+        errors,
+        warnings,
+        rowCount: dataLines.length,
+        foundColumns,
+      };
+    },
+    [columns],
+  );
 
-    // Ler e validar conteúdo
-    const content = await selectedFile.text();
-    const validation = validateCsvLocally(content);
-    setLocalValidation(validation);
-    
-    if (validation.valid) {
-      setFile(selectedFile);
-    } else {
-      setFile(null);
-    }
-  }, [validateCsvLocally]);
+  const handleFileSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const selectedFile = e.target.files?.[0];
+      if (!selectedFile) return;
+
+      // Reset estados
+      setImportResult(null);
+      setStructureError(null);
+      setLocalValidation(null);
+
+      // Validar tipo de arquivo
+      if (!selectedFile.name.endsWith(".csv")) {
+        setStructureError({ message: "Apenas arquivos .csv são aceitos" });
+        return;
+      }
+
+      // Ler e validar conteúdo
+      const content = await selectedFile.text();
+      const validation = validateCsvLocally(content);
+      setLocalValidation(validation);
+
+      if (validation.valid) {
+        setFile(selectedFile);
+      } else {
+        setFile(null);
+      }
+    },
+    [validateCsvLocally],
+  );
 
   const handleImport = async () => {
     if (!file) return;
@@ -164,7 +251,7 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
     try {
       const result = await onImport(file);
       setImportResult(result);
-      
+
       // Limpar arquivo se sucesso total (mas manter resultado visível)
       if (result.errorCount === 0) {
         setFile(null);
@@ -179,7 +266,9 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
       if (error.message || error.errors) {
         setStructureError(error);
       } else {
-        setStructureError({ message: "Erro ao processar o arquivo. Tente novamente." });
+        setStructureError({
+          message: "Erro ao processar o arquivo. Tente novamente.",
+        });
       }
     } finally {
       setIsLoading(false);
@@ -190,9 +279,11 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
     setIsLoadingTemplate(true);
     try {
       const template = await onGetTemplate();
-      
+
       // Criar arquivo para download
-      const blob = new Blob([template.template], { type: "text/csv;charset=utf-8;" });
+      const blob = new Blob([template.template], {
+        type: "text/csv;charset=utf-8;",
+      });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -235,12 +326,12 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile) {
       // Simular evento de input
       const fakeEvent = {
-        target: { files: [droppedFile] }
+        target: { files: [droppedFile] },
       } as unknown as React.ChangeEvent<HTMLInputElement>;
       await handleFileSelect(fakeEvent);
     }
@@ -255,8 +346,12 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
             <FileSpreadsheet className="w-5 h-5 text-blue-600" />
           </div>
           <div>
-            <h4 className="font-semibold text-gray-900">Importar {PRODUCT_NAMES[productType]}</h4>
-            <p className="text-sm text-gray-500">Importe varios produtos de uma vez</p>
+            <h4 className="font-semibold text-gray-900">
+              Importar {PRODUCT_NAMES[productType]}
+            </h4>
+            <p className="text-sm text-gray-500">
+              Importe varios produtos de uma vez
+            </p>
           </div>
         </div>
         <button
@@ -279,28 +374,48 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
         <summary className="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
           <Info className="w-4 h-4" />
           <span>Ver estrutura do CSV</span>
-          <svg className="w-4 h-4 ml-auto transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          <svg
+            className="w-4 h-4 ml-auto transition-transform group-open:rotate-180"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 9l-7 7-7-7"
+            />
           </svg>
         </summary>
-        
+
         <div className="mt-4 p-4 bg-gray-50 rounded-xl space-y-4">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Colunas Obrigatorias</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              Colunas Obrigatorias
+            </p>
             <div className="flex flex-wrap gap-2">
-              {columns.required.map(col => (
-                <span key={col} className="inline-flex items-center px-3 py-1.5 bg-red-50 text-red-700 text-xs font-medium rounded-full border border-red-200">
+              {columns.required.map((col) => (
+                <span
+                  key={col}
+                  className="inline-flex items-center px-3 py-1.5 bg-red-50 text-red-700 text-xs font-medium rounded-full border border-red-200"
+                >
                   {col}
                 </span>
               ))}
             </div>
           </div>
-          
+
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Colunas Opcionais</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              Colunas Opcionais
+            </p>
             <div className="flex flex-wrap gap-2">
-              {columns.optional.map(col => (
-                <span key={col} className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-full border border-gray-200">
+              {columns.optional.map((col) => (
+                <span
+                  key={col}
+                  className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-full border border-gray-200"
+                >
                   {col}
                 </span>
               ))}
@@ -308,7 +423,9 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
           </div>
 
           <div className="pt-3 border-t border-gray-200">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Dicas</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              Dicas
+            </p>
             <ul className="space-y-1.5 text-sm text-gray-600">
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full flex-shrink-0"></span>
@@ -316,15 +433,22 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full flex-shrink-0"></span>
-                Campo <strong className="text-gray-900">imagem</strong>: URL (https://...) ou base64
+                Campo <strong className="text-gray-900">imagens</strong>: URLs
+                separadas por{" "}
+                <code className="px-1.5 py-0.5 bg-gray-200 rounded text-xs font-mono">
+                  |
+                </code>{" "}
+                (ex: https://url1.jpg|https://url2.jpg)
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full flex-shrink-0"></span>
-                <strong className="text-gray-900">valor</strong>: numero inteiro sem pontos
+                <strong className="text-gray-900">valor</strong>: numero inteiro
+                sem pontos
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full flex-shrink-0"></span>
-                <strong className="text-gray-900">ano</strong>: 4 digitos (ex: 2024)
+                <strong className="text-gray-900">ano</strong>: 4 digitos (ex:
+                2024)
               </li>
             </ul>
           </div>
@@ -337,10 +461,10 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 ${
-          isDragging 
-            ? "border-blue-500 bg-blue-50" 
-            : file 
-              ? "border-green-300 bg-green-50" 
+          isDragging
+            ? "border-blue-500 bg-blue-50"
+            : file
+              ? "border-green-300 bg-green-50"
               : "border-gray-300 hover:border-gray-400 bg-gray-50"
         } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
         onClick={() => !disabled && fileInputRef.current?.click()}
@@ -353,7 +477,7 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
           disabled={disabled || isLoading}
           className="hidden"
         />
-        
+
         {file ? (
           <div className="space-y-2">
             <div className="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-full">
@@ -365,11 +489,15 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
         ) : (
           <div className="space-y-3">
             <div className="inline-flex items-center justify-center w-12 h-12 bg-gray-100 rounded-full">
-              <Upload className={`w-6 h-6 ${isDragging ? "text-blue-600" : "text-gray-400"}`} />
+              <Upload
+                className={`w-6 h-6 ${isDragging ? "text-blue-600" : "text-gray-400"}`}
+              />
             </div>
             <div>
               <p className="text-sm font-medium text-gray-900">
-                {isDragging ? "Solte o arquivo aqui" : "Arraste um arquivo CSV ou clique para selecionar"}
+                {isDragging
+                  ? "Solte o arquivo aqui"
+                  : "Arraste um arquivo CSV ou clique para selecionar"}
               </p>
               <p className="text-xs text-gray-500 mt-1">Apenas arquivos .csv</p>
             </div>
@@ -379,22 +507,23 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
 
       {/* Validação local */}
       {localValidation && (
-        <div className={`p-4 rounded-xl border ${
-          localValidation.valid 
-            ? "bg-green-50 border-green-200" 
-            : "bg-red-50 border-red-200"
-        }`}>
+        <div
+          className={`p-4 rounded-xl border ${
+            localValidation.valid
+              ? "bg-green-50 border-green-200"
+              : "bg-red-50 border-red-200"
+          }`}
+        >
           {localValidation.valid ? (
             <div className="flex items-start gap-3">
               <div className="p-1.5 bg-green-100 rounded-lg">
                 <CheckCircle2 className="w-5 h-5 text-green-600" />
               </div>
               <div className="flex-1">
-                <p className="font-medium text-green-800">
-                  Estrutura valida
-                </p>
+                <p className="font-medium text-green-800">Estrutura valida</p>
                 <p className="text-sm text-green-600 mt-0.5">
-                  {localValidation.rowCount} linha(s) de dados prontas para importar
+                  {localValidation.rowCount} linha(s) de dados prontas para
+                  importar
                 </p>
                 {localValidation.warnings.length > 0 && (
                   <div className="mt-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
@@ -417,10 +546,15 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
                 <XCircle className="w-5 h-5 text-red-600" />
               </div>
               <div className="flex-1">
-                <p className="font-medium text-red-800">Problemas encontrados</p>
+                <p className="font-medium text-red-800">
+                  Problemas encontrados
+                </p>
                 <ul className="mt-2 space-y-1.5">
                   {localValidation.errors.map((error, i) => (
-                    <li key={i} className="text-sm text-red-600 flex items-start gap-2">
+                    <li
+                      key={i}
+                      className="text-sm text-red-600 flex items-start gap-2"
+                    >
                       <span className="w-1.5 h-1.5 mt-1.5 bg-red-400 rounded-full flex-shrink-0"></span>
                       {error}
                     </li>
@@ -459,13 +593,18 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
               {structureError.errors && (
                 <ul className="mt-2 space-y-1">
                   {structureError.errors.map((err: string, i: number) => (
-                    <li key={i} className="text-sm text-red-600">{err}</li>
+                    <li key={i} className="text-sm text-red-600">
+                      {err}
+                    </li>
                   ))}
                 </ul>
               )}
               {structureError.missingRequired?.length > 0 && (
                 <p className="text-sm text-red-600 mt-2">
-                  Colunas faltando: <span className="font-medium">{structureError.missingRequired.join(", ")}</span>
+                  Colunas faltando:{" "}
+                  <span className="font-medium">
+                    {structureError.missingRequired.join(", ")}
+                  </span>
                 </p>
               )}
             </div>
@@ -508,13 +647,17 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
 
       {/* Resultado da importação */}
       {importResult && (
-        <div className={`p-5 rounded-xl border-2 ${
-          importResult.success 
-            ? "bg-green-50 border-green-300" 
-            : "bg-amber-50 border-amber-300"
-        }`}>
+        <div
+          className={`p-5 rounded-xl border-2 ${
+            importResult.success
+              ? "bg-green-50 border-green-300"
+              : "bg-amber-50 border-amber-300"
+          }`}
+        >
           <div className="flex items-start gap-4">
-            <div className={`p-2 rounded-full ${importResult.success ? "bg-green-100" : "bg-amber-100"}`}>
+            <div
+              className={`p-2 rounded-full ${importResult.success ? "bg-green-100" : "bg-amber-100"}`}
+            >
               {importResult.success ? (
                 <CheckCircle2 className="w-6 h-6 text-green-600" />
               ) : (
@@ -522,23 +665,42 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
               )}
             </div>
             <div className="flex-1">
-              <h4 className={`text-lg font-semibold ${importResult.success ? "text-green-800" : "text-amber-800"}`}>
+              <h4
+                className={`text-lg font-semibold ${importResult.success ? "text-green-800" : "text-amber-800"}`}
+              >
                 Importacao Concluida
               </h4>
               <p className="text-gray-600 mt-1">{importResult.message}</p>
-              
+
               {/* Stats */}
               <div className="flex gap-6 mt-4">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                   <span className="text-sm text-gray-700">
-                    <span className="font-semibold text-green-700">{importResult.insertedCount}</span> inseridos
+                    <span className="font-semibold text-green-700">
+                      {importResult.insertedCount}
+                    </span>{" "}
+                    inseridos
                   </span>
                 </div>
+                {importResult.warningCount > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                    <span className="text-sm text-gray-700">
+                      <span className="font-semibold text-yellow-700">
+                        {importResult.warningCount}
+                      </span>{" "}
+                      com avisos
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-red-500 rounded-full"></div>
                   <span className="text-sm text-gray-700">
-                    <span className="font-semibold text-red-700">{importResult.errorCount}</span> erros
+                    <span className="font-semibold text-red-700">
+                      {importResult.errorCount}
+                    </span>{" "}
+                    erros
                   </span>
                 </div>
               </div>
@@ -553,22 +715,90 @@ export function CsvImporter({ productType, onImport, onGetTemplate, disabled, on
                     <table className="w-full text-sm">
                       <thead className="bg-red-100 sticky top-0">
                         <tr>
-                          <th className="px-3 py-2 text-left text-red-800 font-medium w-20">Linha</th>
-                          <th className="px-3 py-2 text-left text-red-800 font-medium">Motivo</th>
+                          <th className="px-3 py-2 text-left text-red-800 font-medium w-20">
+                            Linha
+                          </th>
+                          <th className="px-3 py-2 text-left text-red-800 font-medium">
+                            Motivo
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="bg-white">
-                        {importResult.errorRows.map((errorRow: CsvErrorRow, index: number) => (
-                          <tr key={index} className="border-t border-red-100 hover:bg-red-50">
-                            <td className="px-3 py-2 font-mono text-red-600 font-medium">{errorRow.row}</td>
-                            <td className="px-3 py-2 text-red-600">{errorRow.reason}</td>
-                          </tr>
-                        ))}
+                        {importResult.errorRows.map(
+                          (errorRow: CsvErrorRow, index: number) => (
+                            <tr
+                              key={index}
+                              className="border-t border-red-100 hover:bg-red-50"
+                            >
+                              <td className="px-3 py-2 font-mono text-red-600 font-medium">
+                                {errorRow.row}
+                              </td>
+                              <td className="px-3 py-2 text-red-600">
+                                {errorRow.reason}
+                              </td>
+                            </tr>
+                          ),
+                        )}
                       </tbody>
                     </table>
                   </div>
                 </div>
               )}
+
+              {/* Lista de avisos de imagem por linha */}
+              {importResult.warningRows &&
+                importResult.warningRows.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-sm font-semibold text-yellow-700 mb-2">
+                      Avisos de imagem ({importResult.warningRows.length})
+                    </p>
+                    <div className="max-h-48 overflow-y-auto rounded-lg border border-yellow-200">
+                      <table className="w-full text-sm">
+                        <thead className="bg-yellow-100 sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-yellow-800 font-medium w-20">
+                              Linha
+                            </th>
+                            <th className="px-3 py-2 text-left text-yellow-800 font-medium">
+                              Detalhes
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white">
+                          {importResult.warningRows.map(
+                            (warnRow: CsvErrorRow, index: number) => (
+                              <tr
+                                key={index}
+                                className="border-t border-yellow-100 hover:bg-yellow-50"
+                              >
+                                <td className="px-3 py-2 font-mono text-yellow-700 font-medium">
+                                  {warnRow.row}
+                                </td>
+                                <td className="px-3 py-2 text-yellow-700">
+                                  <p>{warnRow.reason}</p>
+                                  {warnRow.imageWarnings &&
+                                    warnRow.imageWarnings.length > 0 && (
+                                      <ul className="mt-1 space-y-0.5">
+                                        {warnRow.imageWarnings.map((w, i) => (
+                                          <li
+                                            key={i}
+                                            className="text-xs text-yellow-600 flex items-start gap-1"
+                                          >
+                                            <span className="w-1 h-1 mt-1.5 bg-yellow-400 rounded-full flex-shrink-0"></span>
+                                            {w}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                </td>
+                              </tr>
+                            ),
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
 
               {/* Botão de concluir quando importação foi bem-sucedida */}
               {importResult.errorCount === 0 && onSuccess && (

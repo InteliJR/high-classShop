@@ -125,12 +125,40 @@ export class S3Service {
    */
   async uploadFromUrl(imageUrl: string, key: string): Promise<string> {
     try {
+      // Validar protocolo (apenas http/https)
+      const parsedUrl = new URL(imageUrl);
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        throw new Error('Apenas URLs http/https são permitidas');
+      }
+
+      // Bloquear IPs privados/locais (proteção SSRF básica)
+      const hostname = parsedUrl.hostname.toLowerCase();
+      const blockedPatterns = [
+        /^localhost$/,
+        /^127\./,
+        /^10\./,
+        /^172\.(1[6-9]|2\d|3[01])\./,
+        /^192\.168\./,
+        /^0\./,
+        /^169\.254\./,
+        /^\[::1\]$/,
+        /^metadata\.google/,
+      ];
+      if (blockedPatterns.some((pattern) => pattern.test(hostname))) {
+        throw new Error('URLs para endereços internos não são permitidas');
+      }
+
+      // Timeout de 15 segundos
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15_000);
+
       // Fetch da imagem
       const response = await fetch(imageUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; ImageBot/1.0)',
         },
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

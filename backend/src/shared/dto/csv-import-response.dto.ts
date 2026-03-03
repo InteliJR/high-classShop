@@ -8,6 +8,8 @@ export interface CsvErrorRow {
   reason: string;
   /** Campos da linha que causaram o erro (para debug/exibição) */
   fields?: Record<string, any>;
+  /** Avisos de imagem (falhas parciais — produto criado, mas algumas imagens falharam) */
+  imageWarnings?: string[];
 }
 
 /**
@@ -20,10 +22,14 @@ export interface CsvImportResponseDto {
   message: string;
   /** Quantidade de produtos inseridos com sucesso */
   insertedCount: number;
-  /** Quantidade de linhas com erro */
+  /** Quantidade de linhas com erro (produto não criado) */
   errorCount: number;
+  /** Quantidade de produtos criados com avisos de imagem */
+  warningCount: number;
   /** Detalhes de cada linha com erro */
   errorRows: CsvErrorRow[];
+  /** Produtos criados com falhas parciais de imagem */
+  warningRows: CsvErrorRow[];
   /** IDs dos produtos inseridos (opcional) */
   insertedIds?: number[];
 }

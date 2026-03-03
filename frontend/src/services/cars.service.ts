@@ -63,7 +63,7 @@ export interface UpdateCarDto extends Partial<CreateCarDto> {}
 export async function getCars(
   page = 1,
   perPage = 20,
-  appliedFilters: Partial<FiltersCarMeta> = {}
+  appliedFilters: Partial<FiltersCarMeta> = {},
 ): Promise<{
   cars: Product[];
   pagination: PaginationMeta;
@@ -74,7 +74,7 @@ export async function getCars(
       "/cars",
       {
         params: { page, perPage, ...appliedFilters },
-      }
+      },
     );
 
     //Extrai a respota da api
@@ -136,7 +136,10 @@ export async function createCar(data: CreateCarDto): Promise<RawCar> {
 }
 
 // Patch /cars/:id
-export async function updateCar(id: number, data: UpdateCarDto): Promise<RawCar> {
+export async function updateCar(
+  id: number,
+  data: UpdateCarDto,
+): Promise<RawCar> {
   try {
     const response = await api.patch<RawCar>(`/cars/${id}`, data);
     return response.data;
@@ -161,6 +164,7 @@ export interface CsvErrorRow {
   row: number;
   reason: string;
   fields?: Record<string, any>;
+  imageWarnings?: string[];
 }
 
 export interface CsvImportResponse {
@@ -168,7 +172,9 @@ export interface CsvImportResponse {
   message: string;
   insertedCount: number;
   errorCount: number;
+  warningCount: number;
   errorRows: CsvErrorRow[];
+  warningRows: CsvErrorRow[];
   insertedIds?: number[];
 }
 
@@ -198,12 +204,16 @@ export async function importCarsCsv(file: File): Promise<CsvImportResponse> {
   try {
     const formData = new FormData();
     formData.append("file", file);
-    
-    const response = await api.post<CsvImportResponse>("/cars/import-csv", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
+
+    const response = await api.post<CsvImportResponse>(
+      "/cars/import-csv",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
       },
-    });
+    );
     return response.data;
   } catch (error: any) {
     console.error("Erro ao importar CSV:", error);

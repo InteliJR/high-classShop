@@ -44,7 +44,7 @@ export class AircraftsService {
     { name: 'assentos', required: false, type: 'number' },
     { name: 'tipo_aeronave', required: false, type: 'string' },
     { name: 'descricao', required: false, type: 'string' },
-    { name: 'imagem', required: false, type: 'string' }, // URL ou base64
+    { name: 'imagens', required: false, type: 'string' }, // URLs ou base64 separadas por | (pipe)
   ];
 
   constructor(
@@ -391,7 +391,7 @@ export class AircraftsService {
 
     const templateHeader = this.csvColumns.map((c) => c.name).join(',');
     const exampleRow =
-      'Embraer,Phenom 300,15000000,São Paulo,2021,Light Jet,8,Jato Executivo,Aeronave com baixas horas de voo e interior renovado,https://example.com/imagem.jpg';
+      'Embraer,Phenom 300,15000000,São Paulo,2021,Light Jet,8,Jato Executivo,Aeronave com baixas horas de voo e interior renovado,https://example.com/img1.jpg|https://example.com/img2.jpg';
 
     return {
       template: `${templateHeader}\n${exampleRow}`,
@@ -410,7 +410,8 @@ export class AircraftsService {
         tipo_aeronave:
           'Tipo: Jato Executivo, Turboélice, Helicóptero, etc (opcional)',
         descricao: 'Descrição detalhada da aeronave (texto, opcional)',
-        imagem: 'URL da imagem ou string base64 (opcional)',
+        imagens:
+          'URLs de imagens separadas por | (pipe). Primeira imagem será a principal. Ex: https://img1.jpg|https://img2.jpg (opcional)',
       },
       example: {
         marca: 'Embraer',
@@ -422,7 +423,7 @@ export class AircraftsService {
         assentos: 8,
         tipo_aeronave: 'Jato Executivo',
         descricao: 'Aeronave com baixas horas de voo e interior renovado',
-        imagem: 'https://example.com/imagem.jpg',
+        imagens: 'https://example.com/img1.jpg|https://example.com/img2.jpg',
       },
     };
   }
@@ -454,6 +455,7 @@ export class AircraftsService {
 
     const insertedIds: number[] = [];
     const errorRows: CsvErrorRow[] = [];
+    const warningRows: CsvErrorRow[] = [];
 
     // 3. Processar cada linha
     for (let i = 0; i < rows.length; i++) {
@@ -513,28 +515,47 @@ export class AircraftsService {
           },
         });
 
-        // Processar imagem se fornecida
-        if (row.imagem && row.imagem.trim()) {
-          try {
-            const timestamp = Date.now();
-            const key = `aircrafts/${aircraft.id}/${timestamp}-0.jpg`;
-            const imageKey = await this.s3Service.uploadImageAuto(
-              row.imagem,
-              key,
-            );
+        // Processar imagens (suporte a múltiplas URLs separadas por |)
+        const imageUrls = this.csvImportService.parseDelimitedImages(
+          row.imagens || row.imagem, // retrocompatível com coluna 'imagem'
+        );
 
-            await this.prismaService.aircraft_image.create({
-              data: {
-                aircraft_id: aircraft.id,
-                image_url: imageKey,
-                is_primary: true,
-                product_type: 'AIRCRAFT',
-              },
+        if (imageUrls.length > 0) {
+          const imageErrors: string[] = [];
+          let successCount = 0;
+
+          for (let imgIdx = 0; imgIdx < imageUrls.length; imgIdx++) {
+            try {
+              const timestamp = Date.now();
+              const key = `aircrafts/${aircraft.id}/${timestamp}-${imgIdx}.jpg`;
+              const imageKey = await this.s3Service.uploadImageAuto(
+                imageUrls[imgIdx],
+                key,
+              );
+
+              await this.prismaService.aircraft_image.create({
+                data: {
+                  aircraft_id: aircraft.id,
+                  image_url: imageKey,
+                  is_primary: imgIdx === 0,
+                  product_type: 'AIRCRAFT',
+                },
+              });
+              successCount++;
+            } catch (imageError) {
+              imageErrors.push(
+                `Imagem ${imgIdx + 1}: ${imageError.message || 'Erro desconhecido'}`,
+              );
+            }
+          }
+
+          if (imageErrors.length > 0) {
+            warningRows.push({
+              row: rowNumber,
+              reason: `Produto criado (${successCount}/${imageUrls.length} imagens processadas)`,
+              fields: row,
+              imageWarnings: imageErrors,
             });
-          } catch (imageError) {
-            console.warn(
-              `Erro ao processar imagem para aeronave ${aircraft.id}: ${imageError.message}`,
-            );
           }
         }
 
@@ -548,6 +569,10 @@ export class AircraftsService {
       }
     }
 
-    return this.csvImportService.createResponse(insertedIds, errorRows);
+    return this.csvImportService.createResponse(
+      insertedIds,
+      errorRows,
+      warningRows,
+    );
   }
 }

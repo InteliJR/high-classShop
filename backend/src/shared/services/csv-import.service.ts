@@ -23,21 +23,25 @@ export class CsvImportService {
    * Parseia o conteúdo CSV para um array de objetos
    */
   parseCSV(csvContent: string): CsvParsedRow[] {
-    const lines = csvContent.split(/\r?\n/).filter(line => line.trim());
-    
+    const lines = csvContent.split(/\r?\n/).filter((line) => line.trim());
+
     if (lines.length < 2) {
-      throw new BadRequestException('CSV deve conter pelo menos o cabeçalho e uma linha de dados.');
+      throw new BadRequestException(
+        'CSV deve conter pelo menos o cabeçalho e uma linha de dados.',
+      );
     }
 
     // Parse do header - suporta vírgula e ponto-e-vírgula como delimitador
     const delimiter = lines[0].includes(';') ? ';' : ',';
-    const headers = this.parseCsvLine(lines[0], delimiter).map(h => h.trim().toLowerCase());
+    const headers = this.parseCsvLine(lines[0], delimiter).map((h) =>
+      h.trim().toLowerCase(),
+    );
 
     // Parse das linhas de dados
     const rows: CsvParsedRow[] = [];
     for (let i = 1; i < lines.length; i++) {
       const values = this.parseCsvLine(lines[i], delimiter);
-      
+
       if (values.length !== headers.length) {
         continue; // Ignora linhas com número incorreto de colunas (será reportado na validação)
       }
@@ -62,7 +66,7 @@ export class CsvImportService {
 
     for (let i = 0; i < line.length; i++) {
       const char = line[i];
-      
+
       if (char === '"') {
         if (inQuotes && line[i + 1] === '"') {
           current += '"';
@@ -78,7 +82,7 @@ export class CsvImportService {
       }
     }
     result.push(current);
-    
+
     return result;
   }
 
@@ -87,10 +91,10 @@ export class CsvImportService {
    */
   validateStructure(
     csvContent: string,
-    columnDefinitions: CsvColumnDefinition[]
+    columnDefinitions: CsvColumnDefinition[],
   ): CsvStructureValidation {
-    const lines = csvContent.split(/\r?\n/).filter(line => line.trim());
-    
+    const lines = csvContent.split(/\r?\n/).filter((line) => line.trim());
+
     if (lines.length === 0) {
       return {
         valid: false,
@@ -102,27 +106,30 @@ export class CsvImportService {
     }
 
     const delimiter = lines[0].includes(';') ? ';' : ',';
-    const foundColumns = this.parseCsvLine(lines[0], delimiter)
-      .map(h => h.trim().toLowerCase());
+    const foundColumns = this.parseCsvLine(lines[0], delimiter).map((h) =>
+      h.trim().toLowerCase(),
+    );
 
     const requiredColumns = columnDefinitions
-      .filter(c => c.required)
-      .map(c => c.name.toLowerCase());
+      .filter((c) => c.required)
+      .map((c) => c.name.toLowerCase());
 
-    const knownColumns = columnDefinitions.map(c => c.name.toLowerCase());
+    const knownColumns = columnDefinitions.map((c) => c.name.toLowerCase());
 
     const missingRequired = requiredColumns.filter(
-      col => !foundColumns.includes(col)
+      (col) => !foundColumns.includes(col),
     );
 
     const unknownColumns = foundColumns.filter(
-      col => !knownColumns.includes(col) && col !== ''
+      (col) => !knownColumns.includes(col) && col !== '',
     );
 
     const errors: string[] = [];
-    
+
     if (missingRequired.length > 0) {
-      errors.push(`Colunas obrigatórias faltando: ${missingRequired.join(', ')}`);
+      errors.push(
+        `Colunas obrigatórias faltando: ${missingRequired.join(', ')}`,
+      );
     }
 
     if (unknownColumns.length > 0) {
@@ -130,7 +137,9 @@ export class CsvImportService {
     }
 
     if (lines.length < 2) {
-      errors.push('CSV deve conter pelo menos uma linha de dados além do cabeçalho.');
+      errors.push(
+        'CSV deve conter pelo menos uma linha de dados além do cabeçalho.',
+      );
     }
 
     return {
@@ -148,11 +157,11 @@ export class CsvImportService {
   async validateRow<T extends object>(
     row: CsvParsedRow,
     DtoClass: new () => T,
-    rowNumber: number
+    rowNumber: number,
   ): Promise<{ valid: boolean; errors: string[]; instance?: T }> {
     // Converte tipos antes de validar
     const converted = this.convertTypes(row);
-    
+
     // Cria instância do DTO
     const instance = plainToInstance(DtoClass, converted, {
       enableImplicitConversion: true,
@@ -170,6 +179,32 @@ export class CsvImportService {
     }
 
     return { valid: true, errors: [], instance };
+  }
+
+  /**
+   * Parseia um campo delimitado por pipe (|) para obter múltiplas URLs/base64 de imagem.
+   * @param value Valor da coluna 'imagens' (pode ser null/undefined/vazio)
+   * @param delimiter Caractere delimitador (default: '|')
+   * @param maxImages Limite máximo de imagens por produto (default: 20)
+   * @returns Array de strings (URLs ou base64), vazio se não houver imagens
+   */
+  parseDelimitedImages(
+    value: string | null | undefined,
+    delimiter = '|',
+    maxImages = 20,
+  ): string[] {
+    if (!value || !value.trim()) return [];
+
+    const images = value
+      .split(delimiter)
+      .map((img) => img.trim())
+      .filter((img) => img.length > 0);
+
+    if (images.length > maxImages) {
+      return images.slice(0, maxImages);
+    }
+
+    return images;
   }
 
   /**
@@ -230,23 +265,28 @@ export class CsvImportService {
    */
   createResponse(
     insertedIds: number[],
-    errorRows: CsvErrorRow[]
+    errorRows: CsvErrorRow[],
+    warningRows: CsvErrorRow[] = [],
   ): CsvImportResponseDto {
     const insertedCount = insertedIds.length;
     const errorCount = errorRows.length;
+    const warningCount = warningRows.length;
     const total = insertedCount + errorCount;
 
     let message: string;
     let success: boolean;
 
-    if (errorCount === 0) {
+    if (errorCount === 0 && warningCount === 0) {
       message = `Importação concluída com sucesso. ${insertedCount} produto(s) inserido(s).`;
+      success = true;
+    } else if (errorCount === 0 && warningCount > 0) {
+      message = `Importação concluída com avisos. ${insertedCount} produto(s) inserido(s), ${warningCount} com falhas parciais de imagem.`;
       success = true;
     } else if (insertedCount === 0) {
       message = `Importação falhou. Nenhum produto foi inserido. ${errorCount} erro(s) encontrado(s).`;
       success = false;
     } else {
-      message = `Importação parcial. ${insertedCount} de ${total} produto(s) inserido(s). ${errorCount} erro(s).`;
+      message = `Importação parcial. ${insertedCount} de ${total} produto(s) inserido(s). ${errorCount} erro(s).${warningCount > 0 ? ` ${warningCount} com avisos de imagem.` : ''}`;
       success = true;
     }
 
@@ -255,7 +295,9 @@ export class CsvImportService {
       message,
       insertedCount,
       errorCount,
+      warningCount,
       errorRows,
+      warningRows,
       insertedIds,
     };
   }
