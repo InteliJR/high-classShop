@@ -1,0 +1,1073 @@
+// Schema Prisma do high-classShop: plataforma de marketplace para veículos, embarcações e aeronaves de luxo
+// Documentação: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ╔═══════════════════════════════════════════════════════════════════════════╗
+// ║                        ENUMERAÇÕES / ENUMS                                ║
+// ║              (NÚCLEO → PRODUTO → PROCESSOS → AGENDAMENTOS → INTERESSES)   ║
+// ╚═══════════════════════════════════════════════════════════════════════════╝
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ NÚCLEO (Core)
+// ─────────────────────────────────────────────────────────────────────────────
+// • CivilState: estado civil do usuário
+// • UserRole: papéis de autorização e propriedade de recursos
+// • ProductType: categorias principais de produto
+// • ProcessStatus: etapas do fluxo de processo de venda
+// • ContractStatus: status legal do contrato
+// • SignatureType: tipos de assinatura digital
+// • ProviderStatus: estados do envelope do provedor de assinatura
+// • ProcessCompletionReason: motivo de conclusão do processo
+
+// === Core Enums ===
+// CivilState: estado civil do usuário
+enum CivilState {
+  SINGLE       @map("SINGLE")
+  MARRIED      @map("MARRIED")
+  DIVORCED     @map("DIVORCED")
+  WIDOWED      @map("WIDOWED")
+  SEPARATED    @map("SEPARATED")
+  STABLE_UNION @map("STABLE_UNION")
+}
+
+// UserRole: papéis de autorização e propriedade de recursos
+enum UserRole {
+  CUSTOMER   @map("CUSTOMER")
+  CONSULTANT @map("CONSULTANT")
+  SPECIALIST @map("SPECIALIST")
+  ADMIN      @map("ADMIN")
+}
+
+// ProductType: categorias principais de produto
+enum ProductType {
+  CAR      @map("CAR")
+  BOAT     @map("BOAT")
+  AIRCRAFT @map("AIRCRAFT")
+}
+
+// ProcessStatus: etapas do fluxo de processos de venda
+enum ProcessStatus {
+  SCHEDULING          @map("SCHEDULING")
+  NEGOTIATION         @map("NEGOTIATION")
+  PROCESSING_CONTRACT @map("PROCESSING_CONTRACT")
+  DOCUMENTATION       @map("DOCUMENTATION")
+  COMPLETED           @map("COMPLETED")
+  REJECTED            @map("REJECTED")
+}
+
+// ContractStatus: status de documento legal
+enum ContractStatus {
+  PENDING  @map("PENDING")
+  REJECTED @map("REJECTED")
+  SIGNED   @map("SIGNED")
+}
+
+// SignatureType: métodos de assinatura digital (Simples, Avançada, Qualificada)
+enum SignatureType {
+  SIMPLE
+  ADVANCED
+  QUALIFIED
+}
+
+// ProviderStatus: estados do envelope do provedor de assinatura (DocuSign, etc.)
+enum ProviderStatus {
+  CREATED   @map("created")
+  SENT      @map("sent")
+  DELIVERED @map("delivered")
+  COMPLETED @map("completed")
+  DECLINED  @map("declined")
+  VOIDED    @map("voided")
+  TIMEDOUT  @map("timeout")
+  ERROR     @map("error")
+}
+
+// ProcessCompletionReason: motivo pelo qual um processo foi concluído
+enum ProcessCompletionReason {
+  CONTRACT_SIGNED   @map("CONTRACT_SIGNED")
+  CLIENT_DECLINED   @map("CLIENT_DECLINED")
+  CONTRACT_VOIDED   @map("CONTRACT_VOIDED")
+  CONTRACT_TIMEDOUT @map("CONTRACT_TIMEDOUT")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ PROPOSTAS DE NEGOCIAÇÃO
+// ─────────────────────────────────────────────────────────────────────────────
+// ProposalStatus: estados possíveis de uma proposta de valor
+// - PENDING: aguardando resposta do outro participante
+// - ACCEPTED: proposta aceita (encerra negociação, move processo para PROCESSING_CONTRACT)
+// - REJECTED: proposta rejeitada (permite nova proposta do mesmo participante)
+// - COUNTERED: foi feita uma contraproposta (esta proposta não está mais ativa)
+
+enum ProposalStatus {
+  PENDING   @map("PENDING")
+  ACCEPTED  @map("ACCEPTED")
+  REJECTED  @map("REJECTED")
+  COUNTERED @map("COUNTERED")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ PRODUTO (Product Enums)
+// ─────────────────────────────────────────────────────────────────────────────
+// • EstadoProduto: condição do produto
+// • TipoCategoriaCarro: categorias de automóvel
+// • TipoEmbarcacaoProduto: tipos de embarcação
+// • TipoAeronaveProduto: categorias de aeronave
+
+// === Product Enums ===
+// EstadoProduto: condição do produto (novo, seminovo, coleção)
+enum EstadoProduto {
+  NOVO     @map("novo")
+  SEMINOVO @map("seminovo")
+  COLECAO  @map("colecao")
+}
+
+// TipoCategoriaCarro: categorias de automóvel
+enum TipoCategoriaCarro {
+  SUV         @map("SUV")
+  SEDAN       @map("sedan")
+  COUPE       @map("coupe")
+  CONVERSIVEL @map("conversivel")
+  ESPORTIVO   @map("esportivo")
+  SUPERCARRO  @map("supercarro")
+}
+
+// TipoEmbarcacaoProduto: tipos de embarcação
+enum TipoEmbarcacaoProduto {
+  IATE     @map("iate")
+  LANCHA   @map("lancha")
+  CATAMARA @map("catamara")
+  VELEIRO  @map("veleiro")
+  JET_BOAT @map("jet_boat")
+  OUTRO    @map("outro")
+}
+
+// TipoAeronaveProduto: categorias de aeronave
+enum TipoAeronaveProduto {
+  VLJ              @map("VLJ")
+  EXECUTIVO_MEDIO  @map("executivo_medio")
+  INTERCONTINENTAL @map("intercontinental")
+  TURBOHELICE      @map("turbohelice")
+  HELICOPTERO      @map("helicoptero")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ PROCESSOS & AGENDAMENTOS
+// ─────────────────────────────────────────────────────────────────────────────
+// • TipoProdutoProcesso: tipo de produto em processos
+// • TipoProdutoAgendamento: tipo de produto em agendamentos
+// • StatusAgendamento: ciclo de vida do agendamento
+
+// === Process & Schedule Enums ===
+// TipoProdutoProcesso: tipo de produto para rastreamento de processos
+enum TipoProdutoProcesso {
+  CAR      @map("car")
+  BOAT     @map("boat")
+  AIRCRAFT @map("aircraft")
+}
+
+// TipoProdutoAgendamento: tipo de produto para agendamentos
+enum TipoProdutoAgendamento {
+  CAR      @map("car")
+  BOAT     @map("boat")
+  AIRCRAFT @map("aircraft")
+}
+
+// StatusAgendamento: ciclo de vida do agendamento
+// PENDING: cliente clicou no link do Calendly, aguardando confirmação do especialista
+// SCHEDULED: especialista confirmou o agendamento
+// COMPLETED: reunião realizada
+// CANCELLED: agendamento cancelado
+enum StatusAgendamento {
+  PENDING   @map("pending")
+  SCHEDULED @map("scheduled")
+  COMPLETED @map("completed")
+  CANCELLED @map("cancelled")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ INTERESSES (Preferências de Barcos)
+// ─────────────────────────────────────────────────────────────────────────────
+// Conjunto de enums para preferências de embarcações:
+// uso principal, foco, faixa de valor, status, tipo, tamanho, etc.
+
+enum UsoPrincipalBoatInterest {
+  LAZER                @map("lazer")
+  CRUZEIROS            @map("cruzeiros")
+  PESCA                @map("pesca")
+  EVENTOS              @map("eventos")
+  COLECAO_INVESTIMENTO @map("colecao_investimento")
+}
+
+enum PreferenciaFocoBoatInterest {
+  CONFORTO    @map("conforto")
+  PERFORMANCE @map("performance")
+  EQUILIBRIO  @map("equilibrio")
+}
+
+enum FaixaValorBoatInterest {
+  ATE_500K   @map("ate_500k")
+  DE_500K_1M @map("500k_1M")
+  ACIMA_1M   @map("acima_1M")
+}
+
+enum StatusBoatInterest {
+  NOVA             @map("nova")
+  SEMINOVA         @map("seminova")
+  COLECAO_RARIDADE @map("colecao_raridade")
+}
+
+enum TipoEmbarcacaoBoatInterest {
+  IATE     @map("iate")
+  LANCHA   @map("lancha")
+  CATAMARA @map("catamara")
+  VELEIRO  @map("veleiro")
+  JET_BOAT @map("jet_boat")
+  OUTRO    @map("outro")
+}
+
+enum TamanhoEmbarcacao {
+  ATE_30_PES   @map("ate_30_pes")
+  DE_30_50_PES @map("30_50_pes")
+  ACIMA_50_PES @map("acima_50_pes")
+}
+
+enum MotorBoatInterest {
+  DIESEL           @map("diesel")
+  GASOLINA         @map("gasolina")
+  ELETRICO_HIBRIDO @map("eletrico_hibrido")
+}
+
+enum CapacidadePessoasBoat {
+  DE_1_4 @map("1_4")
+  DE_5_8 @map("5_8")
+  MAIS_8 @map("mais_8")
+}
+
+enum CabinePernoiteBoat {
+  DAY_BOAT  @map("day_boat")
+  UMA_DUAS  @map("1_2_cabines")
+  MAIS_DUAS @map("mais_2_cabines")
+}
+
+enum ExperienciaNavegacao {
+  NENHUMA       @map("nenhuma")
+  BASICA        @map("basica")
+  MEDIO_PORTE   @map("medio_porte")
+  IATES_GRANDES @map("iates_grandes")
+}
+
+enum OperacaoEmbarcacao {
+  PESSOAL     @map("pessoal")
+  COM_AUXILIO @map("com_auxilio")
+  APENAS_CREW @map("apenas_crew_capitao")
+}
+
+enum MarinaPreferencia {
+  POSSUI            @map("possui")
+  PRECISA_INDICACAO @map("precisa_indicacao")
+  NAO_PRIORIDADE    @map("nao_prioridade")
+}
+
+enum PrazoAquisicaoBoat {
+  IMEDIATO @map("imediato")
+  CURTO    @map("curto")
+  MEDIO    @map("medio")
+  LONGO    @map("longo")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ INTERESSES (Preferências de Aeronaves)
+// ─────────────────────────────────────────────────────────────────────────────
+// Conjunto de enums para preferências de aeronaves:
+// uso principal, foco, faixa de valor, capacidade, autonomia, etc.
+
+enum UsoPrincipalAircraftInterest {
+  CORPORATIVO          @map("corporativo")
+  LAZER                @map("lazer")
+  TURISMO              @map("turismo")
+  TRANSPORTE_FAMILIA   @map("transporte_familia")
+  COLECAO_INVESTIMENTO @map("colecao_investimento")
+}
+
+enum PreferenciaFocoAircraft {
+  CONFORTO_LUXO @map("conforto_luxo")
+  PERFORMANCE   @map("performance")
+  EQUILIBRIO    @map("equilibrio")
+}
+
+enum FaixaValorAircraft {
+  ATE_5M    @map("ate_5M")
+  DE_5_20M  @map("5_20M")
+  ACIMA_20M @map("acima_20M")
+}
+
+enum StatusAircraft {
+  NOVA             @map("nova")
+  SEMINOVA         @map("seminova")
+  COLECAO_RARIDADE @map("colecao_raridade")
+}
+
+enum TipoAeronaveAircraft {
+  VLJ              @map("VLJ")
+  EXECUTIVO        @map("executivo")
+  INTERCONTINENTAL @map("intercontinental")
+  TURBOHELICE      @map("turbohelice")
+  HELICOPTERO      @map("helicoptero")
+  OUTRO            @map("outro")
+}
+
+enum AlcanceAutonomia {
+  CURTA @map("curta")
+  MEDIA @map("media")
+  LONGA @map("longa")
+}
+
+enum CapacidadePassageiros {
+  ATE_4  @map("ate_4")
+  DE_5_8 @map("5_8")
+  MAIS_8 @map("mais_8")
+}
+
+enum ExperienciaVoo {
+  NENHUMA                   @map("nenhuma")
+  AERONAVES_LEVES           @map("aeronaves_leves")
+  EXECUTIVOS_TURBOHELICES   @map("executivos_turbohelices")
+  GRANDES_INTERCONTINENTAIS @map("grandes_intercontinentais")
+}
+
+enum OperacaoAeronave {
+  PILOTAR_PESSOALMENTE @map("pilotar_pessoalmente")
+  COM_AUXILIO          @map("com_auxilio")
+  APENAS_CREW_PILOTO   @map("apenas_crew_piloto")
+}
+
+enum HangarPreferencia {
+  POSSUI            @map("possui")
+  PRECISA_INDICACAO @map("precisa_indicacao")
+  NAO_PRIORIDADE    @map("nao_prioridade")
+}
+
+enum ConfiguracaoCabine {
+  EXECUTIVA           @map("executiva")
+  PASSAGEIROS_FAMILIA @map("passageiros_familia")
+  OUTRA               @map("outra")
+}
+
+enum PrazoAquisicaoAircraft {
+  IMEDIATO @map("imediato")
+  CURTO    @map("curto")
+  MEDIO    @map("medio")
+  LONGO    @map("longo")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ ENUMS LEGADOS (Não utilizados atualmente)
+// ─────────────────────────────────────────────────────────────────────────────
+// Especialidade: especializações para veículos, embarcações e aeronaves
+
+// === Legacy/Unused Enum ===
+enum Especialidade {
+  CARROS    @map("carros")
+  BARCOS    @map("barcos")
+  AERONAVES @map("aeronaves")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ╔═══════════════════════════════════════════════════════════════════════════╗
+// ║                         MODELOS / MODELS                                  ║
+// ║   (Auth → Core → Produtos → Processos → Agendamentos → Interesses)        ║
+// ╚═══════════════════════════════════════════════════════════════════════════╝
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ AUTH & USUÁRIOS
+// ─────────────────────────────────────────────────────────────────────────────
+// User: representa usuários do sistema
+// Relações: Address, Company, Process, Contract, RefreshToken, Appointment, Interests
+
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  surname       String
+  email         String   @unique
+  cpf           String   @unique @db.VarChar(11)
+  rg            String   @unique @db.VarChar(10)
+  role          UserRole
+  password_hash String
+
+  civil_state           CivilState?
+  speciality            ProductType?
+  identification_number String?      @unique @db.VarChar(50)
+  commission_rate       Decimal?     @db.Decimal(5, 2) // Taxa individual (especialistas sem empresa)
+
+  address_id    String? @db.Uuid
+  consultant_id String? @db.Uuid
+  company_id    String? @db.Uuid
+
+  address    Address? @relation(fields: [address_id], references: [id])
+  consultant User?    @relation("ClientToConsultant", fields: [consultant_id], references: [id], onDelete: SetNull)
+  clients    User[]   @relation("ClientToConsultant")
+  company    Company? @relation(fields: [company_id], references: [id])
+
+  // Campo para integração com Calendly - especialistas armazenam seu link de agendamento
+  // Ex: https://calendly.com/nome-especialista
+  calendly_url String?
+
+  created_at               DateTime              @default(now())
+  updated_at               DateTime              @updatedAt
+  cars                     Car[]
+  boats                    Boat[]
+  aircraft                 Aircraft[]
+  processesAsClient        Process[]             @relation("process_as_client")
+  processesAsSpecialist    Process[]             @relation("process_as_specialist")
+  appointmentsAsClient     Appointment[]         @relation("appointment_as_client")
+  appointmentsAsSpecialist Appointment[]         @relation("appointment_as_specialist")
+  car_interests            Car_interest[]
+  boat_interests           Boat_interest[]
+  aircraft_interests       Aircraft_interest[]
+  refreshTokens            RefreshToken[]
+  created_contracts        Contract[]            @relation("contract_created_by")
+  signed_contracts         Contract[]            @relation("contract_signed_by")
+  process_rejections       ProcessRejection[]
+  // Propostas de negociação enviadas e recebidas pelo usuário
+  proposals_sent           NegotiationProposal[] @relation("proposal_author")
+  proposals_received       NegotiationProposal[] @relation("proposal_recipient")
+}
+
+// RefreshToken: tokens de sessão vinculados a usuários
+model RefreshToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  token      String   @unique
+  user_id    String   @db.Uuid
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  @@index([user_id])
+  @@index([token])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ ENTIDADES CORE
+// ─────────────────────────────────────────────────────────────────────────────
+// Address: endereços vinculados aos usuários
+// Company: empresas / consultorias que empregam consultores
+
+// === Core Entities ===
+model Address {
+  id           String @id @default(uuid()) @db.Uuid
+  street       String
+  number       String
+  neighborhood String
+  city         String
+  state        String
+  cep          String
+  country      String
+
+  users User[]
+}
+
+// Company: organizações / escritórios que empregam consultores e especialistas
+model Company {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String
+  cnpj            String   @unique
+  logo            String?
+  description     String?
+  commission_rate Decimal? @db.Decimal(5, 2) // Taxa de comissão do escritório (ex: 15.00 = 15%)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  users User[] // Consultores e Especialistas associados
+}
+
+// PlatformCompany: dados da empresa dona da plataforma (singleton)
+// Usada para preencher automaticamente a seção "Dados da Plataforma" nos contratos
+model PlatformCompany {
+  id                      String   @id @default(uuid()) @db.Uuid
+  name                    String // Razão Social
+  cnpj                    String   @db.VarChar(18)
+  bank                    String
+  agency                  String   @db.VarChar(10)
+  checking_account        String   @db.VarChar(20)
+  address                 String?
+  cep                     String?  @db.VarChar(9)
+  default_commission_rate Decimal  @db.Decimal(5, 2) // Taxa padrão de comissão (fallback)
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ PRODUTOS & IMAGENS
+// ─────────────────────────────────────────────────────────────────────────────
+// Car / Boat / Aircraft: inventário de veículos, embarcações e aeronaves de luxo
+// [Type]_image: imagens específicas por tipo de produto
+// Nota: ids Int com TODO para futura migração a UUID
+
+// === Products & Images ===
+// Car: inventário de automóveis de luxo
+// TODO: converter id Int para UUID em migração futura
+model Car {
+  id             Int      @id @default(autoincrement())
+  specialist_id  String?  @db.Uuid
+  marca          String
+  modelo         String
+  valor          Decimal
+  estado         String
+  ano            Int
+  descricao      String?
+  cor            String?
+  km             Int?
+  cambio         String?
+  combustivel    String?
+  tipo_categoria String?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  specialist User?       @relation(fields: [specialist_id], references: [id])
+  images     Car_image[]
+  processes  Process[]
+
+  @@index([specialist_id])
+}
+
+// Car_image: imagens associadas aos anúncios de Car
+model Car_image {
+  id           Int      @id @default(autoincrement())
+  product_type String
+  image_url    String
+  is_primary   Boolean  @default(false)
+  created_at   DateTime @default(now())
+
+  car_id Int?
+  car    Car? @relation(fields: [car_id], references: [id])
+
+  @@index([car_id])
+}
+
+// Boat: inventário de iates/embarcações de luxo
+// TODO: converter id Int para UUID em migração futura
+model Boat {
+  id                 Int      @id @default(autoincrement())
+  specialist_id      String?  @db.Uuid
+  marca              String
+  modelo             String
+  valor              Decimal
+  ano                Int
+  fabricante         String?
+  tamanho            String?
+  estilo             String?
+  combustivel        String?
+  motor              String?
+  ano_motor          Int?
+  descricao_completa String?
+  acessorios         String?
+  estado             String
+  tipo_embarcacao    String?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  specialist User?        @relation(fields: [specialist_id], references: [id])
+  images     Boat_image[]
+  processes  Process[]
+
+  @@index([specialist_id])
+}
+
+// Boat_image: imagens associadas aos anúncios de Boat
+model Boat_image {
+  id           Int      @id @default(autoincrement())
+  product_type String
+  image_url    String
+  is_primary   Boolean  @default(false)
+  created_at   DateTime @default(now())
+
+  boat_id Int?
+  boat    Boat? @relation(fields: [boat_id], references: [id])
+
+  @@index([boat_id])
+}
+
+// Aircraft: inventário de aeronaves de luxo
+// TODO: converter id Int para UUID em migração futura
+model Aircraft {
+  id            Int      @id @default(autoincrement())
+  specialist_id String?  @db.Uuid
+  categoria     String?
+  ano           Int
+  marca         String
+  modelo        String
+  assentos      Int?
+  estado        String
+  descricao     String?
+  valor         Decimal
+  tipo_aeronave String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  specialist User?            @relation(fields: [specialist_id], references: [id])
+  images     Aircraft_image[]
+  processes  Process[]
+
+  @@index([specialist_id])
+}
+
+// Aircraft_image: imagens associadas aos anúncios de Aircraft
+model Aircraft_image {
+  id           Int      @id @default(autoincrement())
+  product_type String
+  image_url    String
+  is_primary   Boolean  @default(false)
+  created_at   DateTime @default(now())
+
+  aircraft_id Int?
+  aircraft    Aircraft? @relation(fields: [aircraft_id], references: [id])
+
+  @@index([aircraft_id])
+}
+
+// Product: camada de abstração para entidades de produto (Car, Boat, Aircraft)
+// TODO: converter car_id, boat_id, aircraft_id para UUID quando IDs de produto migrarem
+model Product {
+  id          String      @id @default(uuid()) @db.Uuid
+  type        ProductType
+  car_id      Int?
+  boat_id     Int?
+  aircraft_id Int?
+
+  process   Process? @relation(fields: [processId], references: [id])
+  processId String?  @db.Uuid
+
+  @@index([processId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ PROCESSOS & CONTRATOS
+// ─────────────────────────────────────────────────────────────────────────────
+// Process: fluxo de negociação entre cliente, especialista e produto
+// ProcessStatusHistory: histórico de alterações de status
+// Contract: documentos digitais com integração a provedores de assinatura
+
+// === Processes & Contracts ===
+// Process: fluxo de negociação/venda vinculando cliente, especialista e produto
+// TODO: converter car_id, boat_id, aircraft_id para UUID em migração futura
+model Process {
+  id            String @id @default(uuid()) @db.Uuid
+  client_id     String @db.Uuid
+  specialist_id String @db.Uuid
+  car_id        Int?
+  aircraft_id   Int?
+  boat_id       Int?
+
+  product_id         String?       @db.Uuid
+  product_type       ProductType
+  active_contract_id String?       @unique @db.Uuid
+  status             ProcessStatus @default(SCHEDULING)
+  notes              String?
+  created_at         DateTime      @default(now())
+  updated_at         DateTime      @updatedAt
+
+  car      Car?      @relation(fields: [car_id], references: [id])
+  boat     Boat?     @relation(fields: [boat_id], references: [id])
+  aircraft Aircraft? @relation(fields: [aircraft_id], references: [id])
+
+  client     User @relation("process_as_client", fields: [client_id], references: [id], map: "fk_process_as_client")
+  specialist User @relation("process_as_specialist", fields: [specialist_id], references: [id], map: "fk_process_as_specialist")
+
+  active_contract Contract?  @relation("process_active_contract", fields: [active_contract_id], references: [id])
+  contracts       Contract[] @relation("process_contracts")
+
+  ProcessStatusHistory ProcessStatusHistory[]
+  rejections           ProcessRejection[]
+  products             Product[]
+  // Rastreabilidade: referência ao Appointment que originou este Process (Calendly integration)
+  // onDelete Cascade: se Appointment for deletado, Process também é deletado para manter integridade
+  appointment          Appointment?           @relation("appointment_process", fields: [appointment_id], references: [id], onDelete: Cascade)
+  appointment_id       String?                @unique @db.Uuid
+
+  // Propostas de negociação: histórico de propostas de valor entre cliente e especialista
+  // TODO: Implementar limite de propostas para evitar spam (sugestão: 20 por processo)
+  proposals            NegotiationProposal[] @relation("process_proposals")
+  // Proposta aceita final que definiu o valor de venda
+  accepted_proposal    NegotiationProposal?  @relation("accepted_proposal", fields: [accepted_proposal_id], references: [id])
+  accepted_proposal_id String?               @unique @db.Uuid
+
+  @@unique([client_id, specialist_id, car_id, boat_id, aircraft_id], name: "unique_active_product")
+  @@index([status])
+  @@index([product_type])
+  @@index([product_id])
+  @@index([created_at])
+}
+
+// ProcessStatusHistory: trilha de auditoria para alterações de status do processo
+model ProcessStatusHistory {
+  id         String                   @id @default(uuid())
+  process    Process                  @relation(fields: [processId], references: [id])
+  processId  String                   @db.Uuid
+  status     ProcessStatus            @default(SCHEDULING)
+  reason     ProcessCompletionReason?
+  changed_by String?                  @db.Uuid
+  changed_at DateTime                 @default(now())
+
+  @@index([processId])
+  @@index([changed_at])
+}
+
+// ProcessRejection: registro de rejeição de um processo com motivo textual
+model ProcessRejection {
+  id               String   @id @default(uuid()) @db.Uuid
+  process_id       String   @db.Uuid
+  rejected_by_id   String   @db.Uuid
+  rejection_reason String   @db.Text
+  rejected_at      DateTime @default(now())
+
+  process     Process @relation(fields: [process_id], references: [id], onDelete: Cascade)
+  rejected_by User    @relation(fields: [rejected_by_id], references: [id])
+
+  @@index([process_id])
+  @@index([rejected_by_id])
+  @@index([rejected_at])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ PROPOSTAS DE NEGOCIAÇÃO
+// ─────────────────────────────────────────────────────────────────────────────
+// NegotiationProposal: proposta de valor enviada durante fase NEGOTIATION
+// Funciona como um chat de propostas onde cliente e especialista alternam propostas
+// até chegarem a um acordo (ACCEPTED) ou desistirem (REJECTED)
+//
+// Regras de negócio:
+// - Valor mínimo: 80% do valor original do produto
+// - Alternância: após uma proposta, o outro participante deve responder
+// - Proposta PENDING: aguardando resposta
+// - Proposta ACCEPTED: encerra negociação, move processo para PROCESSING_CONTRACT
+// - Proposta REJECTED: permite nova proposta do mesmo participante
+// - Proposta COUNTERED: foi feita contraproposta, esta não está mais ativa
+//
+// TODO: Implementar limite de propostas para evitar spam (sugestão: 20 por processo)
+// TODO: Implementar timeout de resposta (ex: 48h para responder)
+// TODO: Adicionar notificações por email quando nova proposta chegar
+
+model NegotiationProposal {
+  id             String         @id @default(uuid()) @db.Uuid
+  process_id     String         @db.Uuid
+  proposed_by_id String         @db.Uuid
+  proposed_to_id String         @db.Uuid
+  // Valor proposto em Decimal para precisão monetária
+  // Validação: deve ser >= 80% do valor do produto (validado no backend)
+  proposed_value Decimal        @db.Decimal(15, 2)
+  status         ProposalStatus @default(PENDING)
+  // Mensagem opcional para contextualizar a proposta (max 500 chars, validado no DTO)
+  message        String?        @db.VarChar(500)
+  // Referência à proposta anterior que esta responde (para histórico encadeado)
+  counter_to_id  String?        @db.Uuid
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
+
+  // Relações
+  process             Process               @relation("process_proposals", fields: [process_id], references: [id], onDelete: Cascade)
+  proposed_by         User                  @relation("proposal_author", fields: [proposed_by_id], references: [id])
+  proposed_to         User                  @relation("proposal_recipient", fields: [proposed_to_id], references: [id])
+  counter_to          NegotiationProposal?  @relation("counter_proposals", fields: [counter_to_id], references: [id])
+  counter_proposals   NegotiationProposal[] @relation("counter_proposals")
+  // Relação inversa: processo que aceitou esta proposta como final
+  accepted_by_process Process?              @relation("accepted_proposal")
+
+  @@index([process_id])
+  @@index([proposed_by_id])
+  @@index([proposed_to_id])
+  @@index([status])
+  @@index([created_at])
+}
+
+// Contract: documentos digitais com integração a provedores de assinatura (DocuSign, etc.)
+// Atualizado para suportar geração via formulário (form-based) além de upload PDF
+model Contract {
+  id          String  @id @default(uuid()) @db.Uuid
+  process_id  String  @db.Uuid
+  description String?
+
+  // Provider (DocuSign)
+  provider_name   String?
+  provider_id     String?
+  provider_status ProviderStatus?
+  provider_meta   Json?
+
+  // Campos de arquivo (opcionais - para retrocompatibilidade com upload PDF)
+  file_name        String?
+  file_path        String?
+  file_type        String?
+  file_size        Int?
+  original_pdf_url String?
+
+  // === DADOS DO FORMULÁRIO DE CONTRATO (form-based) ===
+  // Vendedor (Seller) - inicialmente pré-preenchido com dados do especialista
+  seller_name             String?
+  seller_cpf              String? @db.VarChar(14)
+  seller_rg               String?
+  seller_address          String?
+  seller_cep              String? @db.VarChar(9)
+  seller_bank             String?
+  seller_agency           String?
+  seller_checking_account String?
+
+  // Comprador (Buyer) - pré-preenchido com dados do cliente
+  buyer_name    String?
+  buyer_cpf     String? @db.VarChar(14)
+  buyer_rg      String?
+  buyer_address String?
+  buyer_cep     String? @db.VarChar(9)
+
+  // Veículo/Produto
+  vehicle_model                 String?
+  vehicle_year                  String?
+  vehicle_registration_id       String? // placa (CAR), inscrição (BOAT), prefixo (AIRCRAFT)
+  vehicle_serial_number         String? // chassi (CAR), hull_number (BOAT), serial (AIRCRAFT)
+  vehicle_technical_information String?
+  vehicle_price                 Decimal? @db.Decimal(15, 2)
+  vehicle_price_written         String?  @db.VarChar(500)
+
+  // Pagamento ao Vendedor
+  payment_seller_value         Decimal? @db.Decimal(15, 2)
+  payment_seller_value_written String?  @db.VarChar(500)
+
+  // Comissão da Plataforma
+  commission_value            Decimal? @db.Decimal(15, 2)
+  commission_value_written    String?  @db.VarChar(500)
+  commission_name             String?
+  commission_cpf              String?  @db.VarChar(18) // CNPJ formatado
+  commission_bank             String?
+  commission_agency           String?
+  commission_checking_account String?
+
+  // Cidade de assinatura
+  city String?
+
+  // Template usado (DocuSign template ID)
+  template_id    String?
+  // URL do PDF assinado (após assinatura no DocuSign)
+  signed_pdf_url String?
+
+  // Status do contrato
+  status          ContractStatus @default(PENDING)
+  rejected_reason String?
+  signed_at       DateTime?
+  signature_type  SignatureType?
+
+  // Relacionamentos
+  active_of_process Process? @relation("process_active_contract")
+  process           Process  @relation("process_contracts", fields: [process_id], references: [id])
+
+  uploaded_by_id   String   @db.Uuid
+  uploaded_by_type UserRole
+  uploaded_by      User     @relation("contract_created_by", fields: [uploaded_by_id], references: [id])
+
+  signed_by_id String? @db.Uuid
+  signed_by    User?   @relation("contract_signed_by", fields: [signed_by_id], references: [id])
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([process_id])
+  @@index([uploaded_by_id])
+  @@index([provider_status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ AGENDAMENTOS
+// ─────────────────────────────────────────────────────────────────────────────
+// Appointment: reuniões agendadas entre cliente e especialista
+// Para Calendly: cliente acessa link do especialista externamente, retorna à plataforma
+// e confirma o agendamento. Sistema cria automaticamente Process em status SCHEDULING.
+
+// === Appointments ===
+// Appointment: reuniões agendadas entre cliente e especialista
+// Estrutura simplificada para Calendly: cliente agenda via link externo, confirma no sistema
+// - id: UUID para consistência com resto do sistema
+// - appointment_datetime: ISO 8601 em UTC. Frontend converte para horário local do usuário
+// - status: StatusAgendamento enum (SCHEDULED, COMPLETED, CANCELLED)
+// - product_type: tipo do produto (car, boat, aircraft) - obrigatório
+// - product_id: identificador do produto (car_id, boat_id ou aircraft_id) - obrigatório
+// - notes: anotações opcionais sobre o agendamento
+model Appointment {
+  id            String      @id @default(uuid()) @db.Uuid
+  client_id     String      @db.Uuid
+  specialist_id String      @db.Uuid
+  product_type  ProductType // CAR, BOAT ou AIRCRAFT
+  product_id    Int // id do Car, Boat ou Aircraft específico
+
+  // Data e hora do agendamento em UTC (ISO 8601)
+  // Exemplo: "2024-10-10T14:00:00Z"
+  // Frontend: converte para horário local do usuário ao exibir
+  // Opcional para status PENDING (cliente ainda não informou)
+  appointment_datetime DateTime?
+
+  // Status do agendamento (default PENDING para novo fluxo)
+  status StatusAgendamento @default(PENDING)
+
+  // Anotações sobre o agendamento (ex: "Test drive do Ferrari F8")
+  notes String?
+
+  // Campos para fluxo PENDING:
+  // - user_clicked_at: momento que cliente clicou no link do Calendly
+  // - pending_expires_at: expiração do pending (opcional, 7 dias após criação)
+  // - confirmed_at: momento da confirmação pelo especialista
+  // - confirmed_by_id: UUID do especialista que confirmou
+  user_clicked_at    DateTime  @default(now())
+  pending_expires_at DateTime?
+  confirmed_at       DateTime?
+  confirmed_by_id    String?   @db.Uuid
+
+  // Rastreabilidade e auditoria
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relacionamentos
+  client     User @relation("appointment_as_client", fields: [client_id], references: [id], map: "fk_appointment_as_client")
+  specialist User @relation("appointment_as_specialist", fields: [specialist_id], references: [id], map: "fk_appointment_as_specialist")
+
+  // Process vinculado a este agendamento (criado automaticamente ao confirmar)
+  // Uma-para-um: cada Appointment está associado a um Process
+  process Process? @relation("appointment_process")
+
+  @@index([client_id])
+  @@index([specialist_id])
+  @@index([appointment_datetime])
+  @@index([status])
+  @@index([product_type])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ INTERESSES (Preferências dos clientes)
+// ─────────────────────────────────────────────────────────────────────────────
+// Car_interest / Boat_interest / Aircraft_interest: critérios e preferências de busca
+
+// === Interests (Client Preferences) ===
+// Car_interest: preferências de cliente e critérios de busca para veículos
+model Car_interest {
+  id                      Int      @id @default(autoincrement())
+  client_id               String?  @db.Uuid
+  uso_principal           String?
+  preferencia_foco        String?
+  faixa_valor             String?
+  status                  String?
+  marca_preferida         String?
+  modelo_preferido        String?
+  perfil_veiculo          String?
+  blindagem               Boolean?
+  carroceria              String?
+  fator_importante        String?
+  recursos_indispensaveis String?
+  estilo_viagem           String?
+  mensagem_imagem         String?
+  prazo_aquisicao         String?
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+
+  client User? @relation(fields: [client_id], references: [id])
+
+  @@index([client_id])
+}
+
+// Boat_interest: preferências de cliente e critérios de busca para embarcações
+model Boat_interest {
+  id                      Int      @id @default(autoincrement())
+  client_id               String?  @db.Uuid
+  uso_principal           String?
+  preferencia_foco        String?
+  faixa_valor             String?
+  status                  String?
+  marca_preferida         String?
+  modelo_preferido        String?
+  tipo_embarcacao         String?
+  tamanho_embarcacao      String?
+  motor                   String?
+  capacidade_pessoas      String?
+  cabine_pernoite         String?
+  experiencia_navegacao   String?
+  operacao_embarcacao     String?
+  marina_preferencia      String?
+  recursos_indispensaveis String?
+  prazo_aquisicao         String?
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+
+  client User? @relation(fields: [client_id], references: [id])
+
+  @@index([client_id])
+}
+
+// Aircraft_interest: preferências de cliente e critérios de busca para aeronaves
+model Aircraft_interest {
+  id                      Int      @id @default(autoincrement())
+  client_id               String?  @db.Uuid
+  uso_principal           String?
+  preferencia_foco        String?
+  faixa_valor             String?
+  status                  String?
+  marca_preferida         String?
+  modelo_preferido        String?
+  tipo_aeronave           String?
+  alcance_autonomia       String?
+  capacidade_passageiros  String?
+  experiencia_voo         String?
+  operacao_aeronave       String?
+  hangar_preferencia      String?
+  configuracao_cabine     String?
+  recursos_indispensaveis String?
+  prazo_aquisicao         String?
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+
+  client User? @relation(fields: [client_id], references: [id])
+
+  @@index([client_id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▸ CONFIGURAÇÕES DO SISTEMA (Settings)
+// ─────────────────────────────────────────────────────────────────────────────
+// Settings: configurações key-value para administração do sistema
+// Permite ativar/desativar funcionalidades e configurar parâmetros
+// Chaves importantes:
+// - minimum_proposal_enabled: ativa validação de valor mínimo em propostas
+// - minimum_proposal_percentage: porcentagem mínima (ex: 0.8 = 80%)
+
+model Settings {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique
+  value       String
+  description String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([key])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ╔═══════════════════════════════════════════════════════════════════════════╗
+// ║                         NOTAS & TODOs                                     ║
+// ╚═══════════════════════════════════════════════════════════════════════════╝
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// [1] MIGRAÇÃO DE PKs
+//     Converter ids Int (autoincrement) para UUID em:
+//       • Car, Boat, Aircraft, Appointment, tabelas de interesse
+//     ⚠ Requer migração com transformação de dados e planejamento
+//
+// [2] CONSOLIDAÇÃO DE ENUMS
+//     ProductType, TipoProdutoProcesso e TipoProdutoAgendamento são semanticamente
+//     similares. Mantê-los separados enquanto houver compatibilidade retroativa.
+//
+//
+// ═══════════════════════════════════════════════════════════════════════════

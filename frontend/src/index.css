@@ -1,0 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+@import "tailwindcss";
+
+@theme {
+   /* Cores da plataforma */
+  --color-primary: #1C1C1C;
+  --color-secondary: #B3B3B3;
+  --color-background-secondary: #3C3C3C;
+  --color-background: #F5F5F5;
+  --color-button: #2C2C2C;
+  --color-bg-container: #C1C7CD;
+  --color-color-input: #D9D9D9;
+  --color-color-text-secondary: #E9E9E9;
+  --color-color-a: #545454;
+
+  --color-button-solid: #626161;
+  --color-button-solid-hover: #4A4A4A;
+  --color-button-light: #F5F5F5;
+  --color-button-muted: #C1C7CD;
+
+  --color-text-dark: #000000;
+}
+
+@layer components {
+  .h1-style {
+    @apply text-3xl font-normal;
+  }
+  
+  .h2-style {
+    @apply text-2xl font-semibold;
+  }
+}
+
+:root {
+  /* Fontes da plataforma */
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+
+  /* Cor de fundo */
+  background-color: var(--color-background);
+
+}
