@@ -409,6 +409,7 @@ export class BoatsService {
     const rows = this.csvImportService.parseCSV(csvContent);
 
     const insertedIds: number[] = [];
+    const updatedIds: number[] = [];
     const errorRows: CsvErrorRow[] = [];
     const warningRows: CsvErrorRow[] = [];
 
@@ -460,8 +461,30 @@ export class BoatsService {
           continue;
         }
 
-        // Criar o barco
-        const boat = await this.prismaService.boat.create({ data: boatData });
+        // Verificar se já existe um produto com mesma marca + modelo para este especialista
+        const existingBoat = await this.prismaService.boat.findFirst({
+          where: {
+            marca: row.marca?.trim(),
+            modelo: row.modelo?.trim(),
+            specialist_id: user.id,
+          },
+        });
+
+        let boat: any;
+        let isUpdate = false;
+
+        if (existingBoat) {
+          // Atualizar produto existente
+          const { specialist_id, ...updateFields } = boatData;
+          boat = await this.prismaService.boat.update({
+            where: { id: existingBoat.id },
+            data: updateFields,
+          });
+          isUpdate = true;
+        } else {
+          // Criar novo produto
+          boat = await this.prismaService.boat.create({ data: boatData });
+        }
 
         // Processar imagens (suporte a múltiplas URLs separadas por |)
         const imageUrls = this.csvImportService.parseDelimitedImages(
@@ -469,6 +492,13 @@ export class BoatsService {
         );
 
         if (imageUrls.length > 0) {
+          // Se é atualização, remover imagens antigas antes de adicionar novas
+          if (isUpdate) {
+            await this.prismaService.boat_image.deleteMany({
+              where: { boat_id: boat.id },
+            });
+          }
+
           const imageErrors: string[] = [];
           let successCount = 0;
 
@@ -500,14 +530,18 @@ export class BoatsService {
           if (imageErrors.length > 0) {
             warningRows.push({
               row: rowNumber,
-              reason: `Produto criado (${successCount}/${imageUrls.length} imagens processadas)`,
+              reason: `Produto ${isUpdate ? 'atualizado' : 'criado'} (${successCount}/${imageUrls.length} imagens processadas)`,
               fields: row,
               imageWarnings: imageErrors,
             });
           }
         }
 
-        insertedIds.push(boat.id);
+        if (isUpdate) {
+          updatedIds.push(boat.id);
+        } else {
+          insertedIds.push(boat.id);
+        }
       } catch (error) {
         errorRows.push({
           row: rowNumber,
@@ -521,6 +555,7 @@ export class BoatsService {
       insertedIds,
       errorRows,
       warningRows,
+      updatedIds,
     );
   }
 }

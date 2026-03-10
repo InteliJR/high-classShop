@@ -454,6 +454,7 @@ export class AircraftsService {
     const rows = this.csvImportService.parseCSV(csvContent);
 
     const insertedIds: number[] = [];
+    const updatedIds: number[] = [];
     const errorRows: CsvErrorRow[] = [];
     const warningRows: CsvErrorRow[] = [];
 
@@ -499,21 +500,52 @@ export class AircraftsService {
           continue;
         }
 
-        // Criar a aeronave
-        const aircraft = await this.prismaService.aircraft.create({
-          data: {
-            categoria: aircraftData.categoria,
-            ano: aircraftData.ano,
-            marca: aircraftData.marca,
-            modelo: aircraftData.modelo,
-            assentos: aircraftData.assentos,
-            estado: aircraftData.estado,
-            descricao: aircraftData.descricao,
-            valor: aircraftData.valor,
-            tipo_aeronave: aircraftData.tipo_aeronave,
-            specialist_id: aircraftData.specialist_id ?? null,
+        // Verificar se já existe um produto com mesma marca + modelo para este especialista
+        const existingAircraft = await this.prismaService.aircraft.findFirst({
+          where: {
+            marca: row.marca?.trim(),
+            modelo: row.modelo?.trim(),
+            specialist_id: user.id,
           },
         });
+
+        let aircraft: any;
+        let isUpdate = false;
+
+        if (existingAircraft) {
+          // Atualizar produto existente
+          aircraft = await this.prismaService.aircraft.update({
+            where: { id: existingAircraft.id },
+            data: {
+              categoria: aircraftData.categoria,
+              ano: aircraftData.ano,
+              marca: aircraftData.marca,
+              modelo: aircraftData.modelo,
+              assentos: aircraftData.assentos,
+              estado: aircraftData.estado,
+              descricao: aircraftData.descricao,
+              valor: aircraftData.valor,
+              tipo_aeronave: aircraftData.tipo_aeronave,
+            },
+          });
+          isUpdate = true;
+        } else {
+          // Criar nova aeronave
+          aircraft = await this.prismaService.aircraft.create({
+            data: {
+              categoria: aircraftData.categoria,
+              ano: aircraftData.ano,
+              marca: aircraftData.marca,
+              modelo: aircraftData.modelo,
+              assentos: aircraftData.assentos,
+              estado: aircraftData.estado,
+              descricao: aircraftData.descricao,
+              valor: aircraftData.valor,
+              tipo_aeronave: aircraftData.tipo_aeronave,
+              specialist_id: aircraftData.specialist_id ?? null,
+            },
+          });
+        }
 
         // Processar imagens (suporte a múltiplas URLs separadas por |)
         const imageUrls = this.csvImportService.parseDelimitedImages(
@@ -521,6 +553,13 @@ export class AircraftsService {
         );
 
         if (imageUrls.length > 0) {
+          // Se é atualização, remover imagens antigas antes de adicionar novas
+          if (isUpdate) {
+            await this.prismaService.aircraft_image.deleteMany({
+              where: { aircraft_id: aircraft.id },
+            });
+          }
+
           const imageErrors: string[] = [];
           let successCount = 0;
 
@@ -552,14 +591,18 @@ export class AircraftsService {
           if (imageErrors.length > 0) {
             warningRows.push({
               row: rowNumber,
-              reason: `Produto criado (${successCount}/${imageUrls.length} imagens processadas)`,
+              reason: `Produto ${isUpdate ? 'atualizado' : 'criado'} (${successCount}/${imageUrls.length} imagens processadas)`,
               fields: row,
               imageWarnings: imageErrors,
             });
           }
         }
 
-        insertedIds.push(aircraft.id);
+        if (isUpdate) {
+          updatedIds.push(aircraft.id);
+        } else {
+          insertedIds.push(aircraft.id);
+        }
       } catch (error) {
         errorRows.push({
           row: rowNumber,
@@ -573,6 +616,7 @@ export class AircraftsService {
       insertedIds,
       errorRows,
       warningRows,
+      updatedIds,
     );
   }
 }

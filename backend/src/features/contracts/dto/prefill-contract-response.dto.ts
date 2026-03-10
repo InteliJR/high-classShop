@@ -50,15 +50,25 @@ export class PrefillContractResponseDto {
     value: number;
   };
 
-  // Dados de comissão da plataforma (PlatformCompany + cálculo automático)
-  commission?: {
+  // Dados da Plataforma (Split 1) - PlatformCompany
+  platform?: {
     name?: string;
-    cpf?: string;
+    cnpj?: string;
     bank?: string;
     agency?: string;
     checking_account?: string;
     rate?: number; // Taxa de comissão em % (ex: 10.00 = 10%)
     value?: number; // Valor calculado da comissão em R$
-    source?: string; // Origem da taxa: 'company', 'specialist' ou 'platform'
+  };
+
+  // Dados do Escritório/Empresa (Split 2) - Company do especialista
+  office?: {
+    name?: string;
+    cnpj?: string;
+    bank?: string; // Opcional - só preenchido se empresa tiver dados bancários
+    agency?: string;
+    checking_account?: string;
+    rate?: number; // Taxa de comissão em % (ex: 5.00 = 5%)
+    value?: number; // Valor calculado da comissão em R$
   };
 }

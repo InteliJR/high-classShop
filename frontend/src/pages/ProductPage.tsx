@@ -431,7 +431,7 @@ export default function ProductPage() {
                 </p>
               </div>
             </div>
-          ) : specialist.calendly_url ? (
+          ) : specialist.calendly_url?.trim() ? (
             /* Com Calendly URL - Botão para acessar e criar PENDING */
             <div className="space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

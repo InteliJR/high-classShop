@@ -22,6 +22,8 @@ export interface CsvImportResponseDto {
   message: string;
   /** Quantidade de produtos inseridos com sucesso */
   insertedCount: number;
+  /** Quantidade de produtos atualizados (match por marca + modelo + especialista) */
+  updatedCount: number;
   /** Quantidade de linhas com erro (produto não criado) */
   errorCount: number;
   /** Quantidade de produtos criados com avisos de imagem */
@@ -32,6 +34,8 @@ export interface CsvImportResponseDto {
   warningRows: CsvErrorRow[];
   /** IDs dos produtos inseridos (opcional) */
   insertedIds?: number[];
+  /** IDs dos produtos atualizados (opcional) */
+  updatedIds?: number[];
 }
 
 /**

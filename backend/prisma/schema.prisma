@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
@@ -486,8 +486,14 @@ model Company {
   logo            String?
   description     String?
   commission_rate Decimal? @db.Decimal(5, 2) // Taxa de comissão do escritório (ex: 15.00 = 15%)
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+
+  // Dados bancários (opcionais - se preenchidos, são usados no contrato)
+  bank             String?
+  agency           String? @db.VarChar(10)
+  checking_account String? @db.VarChar(20)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   users User[] // Consultores e Especialistas associados
 }
@@ -842,14 +848,30 @@ model Contract {
   payment_seller_value         Decimal? @db.Decimal(15, 2)
   payment_seller_value_written String?  @db.VarChar(500)
 
-  // Comissão da Plataforma
-  commission_value            Decimal? @db.Decimal(15, 2)
-  commission_value_written    String?  @db.VarChar(500)
-  commission_name             String?
-  commission_cpf              String?  @db.VarChar(18) // CNPJ formatado
-  commission_bank             String?
-  commission_agency           String?
-  commission_checking_account String?
+  // Dados da Plataforma (Split 1)
+  platform_value            Decimal? @db.Decimal(15, 2)
+  platform_value_written    String?  @db.VarChar(500)
+  platform_percentage       Decimal? @db.Decimal(5, 2) // Ex: 5.00 = 5%
+  platform_name             String?
+  platform_cnpj             String?  @db.VarChar(18)
+  platform_bank             String?
+  platform_agency           String?
+  platform_checking_account String?
+
+  // Dados do Escritório/Empresa Parceira (Split 2)
+  office_value            Decimal? @db.Decimal(15, 2)
+  office_value_written    String?  @db.VarChar(500)
+  office_name             String?
+  office_cnpj             String?  @db.VarChar(18)
+  office_bank             String?
+  office_agency           String?
+  office_checking_account String?
+
+  // Testemunhas (opcionais)
+  testimonial1_cpf   String? @db.VarChar(14)
+  testimonial1_email String?
+  testimonial2_cpf   String? @db.VarChar(14)
+  testimonial2_email String?
 
   // Cidade de assinatura
   city String?

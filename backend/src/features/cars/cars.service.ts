@@ -379,6 +379,7 @@ export class CarsService {
     const rows = this.csvImportService.parseCSV(csvContent);
 
     const insertedIds: number[] = [];
+    const updatedIds: number[] = [];
     const errorRows: CsvErrorRow[] = [];
     const warningRows: CsvErrorRow[] = [];
 
@@ -426,8 +427,30 @@ export class CarsService {
           continue;
         }
 
-        // Criar o carro
-        const car = await this.prismaService.car.create({ data: carData });
+        // Verificar se já existe um produto com mesma marca + modelo para este especialista
+        const existingCar = await this.prismaService.car.findFirst({
+          where: {
+            marca: row.marca?.trim(),
+            modelo: row.modelo?.trim(),
+            specialist_id: user.id,
+          },
+        });
+
+        let car: any;
+        let isUpdate = false;
+
+        if (existingCar) {
+          // Atualizar produto existente
+          const { specialist_id, ...updateFields } = carData;
+          car = await this.prismaService.car.update({
+            where: { id: existingCar.id },
+            data: updateFields,
+          });
+          isUpdate = true;
+        } else {
+          // Criar novo produto
+          car = await this.prismaService.car.create({ data: carData });
+        }
 
         // Processar imagens (suporte a múltiplas URLs separadas por |)
         const imageUrls = this.csvImportService.parseDelimitedImages(
@@ -435,6 +458,13 @@ export class CarsService {
         );
 
         if (imageUrls.length > 0) {
+          // Se é atualização, remover imagens antigas antes de adicionar novas
+          if (isUpdate) {
+            await this.prismaService.car_image.deleteMany({
+              where: { car_id: car.id },
+            });
+          }
+
           const imageErrors: string[] = [];
           let successCount = 0;
 
@@ -466,14 +496,18 @@ export class CarsService {
           if (imageErrors.length > 0) {
             warningRows.push({
               row: rowNumber,
-              reason: `Produto criado (${successCount}/${imageUrls.length} imagens processadas)`,
+              reason: `Produto ${isUpdate ? 'atualizado' : 'criado'} (${successCount}/${imageUrls.length} imagens processadas)`,
               fields: row,
               imageWarnings: imageErrors,
             });
           }
         }
 
-        insertedIds.push(car.id);
+        if (isUpdate) {
+          updatedIds.push(car.id);
+        } else {
+          insertedIds.push(car.id);
+        }
       } catch (error) {
         errorRows.push({
           row: rowNumber,
@@ -487,6 +521,7 @@ export class CarsService {
       insertedIds,
       errorRows,
       warningRows,
+      updatedIds,
     );
   }
 }

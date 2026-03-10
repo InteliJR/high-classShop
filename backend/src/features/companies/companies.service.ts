@@ -8,17 +8,27 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { Prisma } from '@prisma/client';
+import { PaginationDto } from '../../shared/dto/pagination.dto';
 
 @Injectable()
 export class CompaniesService {
   constructor(private prisma: PrismaService) {}
 
-  // Busca todas as empresas.
+  // Busca todas as empresas com contagem de especialistas.
   async findAll() {
-    const companies = await this.prisma.company.findMany();
+    const companies = await this.prisma.company.findMany({
+      include: {
+        _count: {
+          select: { users: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
     return companies.map((c) => ({
       ...c,
       commission_rate: c.commission_rate ? Number(c.commission_rate) : null,
+      specialists_count: c._count.users,
+      _count: undefined,
     }));
   }
 
@@ -120,5 +130,59 @@ export class CompaniesService {
     await this.findOne(id);
     await this.prisma.company.delete({ where: { id } });
     return { ok: true };
+  }
+
+  // Busca especialistas associados a uma empresa, com paginação.
+  async findSpecialistsByCompany(
+    companyId: string,
+    page: number = 1,
+    perPage: number = 5,
+  ) {
+    // Verificar se empresa existe
+    await this.findOne(companyId);
+
+    const skip = (page - 1) * perPage;
+
+    const [specialists, count] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { company_id: companyId },
+        select: {
+          id: true,
+          name: true,
+          surname: true,
+          email: true,
+          role: true,
+          speciality: true,
+          commission_rate: true,
+          calendly_url: true,
+          created_at: true,
+        },
+        skip,
+        take: perPage,
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.user.count({
+        where: { company_id: companyId },
+      }),
+    ]);
+
+    const totalPages = Math.ceil(count / perPage);
+
+    const pagination: PaginationDto = {
+      current_page: page,
+      per_page: perPage,
+      total: count,
+      total_pages: totalPages,
+      has_next: page < totalPages,
+      has_prev: page > 1,
+    };
+
+    return {
+      data: specialists.map((s) => ({
+        ...s,
+        commission_rate: s.commission_rate ? Number(s.commission_rate) : null,
+      })),
+      pagination,
+    };
   }
 }

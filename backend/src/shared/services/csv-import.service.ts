@@ -267,26 +267,30 @@ export class CsvImportService {
     insertedIds: number[],
     errorRows: CsvErrorRow[],
     warningRows: CsvErrorRow[] = [],
+    updatedIds: number[] = [],
   ): CsvImportResponseDto {
     const insertedCount = insertedIds.length;
+    const updatedCount = updatedIds.length;
     const errorCount = errorRows.length;
     const warningCount = warningRows.length;
-    const total = insertedCount + errorCount;
+    const total = insertedCount + updatedCount + errorCount;
 
     let message: string;
     let success: boolean;
 
-    if (errorCount === 0 && warningCount === 0) {
-      message = `Importação concluída com sucesso. ${insertedCount} produto(s) inserido(s).`;
+    const parts: string[] = [];
+    if (insertedCount > 0) parts.push(`${insertedCount} inserido(s)`);
+    if (updatedCount > 0) parts.push(`${updatedCount} atualizado(s)`);
+    if (warningCount > 0) parts.push(`${warningCount} com avisos de imagem`);
+
+    if (errorCount === 0) {
+      message = `Importação concluída com sucesso. ${parts.join(', ')}.`;
       success = true;
-    } else if (errorCount === 0 && warningCount > 0) {
-      message = `Importação concluída com avisos. ${insertedCount} produto(s) inserido(s), ${warningCount} com falhas parciais de imagem.`;
-      success = true;
-    } else if (insertedCount === 0) {
-      message = `Importação falhou. Nenhum produto foi inserido. ${errorCount} erro(s) encontrado(s).`;
+    } else if (insertedCount === 0 && updatedCount === 0) {
+      message = `Importação falhou. Nenhum produto foi inserido ou atualizado. ${errorCount} erro(s) encontrado(s).`;
       success = false;
     } else {
-      message = `Importação parcial. ${insertedCount} de ${total} produto(s) inserido(s). ${errorCount} erro(s).${warningCount > 0 ? ` ${warningCount} com avisos de imagem.` : ''}`;
+      message = `Importação parcial. ${parts.join(', ')}. ${errorCount} erro(s).`;
       success = true;
     }
 
@@ -294,11 +298,13 @@ export class CsvImportService {
       success,
       message,
       insertedCount,
+      updatedCount,
       errorCount,
       warningCount,
       errorRows,
       warningRows,
       insertedIds,
+      updatedIds,
     };
   }
 }

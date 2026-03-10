@@ -1,6 +1,7 @@
 // frontend/src/services/companies.service.ts
 import api from "./api";
 import axios from "axios";
+import type { PaginationMeta } from "../types/types";
 
 export type Company = {
   id: string;
@@ -10,6 +11,27 @@ export type Company = {
   description?: string | null;
   logoUrl?: string | null;
   commission_rate?: number | null;
+  bank?: string | null;
+  agency?: string | null;
+  checking_account?: string | null;
+  specialists_count?: number;
+};
+
+export type CompanySpecialist = {
+  id: string;
+  name: string;
+  surname: string;
+  email: string;
+  role: string;
+  speciality: string | null;
+  commission_rate: number | null;
+  calendly_url: string | null;
+  created_at: string;
+};
+
+export type CompanySpecialistsResponse = {
+  data: CompanySpecialist[];
+  pagination: PaginationMeta;
 };
 
 // Tipo auxiliar para criação (geralmente não enviamos ID ou logoUrl na criação)
@@ -18,6 +40,9 @@ type CreateCompanyDto = {
   cnpj: string;
   logo?: string;
   commission_rate?: number;
+  bank?: string;
+  agency?: string;
+  checking_account?: string;
 };
 
 // Função auxiliar para extrair mensagem de erro
@@ -78,6 +103,23 @@ export async function updateCompany(
 export async function deleteCompany(id: string): Promise<void> {
   try {
     await api.delete(`/companies/${id}`);
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
+
+// Busca especialistas de uma empresa com paginação (lazy loading).
+export async function getCompanySpecialists(
+  companyId: string,
+  page: number = 1,
+  perPage: number = 5,
+): Promise<CompanySpecialistsResponse> {
+  try {
+    const { data } = await api.get<CompanySpecialistsResponse>(
+      `/companies/${companyId}/specialists`,
+      { params: { page, perPage } },
+    );
+    return data;
   } catch (error) {
     throw new Error(getErrorMessage(error));
   }

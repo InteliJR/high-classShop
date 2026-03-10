@@ -25,6 +25,10 @@ export default function NewCompanyForm({
   const [logo, setLogo] = useState<File | null>(null);
   // Taxa de comissão do escritório (opcional)
   const [commissionRate, setCommissionRate] = useState("");
+  // Dados bancários opcionais
+  const [bank, setBank] = useState("");
+  const [agency, setAgency] = useState("");
+  const [checkingAccount, setCheckingAccount] = useState("");
   // Controla se o formulário está a ser enviado, para desativar o botão e evitar cliques duplos.
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Guarda qualquer mensagem de erro que ocorra durante a validação ou o envio.
@@ -40,11 +44,17 @@ export default function NewCompanyForm({
           ? String(companyToEdit.commission_rate)
           : "",
       );
+      setBank(companyToEdit.bank || "");
+      setAgency(companyToEdit.agency || "");
+      setCheckingAccount(companyToEdit.checking_account || "");
     } else {
       setName("");
       setCnpj("");
       setLogo(null);
       setCommissionRate("");
+      setBank("");
+      setAgency("");
+      setCheckingAccount("");
     }
   }, [companyToEdit]);
 
@@ -110,6 +120,9 @@ export default function NewCompanyForm({
           name,
           cnpj: cleanCNPJ,
           commission_rate: parsedRate,
+          bank: bank || undefined,
+          agency: agency || undefined,
+          checking_account: checkingAccount || undefined,
         });
       } else {
         // Modo de criação - converte logo para base64 se existir
@@ -123,6 +136,9 @@ export default function NewCompanyForm({
           cnpj: cleanCNPJ,
           logo: logoBase64,
           commission_rate: parsedRate,
+          bank: bank || undefined,
+          agency: agency || undefined,
+          checking_account: checkingAccount || undefined,
         });
       }
       onSuccess();
@@ -205,6 +221,69 @@ export default function NewCompanyForm({
         <p className="text-xs text-gray-500 mt-1">
           Opcional. Especialistas desta empresa usarão esta taxa.
         </p>
+      </div>
+
+      {/* --- DADOS BANCÁRIOS (OPCIONAIS) --- */}
+      <div className="border-t pt-4 mt-4">
+        <p className="text-sm font-medium text-text-secondary mb-3">
+          Dados Bancários (Opcionais)
+        </p>
+        <p className="text-xs text-gray-500 mb-4">
+          Se preenchidos, serão usados automaticamente nos contratos.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label
+              htmlFor="bank"
+              className="block text-sm font-medium text-text-secondary"
+            >
+              Banco
+            </label>
+            <input
+              id="bank"
+              type="text"
+              value={bank}
+              onChange={(e) => setBank(e.target.value)}
+              placeholder="Ex: Bradesco"
+              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="agency"
+              className="block text-sm font-medium text-text-secondary"
+            >
+              Agência
+            </label>
+            <input
+              id="agency"
+              type="text"
+              value={agency}
+              onChange={(e) => setAgency(e.target.value)}
+              placeholder="Ex: 1234"
+              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="checking_account"
+              className="block text-sm font-medium text-text-secondary"
+            >
+              Conta Corrente
+            </label>
+            <input
+              id="checking_account"
+              type="text"
+              value={checkingAccount}
+              onChange={(e) => setCheckingAccount(e.target.value)}
+              placeholder="Ex: 12345-6"
+              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
+            />
+          </div>
+        </div>
       </div>
 
       <div>

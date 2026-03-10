@@ -171,11 +171,13 @@ export interface CsvImportResponse {
   success: boolean;
   message: string;
   insertedCount: number;
+  updatedCount: number;
   errorCount: number;
   warningCount: number;
   errorRows: CsvErrorRow[];
   warningRows: CsvErrorRow[];
   insertedIds?: number[];
+  updatedIds?: number[];
 }
 
 export interface CsvTemplateResponse {

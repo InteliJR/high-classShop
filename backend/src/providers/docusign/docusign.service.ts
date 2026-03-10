@@ -302,6 +302,10 @@ export class DocuSignService {
     sellerName: string;
     formFields: Record<string, string>;
     processId: string;
+    testimonial1Name?: string;
+    testimonial1Email?: string;
+    testimonial2Name?: string;
+    testimonial2Email?: string;
   }): Promise<{ envelopeId: string; status: EnvelopeStatus }> {
     const {
       templateId,
@@ -311,6 +315,10 @@ export class DocuSignService {
       sellerName,
       formFields,
       processId,
+      testimonial1Name,
+      testimonial1Email,
+      testimonial2Name,
+      testimonial2Email,
     } = params;
 
     try {
@@ -354,6 +362,17 @@ export class DocuSignService {
             roleName: 'Seller',
             name: sellerName,
             email: sellerEmail,
+          },
+          // Testemunhas são obrigatórias no template — se não fornecidas, usar placeholder
+          {
+            roleName: 'Testimonial1',
+            name: testimonial1Name || 'Testemunha 1',
+            email: testimonial1Email || sellerEmail,
+          },
+          {
+            roleName: 'Testimonial2',
+            name: testimonial2Name || 'Testemunha 2',
+            email: testimonial2Email || buyerEmail,
           },
         ],
         customFields: {
@@ -469,7 +488,8 @@ export class DocuSignService {
    * @param params.sellerName - Nome do vendedor
    * @param params.formFields - Campos do formulário para preencher no contrato
    * @param params.processId - ID do processo para rastreabilidade
-   * @returns Promise<{ envelopeId, pdfBase64, expiresAt }>
+   * @param params.returnUrl - URL de callback após sair do Sender View
+   * @returns Promise<{ envelopeId, previewUrl, expiresAt }>
    */
   async createEnvelopePreview(params: {
     templateId: string;
@@ -479,9 +499,14 @@ export class DocuSignService {
     sellerName: string;
     formFields: Record<string, string>;
     processId: string;
+    returnUrl: string;
+    testimonial1Name?: string;
+    testimonial1Email?: string;
+    testimonial2Name?: string;
+    testimonial2Email?: string;
   }): Promise<{
     envelopeId: string;
-    pdfBase64: string;
+    previewUrl: string;
     expiresAt: string;
   }> {
     const {
@@ -492,6 +517,11 @@ export class DocuSignService {
       sellerName,
       formFields,
       processId,
+      returnUrl,
+      testimonial1Name,
+      testimonial1Email,
+      testimonial2Name,
+      testimonial2Email,
     } = params;
 
     try {
@@ -535,6 +565,17 @@ export class DocuSignService {
             name: sellerName,
             email: sellerEmail,
           },
+          // Testemunhas são obrigatórias no template — se não fornecidas, usar placeholder
+          {
+            roleName: 'Testimonial1',
+            name: testimonial1Name || 'Testemunha 1',
+            email: testimonial1Email || sellerEmail,
+          },
+          {
+            roleName: 'Testimonial2',
+            name: testimonial2Name || 'Testemunha 2',
+            email: testimonial2Email || buyerEmail,
+          },
         ],
         customFields: {
           textCustomFields: [
@@ -558,9 +599,20 @@ export class DocuSignService {
       const docGenFieldsResponse =
         await this.client.getEnvelopeDocGenFormFields(envelopeId);
 
+      this.logger.log(
+        `DocGen fields raw response: ${JSON.stringify(docGenFieldsResponse, null, 2)}`,
+      );
+      this.logger.log(
+        `Form fields keys being sent: ${JSON.stringify(Object.keys(formFields))}`,
+      );
+
       const updatedDocGenFormFields = this.mapFormFieldsToDocGen(
         docGenFieldsResponse.docGenFormFields,
         formFields,
+      );
+
+      this.logger.log(
+        `Updated DocGen fields to send: ${JSON.stringify(updatedDocGenFormFields, null, 2)}`,
       );
 
       await this.client.updateEnvelopeDocGenFormFields(envelopeId, {
@@ -569,21 +621,31 @@ export class DocuSignService {
 
       this.logger.log(`✓ Campos DocGen atualizados`);
 
-      // ===== ETAPA 3: BAIXAR DOCUMENTO COMBINADO COMO PDF =====
-      this.logger.log('PREVIEW ETAPA 3: Baixando documento combinado...');
+      // ===== ETAPA 3: CRIAR SENDER VIEW =====
+      this.logger.log('PREVIEW ETAPA 3: Criando Sender View...');
 
-      const documentResponse = await this.client.getCombinedDocument(envelopeId);
+      const senderViewResponse = await this.client.createSenderView(
+        envelopeId,
+        returnUrl,
+        {
+          startingScreen: 'Tagger',
+          showBackButton: 'false',
+          showEditRecipients: 'false',
+          showEditDocuments: 'true',
+          showDiscardAction: 'false',
+          sendButtonAction: 'send',
+        },
+      );
 
-      // O envelope permanece em DRAFT até o usuário confirmar o envio
-      // Expira em 24 horas (envelopes draft expiram automaticamente)
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      // URL do Sender View expira em ~10 minutos
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-      this.logger.log(`✓ Documento PDF baixado`);
+      this.logger.log(`✓ Sender View criado`);
       this.logger.log(`=== PREVIEW PRONTO ===`);
 
       return {
         envelopeId,
-        pdfBase64: documentResponse.pdfBase64,
+        previewUrl: senderViewResponse.url,
         expiresAt,
       };
     } catch (error) {
@@ -672,11 +734,15 @@ export class DocuSignService {
   /**
    * Mapeia os campos do formulário para a estrutura DocGen
    *
-   * A API DocuSign retorna os campos com 'name' (ID interno) e 'label'.
-   * Precisamos encontrar o 'name' correspondente ao 'label' e atribuir o valor.
+   * A API DocuSign retorna os campos com:
+   * - 'label': nome limpo do campo (ex: "seller_cpf", "payment_seller_value_written")
+   * - 'name': ID interno com prefixos/sufixos (ex: "/C_seller_cpf", "C_seller_name_value_Z157HB4")
+   *
+   * Usamos o 'label' como chave primária de lookup (sempre limpo).
+   * Se 'label' não existir, normalizamos o 'name' como fallback.
    *
    * @param docGenFormFields - Array de documentos com campos DocGen da API
-   * @param formFields - Mapa de label -> valor do formulário
+   * @param formFields - Mapa de campo -> valor do formulário
    * @returns Array de documentos com campos DocGen atualizados
    */
   private mapFormFieldsToDocGen(
@@ -691,24 +757,27 @@ export class DocuSignService {
     return docGenFormFields.map((doc: any) => {
       const docGenFormFieldList = (doc.docGenFormFieldList || []).map(
         (field: any) => {
-          const label = field.label;
-          const value = formFields[label];
+          // Prioridade: usar label (sempre limpo), fallback para name normalizado
+          const fieldKey = field.label || field.name || '';
+          const lookupKey = fieldKey.replace(/^\/?C_/, '');
+
+          const value = formFields[lookupKey];
 
           if (value !== undefined) {
             this.logger.debug(
-              `Mapeando campo: label="${label}" -> name="${field.name}" = "${value}"`,
+              `Mapeando campo: label="${field.label}" name="${field.name}" → key="${lookupKey}" = "${value}"`,
             );
             return {
               name: field.name,
               value: String(value),
             };
           } else {
-            this.logger.debug(
-              `Campo não encontrado no formulário: label="${label}"`,
+            this.logger.warn(
+              `Campo não encontrado: label="${field.label}", name="${field.name}", key="${lookupKey}"`,
             );
             return {
               name: field.name,
-              value: field.value || '', // Manter valor existente ou vazio
+              value: field.value || '',
             };
           }
         },

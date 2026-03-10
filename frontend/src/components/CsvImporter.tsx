@@ -683,6 +683,17 @@ export function CsvImporter({
                     inseridos
                   </span>
                 </div>
+                {importResult.updatedCount > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                    <span className="text-sm text-gray-700">
+                      <span className="font-semibold text-blue-700">
+                        {importResult.updatedCount}
+                      </span>{" "}
+                      atualizados
+                    </span>
+                  </div>
+                )}
                 {importResult.warningCount > 0 && (
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
