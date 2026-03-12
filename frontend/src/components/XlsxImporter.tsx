@@ -10,23 +10,44 @@ import {
   Info,
   Loader2,
 } from "lucide-react";
-import type {
-  CsvImportResponse,
-  CsvTemplateResponse,
-  CsvErrorRow,
-} from "../services/cars.service";
 
 type ProductType = "CAR" | "BOAT" | "AIRCRAFT";
 
-interface CsvImporterProps {
+export interface XlsxImportResponse {
+  success: boolean;
+  message: string;
+  insertedCount: number;
+  updatedCount: number;
+  errorCount: number;
+  warningCount: number;
+  errorRows: XlsxErrorRow[];
+  warningRows: XlsxErrorRow[];
+  insertedIds?: number[];
+  updatedIds?: number[];
+}
+
+export interface XlsxErrorRow {
+  row: number;
+  reason: string;
+  fields?: Record<string, any>;
+  imageWarnings?: string[];
+}
+
+interface XlsxImporterProps {
   productType: ProductType;
-  onImport: (file: File) => Promise<CsvImportResponse>;
-  onGetTemplate: () => Promise<CsvTemplateResponse>;
+  onImport: (file: File) => Promise<XlsxImportResponse>;
+  onDownloadTemplate: () => Promise<void>;
   disabled?: boolean;
   onSuccess?: () => void;
 }
 
-// Definições de colunas por tipo de produto (para validação local)
+const PRODUCT_NAMES: Record<ProductType, string> = {
+  CAR: "Carros",
+  BOAT: "Lanchas",
+  AIRCRAFT: "Aeronaves",
+};
+
+// Colunas por tipo (sem 'imagens' — agora são embutidas na planilha)
 const COLUMN_DEFINITIONS: Record<
   ProductType,
   { required: string[]; optional: string[] }
@@ -40,7 +61,6 @@ const COLUMN_DEFINITIONS: Record<
       "combustivel",
       "tipo_categoria",
       "descricao",
-      "imagens",
     ],
   },
   BOAT: {
@@ -55,190 +75,67 @@ const COLUMN_DEFINITIONS: Record<
       "tipo_embarcacao",
       "descricao_completa",
       "acessorios",
-      "imagens",
     ],
   },
   AIRCRAFT: {
     required: ["marca", "modelo", "valor", "estado", "ano"],
-    optional: [
-      "categoria",
-      "assentos",
-      "tipo_aeronave",
-      "descricao",
-      "imagens",
-    ],
+    optional: ["categoria", "assentos", "tipo_aeronave", "descricao"],
   },
 };
 
-const PRODUCT_NAMES: Record<ProductType, string> = {
-  CAR: "Carros",
-  BOAT: "Lanchas",
-  AIRCRAFT: "Aeronaves",
-};
+const MAX_FILE_SIZE_MB = 50;
 
-interface LocalValidationResult {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
-  rowCount: number;
-  foundColumns: string[];
-}
-
-export function CsvImporter({
+export function XlsxImporter({
   productType,
   onImport,
-  onGetTemplate,
+  onDownloadTemplate,
   disabled,
   onSuccess,
-}: CsvImporterProps) {
+}: XlsxImporterProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
-  const [importResult, setImportResult] = useState<CsvImportResponse | null>(
+  const [importResult, setImportResult] = useState<XlsxImportResponse | null>(
     null,
   );
-  const [localValidation, setLocalValidation] =
-    useState<LocalValidationResult | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [structureError, setStructureError] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const columns = COLUMN_DEFINITIONS[productType];
 
-  // Validação local do CSV antes de enviar
-  const validateCsvLocally = useCallback(
-    (content: string): LocalValidationResult => {
-      const lines = content.split(/\r?\n/).filter((line) => line.trim());
-      const errors: string[] = [];
-      const warnings: string[] = [];
-
-      if (lines.length === 0) {
-        return {
-          valid: false,
-          errors: ["CSV está vazio"],
-          warnings: [],
-          rowCount: 0,
-          foundColumns: [],
-        };
-      }
-
-      // Detectar delimitador
-      const delimiter = lines[0].includes(";") ? ";" : ",";
-
-      // Parse do header
-      const headerLine = lines[0];
-      const foundColumns = headerLine
-        .split(delimiter)
-        .map((col) => col.trim().toLowerCase().replace(/^"|"$/g, ""));
-
-      // Verificar colunas obrigatórias
-      const missingRequired = columns.required.filter(
-        (col) => !foundColumns.includes(col),
-      );
-      if (missingRequired.length > 0) {
-        errors.push(
-          `Colunas obrigatórias faltando: ${missingRequired.join(", ")}`,
-        );
-      }
-
-      // Verificar colunas não reconhecidas (aceitar 'imagem' como alias de 'imagens')
-      const allKnown = [...columns.required, ...columns.optional, "imagem"];
-      const unknownColumns = foundColumns.filter(
-        (col) => !allKnown.includes(col) && col !== "",
-      );
-      if (unknownColumns.length > 0) {
-        warnings.push(
-          `Colunas não reconhecidas (serão ignoradas): ${unknownColumns.join(", ")}`,
-        );
-      }
-
-      // Aviso se usou 'imagem' (singular) ao invés de 'imagens'
-      if (
-        foundColumns.includes("imagem") &&
-        !foundColumns.includes("imagens")
-      ) {
-        warnings.push(
-          `Coluna 'imagem' encontrada — use 'imagens' para suporte a múltiplas URLs separadas por |`,
-        );
-      }
-
-      // Verificar se há linhas de dados
-      const dataLines = lines.slice(1).filter((line) => line.trim());
-      if (dataLines.length === 0) {
-        errors.push("CSV não contém linhas de dados (apenas cabeçalho)");
-      }
-
-      // Validar número de colunas em cada linha
-      const expectedCols = foundColumns.length;
-      dataLines.forEach((line, index) => {
-        const cols = line.split(delimiter).length;
-        if (cols !== expectedCols) {
-          errors.push(
-            `Linha ${index + 2}: número incorreto de colunas (esperado ${expectedCols}, encontrado ${cols})`,
-          );
-        }
-      });
-
-      // Validar campos numéricos obrigatórios nas primeiras 5 linhas como amostra
-      const sampleLines = dataLines.slice(0, 5);
-      const numericFields = ["valor", "ano"];
-
-      sampleLines.forEach((line, lineIndex) => {
-        const values = line
-          .split(delimiter)
-          .map((v) => v.trim().replace(/^"|"$/g, ""));
-
-        numericFields.forEach((field) => {
-          const colIndex = foundColumns.indexOf(field);
-          if (colIndex >= 0 && values[colIndex]) {
-            const value = values[colIndex];
-            if (isNaN(Number(value))) {
-              errors.push(
-                `Linha ${lineIndex + 2}: campo '${field}' deve ser numérico, encontrado: "${value}"`,
-              );
-            }
-          }
-        });
-      });
-
-      return {
-        valid: errors.length === 0,
-        errors,
-        warnings,
-        rowCount: dataLines.length,
-        foundColumns,
-      };
-    },
-    [columns],
-  );
-
   const handleFileSelect = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
+    (e: React.ChangeEvent<HTMLInputElement>) => {
       const selectedFile = e.target.files?.[0];
       if (!selectedFile) return;
 
-      // Reset estados
+      // Reset
       setImportResult(null);
       setStructureError(null);
-      setLocalValidation(null);
+      setFileError(null);
 
-      // Validar tipo de arquivo
-      if (!selectedFile.name.endsWith(".csv")) {
-        setStructureError({ message: "Apenas arquivos .csv são aceitos" });
+      // Validar extensão
+      if (!selectedFile.name.endsWith(".xlsx")) {
+        setFileError(
+          "Apenas arquivos .xlsx são aceitos. Salve sua planilha no formato Excel (.xlsx).",
+        );
+        setFile(null);
         return;
       }
 
-      // Ler e validar conteúdo
-      const content = await selectedFile.text();
-      const validation = validateCsvLocally(content);
-      setLocalValidation(validation);
-
-      if (validation.valid) {
-        setFile(selectedFile);
-      } else {
+      // Validar tamanho
+      const sizeMB = selectedFile.size / (1024 * 1024);
+      if (sizeMB > MAX_FILE_SIZE_MB) {
+        setFileError(
+          `Arquivo muito grande (${sizeMB.toFixed(1)} MB). Limite: ${MAX_FILE_SIZE_MB} MB.`,
+        );
         setFile(null);
+        return;
       }
+
+      setFile(selectedFile);
     },
-    [validateCsvLocally],
+    [],
   );
 
   const handleImport = async () => {
@@ -252,17 +149,13 @@ export function CsvImporter({
       const result = await onImport(file);
       setImportResult(result);
 
-      // Limpar arquivo se sucesso total (mas manter resultado visível)
       if (result.errorCount === 0) {
         setFile(null);
-        setLocalValidation(null);
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
-        // NÃO fecha automaticamente - deixa o usuário ver o resultado
       }
     } catch (error: any) {
-      // Erro de estrutura do CSV retornado pelo backend
       if (error.message || error.errors) {
         setStructureError(error);
       } else {
@@ -278,20 +171,7 @@ export function CsvImporter({
   const handleDownloadTemplate = async () => {
     setIsLoadingTemplate(true);
     try {
-      const template = await onGetTemplate();
-
-      // Criar arquivo para download
-      const blob = new Blob([template.template], {
-        type: "text/csv;charset=utf-8;",
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `template_${productType.toLowerCase()}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      await onDownloadTemplate();
     } catch (error) {
       console.error("Erro ao baixar template:", error);
       alert("Erro ao baixar o template. Tente novamente.");
@@ -303,7 +183,7 @@ export function CsvImporter({
   const resetAll = () => {
     setFile(null);
     setImportResult(null);
-    setLocalValidation(null);
+    setFileError(null);
     setStructureError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -323,17 +203,16 @@ export function CsvImporter({
     setIsDragging(false);
   };
 
-  const handleDrop = async (e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
 
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile) {
-      // Simular evento de input
       const fakeEvent = {
         target: { files: [droppedFile] },
       } as unknown as React.ChangeEvent<HTMLInputElement>;
-      await handleFileSelect(fakeEvent);
+      handleFileSelect(fakeEvent);
     }
   };
 
@@ -350,7 +229,7 @@ export function CsvImporter({
               Importar {PRODUCT_NAMES[productType]}
             </h4>
             <p className="text-sm text-gray-500">
-              Importe varios produtos de uma vez
+              Importe varios produtos de uma vez via planilha
             </p>
           </div>
         </div>
@@ -373,7 +252,7 @@ export function CsvImporter({
       <details className="group">
         <summary className="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
           <Info className="w-4 h-4" />
-          <span>Ver estrutura do CSV</span>
+          <span>Ver estrutura da planilha</span>
           <svg
             className="w-4 h-4 ml-auto transition-transform group-open:rotate-180"
             fill="none"
@@ -428,27 +307,31 @@ export function CsvImporter({
             </p>
             <ul className="space-y-1.5 text-sm text-gray-600">
               <li className="flex items-start gap-2">
-                <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full flex-shrink-0"></span>
-                Separador: virgula (,) ou ponto-e-virgula (;)
+                <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
+                Formato aceito: <strong className="text-gray-900">.xlsx</strong>{" "}
+                (Excel)
               </li>
               <li className="flex items-start gap-2">
-                <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full flex-shrink-0"></span>
-                Campo <strong className="text-gray-900">imagens</strong>: URLs
-                separadas por{" "}
-                <code className="px-1.5 py-0.5 bg-gray-200 rounded text-xs font-mono">
-                  |
-                </code>{" "}
-                (ex: https://url1.jpg|https://url2.jpg)
+                <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
+                <strong className="text-gray-900">Imagens</strong>: insira
+                diretamente na planilha (cole na linha do produto). A primeira
+                imagem de cada linha sera a principal.
               </li>
               <li className="flex items-start gap-2">
-                <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full flex-shrink-0"></span>
+                <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
                 <strong className="text-gray-900">valor</strong>: numero inteiro
                 sem pontos
               </li>
               <li className="flex items-start gap-2">
-                <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full flex-shrink-0"></span>
+                <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
                 <strong className="text-gray-900">ano</strong>: 4 digitos (ex:
                 2024)
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
+                Produtos com mesma{" "}
+                <strong className="text-gray-900">marca + modelo</strong> serao
+                atualizados ao inves de duplicados.
               </li>
             </ul>
           </div>
@@ -472,7 +355,7 @@ export function CsvImporter({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".csv"
+          accept=".xlsx"
           onChange={handleFileSelect}
           disabled={disabled || isLoading}
           className="hidden"
@@ -484,7 +367,9 @@ export function CsvImporter({
               <CheckCircle2 className="w-6 h-6 text-green-600" />
             </div>
             <p className="text-sm font-medium text-gray-900">{file.name}</p>
-            <p className="text-xs text-gray-500">Arquivo selecionado</p>
+            <p className="text-xs text-gray-500">
+              {(file.size / (1024 * 1024)).toFixed(2)} MB — Pronto para importar
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -497,85 +382,25 @@ export function CsvImporter({
               <p className="text-sm font-medium text-gray-900">
                 {isDragging
                   ? "Solte o arquivo aqui"
-                  : "Arraste um arquivo CSV ou clique para selecionar"}
+                  : "Arraste uma planilha XLSX ou clique para selecionar"}
               </p>
-              <p className="text-xs text-gray-500 mt-1">Apenas arquivos .csv</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Apenas arquivos .xlsx (max {MAX_FILE_SIZE_MB} MB)
+              </p>
             </div>
           </div>
         )}
       </div>
 
-      {/* Validação local */}
-      {localValidation && (
-        <div
-          className={`p-4 rounded-xl border ${
-            localValidation.valid
-              ? "bg-green-50 border-green-200"
-              : "bg-red-50 border-red-200"
-          }`}
-        >
-          {localValidation.valid ? (
-            <div className="flex items-start gap-3">
-              <div className="p-1.5 bg-green-100 rounded-lg">
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-              </div>
-              <div className="flex-1">
-                <p className="font-medium text-green-800">Estrutura valida</p>
-                <p className="text-sm text-green-600 mt-0.5">
-                  {localValidation.rowCount} linha(s) de dados prontas para
-                  importar
-                </p>
-                {localValidation.warnings.length > 0 && (
-                  <div className="mt-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                    <div className="flex items-center gap-2 text-yellow-700 mb-1">
-                      <AlertTriangle className="w-4 h-4" />
-                      <span className="text-sm font-medium">Avisos:</span>
-                    </div>
-                    <ul className="text-sm text-yellow-600 space-y-1 ml-6">
-                      {localValidation.warnings.map((warning, i) => (
-                        <li key={i}>{warning}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
+      {/* Erro de arquivo */}
+      {fileError && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+          <div className="flex items-start gap-3">
+            <div className="p-1.5 bg-red-100 rounded-lg">
+              <XCircle className="w-5 h-5 text-red-600" />
             </div>
-          ) : (
-            <div className="flex items-start gap-3">
-              <div className="p-1.5 bg-red-100 rounded-lg">
-                <XCircle className="w-5 h-5 text-red-600" />
-              </div>
-              <div className="flex-1">
-                <p className="font-medium text-red-800">
-                  Problemas encontrados
-                </p>
-                <ul className="mt-2 space-y-1.5">
-                  {localValidation.errors.map((error, i) => (
-                    <li
-                      key={i}
-                      className="text-sm text-red-600 flex items-start gap-2"
-                    >
-                      <span className="w-1.5 h-1.5 mt-1.5 bg-red-400 rounded-full flex-shrink-0"></span>
-                      {error}
-                    </li>
-                  ))}
-                </ul>
-                {localValidation.warnings.length > 0 && (
-                  <div className="mt-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                    <div className="flex items-center gap-2 text-yellow-700 mb-1">
-                      <AlertTriangle className="w-4 h-4" />
-                      <span className="text-sm font-medium">Avisos:</span>
-                    </div>
-                    <ul className="text-sm text-yellow-600 space-y-1 ml-6">
-                      {localValidation.warnings.map((warning, i) => (
-                        <li key={i}>{warning}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+            <p className="font-medium text-red-800">{fileError}</p>
+          </div>
         </div>
       )}
 
@@ -588,7 +413,7 @@ export function CsvImporter({
             </div>
             <div className="flex-1">
               <p className="font-medium text-red-800">
-                {structureError.message || "Erro na estrutura do CSV"}
+                {structureError.message || "Erro na estrutura da planilha"}
               </p>
               {structureError.errors && (
                 <ul className="mt-2 space-y-1">
@@ -617,7 +442,7 @@ export function CsvImporter({
         <button
           type="button"
           onClick={handleImport}
-          disabled={!file || isLoading || disabled || !localValidation?.valid}
+          disabled={!file || isLoading || disabled}
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 focus:ring-4 focus:ring-green-200 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all"
         >
           {isLoading ? (
@@ -628,12 +453,12 @@ export function CsvImporter({
           ) : (
             <>
               <Upload className="w-4 h-4" />
-              Importar CSV
+              Importar Planilha
             </>
           )}
         </button>
 
-        {(file || importResult || localValidation) && (
+        {(file || importResult) && (
           <button
             type="button"
             onClick={resetAll}
@@ -736,7 +561,7 @@ export function CsvImporter({
                       </thead>
                       <tbody className="bg-white">
                         {importResult.errorRows.map(
-                          (errorRow: CsvErrorRow, index: number) => (
+                          (errorRow: XlsxErrorRow, index: number) => (
                             <tr
                               key={index}
                               className="border-t border-red-100 hover:bg-red-50"
@@ -777,7 +602,7 @@ export function CsvImporter({
                         </thead>
                         <tbody className="bg-white">
                           {importResult.warningRows.map(
-                            (warnRow: CsvErrorRow, index: number) => (
+                            (warnRow: XlsxErrorRow, index: number) => (
                               <tr
                                 key={index}
                                 className="border-t border-yellow-100 hover:bg-yellow-50"
@@ -795,7 +620,7 @@ export function CsvImporter({
                                             key={i}
                                             className="text-xs text-yellow-600 flex items-start gap-1"
                                           >
-                                            <span className="w-1 h-1 mt-1.5 bg-yellow-400 rounded-full flex-shrink-0"></span>
+                                            <span className="w-1 h-1 mt-1.5 bg-yellow-400 rounded-full shrink-0"></span>
                                             {w}
                                           </li>
                                         ))}
@@ -835,4 +660,4 @@ export function CsvImporter({
   );
 }
 
-export default CsvImporter;
+export default XlsxImporter;

@@ -4,8 +4,8 @@ export interface Appointment {
   id: string;
   client_id: string;
   specialist_id: string;
-  product_type: "CAR" | "BOAT" | "AIRCRAFT";
-  product_id: number;
+  product_type?: "CAR" | "BOAT" | "AIRCRAFT" | null;
+  product_id?: number | null;
   appointment_datetime?: string | null;
   status: "PENDING" | "SCHEDULED" | "COMPLETED" | "CANCELLED";
   notes?: string;
@@ -33,7 +33,7 @@ export interface Appointment {
     marca: string;
     modelo: string;
     valor: number;
-  };
+  } | null;
 }
 
 export interface ApiResponse<T> {
@@ -91,6 +91,28 @@ export async function createPendingAppointment(data: {
   const response = await api.post<ApiResponse<Appointment>>(
     "/appointments/pending",
     data,
+    { withCredentials: true }
+  );
+  return response.data.data;
+}
+
+/**
+ * Cria um agendamento de consultoria PENDING (sem produto definido)
+ * O especialista irá recomendar um produto durante a reunião
+ * @param data - Dados do agendamento de consultoria
+ * @returns O agendamento de consultoria criado em status PENDING
+ */
+export async function createConsultancyAppointment(data: {
+  client_id: string;
+  specialist_id: string;
+  notes?: string;
+}): Promise<Appointment> {
+  const response = await api.post<ApiResponse<Appointment>>(
+    "/appointments/pending",
+    {
+      ...data,
+      // Não envia product_type e product_id para consultoria
+    },
     { withCredentials: true }
   );
   return response.data.data;

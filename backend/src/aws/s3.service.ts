@@ -213,4 +213,33 @@ export class S3Service {
     // Caso contrário, assume que é base64
     return this.uploadBase64Image(imageData, key);
   }
+
+  /**
+   * Faz o upload de um buffer binário diretamente para o bucket S3.
+   * Usado para imagens extraídas de planilhas XLSX via ExcelJS.
+   * @param buffer Buffer com os dados da imagem
+   * @param key O nome/caminho completo do ficheiro no bucket.
+   * @param contentType MIME type da imagem (ex: image/png, image/jpeg)
+   * @returns A 'key' do objeto salvo.
+   */
+  async uploadBuffer(
+    buffer: Buffer,
+    key: string,
+    contentType: string,
+  ): Promise<string> {
+    const command = new PutObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+    });
+
+    try {
+      await this.s3Client.send(command);
+      return key;
+    } catch (error) {
+      console.error('Failed to upload buffer to S3', error);
+      throw new InternalServerErrorException('Failed to upload image buffer.');
+    }
+  }
 }

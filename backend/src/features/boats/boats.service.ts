@@ -18,13 +18,13 @@ import {
 import { Boat } from './entity/boat.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import {
-  CsvImportService,
-  CsvColumnDefinition,
-} from 'src/shared/services/csv-import.service';
+  XlsxImportService,
+  XlsxColumnDefinition,
+} from 'src/shared/services/xlsx-import.service';
 import {
-  CsvImportResponseDto,
-  CsvErrorRow,
-} from 'src/shared/dto/csv-import-response.dto';
+  ImportResponseDto,
+  ImportErrorRow,
+} from 'src/shared/dto/import-response.dto';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 
@@ -32,8 +32,8 @@ import { plainToInstance } from 'class-transformer';
 export class BoatsService {
   private readonly logger = new Logger(BoatsService.name);
 
-  // Definição das colunas do CSV para barcos
-  private readonly csvColumns: CsvColumnDefinition[] = [
+  // Definição das colunas da planilha para barcos (sem 'imagens' — agora são embutidas)
+  private readonly xlsxColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
@@ -48,13 +48,12 @@ export class BoatsService {
     { name: 'tipo_embarcacao', required: false, type: 'string' },
     { name: 'descricao_completa', required: false, type: 'string' },
     { name: 'acessorios', required: false, type: 'string' },
-    { name: 'imagens', required: false, type: 'string' }, // URLs ou base64 separadas por | (pipe)
   ];
 
   constructor(
     private prismaService: PrismaService,
     private s3Service: S3Service,
-    private csvImportService: CsvImportService,
+    private xlsxImportService: XlsxImportService,
   ) {}
 
   async create(createBoatDto: CreateBoatDto) {
@@ -323,95 +322,81 @@ export class BoatsService {
   }
 
   /**
-   * Retorna o template CSV para importação de barcos
+   * Retorna o template XLSX para importação de barcos
    */
-  getCsvTemplate() {
-    const requiredColumns = this.csvColumns
-      .filter((c) => c.required)
-      .map((c) => c.name);
-    const optionalColumns = this.csvColumns
-      .filter((c) => !c.required)
-      .map((c) => c.name);
-
-    const templateHeader = this.csvColumns.map((c) => c.name).join(',');
-    const exampleRow =
-      'Azimut,55 Fly,3500000,São Paulo,2022,Azimut,55 pés,Flybridge,Diesel,Volvo Penta D6,2022,Lancha,Embarcação em excelente estado com todos os opcionais,GPS Garmin - Ar condicionado - Gerador,https://example.com/img1.jpg|https://example.com/img2.jpg';
-
-    return {
-      template: `${templateHeader}\n${exampleRow}`,
-      columns: {
-        required: requiredColumns,
-        optional: optionalColumns,
-      },
-      instructions: {
-        marca: 'Nome da marca da embarcação (texto)',
-        modelo: 'Nome do modelo (texto)',
-        valor: 'Preço em reais (número inteiro, sem pontos ou vírgulas)',
-        estado: 'Estado onde a embarcação está localizada (texto)',
-        ano: 'Ano de fabricação (número)',
-        fabricante: 'Nome do fabricante (texto, opcional)',
-        tamanho: 'Tamanho em pés ou metros (texto, opcional)',
-        estilo: 'Estilo: Flybridge, Sport, Open, etc (opcional)',
-        combustivel: 'Tipo de combustível: Diesel, Gasolina (opcional)',
-        motor: 'Modelo do motor (texto, opcional)',
-        ano_motor: 'Ano do motor (número, opcional)',
-        tipo_embarcacao: 'Tipo: Lancha, Veleiro, Iate, Jet Ski, etc (opcional)',
-        descricao_completa:
-          'Descrição detalhada da embarcação (texto, opcional)',
-        acessorios: 'Lista de acessórios separados por hífen (opcional)',
-        imagens:
-          'URLs de imagens separadas por | (pipe). Primeira imagem será a principal. Ex: https://img1.jpg|https://img2.jpg (opcional)',
-      },
-      example: {
-        marca: 'Azimut',
-        modelo: '55 Fly',
-        valor: 3500000,
-        estado: 'São Paulo',
-        ano: 2022,
-        fabricante: 'Azimut',
-        tamanho: '55 pés',
-        estilo: 'Flybridge',
-        combustivel: 'Diesel',
-        motor: 'Volvo Penta D6',
-        ano_motor: 2022,
-        tipo_embarcacao: 'Lancha',
-        descricao_completa:
-          'Embarcação em excelente estado com todos os opcionais',
-        acessorios: 'GPS Garmin - Ar condicionado - Gerador',
-        imagens: 'https://example.com/img1.jpg|https://example.com/img2.jpg',
-      },
+  async getXlsxTemplate(): Promise<Buffer> {
+    const instructions: Record<string, string> = {
+      marca: 'Nome da marca da embarcação (texto)',
+      modelo: 'Nome do modelo (texto)',
+      valor: 'Preço em reais (número inteiro, sem pontos ou vírgulas)',
+      estado: 'Estado onde a embarcação está localizada (texto)',
+      ano: 'Ano de fabricação (número)',
+      fabricante: 'Nome do fabricante (texto, opcional)',
+      tamanho: 'Tamanho em pés ou metros (texto, opcional)',
+      estilo: 'Estilo: Flybridge, Sport, Open, etc (opcional)',
+      combustivel: 'Tipo de combustível: Diesel, Gasolina (opcional)',
+      motor: 'Modelo do motor (texto, opcional)',
+      ano_motor: 'Ano do motor (número, opcional)',
+      tipo_embarcacao: 'Tipo: Lancha, Veleiro, Iate, Jet Ski, etc (opcional)',
+      descricao_completa: 'Descrição detalhada da embarcação (texto, opcional)',
+      acessorios: 'Lista de acessórios separados por hífen (opcional)',
     };
+
+    const example: Record<string, any> = {
+      marca: 'Azimut',
+      modelo: '55 Fly',
+      valor: 3500000,
+      estado: 'São Paulo',
+      ano: 2022,
+      fabricante: 'Azimut',
+      tamanho: '55 pés',
+      estilo: 'Flybridge',
+      combustivel: 'Diesel',
+      motor: 'Volvo Penta D6',
+      ano_motor: 2022,
+      tipo_embarcacao: 'Lancha',
+      descricao_completa:
+        'Embarcação em excelente estado com todos os opcionais',
+      acessorios: 'GPS Garmin - Ar condicionado - Gerador',
+    };
+
+    return this.xlsxImportService.generateTemplate(
+      this.xlsxColumns,
+      example,
+      instructions,
+    );
   }
 
   /**
-   * Importa barcos a partir de um CSV
+   * Importa barcos a partir de um arquivo XLSX
    */
-  async importFromCsv(
-    csvContent: string,
+  async importFromXlsx(
+    fileBuffer: Buffer,
     user: UserEntity,
-  ): Promise<CsvImportResponseDto> {
-    // 1. Validar estrutura do CSV
-    const structureValidation = this.csvImportService.validateStructure(
-      csvContent,
-      this.csvColumns,
+  ): Promise<ImportResponseDto> {
+    // 1. Parsear a planilha XLSX (dados + imagens embutidas)
+    const { rows, imageMap } =
+      await this.xlsxImportService.parseWorkbook(fileBuffer);
+
+    // 2. Validar estrutura
+    const structureValidation = this.xlsxImportService.validateStructure(
+      rows,
+      this.xlsxColumns,
     );
 
     if (!structureValidation.valid) {
       throw new BadRequestException({
-        message: 'Estrutura do CSV inválida',
+        message: 'Estrutura da planilha inválida',
         errors: structureValidation.errors,
         missingRequired: structureValidation.missingRequired,
         unknownColumns: structureValidation.unknownColumns,
       });
     }
 
-    // 2. Parsear o CSV
-    const rows = this.csvImportService.parseCSV(csvContent);
-
     const insertedIds: number[] = [];
     const updatedIds: number[] = [];
-    const errorRows: CsvErrorRow[] = [];
-    const warningRows: CsvErrorRow[] = [];
+    const errorRows: ImportErrorRow[] = [];
+    const warningRows: ImportErrorRow[] = [];
 
     // 3. Processar cada linha
     for (let i = 0; i < rows.length; i++) {
@@ -486,12 +471,10 @@ export class BoatsService {
           boat = await this.prismaService.boat.create({ data: boatData });
         }
 
-        // Processar imagens (suporte a múltiplas URLs separadas por |)
-        const imageUrls = this.csvImportService.parseDelimitedImages(
-          row.imagens || row.imagem, // retrocompatível com coluna 'imagem'
-        );
+        // Processar imagens embutidas da planilha
+        const embeddedImages = imageMap.get(i) || [];
 
-        if (imageUrls.length > 0) {
+        if (embeddedImages.length > 0) {
           // Se é atualização, remover imagens antigas antes de adicionar novas
           if (isUpdate) {
             await this.prismaService.boat_image.deleteMany({
@@ -502,13 +485,16 @@ export class BoatsService {
           const imageErrors: string[] = [];
           let successCount = 0;
 
-          for (let imgIdx = 0; imgIdx < imageUrls.length; imgIdx++) {
+          for (let imgIdx = 0; imgIdx < embeddedImages.length; imgIdx++) {
             try {
+              const img = embeddedImages[imgIdx];
               const timestamp = Date.now();
-              const key = `boats/${boat.id}/${timestamp}-${imgIdx}.jpg`;
-              const imageKey = await this.s3Service.uploadImageAuto(
-                imageUrls[imgIdx],
+              const key = `boats/${boat.id}/${timestamp}-${imgIdx}.${img.extension}`;
+              const contentType = `image/${img.extension === 'jpg' ? 'jpeg' : img.extension}`;
+              const imageKey = await this.s3Service.uploadBuffer(
+                img.buffer,
                 key,
+                contentType,
               );
 
               await this.prismaService.boat_image.create({
@@ -530,7 +516,7 @@ export class BoatsService {
           if (imageErrors.length > 0) {
             warningRows.push({
               row: rowNumber,
-              reason: `Produto ${isUpdate ? 'atualizado' : 'criado'} (${successCount}/${imageUrls.length} imagens processadas)`,
+              reason: `Produto ${isUpdate ? 'atualizado' : 'criado'} (${successCount}/${embeddedImages.length} imagens processadas)`,
               fields: row,
               imageWarnings: imageErrors,
             });
@@ -551,7 +537,7 @@ export class BoatsService {
       }
     }
 
-    return this.csvImportService.createResponse(
+    return this.xlsxImportService.createResponse(
       insertedIds,
       errorRows,
       warningRows,

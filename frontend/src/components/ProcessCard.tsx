@@ -8,11 +8,12 @@ import {
   MessageSquare,
   CheckCircle,
   XCircle,
+  Package,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Process } from "../services/processes.service";
-import type { Product } from "../types/types";
+import type { Product, SpecialityType } from "../types/types";
 import React from "react";
 import UpdateProcessStatusModal from "./UpdateProcessStatusModal";
 import { getContextualStatusMessage } from "../utils/processStatusMessages";
@@ -40,6 +41,8 @@ interface ProcessCardProps {
   onUploadDocuments?: () => void;
   onStatusUpdated?: () => void;
   isClientView?: boolean; // Se true, remove botões de ação (apenas visualização)
+  onSelectProduct?: () => void; // Callback para abrir seleção de produto em consultoria
+  specialistSpeciality?: SpecialityType; // Especialidade do especialista para filtrar produtos
 }
 
 /**
@@ -54,6 +57,8 @@ export default function ProcessCard({
   onUploadDocuments,
   onStatusUpdated,
   isClientView = false,
+  onSelectProduct,
+  specialistSpeciality,
 }: ProcessCardProps) {
   const navigate = useNavigate();
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -61,6 +66,9 @@ export default function ProcessCard({
   const [activeContract, setActiveContract] = useState<any>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // Verifica se é um processo de consultoria (sem produto atribuído)
+  const isConsultancy = !process.product_type || !process.product_id;
 
   // Load completion reason and active contract on mount and when process changes
   useEffect(() => {
@@ -180,9 +188,14 @@ export default function ProcessCard({
       <div className="px-3 py-2 md:px-6 md:py-4 border-b border-gray-100 flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm md:text-lg font-semibold text-gray-900 truncate">
-            Processo - {process.client?.name || process.client_id} -{" "}
-            {product?.modelo || "Produto"}
+            {isConsultancy ? "Consultoria" : "Processo"} - {process.client?.name || process.client_id} -{" "}
+            {isConsultancy ? "Aguardando produto" : (product?.modelo || "Produto")}
           </h3>
+          {isConsultancy && (
+            <p className="text-xs text-amber-600 mt-1">
+              Especialista precisa selecionar um produto
+            </p>
+          )}
         </div>
         {onToggleExpand && (
           <button
@@ -283,6 +296,39 @@ export default function ProcessCard({
                 </button>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Consultancy - Select Product Button (Specialist View Only) */}
+        {isConsultancy && !isClientView && onSelectProduct && (
+          <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-purple-900 mb-1">
+                Este é um processo de consultoria
+              </p>
+              <p className="text-xs text-purple-700 mb-2">
+                Após a reunião com o cliente, selecione o produto recomendado para continuar com a negociação.
+              </p>
+              <button
+                onClick={onSelectProduct}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition"
+              >
+                <Package size={16} />
+                Selecionar Produto
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Consultancy - Client View Info */}
+        {isConsultancy && isClientView && (
+          <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+            <p className="text-sm font-medium text-purple-900 mb-1">
+              Processo de consultoria
+            </p>
+            <p className="text-xs text-purple-700">
+              Após a reunião, o especialista irá selecionar o produto mais adequado para você.
+            </p>
           </div>
         )}
 

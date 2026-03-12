@@ -71,4 +71,17 @@ export class PrefillContractResponseDto {
     rate?: number; // Taxa de comissão em % (ex: 5.00 = 5%)
     value?: number; // Valor calculado da comissão em R$
   };
+
+  // Dados do Especialista (Split 3) - Comissão individual do especialista
+  specialist?: {
+    id: string;
+    name: string;
+    email?: string;
+    cpf?: string;
+    bank?: string;
+    agency?: string;
+    checking_account?: string;
+    rate?: number; // Taxa de comissão em % (ex: 3.00 = 3%)
+    value?: number; // Valor calculado da comissão em R$
+  };
 }

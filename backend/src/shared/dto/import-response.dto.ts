@@ -1,8 +1,8 @@
 /**
- * Representa um erro em uma linha específica do CSV
+ * Representa um erro em uma linha específica da planilha
  */
-export interface CsvErrorRow {
-  /** Número da linha no CSV (1-indexed, excluindo header) */
+export interface ImportErrorRow {
+  /** Número da linha na planilha (1-indexed, excluindo header) */
   row: number;
   /** Mensagem de erro explicativa */
   reason: string;
@@ -13,9 +13,9 @@ export interface CsvErrorRow {
 }
 
 /**
- * Resposta padrão para importação de CSV
+ * Resposta padrão para importação de planilha XLSX
  */
-export interface CsvImportResponseDto {
+export interface ImportResponseDto {
   /** Indica se a operação foi bem sucedida (pode ter erros parciais) */
   success: boolean;
   /** Mensagem geral sobre a importação */
@@ -29,9 +29,9 @@ export interface CsvImportResponseDto {
   /** Quantidade de produtos criados com avisos de imagem */
   warningCount: number;
   /** Detalhes de cada linha com erro */
-  errorRows: CsvErrorRow[];
+  errorRows: ImportErrorRow[];
   /** Produtos criados com falhas parciais de imagem */
-  warningRows: CsvErrorRow[];
+  warningRows: ImportErrorRow[];
   /** IDs dos produtos inseridos (opcional) */
   insertedIds?: number[];
   /** IDs dos produtos atualizados (opcional) */
@@ -39,22 +39,28 @@ export interface CsvImportResponseDto {
 }
 
 /**
- * Estrutura esperada de uma linha do CSV após parsing
+ * Estrutura esperada de uma linha da planilha após parsing
  */
-export interface CsvParsedRow {
+export interface ImportParsedRow {
   [key: string]: string;
 }
 
 /**
- * Resultado da validação de estrutura do CSV
+ * Resultado da validação de estrutura da planilha
  */
-export interface CsvStructureValidation {
+export interface ImportStructureValidation {
   valid: boolean;
   errors: string[];
-  /** Colunas encontradas no CSV */
+  /** Colunas encontradas na planilha */
   foundColumns: string[];
   /** Colunas obrigatórias que estão faltando */
   missingRequired: string[];
-  /** Colunas no CSV que não são reconhecidas */
+  /** Colunas na planilha que não são reconhecidas */
   unknownColumns: string[];
 }
+
+// Aliases para retrocompatibilidade interna (facilita migração)
+export type CsvImportResponseDto = ImportResponseDto;
+export type CsvErrorRow = ImportErrorRow;
+export type CsvParsedRow = ImportParsedRow;
+export type CsvStructureValidation = ImportStructureValidation;

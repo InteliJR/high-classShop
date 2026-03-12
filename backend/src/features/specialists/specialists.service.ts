@@ -66,6 +66,9 @@ export class SpecialistsService {
           role: 'SPECIALIST',
           company_id: data.company_id || null,
           commission_rate: data.commission_rate ?? null,
+          bank: data.bank || null,
+          agency: data.agency || null,
+          checking_account: data.checking_account || null,
         },
       });
     } catch (error) {

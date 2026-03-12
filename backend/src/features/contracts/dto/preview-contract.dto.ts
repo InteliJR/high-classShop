@@ -198,6 +198,37 @@ export class PreviewContractDto {
   @IsOptional()
   office_checking_account?: string;
 
+  // === DADOS DO ESPECIALISTA (SPLIT 3) ===
+
+  @IsNumber({}, { message: 'specialist_value deve ser um número' })
+  @IsNotEmpty({ message: 'specialist_value é obrigatório' })
+  @Min(0, { message: 'specialist_value deve ser maior ou igual a zero' })
+  specialist_value: number;
+
+  @IsString({ message: 'specialist_name deve ser uma string' })
+  @IsNotEmpty({ message: 'specialist_name é obrigatório' })
+  specialist_name: string;
+
+  @IsEmail({}, { message: 'specialist_email deve ser um email válido' })
+  @IsNotEmpty({ message: 'specialist_email é obrigatório' })
+  specialist_email: string;
+
+  @IsString({ message: 'specialist_document deve ser uma string' })
+  @IsNotEmpty({ message: 'specialist_document é obrigatório' })
+  specialist_document: string;
+
+  @IsString({ message: 'specialist_bank deve ser uma string' })
+  @IsOptional()
+  specialist_bank?: string;
+
+  @IsString({ message: 'specialist_agency deve ser uma string' })
+  @IsOptional()
+  specialist_agency?: string;
+
+  @IsString({ message: 'specialist_checking_account deve ser uma string' })
+  @IsOptional()
+  specialist_checking_account?: string;
+
   // === TESTEMUNHAS (OPCIONAIS) ===
 
   @IsString({ message: 'testimonial1_name deve ser uma string' })

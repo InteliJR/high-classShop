@@ -40,6 +40,10 @@ export default function NewSpecialistForm({
   const [companies, setCompanies] = useState<Company[]>([]);
   // Taxa de comissão individual (somente se não for vinculado a empresa)
   const [commissionRate, setCommissionRate] = useState("");
+  // Dados bancários do especialista
+  const [bank, setBank] = useState("");
+  const [agency, setAgency] = useState("");
+  const [checkingAccount, setCheckingAccount] = useState("");
   // Controla se o formulário está a ser enviado, para desativar o botão e evitar cliques duplos.
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Guarda qualquer mensagem de erro que ocorra durante a validação ou o envio.
@@ -68,6 +72,9 @@ export default function NewSpecialistForm({
           ? String(specialistToEdit.commission_rate)
           : "",
       );
+      setBank(specialistToEdit.bank || "");
+      setAgency(specialistToEdit.agency || "");
+      setCheckingAccount(specialistToEdit.checking_account || "");
     } else {
       setName("");
       setSurname("");
@@ -78,6 +85,9 @@ export default function NewSpecialistForm({
       setSpeciality("CAR");
       setCompanyId("");
       setCommissionRate("");
+      setBank("");
+      setAgency("");
+      setCheckingAccount("");
     }
   }, [specialistToEdit]);
 
@@ -161,6 +171,9 @@ export default function NewSpecialistForm({
           commission_rate: commissionRate
             ? parseFloat(commissionRate)
             : undefined,
+          bank: bank || undefined,
+          agency: agency || undefined,
+          checking_account: checkingAccount || undefined,
         });
       } else {
         // Modo de criação
@@ -176,6 +189,9 @@ export default function NewSpecialistForm({
           commission_rate: commissionRate
             ? parseFloat(commissionRate)
             : undefined,
+          bank: bank || undefined,
+          agency: agency || undefined,
+          checking_account: checkingAccount || undefined,
         });
       }
       onSuccess();
@@ -395,6 +411,74 @@ export default function NewSpecialistForm({
           </p>
         </div>
       )}
+
+      {/* --- DADOS BANCÁRIOS --- */}
+      <div className="border-t border-gray-200 pt-4 mt-4">
+        <h3 className="text-sm font-semibold text-text-secondary mb-3">
+          Dados Bancários (para recebimento de comissão)
+        </h3>
+
+        <div className="space-y-4">
+          <div>
+            <label
+              htmlFor="bank"
+              className="block text-sm font-medium text-text-secondary"
+            >
+              Banco
+            </label>
+            <input
+              id="bank"
+              type="text"
+              value={bank}
+              onChange={(e) => setBank(e.target.value)}
+              placeholder="Ex: Banco do Brasil, Itaú, etc."
+              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label
+                htmlFor="agency"
+                className="block text-sm font-medium text-text-secondary"
+              >
+                Agência
+              </label>
+              <input
+                id="agency"
+                type="text"
+                value={agency}
+                onChange={(e) => setAgency(e.target.value)}
+                placeholder="Ex: 1234"
+                maxLength={10}
+                className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="checking_account"
+                className="block text-sm font-medium text-text-secondary"
+              >
+                Conta Corrente
+              </label>
+              <input
+                id="checking_account"
+                type="text"
+                value={checkingAccount}
+                onChange={(e) => setCheckingAccount(e.target.value)}
+                placeholder="Ex: 12345-6"
+                maxLength={20}
+                className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-gray-500">
+            Os dados bancários serão usados para recebimento da comissão do especialista nos contratos.
+          </p>
+        </div>
+      </div>
 
       {/* Exibe a mensagem de erro apenas se o estado 'error' tiver algum conteúdo. */}
       {error && <p className="text-red-500 text-sm">{error}</p>}

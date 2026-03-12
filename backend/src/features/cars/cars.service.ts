@@ -18,13 +18,13 @@ import {
 import { Car } from './entity/car.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import {
-  CsvImportService,
-  CsvColumnDefinition,
-} from 'src/shared/services/csv-import.service';
+  XlsxImportService,
+  XlsxColumnDefinition,
+} from 'src/shared/services/xlsx-import.service';
 import {
-  CsvImportResponseDto,
-  CsvErrorRow,
-} from 'src/shared/dto/csv-import-response.dto';
+  ImportResponseDto,
+  ImportErrorRow,
+} from 'src/shared/dto/import-response.dto';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 
@@ -32,8 +32,8 @@ import { plainToInstance } from 'class-transformer';
 export class CarsService {
   private readonly logger = new Logger(CarsService.name);
 
-  // Definição das colunas do CSV para carros
-  private readonly csvColumns: CsvColumnDefinition[] = [
+  // Definição das colunas da planilha para carros (sem 'imagens' — agora são embutidas)
+  private readonly xlsxColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
@@ -45,13 +45,12 @@ export class CarsService {
     { name: 'combustivel', required: false, type: 'string' },
     { name: 'tipo_categoria', required: false, type: 'string' },
     { name: 'descricao', required: false, type: 'string' },
-    { name: 'imagens', required: false, type: 'string' }, // URLs ou base64 separadas por | (pipe)
   ];
 
   constructor(
     private prismaService: PrismaService,
     private s3Service: S3Service,
-    private csvImportService: CsvImportService,
+    private xlsxImportService: XlsxImportService,
   ) {}
 
   async create(createCarDto: CreateCarDto) {
@@ -300,88 +299,75 @@ export class CarsService {
   }
 
   /**
-   * Retorna o template CSV para importação de carros
+   * Retorna o template XLSX para importação de carros
    */
-  getCsvTemplate() {
-    const requiredColumns = this.csvColumns
-      .filter((c) => c.required)
-      .map((c) => c.name);
-    const optionalColumns = this.csvColumns
-      .filter((c) => !c.required)
-      .map((c) => c.name);
-
-    const templateHeader = this.csvColumns.map((c) => c.name).join(',');
-    const exampleRow =
-      'BMW,X5,450000,São Paulo,2023,Preto,15000,Automático,Gasolina,SUV,Carro em excelente estado,https://example.com/img1.jpg|https://example.com/img2.jpg';
-
-    return {
-      template: `${templateHeader}\n${exampleRow}`,
-      columns: {
-        required: requiredColumns,
-        optional: optionalColumns,
-      },
-      instructions: {
-        marca: 'Nome da marca do carro (texto)',
-        modelo: 'Nome do modelo (texto)',
-        valor: 'Preço em reais (número inteiro, sem pontos ou vírgulas)',
-        estado: 'Estado onde o carro está localizado (texto)',
-        ano: 'Ano de fabricação (número)',
-        cor: 'Cor do veículo (texto, opcional)',
-        km: 'Quilometragem (número, opcional)',
-        cambio: 'Tipo de câmbio: Manual, Automático, CVT (opcional)',
-        combustivel:
-          'Tipo de combustível: Gasolina, Etanol, Flex, Diesel, Elétrico, Híbrido (opcional)',
-        tipo_categoria: 'Categoria: Sedan, SUV, Hatch, Pickup, etc (opcional)',
-        descricao: 'Descrição detalhada do veículo (texto, opcional)',
-        imagens:
-          'URLs de imagens separadas por | (pipe). Primeira imagem será a principal. Ex: https://img1.jpg|https://img2.jpg (opcional)',
-      },
-      example: {
-        marca: 'BMW',
-        modelo: 'X5',
-        valor: 450000,
-        estado: 'São Paulo',
-        ano: 2023,
-        cor: 'Preto',
-        km: 15000,
-        cambio: 'Automático',
-        combustivel: 'Gasolina',
-        tipo_categoria: 'SUV',
-        descricao: 'Carro em excelente estado',
-        imagens: 'https://example.com/img1.jpg|https://example.com/img2.jpg',
-      },
+  async getXlsxTemplate(): Promise<Buffer> {
+    const instructions: Record<string, string> = {
+      marca: 'Nome da marca do carro (texto)',
+      modelo: 'Nome do modelo (texto)',
+      valor: 'Preço em reais (número inteiro, sem pontos ou vírgulas)',
+      estado: 'Estado onde o carro está localizado (texto)',
+      ano: 'Ano de fabricação (número)',
+      cor: 'Cor do veículo (texto, opcional)',
+      km: 'Quilometragem (número, opcional)',
+      cambio: 'Tipo de câmbio: Manual, Automático, CVT (opcional)',
+      combustivel:
+        'Tipo de combustível: Gasolina, Etanol, Flex, Diesel, Elétrico, Híbrido (opcional)',
+      tipo_categoria: 'Categoria: Sedan, SUV, Hatch, Pickup, etc (opcional)',
+      descricao: 'Descrição detalhada do veículo (texto, opcional)',
     };
+
+    const example: Record<string, any> = {
+      marca: 'BMW',
+      modelo: 'X5',
+      valor: 450000,
+      estado: 'São Paulo',
+      ano: 2023,
+      cor: 'Preto',
+      km: 15000,
+      cambio: 'Automático',
+      combustivel: 'Gasolina',
+      tipo_categoria: 'SUV',
+      descricao: 'Carro em excelente estado',
+    };
+
+    return this.xlsxImportService.generateTemplate(
+      this.xlsxColumns,
+      example,
+      instructions,
+    );
   }
 
   /**
-   * Importa carros a partir de um CSV
+   * Importa carros a partir de um arquivo XLSX
    */
-  async importFromCsv(
-    csvContent: string,
+  async importFromXlsx(
+    fileBuffer: Buffer,
     user: UserEntity,
-  ): Promise<CsvImportResponseDto> {
-    // 1. Validar estrutura do CSV
-    const structureValidation = this.csvImportService.validateStructure(
-      csvContent,
-      this.csvColumns,
+  ): Promise<ImportResponseDto> {
+    // 1. Parsear a planilha XLSX (dados + imagens embutidas)
+    const { rows, imageMap } =
+      await this.xlsxImportService.parseWorkbook(fileBuffer);
+
+    // 2. Validar estrutura
+    const structureValidation = this.xlsxImportService.validateStructure(
+      rows,
+      this.xlsxColumns,
     );
 
     if (!structureValidation.valid) {
       throw new BadRequestException({
-        message: 'Estrutura do CSV inválida',
+        message: 'Estrutura da planilha inválida',
         errors: structureValidation.errors,
         missingRequired: structureValidation.missingRequired,
         unknownColumns: structureValidation.unknownColumns,
       });
     }
 
-    // 2. Parsear o CSV
-    const rows = this.csvImportService.parseCSV(csvContent);
-
     const insertedIds: number[] = [];
     const updatedIds: number[] = [];
-    const errorRows: CsvErrorRow[] = [];
-    const warningRows: CsvErrorRow[] = [];
+    const errorRows: ImportErrorRow[] = [];
+    const warningRows: ImportErrorRow[] = [];
 
     // 3. Processar cada linha
     for (let i = 0; i < rows.length; i++) {
@@ -452,12 +438,10 @@ export class CarsService {
           car = await this.prismaService.car.create({ data: carData });
         }
 
-        // Processar imagens (suporte a múltiplas URLs separadas por |)
-        const imageUrls = this.csvImportService.parseDelimitedImages(
-          row.imagens || row.imagem, // retrocompatível com coluna 'imagem'
-        );
+        // Processar imagens embutidas da planilha
+        const embeddedImages = imageMap.get(i) || [];
 
-        if (imageUrls.length > 0) {
+        if (embeddedImages.length > 0) {
           // Se é atualização, remover imagens antigas antes de adicionar novas
           if (isUpdate) {
             await this.prismaService.car_image.deleteMany({
@@ -468,13 +452,16 @@ export class CarsService {
           const imageErrors: string[] = [];
           let successCount = 0;
 
-          for (let imgIdx = 0; imgIdx < imageUrls.length; imgIdx++) {
+          for (let imgIdx = 0; imgIdx < embeddedImages.length; imgIdx++) {
             try {
+              const img = embeddedImages[imgIdx];
               const timestamp = Date.now();
-              const key = `cars/${car.id}/${timestamp}-${imgIdx}.jpg`;
-              const imageKey = await this.s3Service.uploadImageAuto(
-                imageUrls[imgIdx],
+              const key = `cars/${car.id}/${timestamp}-${imgIdx}.${img.extension}`;
+              const contentType = `image/${img.extension === 'jpg' ? 'jpeg' : img.extension}`;
+              const imageKey = await this.s3Service.uploadBuffer(
+                img.buffer,
                 key,
+                contentType,
               );
 
               await this.prismaService.car_image.create({
@@ -496,7 +483,7 @@ export class CarsService {
           if (imageErrors.length > 0) {
             warningRows.push({
               row: rowNumber,
-              reason: `Produto ${isUpdate ? 'atualizado' : 'criado'} (${successCount}/${imageUrls.length} imagens processadas)`,
+              reason: `Produto ${isUpdate ? 'atualizado' : 'criado'} (${successCount}/${embeddedImages.length} imagens processadas)`,
               fields: row,
               imageWarnings: imageErrors,
             });
@@ -517,7 +504,7 @@ export class CarsService {
       }
     }
 
-    return this.csvImportService.createResponse(
+    return this.xlsxImportService.createResponse(
       insertedIds,
       errorRows,
       warningRows,

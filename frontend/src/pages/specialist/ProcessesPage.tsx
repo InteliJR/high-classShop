@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import ProcessCard from "../../components/ProcessCard.tsx";
 import CreateProcessModal from "../../components/CreateProcessModal.tsx";
+import ProductSelectorModal from "../../components/ProductSelectorModal.tsx";
 import {
   getProcessesBySpecialist,
   type ProcessFilters,
@@ -76,6 +77,8 @@ export default function ProcessesPage() {
 
   // Modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showProductSelectorModal, setShowProductSelectorModal] = useState(false);
+  const [selectedProcessForProduct, setSelectedProcessForProduct] = useState<ProcessWithProduct | null>(null);
 
   const itemsPerPage = 10;
 
@@ -206,6 +209,21 @@ export default function ProcessesPage() {
     setShowCreateModal(false);
     setIsEditing(false); // Resume polling after creation
     loadProcesses(1); // Reload from first page
+  };
+
+  // Handle opening product selector for consultancy processes
+  const handleSelectProduct = (process: ProcessWithProduct) => {
+    setSelectedProcessForProduct(process);
+    setShowProductSelectorModal(true);
+    setIsEditing(true); // Pause polling while selecting product
+  };
+
+  // Handle successful product assignment
+  const handleProductAssigned = () => {
+    setShowProductSelectorModal(false);
+    setSelectedProcessForProduct(null);
+    setIsEditing(false);
+    loadProcesses(currentPage);
   };
 
   // Handle after status is updated
@@ -459,6 +477,8 @@ export default function ProcessesPage() {
                 onToggleExpand={() => handleToggleExpand(process.id)}
                 onUploadDocuments={() => handleUploadDocuments(process.id)}
                 onStatusUpdated={() => handleStatusUpdated()}
+                onSelectProduct={() => handleSelectProduct(process)}
+                specialistSpeciality={user?.speciality}
               />
             ))}
           </div>
@@ -505,6 +525,22 @@ export default function ProcessesPage() {
         onClose={() => setShowCreateModal(false)}
         onSuccess={handleProcessCreated}
       />
+
+      {/* Product Selector Modal for Consultancy Processes */}
+      {selectedProcessForProduct && user?.speciality && (
+        <ProductSelectorModal
+          isOpen={showProductSelectorModal}
+          onClose={() => {
+            setShowProductSelectorModal(false);
+            setSelectedProcessForProduct(null);
+            setIsEditing(false);
+          }}
+          onSuccess={handleProductAssigned}
+          process={selectedProcessForProduct}
+          specialistId={user.id}
+          specialistSpeciality={user.speciality}
+        />
+      )}
     </div>
   );
 }

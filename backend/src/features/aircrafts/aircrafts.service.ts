@@ -19,13 +19,13 @@ import { Prisma } from '@prisma/client';
 import { Aircraft } from './entity/aircraft.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import {
-  CsvImportService,
-  CsvColumnDefinition,
-} from 'src/shared/services/csv-import.service';
+  XlsxImportService,
+  XlsxColumnDefinition,
+} from 'src/shared/services/xlsx-import.service';
 import {
-  CsvImportResponseDto,
-  CsvErrorRow,
-} from 'src/shared/dto/csv-import-response.dto';
+  ImportResponseDto,
+  ImportErrorRow,
+} from 'src/shared/dto/import-response.dto';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 
@@ -33,8 +33,8 @@ import { plainToInstance } from 'class-transformer';
 export class AircraftsService {
   private readonly logger = new Logger(AircraftsService.name);
 
-  // Definição das colunas do CSV para aeronaves
-  private readonly csvColumns: CsvColumnDefinition[] = [
+  // Definição das colunas da planilha para aeronaves (sem 'imagens' — agora são embutidas)
+  private readonly xlsxColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
@@ -44,13 +44,12 @@ export class AircraftsService {
     { name: 'assentos', required: false, type: 'number' },
     { name: 'tipo_aeronave', required: false, type: 'string' },
     { name: 'descricao', required: false, type: 'string' },
-    { name: 'imagens', required: false, type: 'string' }, // URLs ou base64 separadas por | (pipe)
   ];
 
   constructor(
     private prismaService: PrismaService,
     private s3Service: S3Service,
-    private csvImportService: CsvImportService,
+    private xlsxImportService: XlsxImportService,
   ) {}
 
   async create(createAircraftDto: CreateAircraftDto) {
@@ -379,84 +378,71 @@ export class AircraftsService {
   }
 
   /**
-   * Retorna o template CSV para importação de aeronaves
+   * Retorna o template XLSX para importação de aeronaves
    */
-  getCsvTemplate() {
-    const requiredColumns = this.csvColumns
-      .filter((c) => c.required)
-      .map((c) => c.name);
-    const optionalColumns = this.csvColumns
-      .filter((c) => !c.required)
-      .map((c) => c.name);
-
-    const templateHeader = this.csvColumns.map((c) => c.name).join(',');
-    const exampleRow =
-      'Embraer,Phenom 300,15000000,São Paulo,2021,Light Jet,8,Jato Executivo,Aeronave com baixas horas de voo e interior renovado,https://example.com/img1.jpg|https://example.com/img2.jpg';
-
-    return {
-      template: `${templateHeader}\n${exampleRow}`,
-      columns: {
-        required: requiredColumns,
-        optional: optionalColumns,
-      },
-      instructions: {
-        marca: 'Nome da marca da aeronave (texto)',
-        modelo: 'Nome do modelo (texto)',
-        valor: 'Preço em reais (número inteiro, sem pontos ou vírgulas)',
-        estado: 'Estado onde a aeronave está localizada (texto)',
-        ano: 'Ano de fabricação (número)',
-        categoria: 'Categoria: Light Jet, Midsize, Large Cabin, etc (opcional)',
-        assentos: 'Número de assentos (número, opcional)',
-        tipo_aeronave:
-          'Tipo: Jato Executivo, Turboélice, Helicóptero, etc (opcional)',
-        descricao: 'Descrição detalhada da aeronave (texto, opcional)',
-        imagens:
-          'URLs de imagens separadas por | (pipe). Primeira imagem será a principal. Ex: https://img1.jpg|https://img2.jpg (opcional)',
-      },
-      example: {
-        marca: 'Embraer',
-        modelo: 'Phenom 300',
-        valor: 15000000,
-        estado: 'São Paulo',
-        ano: 2021,
-        categoria: 'Light Jet',
-        assentos: 8,
-        tipo_aeronave: 'Jato Executivo',
-        descricao: 'Aeronave com baixas horas de voo e interior renovado',
-        imagens: 'https://example.com/img1.jpg|https://example.com/img2.jpg',
-      },
+  async getXlsxTemplate(): Promise<Buffer> {
+    const instructions: Record<string, string> = {
+      marca: 'Nome da marca da aeronave (texto)',
+      modelo: 'Nome do modelo (texto)',
+      valor: 'Preço em reais (número inteiro, sem pontos ou vírgulas)',
+      estado: 'Estado onde a aeronave está localizada (texto)',
+      ano: 'Ano de fabricação (número)',
+      categoria: 'Categoria: Light Jet, Midsize, Large Cabin, etc (opcional)',
+      assentos: 'Número de assentos (número, opcional)',
+      tipo_aeronave:
+        'Tipo: Jato Executivo, Turboélice, Helicóptero, etc (opcional)',
+      descricao: 'Descrição detalhada da aeronave (texto, opcional)',
     };
+
+    const example: Record<string, any> = {
+      marca: 'Embraer',
+      modelo: 'Phenom 300',
+      valor: 15000000,
+      estado: 'São Paulo',
+      ano: 2021,
+      categoria: 'Light Jet',
+      assentos: 8,
+      tipo_aeronave: 'Jato Executivo',
+      descricao: 'Aeronave com baixas horas de voo e interior renovado',
+    };
+
+    return this.xlsxImportService.generateTemplate(
+      this.xlsxColumns,
+      example,
+      instructions,
+    );
   }
 
   /**
-   * Importa aeronaves a partir de um CSV
+   * Importa aeronaves a partir de um arquivo XLSX
    */
-  async importFromCsv(
-    csvContent: string,
+  async importFromXlsx(
+    fileBuffer: Buffer,
     user: UserEntity,
-  ): Promise<CsvImportResponseDto> {
-    // 1. Validar estrutura do CSV
-    const structureValidation = this.csvImportService.validateStructure(
-      csvContent,
-      this.csvColumns,
+  ): Promise<ImportResponseDto> {
+    // 1. Parsear a planilha XLSX (dados + imagens embutidas)
+    const { rows, imageMap } =
+      await this.xlsxImportService.parseWorkbook(fileBuffer);
+
+    // 2. Validar estrutura
+    const structureValidation = this.xlsxImportService.validateStructure(
+      rows,
+      this.xlsxColumns,
     );
 
     if (!structureValidation.valid) {
       throw new BadRequestException({
-        message: 'Estrutura do CSV inválida',
+        message: 'Estrutura da planilha inválida',
         errors: structureValidation.errors,
         missingRequired: structureValidation.missingRequired,
         unknownColumns: structureValidation.unknownColumns,
       });
     }
 
-    // 2. Parsear o CSV
-    const rows = this.csvImportService.parseCSV(csvContent);
-
     const insertedIds: number[] = [];
     const updatedIds: number[] = [];
-    const errorRows: CsvErrorRow[] = [];
-    const warningRows: CsvErrorRow[] = [];
+    const errorRows: ImportErrorRow[] = [];
+    const warningRows: ImportErrorRow[] = [];
 
     // 3. Processar cada linha
     for (let i = 0; i < rows.length; i++) {
@@ -547,12 +533,10 @@ export class AircraftsService {
           });
         }
 
-        // Processar imagens (suporte a múltiplas URLs separadas por |)
-        const imageUrls = this.csvImportService.parseDelimitedImages(
-          row.imagens || row.imagem, // retrocompatível com coluna 'imagem'
-        );
+        // Processar imagens embutidas da planilha
+        const embeddedImages = imageMap.get(i) || [];
 
-        if (imageUrls.length > 0) {
+        if (embeddedImages.length > 0) {
           // Se é atualização, remover imagens antigas antes de adicionar novas
           if (isUpdate) {
             await this.prismaService.aircraft_image.deleteMany({
@@ -563,13 +547,16 @@ export class AircraftsService {
           const imageErrors: string[] = [];
           let successCount = 0;
 
-          for (let imgIdx = 0; imgIdx < imageUrls.length; imgIdx++) {
+          for (let imgIdx = 0; imgIdx < embeddedImages.length; imgIdx++) {
             try {
+              const img = embeddedImages[imgIdx];
               const timestamp = Date.now();
-              const key = `aircrafts/${aircraft.id}/${timestamp}-${imgIdx}.jpg`;
-              const imageKey = await this.s3Service.uploadImageAuto(
-                imageUrls[imgIdx],
+              const key = `aircrafts/${aircraft.id}/${timestamp}-${imgIdx}.${img.extension}`;
+              const contentType = `image/${img.extension === 'jpg' ? 'jpeg' : img.extension}`;
+              const imageKey = await this.s3Service.uploadBuffer(
+                img.buffer,
                 key,
+                contentType,
               );
 
               await this.prismaService.aircraft_image.create({
@@ -591,7 +578,7 @@ export class AircraftsService {
           if (imageErrors.length > 0) {
             warningRows.push({
               row: rowNumber,
-              reason: `Produto ${isUpdate ? 'atualizado' : 'criado'} (${successCount}/${imageUrls.length} imagens processadas)`,
+              reason: `Produto ${isUpdate ? 'atualizado' : 'criado'} (${successCount}/${embeddedImages.length} imagens processadas)`,
               fields: row,
               imageWarnings: imageErrors,
             });
@@ -612,7 +599,7 @@ export class AircraftsService {
       }
     }
 
-    return this.csvImportService.createResponse(
+    return this.xlsxImportService.createResponse(
       insertedIds,
       errorRows,
       warningRows,

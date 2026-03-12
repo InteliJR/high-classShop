@@ -58,6 +58,18 @@ export interface PrefillOffice {
   value?: number;
 }
 
+export interface PrefillSpecialist {
+  id?: string;
+  name?: string;
+  email?: string;
+  cpf?: string;
+  bank?: string;
+  agency?: string;
+  checking_account?: string;
+  rate?: number;
+  value?: number;
+}
+
 export interface PrefillContractResponse {
   process_id: string;
   product_type: "CAR" | "BOAT" | "AIRCRAFT";
@@ -67,6 +79,7 @@ export interface PrefillContractResponse {
   proposal?: PrefillProposal;
   platform?: PrefillPlatform;
   office?: PrefillOffice;
+  specialist?: PrefillSpecialist;
 }
 
 // === TIPOS PARA GERAÇÃO DE CONTRATO ===
@@ -120,6 +133,15 @@ export interface GenerateContractData {
   office_bank?: string;
   office_agency?: string;
   office_checking_account?: string;
+
+  // Dados do Especialista (Split 3)
+  specialist_value?: number;
+  specialist_name?: string;
+  specialist_email?: string;
+  specialist_document?: string;
+  specialist_bank?: string;
+  specialist_agency?: string;
+  specialist_checking_account?: string;
 
   // Testemunhas (opcionais)
   testimonial1_name?: string;
@@ -210,6 +232,9 @@ export async function generateContract(
     buyer_cep: stripFormatting(data.buyer_cep),
     platform_cnpj: stripFormatting(data.platform_cnpj),
     office_cnpj: stripFormatting(data.office_cnpj),
+    specialist_document: data.specialist_document
+      ? stripFormatting(data.specialist_document)
+      : undefined,
     testimonial1_cpf: data.testimonial1_cpf
       ? stripFormatting(data.testimonial1_cpf)
       : undefined,
@@ -278,6 +303,9 @@ export async function previewContract(
     buyer_cep: stripFormatting(data.buyer_cep),
     platform_cnpj: stripFormatting(data.platform_cnpj),
     office_cnpj: stripFormatting(data.office_cnpj),
+    specialist_document: data.specialist_document
+      ? stripFormatting(data.specialist_document)
+      : undefined,
     testimonial1_cpf: data.testimonial1_cpf
       ? stripFormatting(data.testimonial1_cpf)
       : undefined,
@@ -321,6 +349,9 @@ export async function sendContractAfterPreview(
     buyer_cep: stripFormatting(data.buyer_cep),
     platform_cnpj: stripFormatting(data.platform_cnpj),
     office_cnpj: stripFormatting(data.office_cnpj),
+    specialist_document: data.specialist_document
+      ? stripFormatting(data.specialist_document)
+      : undefined,
     testimonial1_cpf: data.testimonial1_cpf
       ? stripFormatting(data.testimonial1_cpf)
       : undefined,

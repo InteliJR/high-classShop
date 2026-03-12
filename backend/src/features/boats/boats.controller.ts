@@ -11,6 +11,8 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { BoatsService } from './boats.service';
@@ -26,15 +28,15 @@ import {
   assertSpecialistCanCreate,
   assertSpecialistCanModify,
 } from 'src/shared/helpers/specialist-auth.helper';
-import { CsvImportService } from 'src/shared/services/csv-import.service';
-import { CsvImportResponseDto } from 'src/shared/dto/csv-import-response.dto';
+import { XlsxImportService } from 'src/shared/services/xlsx-import.service';
+import { ImportResponseDto } from 'src/shared/dto/import-response.dto';
 import { Public } from 'src/shared/decorators/public.decorator';
 
 @Controller('boats')
 export class BoatsController {
   constructor(
     private readonly boatsService: BoatsService,
-    private readonly csvImportService: CsvImportService,
+    private readonly xlsxImportService: XlsxImportService,
   ) {}
 
   @Post()
@@ -48,27 +50,34 @@ export class BoatsController {
     return this.boatsService.create(createBoatDto);
   }
 
-  @Post('import-csv')
+  @Post('import-xlsx')
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
-  @UseInterceptors(FileInterceptor('file'))
-  async importCsv(
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }),
+  )
+  async importXlsx(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: UserEntity,
-  ): Promise<CsvImportResponseDto> {
+  ): Promise<ImportResponseDto> {
     // Validar permissão do usuário
     assertSpecialistCanCreate('BOAT', user);
 
     if (!file) {
-      throw new BadRequestException('Arquivo CSV é obrigatório.');
+      throw new BadRequestException('Arquivo XLSX é obrigatório.');
     }
 
-    const csvContent = file.buffer.toString('utf-8');
-    return this.boatsService.importFromCsv(csvContent, user);
+    return this.boatsService.importFromXlsx(file.buffer, user);
   }
 
-  @Get('csv-template')
-  getCsvTemplate() {
-    return this.boatsService.getCsvTemplate();
+  @Get('xlsx-template')
+  async getXlsxTemplate(@Res({ passthrough: true }) res: any) {
+    const buffer = await this.boatsService.getXlsxTemplate();
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename=template_lanchas.xlsx',
+    });
+    return new StreamableFile(buffer);
   }
 
   @Get()

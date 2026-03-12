@@ -213,7 +213,7 @@ export class ContractsService {
 
     // Buscar dados da empresa da plataforma + calcular comissão
     const platformCompany = await this.platformCompanyService.findOne();
-    const { platformRate, officeRate, officeData } =
+    const { platformRate, officeRate, officeData, specialistRate, specialistData } =
       await this.calculateCommissionSplit(
         processData.specialist,
         platformCompany,
@@ -233,6 +233,9 @@ export class ContractsService {
       ? (proposalValue * platformRate) / 100
       : 0;
     const officeValue = officeRate ? (proposalValue * officeRate) / 100 : 0;
+    const specialistValue = specialistRate
+      ? (proposalValue * specialistRate) / 100
+      : 0;
 
     return {
       process_id: processData.id,
@@ -284,20 +287,45 @@ export class ContractsService {
             value: Math.round(officeValue * 100) / 100,
           }
         : undefined,
+      specialist: specialistData
+        ? {
+            id: specialistData.id,
+            name: specialistData.name,
+            email: specialistData.email || undefined,
+            cpf: specialistData.cpf || undefined,
+            bank: specialistData.bank || undefined,
+            agency: specialistData.agency || undefined,
+            checking_account: specialistData.checking_account || undefined,
+            rate: specialistRate,
+            value: Math.round(specialistValue * 100) / 100,
+          }
+        : undefined,
     };
   }
 
   /**
-   * Calcula as taxas de comissão da plataforma e do escritório separadamente
+   * Calcula as taxas de comissão da plataforma, escritório e especialista separadamente
    *
    * Taxas de comissão:
    * - Plataforma: sempre usa default_commission_rate da PlatformCompany
-   * - Escritório: usa company.commission_rate ou specialist.commission_rate (fallback 0)
+   * - Escritório: usa company.commission_rate (se especialista tiver empresa)
+   * - Especialista: usa specialist.commission_rate (taxa individual do especialista)
    *
-   * @returns { platformRate, officeRate, officeData }
+   * @returns { platformRate, officeRate, officeData, specialistRate, specialistData }
    */
   private async calculateCommissionSplit(
-    specialist: { company_id?: string | null; commission_rate?: any },
+    specialist: {
+      id?: string;
+      name?: string;
+      surname?: string;
+      email?: string;
+      cpf?: string;
+      company_id?: string | null;
+      commission_rate?: any;
+      bank?: string | null;
+      agency?: string | null;
+      checking_account?: string | null;
+    },
     platformCompany: { default_commission_rate: number } | null,
   ): Promise<{
     platformRate: number;
@@ -309,11 +337,21 @@ export class ContractsService {
       agency?: string | null;
       checking_account?: string | null;
     } | null;
+    specialistRate: number;
+    specialistData: {
+      id: string;
+      name: string;
+      email?: string | null;
+      cpf?: string | null;
+      bank?: string | null;
+      agency?: string | null;
+      checking_account?: string | null;
+    } | null;
   }> {
     // Taxa da plataforma: sempre vem da PlatformCompany
     const platformRate = platformCompany?.default_commission_rate ?? 0;
 
-    // Taxa do escritório: vem da empresa do especialista ou do próprio especialista
+    // Taxa do escritório: vem da empresa do especialista
     let officeRate = 0;
     let officeData: {
       name: string;
@@ -322,6 +360,24 @@ export class ContractsService {
       agency?: string | null;
       checking_account?: string | null;
     } | null = null;
+
+    // Taxa do especialista: taxa individual do especialista
+    const specialistRate = specialist.commission_rate
+      ? Number(specialist.commission_rate)
+      : 0;
+
+    // Dados do especialista para comissão
+    const specialistData = specialist.id
+      ? {
+          id: specialist.id,
+          name: `${specialist.name || ''} ${specialist.surname || ''}`.trim(),
+          email: specialist.email,
+          cpf: specialist.cpf,
+          bank: specialist.bank,
+          agency: specialist.agency,
+          checking_account: specialist.checking_account,
+        }
+      : null;
 
     // 1. Verificar se especialista tem empresa associada
     if (specialist.company_id) {
@@ -342,13 +398,7 @@ export class ContractsService {
       }
     }
 
-    // 2. Se especialista tem taxa individual, usa como taxa do escritório
-    // (apenas se não tiver empresa ou empresa não tiver taxa)
-    if (officeRate === 0 && specialist.commission_rate) {
-      officeRate = Number(specialist.commission_rate);
-    }
-
-    return { platformRate, officeRate, officeData };
+    return { platformRate, officeRate, officeData, specialistRate, specialistData };
   }
 
   /**
@@ -501,6 +551,8 @@ export class ContractsService {
           buyerName: dto.buyer_name,
           sellerEmail: dto.seller_email,
           sellerName: dto.seller_name,
+          specialistEmail: dto.specialist_email,
+          specialistName: dto.specialist_name,
           formFields,
           processId: dto.process_id,
           testimonial1Name: dto.testimonial1_name,
@@ -588,6 +640,17 @@ export class ContractsService {
               office_bank: dto.office_bank || null,
               office_agency: dto.office_agency || null,
               office_checking_account: dto.office_checking_account || null,
+
+              // Dados do Especialista (Split 3)
+              specialist_commission_value: dto.specialist_value,
+              specialist_commission_value_written: numberToWords(
+                dto.specialist_value,
+              ),
+              specialist_name: dto.specialist_name,
+              specialist_document: dto.specialist_document,
+              specialist_bank: dto.specialist_bank || null,
+              specialist_agency: dto.specialist_agency || null,
+              specialist_checking_account: dto.specialist_checking_account || null,
 
               // Testemunhas (opcionais)
               testimonial1_cpf: dto.testimonial1_cpf || null,
@@ -726,7 +789,7 @@ export class ContractsService {
    */
   private buildFormFields(
     dto: GenerateContractDto,
-    productType: ProductType,
+    productType: ProductType | null,
   ): Record<string, string> {
     const fields: Record<string, string> = {
       // Vendedor
@@ -790,6 +853,16 @@ export class ContractsService {
       office_bank: dto.office_bank || '',
       office_agency: dto.office_agency || '',
       office_checking_account: dto.office_checking_account || '',
+
+      // Dados do Especialista (Split 3)
+      specialist_value: formatBRL(dto.specialist_value),
+      specialist_value_written: numberToWords(dto.specialist_value),
+      specialist_bank: dto.specialist_bank || '',
+      specialist_agency: dto.specialist_agency || '',
+      specialist_checking_account: dto.specialist_checking_account || '',
+      // NOTE: variável do template usa nome em português/inglês misturado
+      especialista_name: dto.specialist_name,
+      specialist_document: formatCpf(dto.specialist_document),
 
       // Testemunhas (opcionais)
       testimonial1_cpf: dto.testimonial1_cpf
@@ -940,6 +1013,13 @@ export class ContractsService {
         office_bank: dto.office_bank,
         office_agency: dto.office_agency,
         office_checking_account: dto.office_checking_account,
+        specialist_value: dto.specialist_value,
+        specialist_name: dto.specialist_name,
+        specialist_email: dto.specialist_email,
+        specialist_document: dto.specialist_document,
+        specialist_bank: dto.specialist_bank,
+        specialist_agency: dto.specialist_agency,
+        specialist_checking_account: dto.specialist_checking_account,
         testimonial1_cpf: dto.testimonial1_cpf,
         testimonial1_email: dto.testimonial1_email,
         testimonial2_cpf: dto.testimonial2_cpf,
@@ -1179,6 +1259,17 @@ export class ContractsService {
               office_bank: dto.office_bank || null,
               office_agency: dto.office_agency || null,
               office_checking_account: dto.office_checking_account || null,
+
+              // Dados do Especialista (Split 3)
+              specialist_commission_value: dto.specialist_value,
+              specialist_commission_value_written: numberToWords(
+                dto.specialist_value,
+              ),
+              specialist_name: dto.specialist_name,
+              specialist_document: dto.specialist_document,
+              specialist_bank: dto.specialist_bank || null,
+              specialist_agency: dto.specialist_agency || null,
+              specialist_checking_account: dto.specialist_checking_account || null,
 
               // Testemunhas (opcionais)
               testimonial1_cpf: dto.testimonial1_cpf || null,

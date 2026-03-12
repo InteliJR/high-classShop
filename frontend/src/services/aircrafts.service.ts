@@ -157,57 +157,57 @@ export async function deleteAircraft(id: number): Promise<void> {
 }
 
 // CSV Import Types
-export interface CsvErrorRow {
+// XLSX Import Types
+export interface XlsxErrorRow {
   row: number;
   reason: string;
   fields?: Record<string, any>;
   imageWarnings?: string[];
 }
 
-export interface CsvImportResponse {
+export interface XlsxImportResponse {
   success: boolean;
   message: string;
   insertedCount: number;
+  updatedCount: number;
   errorCount: number;
   warningCount: number;
-  errorRows: CsvErrorRow[];
-  warningRows: CsvErrorRow[];
+  errorRows: XlsxErrorRow[];
+  warningRows: XlsxErrorRow[];
   insertedIds?: number[];
+  updatedIds?: number[];
 }
 
-export interface CsvTemplateResponse {
-  template: string;
-  columns: {
-    required: string[];
-    optional: string[];
-  };
-  instructions: Record<string, string>;
-  example: Record<string, any>;
-}
-
-// Get /aircrafts/csv-template
-export async function getAircraftsCsvTemplate(): Promise<CsvTemplateResponse> {
+// Get /aircrafts/xlsx-template (downloads binary .xlsx file)
+export async function getAircraftsXlsxTemplate(): Promise<void> {
   try {
-    const response = await api.get<CsvTemplateResponse>(
-      "/aircrafts/csv-template",
-    );
-    return response.data;
+    const response = await api.get("/aircrafts/xlsx-template", {
+      responseType: "blob",
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "template_aeronaves.xlsx");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   } catch (error) {
-    console.error("Erro ao buscar template CSV:", error);
+    console.error("Erro ao baixar template XLSX:", error);
     throw error;
   }
 }
 
-// Post /aircrafts/import-csv
-export async function importAircraftsCsv(
+// Post /aircrafts/import-xlsx
+export async function importAircraftsXlsx(
   file: File,
-): Promise<CsvImportResponse> {
+): Promise<XlsxImportResponse> {
   try {
     const formData = new FormData();
     formData.append("file", file);
 
-    const response = await api.post<CsvImportResponse>(
-      "/aircrafts/import-csv",
+    const response = await api.post<XlsxImportResponse>(
+      "/aircrafts/import-xlsx",
       formData,
       {
         headers: {
@@ -217,7 +217,7 @@ export async function importAircraftsCsv(
     );
     return response.data;
   } catch (error: any) {
-    console.error("Erro ao importar CSV:", error);
+    console.error("Erro ao importar XLSX:", error);
     if (error.response?.data) {
       throw error.response.data;
     }

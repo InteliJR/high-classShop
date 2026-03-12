@@ -286,6 +286,8 @@ export class DocuSignService {
    * @param params.buyerName - Nome do comprador
    * @param params.sellerEmail - Email do vendedor
    * @param params.sellerName - Nome do vendedor
+   * @param params.specialistEmail - Email do especialista (para assinatura)
+   * @param params.specialistName - Nome do especialista
    * @param params.formFields - Campos do formulário para preencher no contrato
    * @param params.processId - ID do processo para rastreabilidade
    * @returns Promise<{envelopeId: string; status: EnvelopeStatus}>
@@ -300,6 +302,8 @@ export class DocuSignService {
     buyerName: string;
     sellerEmail: string;
     sellerName: string;
+    specialistEmail?: string;
+    specialistName?: string;
     formFields: Record<string, string>;
     processId: string;
     testimonial1Name?: string;
@@ -313,6 +317,8 @@ export class DocuSignService {
       buyerName,
       sellerEmail,
       sellerName,
+      specialistEmail,
+      specialistName,
       formFields,
       processId,
       testimonial1Name,
@@ -363,6 +369,16 @@ export class DocuSignService {
             name: sellerName,
             email: sellerEmail,
           },
+          // Especialista recebe comissão e precisa assinar
+          ...(specialistEmail && specialistName
+            ? [
+                {
+                  roleName: 'Specialist',
+                  name: specialistName,
+                  email: specialistEmail,
+                },
+              ]
+            : []),
           // Testemunhas são obrigatórias no template — se não fornecidas, usar placeholder
           {
             roleName: 'Testimonial1',

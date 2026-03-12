@@ -166,8 +166,11 @@ export class ProposalsService {
         success: false,
         error: {
           code: 400,
-          message: 'Processo não possui produto associado',
-          details: { process_id: dto.process_id },
+          message: 'Processo não possui produto associado. O especialista deve selecionar um produto antes de iniciar a negociação.',
+          details: {
+            process_id: dto.process_id,
+            tip: 'Se este é um processo de consultoria, o especialista precisa atribuir um produto através da opção "Selecionar Produto" na página de processos.',
+          },
         },
       });
     }

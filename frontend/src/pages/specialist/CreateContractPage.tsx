@@ -67,6 +67,15 @@ interface ContractFormData {
   office_agency: string;
   office_checking_account: string;
 
+  // Dados do Especialista (Split 3)
+  specialist_value: number;
+  specialist_name: string;
+  specialist_email: string;
+  specialist_document: string;
+  specialist_bank: string;
+  specialist_agency: string;
+  specialist_checking_account: string;
+
   // Testemunhas (opcionais)
   testimonial1_name: string;
   testimonial1_cpf: string;
@@ -132,6 +141,13 @@ export default function CreateContractPage() {
       office_bank: "",
       office_agency: "",
       office_checking_account: "",
+      specialist_value: 0,
+      specialist_name: "",
+      specialist_email: "",
+      specialist_document: "",
+      specialist_bank: "",
+      specialist_agency: "",
+      specialist_checking_account: "",
       testimonial1_name: "",
       testimonial1_cpf: "",
       testimonial1_email: "",
@@ -163,6 +179,7 @@ export default function CreateContractPage() {
   const vehiclePrice = watch("vehicle_price");
   const platformValue = watch("platform_value");
   const officeValue = watch("office_value");
+  const specialistValue = watch("specialist_value");
 
   // Validate processId exists
   if (!processId) {
@@ -277,6 +294,27 @@ export default function CreateContractPage() {
             setValue("office_value", data.office.value);
           }
         }
+
+        // Dados do Especialista (Split 3)
+        if (data.specialist) {
+          setValue("specialist_name", data.specialist.name || "");
+          setValue("specialist_email", data.specialist.email || "");
+          setValue(
+            "specialist_document",
+            data.specialist.cpf ? applyCpfMask(data.specialist.cpf) : "",
+          );
+          setValue("specialist_bank", data.specialist.bank || "");
+          setValue("specialist_agency", data.specialist.agency || "");
+          setValue(
+            "specialist_checking_account",
+            data.specialist.checking_account || "",
+          );
+
+          // Valor do especialista
+          if (data.specialist.value != null) {
+            setValue("specialist_value", data.specialist.value);
+          }
+        }
       } catch (error: unknown) {
         console.error("Erro ao carregar dados do contrato:", error);
 
@@ -352,6 +390,14 @@ export default function CreateContractPage() {
     office_bank: formData.office_bank || undefined,
     office_agency: formData.office_agency || undefined,
     office_checking_account: formData.office_checking_account || undefined,
+    // Specialist split
+    specialist_value: formData.specialist_value || undefined,
+    specialist_name: formData.specialist_name || undefined,
+    specialist_email: formData.specialist_email || undefined,
+    specialist_document: formData.specialist_document || undefined,
+    specialist_bank: formData.specialist_bank || undefined,
+    specialist_agency: formData.specialist_agency || undefined,
+    specialist_checking_account: formData.specialist_checking_account || undefined,
     // Witnesses (optional)
     testimonial1_name: formData.testimonial1_name || undefined,
     testimonial1_cpf: formData.testimonial1_cpf || undefined,
@@ -478,16 +524,16 @@ export default function CreateContractPage() {
     });
   }, []);
 
-  // Calcular valor do vendedor automaticamente (seller = price - platform - office)
+  // Calcular valor do vendedor automaticamente (seller = price - platform - office - specialist)
   useEffect(() => {
-    if (vehiclePrice && (platformValue || officeValue)) {
+    if (vehiclePrice && (platformValue || officeValue || specialistValue)) {
       const sellerValue =
-        vehiclePrice - (platformValue || 0) - (officeValue || 0);
+        vehiclePrice - (platformValue || 0) - (officeValue || 0) - (specialistValue || 0);
       setValue("payment_seller_value", sellerValue > 0 ? sellerValue : 0);
     }
-  }, [vehiclePrice, platformValue, officeValue, setValue]);
+  }, [vehiclePrice, platformValue, officeValue, specialistValue, setValue]);
 
-  // Recalcular valor da plataforma e escritório quando o preço muda (usa taxas do prefill)
+  // Recalcular valor da plataforma, escritório e especialista quando o preço muda (usa taxas do prefill)
   useEffect(() => {
     if (vehiclePrice > 0) {
       if (prefillData?.platform?.rate != null) {
@@ -499,6 +545,11 @@ export default function CreateContractPage() {
         const newOfficeValue =
           Math.round(vehiclePrice * prefillData.office.rate) / 100;
         setValue("office_value", newOfficeValue);
+      }
+      if (prefillData?.specialist?.rate != null) {
+        const newSpecialistValue =
+          Math.round(vehiclePrice * prefillData.specialist.rate) / 100;
+        setValue("specialist_value", newSpecialistValue);
       }
     }
   }, [vehiclePrice, prefillData, setValue]);
@@ -1350,6 +1401,156 @@ export default function CreateContractPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                   placeholder="Opcional"
                 />
+              </div>
+            </div>
+          </section>
+
+          {/* Seção: Dados do Especialista */}
+          <section className="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">
+              Dados do Especialista
+            </h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Dados do especialista responsável pelo produto. O especialista
+              receberá uma comissão sobre a venda e precisa assinar o contrato.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome *
+                </label>
+                <input
+                  type="text"
+                  {...register("specialist_name", {
+                    required: "Nome do especialista é obrigatório",
+                  })}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                />
+                {errors.specialist_name && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialist_name.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  E-mail *
+                </label>
+                <input
+                  type="email"
+                  {...register("specialist_email", {
+                    required: "E-mail do especialista é obrigatório",
+                  })}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                />
+                {errors.specialist_email && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialist_email.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CPF *
+                </label>
+                <Controller
+                  name="specialist_document"
+                  control={control}
+                  rules={{ required: "CPF do especialista é obrigatório" }}
+                  render={({ field }) => (
+                    <input
+                      type="text"
+                      {...field}
+                      readOnly
+                      maxLength={14}
+                      placeholder="000.000.000-00"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                    />
+                  )}
+                />
+                {errors.specialist_document && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialist_document.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Banco *
+                </label>
+                <input
+                  type="text"
+                  {...register("specialist_bank", {
+                    required: "Banco do especialista é obrigatório",
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  placeholder="Banco do especialista"
+                />
+                {errors.specialist_bank && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialist_bank.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Agência *
+                </label>
+                <input
+                  type="text"
+                  {...register("specialist_agency", {
+                    required: "Agência do especialista é obrigatória",
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  placeholder="Agência"
+                />
+                {errors.specialist_agency && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialist_agency.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Conta Corrente *
+                </label>
+                <input
+                  type="text"
+                  {...register("specialist_checking_account", {
+                    required: "Conta corrente do especialista é obrigatória",
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  placeholder="Conta corrente"
+                />
+                {errors.specialist_checking_account && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialist_checking_account.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Valor da Comissão *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                    R$
+                  </span>
+                  <input
+                    type="text"
+                    value={formatBRL(watch("specialist_value"))}
+                    readOnly
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                  />
+                </div>
               </div>
             </div>
           </section>

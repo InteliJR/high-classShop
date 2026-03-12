@@ -13,6 +13,9 @@ export type Specialist = {
   speciality: "CAR" | "BOAT" | "AIRCRAFT";
   company_id?: string | null;
   commission_rate?: number | null;
+  bank?: string | null;
+  agency?: string | null;
+  checking_account?: string | null;
 };
 
 // Tipo para especialistas agrupados por categoria
@@ -33,6 +36,9 @@ export type CreateSpecialistData = {
   speciality: "CAR" | "BOAT" | "AIRCRAFT";
   company_id?: string;
   commission_rate?: number;
+  bank?: string;
+  agency?: string;
+  checking_account?: string;
 };
 
 // Função auxiliar para extrair mensagem de erro
