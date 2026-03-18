@@ -117,7 +117,7 @@ export const mockUsers: UserMock[] = [
     password_hash: COMMON_PASSWORD_HASH,
     company_id: GENIUS_COMPANY_REF, // Será preenchido com UUID real na seed
     commission_rate: undefined, // Usará taxa da empresa (Genius: 12.5%)
-    calendly_url: 'https://calendly.com/carlos-mecanico',
+    calendly_url: null, // Configurar com URL real do Calendly
   },
   {
     name: 'Marina',
@@ -128,7 +128,7 @@ export const mockUsers: UserMock[] = [
     role: 'SPECIALIST',
     speciality: 'BOAT',
     password_hash: COMMON_PASSWORD_HASH,
-    calendly_url: 'https://calendly.com/marina-navegante',
+    calendly_url: null, // Configurar com URL real do Calendly
   },
   {
     name: 'Pedro',
@@ -139,7 +139,7 @@ export const mockUsers: UserMock[] = [
     role: 'SPECIALIST',
     speciality: 'AIRCRAFT',
     password_hash: COMMON_PASSWORD_HASH,
-    calendly_url: 'https://calendly.com/pedro-aviador',
+    calendly_url: null, // Configurar com URL real do Calendly
   },
   {
     name: 'João',

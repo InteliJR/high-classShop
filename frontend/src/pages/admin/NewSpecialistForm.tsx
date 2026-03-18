@@ -44,6 +44,8 @@ export default function NewSpecialistForm({
   const [bank, setBank] = useState("");
   const [agency, setAgency] = useState("");
   const [checkingAccount, setCheckingAccount] = useState("");
+  // Link do Calendly para agendamentos
+  const [calendlyUrl, setCalendlyUrl] = useState("");
   // Controla se o formulário está a ser enviado, para desativar o botão e evitar cliques duplos.
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Guarda qualquer mensagem de erro que ocorra durante a validação ou o envio.
@@ -75,6 +77,7 @@ export default function NewSpecialistForm({
       setBank(specialistToEdit.bank || "");
       setAgency(specialistToEdit.agency || "");
       setCheckingAccount(specialistToEdit.checking_account || "");
+      setCalendlyUrl(specialistToEdit.calendly_url || "");
     } else {
       setName("");
       setSurname("");
@@ -88,6 +91,7 @@ export default function NewSpecialistForm({
       setBank("");
       setAgency("");
       setCheckingAccount("");
+      setCalendlyUrl("");
     }
   }, [specialistToEdit]);
 
@@ -174,6 +178,7 @@ export default function NewSpecialistForm({
           bank: bank || undefined,
           agency: agency || undefined,
           checking_account: checkingAccount || undefined,
+          calendly_url: calendlyUrl || undefined,
         });
       } else {
         // Modo de criação
@@ -192,6 +197,7 @@ export default function NewSpecialistForm({
           bank: bank || undefined,
           agency: agency || undefined,
           checking_account: checkingAccount || undefined,
+          calendly_url: calendlyUrl || undefined,
         });
       }
       onSuccess();
@@ -411,6 +417,34 @@ export default function NewSpecialistForm({
           </p>
         </div>
       )}
+
+      {/* --- LINK DO CALENDLY --- */}
+      <div className="border-t border-gray-200 pt-4 mt-4">
+        <h3 className="text-sm font-semibold text-text-secondary mb-3">
+          Calendário de Agendamentos
+        </h3>
+        <div>
+          <label
+            htmlFor="calendly_url"
+            className="block text-sm font-medium text-text-secondary"
+          >
+            Link do Calendly
+          </label>
+          <input
+            id="calendly_url"
+            type="url"
+            value={calendlyUrl}
+            onChange={(e) => setCalendlyUrl(e.target.value)}
+            placeholder="https://calendly.com/seu-usuario/reuniao"
+            className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            URL do Calendly para que clientes possam agendar reuniões com este
+            especialista. Pode ser configurado depois pelo próprio especialista
+            no perfil.
+          </p>
+        </div>
+      </div>
 
       {/* --- DADOS BANCÁRIOS --- */}
       <div className="border-t border-gray-200 pt-4 mt-4">

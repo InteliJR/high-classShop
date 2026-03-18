@@ -76,4 +76,9 @@ export class CreateSpecialistDto {
   @IsOptional()
   @Length(1, 20, { message: 'Conta corrente deve ter até 20 caracteres' })
   checking_account?: string;
+
+  @IsString()
+  @IsOptional()
+  @Length(1, 255, { message: 'URL do Calendly deve ter até 255 caracteres' })
+  calendly_url?: string;
 }

@@ -69,6 +69,7 @@ export class SpecialistsService {
           bank: data.bank || null,
           agency: data.agency || null,
           checking_account: data.checking_account || null,
+          calendly_url: data.calendly_url?.trim() || null,
         },
       });
     } catch (error) {
@@ -217,6 +218,7 @@ export class SpecialistsService {
         speciality: true,
         company_id: true,
         commission_rate: true,
+        calendly_url: true,
       },
     });
 

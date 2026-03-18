@@ -16,6 +16,7 @@ export type Specialist = {
   bank?: string | null;
   agency?: string | null;
   checking_account?: string | null;
+  calendly_url?: string | null;
 };
 
 // Tipo para especialistas agrupados por categoria
@@ -39,6 +40,7 @@ export type CreateSpecialistData = {
   bank?: string;
   agency?: string;
   checking_account?: string;
+  calendly_url?: string;
 };
 
 // Função auxiliar para extrair mensagem de erro
