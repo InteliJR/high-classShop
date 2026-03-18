@@ -11,6 +11,8 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CarsService } from './cars.service';
@@ -26,15 +28,15 @@ import {
   assertSpecialistCanCreate,
   assertSpecialistCanModify,
 } from 'src/shared/helpers/specialist-auth.helper';
-import { CsvImportService } from 'src/shared/services/csv-import.service';
-import { CsvImportResponseDto } from 'src/shared/dto/csv-import-response.dto';
+import { XlsxImportService } from 'src/shared/services/xlsx-import.service';
+import { ImportResponseDto } from 'src/shared/dto/import-response.dto';
 import { Public } from 'src/shared/decorators/public.decorator';
 
 @Controller('cars')
 export class CarsController {
   constructor(
     private readonly carsService: CarsService,
-    private readonly csvImportService: CsvImportService,
+    private readonly xlsxImportService: XlsxImportService,
   ) {}
 
   @Post()
@@ -45,27 +47,34 @@ export class CarsController {
     return this.carsService.create(createCarDto);
   }
 
-  @Post('import-csv')
+  @Post('import-xlsx')
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
-  @UseInterceptors(FileInterceptor('file'))
-  async importCsv(
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }),
+  )
+  async importXlsx(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: UserEntity,
-  ): Promise<CsvImportResponseDto> {
+  ): Promise<ImportResponseDto> {
     // Validar permissão do usuário
     assertSpecialistCanCreate('CAR', user);
 
     if (!file) {
-      throw new BadRequestException('Arquivo CSV é obrigatório.');
+      throw new BadRequestException('Arquivo XLSX é obrigatório.');
     }
 
-    const csvContent = file.buffer.toString('utf-8');
-    return this.carsService.importFromCsv(csvContent, user);
+    return this.carsService.importFromXlsx(file.buffer, user);
   }
 
-  @Get('csv-template')
-  getCsvTemplate() {
-    return this.carsService.getCsvTemplate();
+  @Get('xlsx-template')
+  async getXlsxTemplate(@Res({ passthrough: true }) res: any) {
+    const buffer = await this.carsService.getXlsxTemplate();
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename=template_carros.xlsx',
+    });
+    return new StreamableFile(buffer);
   }
 
   @Get()

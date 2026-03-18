@@ -62,4 +62,23 @@ export class CreateSpecialistDto {
   @Min(0, { message: 'Taxa de comissão deve ser >= 0' })
   @Max(100, { message: 'Taxa de comissão deve ser <= 100' })
   commission_rate?: number;
+
+  @IsString()
+  @IsOptional()
+  bank?: string;
+
+  @IsString()
+  @IsOptional()
+  @Length(1, 10, { message: 'Agência deve ter até 10 caracteres' })
+  agency?: string;
+
+  @IsString()
+  @IsOptional()
+  @Length(1, 20, { message: 'Conta corrente deve ter até 20 caracteres' })
+  checking_account?: string;
+
+  @IsString()
+  @IsOptional()
+  @Length(1, 255, { message: 'URL do Calendly deve ter até 255 caracteres' })
+  calendly_url?: string;
 }

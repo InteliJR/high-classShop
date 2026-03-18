@@ -3,7 +3,6 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ConsultantController } from './consultant.controller';
 import { ConsultantService } from './consultant.service';
-import { PrismaService } from 'src/prisma/prisma.service';
 import { AwsModule } from 'src/aws/aws.module';
 
 @Module({
@@ -18,6 +17,6 @@ import { AwsModule } from 'src/aws/aws.module';
     }),
   ],
   controllers: [ConsultantController],
-  providers: [ConsultantService, PrismaService],
+  providers: [ConsultantService],
 })
 export class ConsultantModule {}

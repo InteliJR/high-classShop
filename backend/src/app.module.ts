@@ -23,6 +23,7 @@ import { ProposalsModule } from './features/proposals/proposals.module';
 import { HealthModule } from './health/health.module';
 import { SettingsModule } from './features/settings/settings.module';
 import { PlatformCompanyModule } from './features/platform-company/platform-company.module';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
@@ -47,9 +48,9 @@ import { PlatformCompanyModule } from './features/platform-company/platform-comp
     UsersModule,
     SettingsModule,
     PlatformCompanyModule,
+    PrismaModule
   ],
   providers: [
-    PrismaService,
     {
       provide: APP_FILTER,
       useClass: PrismaExceptionFilter,

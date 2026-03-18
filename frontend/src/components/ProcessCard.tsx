@@ -8,11 +8,12 @@ import {
   MessageSquare,
   CheckCircle,
   XCircle,
+  Package,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Process } from "../services/processes.service";
-import type { Product } from "../types/types";
+import type { Product, SpecialityType } from "../types/types";
 import React from "react";
 import UpdateProcessStatusModal from "./UpdateProcessStatusModal";
 import { getContextualStatusMessage } from "../utils/processStatusMessages";
@@ -40,6 +41,8 @@ interface ProcessCardProps {
   onUploadDocuments?: () => void;
   onStatusUpdated?: () => void;
   isClientView?: boolean; // Se true, remove botões de ação (apenas visualização)
+  onSelectProduct?: () => void; // Callback para abrir seleção de produto em consultoria
+  specialistSpeciality?: SpecialityType; // Especialidade do especialista para filtrar produtos
 }
 
 /**
@@ -54,6 +57,8 @@ export default function ProcessCard({
   onUploadDocuments,
   onStatusUpdated,
   isClientView = false,
+  onSelectProduct,
+  specialistSpeciality,
 }: ProcessCardProps) {
   const navigate = useNavigate();
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -61,6 +66,9 @@ export default function ProcessCard({
   const [activeContract, setActiveContract] = useState<any>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // Verifica se é um processo de consultoria (sem produto atribuído)
+  const isConsultancy = !process.product_type || !process.product_id;
 
   // Load completion reason and active contract on mount and when process changes
   useEffect(() => {
@@ -153,7 +161,7 @@ export default function ProcessCard({
         <div className="hidden md:block absolute top-6 right-6 z-20">
           <button
             onClick={() => navigate(`/processes/${process.id}/negotiation`)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs md:text-sm font-medium rounded-lg shadow-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 text-white text-xs md:text-sm font-medium rounded-lg shadow-lg hover:bg-slate-800 transition-colors whitespace-nowrap"
           >
             <MessageSquare size={16} />
             Negociar
@@ -168,7 +176,7 @@ export default function ProcessCard({
           <div className="hidden md:block absolute top-6 right-6 z-20">
             <button
               onClick={onUploadDocuments}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white text-xs md:text-sm font-medium rounded-lg shadow-lg hover:bg-orange-700 transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 text-white text-xs md:text-sm font-medium rounded-lg shadow-lg hover:bg-slate-800 transition-colors whitespace-nowrap"
             >
               Enviar Contrato
             </button>
@@ -180,9 +188,14 @@ export default function ProcessCard({
       <div className="px-3 py-2 md:px-6 md:py-4 border-b border-gray-100 flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm md:text-lg font-semibold text-gray-900 truncate">
-            Processo - {process.client?.name || process.client_id} -{" "}
-            {product?.modelo || "Produto"}
+            {isConsultancy ? "Consultoria" : "Processo"} - {process.client?.name || process.client_id} -{" "}
+            {isConsultancy ? "Aguardando produto" : (product?.modelo || "Produto")}
           </h3>
+          {isConsultancy && (
+            <p className="text-xs text-slate-600 mt-1">
+              Especialista precisa selecionar um produto
+            </p>
+          )}
         </div>
         {onToggleExpand && (
           <button
@@ -206,7 +219,7 @@ export default function ProcessCard({
         <div className="mb-4">
           <div className="flex items-center gap-2">
             {process.status === "PROCESSING_CONTRACT" && (
-              <Loader size={18} className="animate-spin text-orange-600" />
+              <Loader size={18} className="animate-spin text-slate-700" />
             )}
             {isRejected && <X size={18} className="text-red-600" />}
             <p
@@ -225,9 +238,9 @@ export default function ProcessCard({
 
         {/* Appointment Confirmation Buttons - SCHEDULING Status */}
         {process.status === "SCHEDULING" && (
-          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
             <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-amber-900 mb-2">
+              <p className="text-sm font-medium text-slate-900 mb-2">
                 {isClientView
                   ? "Aguardando confirmação do especialista"
                   : "Solicitação de agendamento"}
@@ -253,7 +266,7 @@ export default function ProcessCard({
                   <button
                     onClick={handleConfirmAppointment}
                     disabled={isConfirming || isCancelling}
-                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50"
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg font-medium hover:bg-slate-800 transition disabled:opacity-50"
                   >
                     {isConfirming ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
@@ -286,12 +299,45 @@ export default function ProcessCard({
           </div>
         )}
 
+        {/* Consultancy - Select Product Button (Specialist View Only) */}
+        {isConsultancy && !isClientView && onSelectProduct && (
+          <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-slate-900 mb-1">
+                Este é um processo de consultoria
+              </p>
+              <p className="text-xs text-slate-700 mb-2">
+                Após a reunião com o cliente, selecione o produto recomendado para continuar com a negociação.
+              </p>
+              <button
+                onClick={onSelectProduct}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg font-medium hover:bg-slate-800 transition"
+              >
+                <Package size={16} />
+                Selecionar Produto
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Consultancy - Client View Info */}
+        {isConsultancy && isClientView && (
+          <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <p className="text-sm font-medium text-slate-900 mb-1">
+              Processo de consultoria
+            </p>
+            <p className="text-xs text-slate-700">
+              Após a reunião, o especialista irá selecionar o produto mais adequado para você.
+            </p>
+          </div>
+        )}
+
         {/* Mobile: botões logo abaixo do status, antes do stepper */}
         {process.status === "NEGOTIATION" && !isExpanded && (
           <div className="md:hidden w-full mb-2 flex flex-col gap-2">
             <button
               onClick={() => navigate(`/processes/${process.id}/negotiation`)}
-              className="w-full px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-blue-700 transition-colors inline-flex items-center justify-center gap-1"
+              className="w-full px-4 py-2 bg-slate-700 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-slate-800 transition-colors inline-flex items-center justify-center gap-1"
             >
               <MessageSquare size={14} />
               Negociar
@@ -307,7 +353,7 @@ export default function ProcessCard({
             <div className="md:hidden w-full mb-2 flex flex-col gap-2">
               <button
                 onClick={onUploadDocuments}
-                className="w-full px-4 py-2 bg-orange-600 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-orange-700 transition-colors inline-flex items-center justify-center gap-1"
+                className="w-full px-4 py-2 bg-slate-700 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-slate-800 transition-colors inline-flex items-center justify-center gap-1"
               >
                 Enviar Contrato
               </button>
@@ -320,13 +366,13 @@ export default function ProcessCard({
         {(process.status === "DOCUMENTATION" ||
           process.status === "COMPLETED") &&
           activeContract && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-600 font-medium">
+                  <p className="text-xs text-slate-600 font-medium">
                     Documento Enviado
                   </p>
-                  <p className="text-sm text-blue-900 font-semibold truncate">
+                  <p className="text-sm text-slate-900 font-semibold truncate">
                     {activeContract.file_name || "Contrato"}
                   </p>
                 </div>
@@ -335,7 +381,7 @@ export default function ProcessCard({
                     href={activeContract.original_pdf_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors whitespace-nowrap"
+                    className="flex items-center gap-1 px-3 py-2 bg-slate-700 text-white text-xs font-medium rounded hover:bg-slate-800 transition-colors whitespace-nowrap"
                   >
                     Baixar
                     <ExternalLink size={14} />
@@ -365,11 +411,11 @@ export default function ProcessCard({
                       isRejectedStep
                         ? "bg-red-500 text-white"
                         : isCompleted
-                          ? "bg-green-500 text-white"
-                          : "bg-gray-300 text-gray-600"
+                          ? "bg-slate-700 text-white"
+                          : "bg-slate-200 text-slate-600"
                     } ${
                       isActive && !isRejectedStep
-                        ? "ring-2 ring-green-300 ring-offset-2"
+                        ? "ring-2 ring-slate-400 ring-offset-2"
                         : ""
                     } ${
                       isRejectedStep ? "ring-2 ring-red-300 ring-offset-2" : ""
@@ -401,8 +447,8 @@ export default function ProcessCard({
                       isRejected && index >= currentStep - 1
                         ? "bg-red-400"
                         : index < currentStep
-                          ? "bg-green-500"
-                          : "bg-gray-300"
+                          ? "bg-slate-700"
+                          : "bg-slate-200"
                     }`}
                     style={{ minWidth: "40px" }}
                   />
@@ -428,11 +474,11 @@ export default function ProcessCard({
                       isRejectedStep
                         ? "bg-red-500 text-white"
                         : isCompleted
-                          ? "bg-green-500 text-white"
-                          : "bg-gray-300 text-gray-600"
+                          ? "bg-slate-700 text-white"
+                          : "bg-slate-200 text-slate-600"
                     } ${
                       isActive && !isRejectedStep
-                        ? "ring-2 ring-green-300 ring-offset-1"
+                        ? "ring-2 ring-slate-400 ring-offset-1"
                         : ""
                     } ${
                       isRejectedStep ? "ring-2 ring-red-300 ring-offset-1" : ""
@@ -452,8 +498,8 @@ export default function ProcessCard({
                         isRejected && index >= currentStep - 1
                           ? "bg-red-400"
                           : index < currentStep
-                            ? "bg-green-500"
-                            : "bg-gray-300"
+                            ? "bg-slate-700"
+                            : "bg-slate-200"
                       }`}
                     />
                   )}
@@ -544,7 +590,7 @@ export default function ProcessCard({
             {process.status === "NEGOTIATION" && (
               <button
                 onClick={() => navigate(`/processes/${process.id}/negotiation`)}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 bg-blue-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
+                className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 bg-slate-700 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors whitespace-nowrap"
               >
                 <MessageSquare size={16} />
                 Ver Negociação
@@ -555,7 +601,7 @@ export default function ProcessCard({
             {process.status === "DOCUMENTATION" && onUploadDocuments && (
               <button
                 onClick={onUploadDocuments}
-                className="flex-1 px-3 py-2 md:px-4 md:py-2 bg-orange-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors whitespace-nowrap"
+                className="flex-1 px-3 py-2 md:px-4 md:py-2 bg-slate-700 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors whitespace-nowrap"
               >
                 Enviar Contrato
               </button>

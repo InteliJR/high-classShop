@@ -36,8 +36,14 @@ export const mockBoats: BoatMock[] = [
     estado: 'Novo',
     tipo_embarcacao: 'Iate',
     images: [
-      { url: 'boats/1/Azimut-Atlantis-43-review-external2-credit-Azimut-Yachts.jpg', is_primary: true },
-      { url: 'boats/1/Azimut-Atlantis-43-review-external2-credit-Azimut-Yachts.jpg', is_primary: false },
+      {
+        url: 'https://www.azimutyachts.com.br/pub/uploads/2022/04/Azimut-A51-External-View-3-1024x576.jpg',
+        is_primary: true,
+      },
+      {
+        url: 'https://www.azimutyachts.com.br/pub/uploads/2022/04/Azimut-A51-External-View-3-1024x576.jpg',
+        is_primary: false,
+      },
     ],
-  }
+  },
 ];

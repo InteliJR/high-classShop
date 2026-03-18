@@ -63,7 +63,7 @@ export interface UpdateCarDto extends Partial<CreateCarDto> {}
 export async function getCars(
   page = 1,
   perPage = 20,
-  appliedFilters: Partial<FiltersCarMeta> = {}
+  appliedFilters: Partial<FiltersCarMeta> = {},
 ): Promise<{
   cars: Product[];
   pagination: PaginationMeta;
@@ -74,7 +74,7 @@ export async function getCars(
       "/cars",
       {
         params: { page, perPage, ...appliedFilters },
-      }
+      },
     );
 
     //Extrai a respota da api
@@ -136,7 +136,10 @@ export async function createCar(data: CreateCarDto): Promise<RawCar> {
 }
 
 // Patch /cars/:id
-export async function updateCar(id: number, data: UpdateCarDto): Promise<RawCar> {
+export async function updateCar(
+  id: number,
+  data: UpdateCarDto,
+): Promise<RawCar> {
   try {
     const response = await api.patch<RawCar>(`/cars/${id}`, data);
     return response.data;
@@ -156,58 +159,65 @@ export async function deleteCar(id: number): Promise<void> {
   }
 }
 
-// CSV Import Types
-export interface CsvErrorRow {
+// XLSX Import Types
+export interface XlsxErrorRow {
   row: number;
   reason: string;
   fields?: Record<string, any>;
+  imageWarnings?: string[];
 }
 
-export interface CsvImportResponse {
+export interface XlsxImportResponse {
   success: boolean;
   message: string;
   insertedCount: number;
+  updatedCount: number;
   errorCount: number;
-  errorRows: CsvErrorRow[];
+  warningCount: number;
+  errorRows: XlsxErrorRow[];
+  warningRows: XlsxErrorRow[];
   insertedIds?: number[];
+  updatedIds?: number[];
 }
 
-export interface CsvTemplateResponse {
-  template: string;
-  columns: {
-    required: string[];
-    optional: string[];
-  };
-  instructions: Record<string, string>;
-  example: Record<string, any>;
-}
-
-// Get /cars/csv-template
-export async function getCarsCsvTemplate(): Promise<CsvTemplateResponse> {
+// Get /cars/xlsx-template (downloads binary .xlsx file)
+export async function getCarsXlsxTemplate(): Promise<void> {
   try {
-    const response = await api.get<CsvTemplateResponse>("/cars/csv-template");
-    return response.data;
+    const response = await api.get("/cars/xlsx-template", {
+      responseType: "blob",
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "template_carros.xlsx");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   } catch (error) {
-    console.error("Erro ao buscar template CSV:", error);
+    console.error("Erro ao baixar template XLSX:", error);
     throw error;
   }
 }
 
-// Post /cars/import-csv
-export async function importCarsCsv(file: File): Promise<CsvImportResponse> {
+// Post /cars/import-xlsx
+export async function importCarsXlsx(file: File): Promise<XlsxImportResponse> {
   try {
     const formData = new FormData();
     formData.append("file", file);
-    
-    const response = await api.post<CsvImportResponse>("/cars/import-csv", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
+
+    const response = await api.post<XlsxImportResponse>(
+      "/cars/import-xlsx",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
       },
-    });
+    );
     return response.data;
   } catch (error: any) {
-    console.error("Erro ao importar CSV:", error);
-    // Se o backend retornou erros de validação de estrutura
+    console.error("Erro ao importar XLSX:", error);
     if (error.response?.data) {
       throw error.response.data;
     }

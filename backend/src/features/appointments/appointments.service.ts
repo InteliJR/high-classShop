@@ -701,14 +701,46 @@ export class AppointmentsService {
       // Só move para NEGOTIATION se Process está em SCHEDULING
       // Evita conflito se já está em NEGOTIATION+ (não retrocede)
       if (process.status === 'SCHEDULING') {
-        await this.prisma.process.update({
-          where: { id: process.id },
-          data: {
-            status: 'NEGOTIATION',
-            notes: `${process.notes || ''}\n[AUTO] Transição automática: SCHEDULING → NEGOTIATION (agendamento confirmado em ${new Date().toISOString()})`,
-            updated_at: new Date(),
-          },
-        });
+        // Verificar se processo tem produto associado
+        const hasProduct = process.car_id || process.boat_id || process.aircraft_id;
+
+        if (hasProduct) {
+          // Processo com produto: avançar para NEGOTIATION
+          await this.prisma.process.update({
+            where: { id: process.id },
+            data: {
+              status: 'NEGOTIATION',
+              notes: `${process.notes || ''}\n[AUTO] Transição automática: SCHEDULING → NEGOTIATION (agendamento concluído em ${new Date().toISOString()})`,
+              updated_at: new Date(),
+            },
+          });
+
+          // Registrar mudança de status no histórico
+          await this.prisma.processStatusHistory.create({
+            data: {
+              processId: process.id,
+              status: 'NEGOTIATION',
+              changed_at: new Date(),
+            },
+          });
+
+          this.logger.log(
+            `[updateStatus] Process ${process.id} avançado para NEGOTIATION (agendamento concluído)`,
+          );
+        } else {
+          // Consultoria (sem produto): manter em SCHEDULING até produto ser selecionado
+          await this.prisma.process.update({
+            where: { id: process.id },
+            data: {
+              notes: `${process.notes || ''}\n[AUTO] Reunião concluída em ${new Date().toISOString()}. Aguardando especialista selecionar produto para avançar para NEGOTIATION.`,
+              updated_at: new Date(),
+            },
+          });
+
+          this.logger.log(
+            `[updateStatus] Process ${process.id} mantido em SCHEDULING (consultoria - aguardando seleção de produto)`,
+          );
+        }
       } else if (
         ![
           'NEGOTIATION',
@@ -787,14 +819,19 @@ export class AppointmentsService {
    * Helper: Busca um produto conforme seu tipo e ID
    * Retorna dados do Car, Boat ou Aircraft
    *
-   * @param productType Tipo do produto (CAR, BOAT, AIRCRAFT)
-   * @param productId ID do produto (car_id, boat_id ou aircraft_id)
-   * @returns Produto encontrado ou null
+   * @param productType Tipo do produto (CAR, BOAT, AIRCRAFT) ou null para consultoria
+   * @param productId ID do produto (car_id, boat_id ou aircraft_id) ou null para consultoria
+   * @returns Produto encontrado ou null (também para consultoria)
    */
   private async getProductByType(
-    productType: ProductType,
-    productId: number,
+    productType: ProductType | null,
+    productId: number | null,
   ): Promise<Car | Boat | Aircraft | null> {
+    // Para consultoria, não há produto ainda
+    if (!productType || !productId) {
+      return null;
+    }
+    
     if (productType === ProductType.CAR) {
       return this.prisma.car.findUnique({ where: { id: productId } });
     } else if (productType === ProductType.BOAT) {
@@ -965,9 +1002,12 @@ export class AppointmentsService {
   /**
    * Cria um agendamento PENDING
    * Usado quando cliente clica no link do Calendly e retorna à plataforma
-   * Não cria Process ainda - apenas registra intenção do cliente
    *
-   * @param dto Dados do agendamento (sem appointment_datetime obrigatório)
+   * Dois fluxos suportados:
+   * 1. Com produto: product_type e product_id fornecidos - fluxo padrão
+   * 2. Consultoria: sem product_type/product_id - cliente quer orientação
+   *
+   * @param dto Dados do agendamento (product_type e product_id opcionais)
    * @param userId ID do cliente autenticado
    * @returns Appointment em status PENDING
    */
@@ -1021,18 +1061,32 @@ export class AppointmentsService {
     }
     this.logger.log(`[createPending] ✓ Especialista encontrado: ${specialist.name}`);
 
-    // Verificar se já existe agendamento PENDING ou SCHEDULED para este cliente/especialista/produto
+    // Determinar se é consultoria (sem produto) ou fluxo padrão (com produto)
+    const isConsultancy = !dto.product_type || !dto.product_id;
+    this.logger.log(`[createPending] Modo: ${isConsultancy ? 'CONSULTORIA' : 'COM PRODUTO'}`);
+
+    // Verificar se já existe agendamento PENDING ou SCHEDULED
     this.logger.log(`[createPending] Verificando agendamento duplicado...`);
-    const existing = await this.prisma.appointment.findFirst({
-      where: {
-        client_id: dto.client_id,
-        specialist_id: dto.specialist_id,
-        product_type: dto.product_type,
-        product_id: dto.product_id,
-        status: {
-          in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
-        },
+    let existingWhere: any = {
+      client_id: dto.client_id,
+      specialist_id: dto.specialist_id,
+      status: {
+        in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
       },
+    };
+
+    if (isConsultancy) {
+      // Para consultoria, verificar se já existe agendamento sem produto
+      existingWhere.product_type = null;
+      existingWhere.product_id = null;
+    } else {
+      // Para fluxo normal, verificar por produto específico
+      existingWhere.product_type = dto.product_type;
+      existingWhere.product_id = dto.product_id;
+    }
+
+    const existing = await this.prisma.appointment.findFirst({
+      where: existingWhere,
     });
 
     if (existing) {
@@ -1041,8 +1095,9 @@ export class AppointmentsService {
         success: false,
         error: {
           code: 409,
-          message:
-            'Já existe um agendamento pendente ou confirmado para este produto',
+          message: isConsultancy
+            ? 'Já existe um agendamento de consultoria pendente com este especialista'
+            : 'Já existe um agendamento pendente ou confirmado para este produto',
           details: {
             existing_id: existing.id,
             existing_status: existing.status,
@@ -1052,20 +1107,25 @@ export class AppointmentsService {
     }
     this.logger.log(`[createPending] ✓ Nenhum agendamento duplicado encontrado`);
 
-    // Validar produto existe
-    this.logger.log(`[createPending] Buscando produto ${dto.product_type}/${dto.product_id}...`);
-    const product = await this.getProductByType(
-      dto.product_type,
-      dto.product_id,
-    );
-    if (!product) {
-      this.logger.error(`[createPending] ERRO: Produto ${dto.product_type}/${dto.product_id} não encontrado`);
-      throw new NotFoundException({
-        success: false,
-        error: { code: 404, message: 'Produto não encontrado' },
-      });
+    // Validar produto apenas se fornecido (não é consultoria)
+    let product: any = null;
+    if (!isConsultancy) {
+      this.logger.log(`[createPending] Buscando produto ${dto.product_type}/${dto.product_id}...`);
+      product = await this.getProductByType(
+        dto.product_type!,
+        dto.product_id!,
+      );
+      if (!product) {
+        this.logger.error(`[createPending] ERRO: Produto ${dto.product_type}/${dto.product_id} não encontrado`);
+        throw new NotFoundException({
+          success: false,
+          error: { code: 404, message: 'Produto não encontrado' },
+        });
+      }
+      this.logger.log(`[createPending] ✓ Produto encontrado`);
+    } else {
+      this.logger.log(`[createPending] Consultoria - pulando validação de produto`);
     }
-    this.logger.log(`[createPending] ✓ Produto encontrado`);
 
     // Criar appointment em status PENDING e Process em transação
     const pendingExpiresAt = new Date();
@@ -1086,22 +1146,31 @@ export class AppointmentsService {
       [appointment, process] = await this.prisma.$transaction(
         async (tx) => {
           this.logger.log(`[createPending] Dentro da transação - iniciando`);
+
           // Criar appointment
+          const appointmentData: any = {
+            client_id: dto.client_id,
+            specialist_id: dto.specialist_id,
+            appointment_datetime: dto.appointment_datetime || null,
+            status: StatusAgendamento.PENDING,
+            notes: dto.notes || (isConsultancy
+              ? 'Consultoria: cliente acessou link do Calendly'
+              : 'Cliente acessou link do Calendly'),
+            user_clicked_at: new Date(),
+            pending_expires_at: pendingExpiresAt,
+          };
+
+          // Adicionar produto se não for consultoria
+          if (!isConsultancy) {
+            appointmentData.product_type = dto.product_type;
+            appointmentData.product_id = dto.product_id;
+          }
+
           this.logger.log(
-            `[createPending] Criando appointment para produto ${dto.product_type}/${dto.product_id}`,
+            `[createPending] Criando appointment ${isConsultancy ? '(consultoria)' : `para produto ${dto.product_type}/${dto.product_id}`}`,
           );
           const createdAppointment = await tx.appointment.create({
-            data: {
-              client_id: dto.client_id,
-              specialist_id: dto.specialist_id,
-              product_type: dto.product_type,
-              product_id: dto.product_id,
-              appointment_datetime: dto.appointment_datetime || null,
-              status: StatusAgendamento.PENDING,
-              notes: dto.notes || 'Cliente acessou link do Calendly',
-              user_clicked_at: new Date(),
-              pending_expires_at: pendingExpiresAt,
-            },
+            data: appointmentData,
             include: {
               client: true,
               specialist: true,
@@ -1112,27 +1181,35 @@ export class AppointmentsService {
           );
 
           // Criar Process em status SCHEDULING
-          const productField =
-            dto.product_type === ProductType.CAR
-              ? 'car_id'
-              : dto.product_type === ProductType.BOAT
-                ? 'boat_id'
-                : 'aircraft_id';
-
-          this.logger.log(
-            `[createPending] Criando process com campo ${productField}=${dto.product_id}`,
-          );
-
-          // Construir data object com campo de produto correto
           const processData: any = {
             client_id: dto.client_id,
             specialist_id: dto.specialist_id,
-            product_type: dto.product_type,
             appointment_id: createdAppointment.id,
             status: 'SCHEDULING',
-            notes: `Criado via agendamento PENDING (${new Date().toISOString()})`,
+            notes: isConsultancy
+              ? `Consultoria criada via agendamento PENDING (${new Date().toISOString()})`
+              : `Criado via agendamento PENDING (${new Date().toISOString()})`,
           };
-          processData[productField] = dto.product_id;
+
+          // Adicionar produto apenas se não for consultoria
+          if (!isConsultancy) {
+            const productField =
+              dto.product_type === ProductType.CAR
+                ? 'car_id'
+                : dto.product_type === ProductType.BOAT
+                  ? 'boat_id'
+                  : 'aircraft_id';
+
+            this.logger.log(
+              `[createPending] Criando process com campo ${productField}=${dto.product_id}`,
+            );
+            processData.product_type = dto.product_type;
+            processData[productField] = dto.product_id;
+          } else {
+            this.logger.log(
+              `[createPending] Criando process de consultoria (sem produto)`,
+            );
+          }
 
           const createdProcess = await tx.process.create({
             data: processData,

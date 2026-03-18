@@ -196,7 +196,7 @@ export class UsersService {
         ...(updateUserDto.cpf && { cpf: updateUserDto.cpf }),
         ...(updateUserDto.rg && { rg: updateUserDto.rg }),
         ...(updateUserDto.calendly_url !== undefined && {
-          calendly_url: updateUserDto.calendly_url,
+          calendly_url: updateUserDto.calendly_url?.trim() || null,
         }),
         updated_at: new Date(),
       },

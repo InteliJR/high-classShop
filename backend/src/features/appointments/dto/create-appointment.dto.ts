@@ -5,24 +5,29 @@ import {
   MaxLength,
   IsInt,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { ProductType } from '@prisma/client';
 
 /**
  * DTO para criar novo agendamento via POST /api/appointments
  *
- * Fluxo Calendly simplificado (Opção C):
- * 1. Cliente acessa link do especialista (Calendly externo)
- * 2. Cliente agenda na plataforma Calendly
- * 3. Cliente retorna à plataforma high-classShop
- * 4. Cliente submete este DTO para confirmar o agendamento
- * 5. Backend cria Appointment + auto-cria Process em status SCHEDULING
+ * Dois fluxos suportados:
  *
- * Frontend:
- * - Apresentar formulário com client_id, specialist_id, product_type
- * - Permitir seleção do produto específico (car_id, boat_id ou aircraft_id)
- * - Enviar appointment_datetime em ISO 8601 UTC (ex: "2024-10-10T14:00:00Z")
- * - Campo notes é opcional para anotações adicionais
+ * FLUXO 1 - Com produto (padrão):
+ * 1. Cliente acessa página do produto
+ * 2. Cliente clica no link do Calendly do especialista
+ * 3. Cliente retorna à plataforma e submete este DTO com product_type e product_id
+ * 4. Backend cria Appointment + auto-cria Process em status SCHEDULING
+ *
+ * FLUXO 2 - Consultoria (sem produto):
+ * 1. Cliente acessa página de consultoria
+ * 2. Cliente seleciona especialista e acessa link do Calendly
+ * 3. Cliente retorna à plataforma e submete DTO SEM product_type/product_id
+ * 4. Backend cria Appointment + Process em SCHEDULING (sem produto)
+ * 5. Após reunião, especialista seleciona produto antes de NEGOTIATION
+ *
+ * Validação: product_type e product_id devem ser ambos fornecidos ou ambos omitidos
  */
 export class CreateAppointmentDto {
   /**
@@ -43,27 +48,31 @@ export class CreateAppointmentDto {
 
   /**
    * Tipo de produto: CAR, BOAT ou AIRCRAFT
-   * Usado para identificar qual tabela buscar o produto (Car, Boat ou Aircraft)
-   * Validação: deve corresponder ao tipo do produto_id
+   * Opcional para consultoria (sem produto inicial)
+   * Se fornecido, product_id também deve ser fornecido
    */
+  @IsOptional()
+  @ValidateIf((o) => o.product_id !== undefined)
   @IsEnum(ProductType, {
     message: 'product_type deve ser CAR, BOAT ou AIRCRAFT',
   })
-  product_type: ProductType;
+  product_type?: ProductType;
 
   /**
    * ID do produto específico (car_id, boat_id ou aircraft_id)
-   * Inteiro que referencia a tabela Car, Boat ou Aircraft
-   * Este campo determina qual carro/barco/aeronave está sendo agendado
+   * Opcional para consultoria (sem produto inicial)
+   * Se fornecido, product_type também deve ser fornecido
    *
    * Exemplo:
    * - Se product_type = CAR: product_id = 1 (referencia Car com id=1)
    * - Se product_type = BOAT: product_id = 5 (referencia Boat com id=5)
    * - Se product_type = AIRCRAFT: product_id = 3 (referencia Aircraft com id=3)
    */
+  @IsOptional()
+  @ValidateIf((o) => o.product_type !== undefined)
   @IsInt({ message: 'product_id deve ser um número inteiro' })
   @Min(1, { message: 'product_id deve ser no mínimo 1' })
-  product_id: number;
+  product_id?: number;
 
   /**
    * Data e hora do agendamento em ISO 8601 UTC

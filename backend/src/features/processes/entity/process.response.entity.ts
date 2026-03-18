@@ -3,7 +3,8 @@ import { $Enums, Prisma } from '@prisma/client';
 export class ProcessResponse {
   id: string;
   status: $Enums.ProcessStatus;
-  product_type: $Enums.ProductType;
+  product_type: $Enums.ProductType | null; // Null para processos de consultoria
+  product_id?: number | null; // ID do produto (car_id, boat_id, ou aircraft_id)
   client: {
     id: string;
     name: string;

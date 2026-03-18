@@ -17,7 +17,7 @@ import {
   applyCepMask,
   formatBRL,
 } from "../../services/contracts.service";
-import ContractPreviewModal from "../../components/ContractPreviewModal";
+import DocuSignPreviewModal from "../../components/DocuSignPreviewModal";
 
 interface ContractFormData {
   // Vendedor
@@ -50,13 +50,39 @@ interface ContractFormData {
   // Pagamento
   payment_seller_value: number;
 
-  // Comissão
-  commission_value: number;
-  commission_name: string;
-  commission_cpf: string;
-  commission_bank: string;
-  commission_agency: string;
-  commission_checking_account: string;
+  // Dados da Plataforma (Split 1)
+  platform_value: number;
+  platform_percentage: number;
+  platform_name: string;
+  platform_cnpj: string;
+  platform_bank: string;
+  platform_agency: string;
+  platform_checking_account: string;
+
+  // Dados do Escritório (Split 2)
+  office_value: number;
+  office_name: string;
+  office_cnpj: string;
+  office_bank: string;
+  office_agency: string;
+  office_checking_account: string;
+
+  // Dados do Especialista (Split 3)
+  specialist_value: number;
+  specialist_name: string;
+  specialist_email: string;
+  specialist_document: string;
+  specialist_bank: string;
+  specialist_agency: string;
+  specialist_checking_account: string;
+
+  // Testemunhas (opcionais)
+  testimonial1_name: string;
+  testimonial1_cpf: string;
+  testimonial1_email: string;
+  testimonial2_name: string;
+  testimonial2_cpf: string;
+  testimonial2_email: string;
 
   // Cidade
   city: string;
@@ -102,12 +128,32 @@ export default function CreateContractPage() {
       vehicle_technical_info: "",
       vehicle_price: 0,
       payment_seller_value: 0,
-      commission_value: 0,
-      commission_name: "",
-      commission_cpf: "",
-      commission_bank: "",
-      commission_agency: "",
-      commission_checking_account: "",
+      platform_value: 0,
+      platform_percentage: 0,
+      platform_name: "",
+      platform_cnpj: "",
+      platform_bank: "",
+      platform_agency: "",
+      platform_checking_account: "",
+      office_value: 0,
+      office_name: "",
+      office_cnpj: "",
+      office_bank: "",
+      office_agency: "",
+      office_checking_account: "",
+      specialist_value: 0,
+      specialist_name: "",
+      specialist_email: "",
+      specialist_document: "",
+      specialist_bank: "",
+      specialist_agency: "",
+      specialist_checking_account: "",
+      testimonial1_name: "",
+      testimonial1_cpf: "",
+      testimonial1_email: "",
+      testimonial2_name: "",
+      testimonial2_cpf: "",
+      testimonial2_email: "",
       city: "",
       description: "",
     },
@@ -131,7 +177,9 @@ export default function CreateContractPage() {
   const [isSendingAfterPreview, setIsSendingAfterPreview] = useState(false);
 
   const vehiclePrice = watch("vehicle_price");
-  const commissionValue = watch("commission_value");
+  const platformValue = watch("platform_value");
+  const officeValue = watch("office_value");
+  const specialistValue = watch("specialist_value");
 
   // Validate processId exists
   if (!processId) {
@@ -204,23 +252,67 @@ export default function CreateContractPage() {
         const proposalValue = data.proposal?.value || data.product.price;
         setValue("vehicle_price", proposalValue);
 
-        // Comissão da plataforma
-        if (data.commission) {
-          setValue("commission_name", data.commission.name || "");
+        // Dados da Plataforma (Split 1)
+        if (data.platform) {
+          setValue("platform_name", data.platform.name || "");
           setValue(
-            "commission_cpf",
-            data.commission.cpf ? applyCnpjMask(data.commission.cpf) : "",
+            "platform_cnpj",
+            data.platform.cnpj ? applyCnpjMask(data.platform.cnpj) : "",
           );
-          setValue("commission_bank", data.commission.bank || "");
-          setValue("commission_agency", data.commission.agency || "");
+          setValue("platform_bank", data.platform.bank || "");
+          setValue("platform_agency", data.platform.agency || "");
           setValue(
-            "commission_checking_account",
-            data.commission.checking_account || "",
+            "platform_checking_account",
+            data.platform.checking_account || "",
           );
 
-          // Auto-preencher valor da comissão calculado automaticamente
-          if (data.commission.value != null) {
-            setValue("commission_value", data.commission.value);
+          // Taxa e valor da plataforma
+          if (data.platform.rate != null) {
+            setValue("platform_percentage", data.platform.rate);
+          }
+          if (data.platform.value != null) {
+            setValue("platform_value", data.platform.value);
+          }
+        }
+
+        // Dados do Escritório (Split 2)
+        if (data.office) {
+          setValue("office_name", data.office.name || "");
+          setValue(
+            "office_cnpj",
+            data.office.cnpj ? applyCnpjMask(data.office.cnpj) : "",
+          );
+          setValue("office_bank", data.office.bank || "");
+          setValue("office_agency", data.office.agency || "");
+          setValue(
+            "office_checking_account",
+            data.office.checking_account || "",
+          );
+
+          // Valor do escritório
+          if (data.office.value != null) {
+            setValue("office_value", data.office.value);
+          }
+        }
+
+        // Dados do Especialista (Split 3)
+        if (data.specialist) {
+          setValue("specialist_name", data.specialist.name || "");
+          setValue("specialist_email", data.specialist.email || "");
+          setValue(
+            "specialist_document",
+            data.specialist.cpf ? applyCpfMask(data.specialist.cpf) : "",
+          );
+          setValue("specialist_bank", data.specialist.bank || "");
+          setValue("specialist_agency", data.specialist.agency || "");
+          setValue(
+            "specialist_checking_account",
+            data.specialist.checking_account || "",
+          );
+
+          // Valor do especialista
+          if (data.specialist.value != null) {
+            setValue("specialist_value", data.specialist.value);
           }
         }
       } catch (error: unknown) {
@@ -283,12 +375,36 @@ export default function CreateContractPage() {
     vehicle_technical_info: formData.vehicle_technical_info || undefined,
     vehicle_price: formData.vehicle_price,
     payment_seller_value: formData.payment_seller_value,
-    commission_value: formData.commission_value,
-    commission_name: formData.commission_name,
-    commission_cpf: formData.commission_cpf,
-    commission_bank: formData.commission_bank,
-    commission_agency: formData.commission_agency,
-    commission_checking_account: formData.commission_checking_account,
+    // Platform split
+    platform_value: formData.platform_value,
+    platform_percentage: formData.platform_percentage,
+    platform_name: formData.platform_name,
+    platform_cnpj: formData.platform_cnpj,
+    platform_bank: formData.platform_bank,
+    platform_agency: formData.platform_agency,
+    platform_checking_account: formData.platform_checking_account,
+    // Office split
+    office_value: formData.office_value,
+    office_name: formData.office_name,
+    office_cnpj: formData.office_cnpj,
+    office_bank: formData.office_bank || undefined,
+    office_agency: formData.office_agency || undefined,
+    office_checking_account: formData.office_checking_account || undefined,
+    // Specialist split
+    specialist_value: formData.specialist_value || undefined,
+    specialist_name: formData.specialist_name || undefined,
+    specialist_email: formData.specialist_email || undefined,
+    specialist_document: formData.specialist_document || undefined,
+    specialist_bank: formData.specialist_bank || undefined,
+    specialist_agency: formData.specialist_agency || undefined,
+    specialist_checking_account: formData.specialist_checking_account || undefined,
+    // Witnesses (optional)
+    testimonial1_name: formData.testimonial1_name || undefined,
+    testimonial1_cpf: formData.testimonial1_cpf || undefined,
+    testimonial1_email: formData.testimonial1_email || undefined,
+    testimonial2_name: formData.testimonial2_name || undefined,
+    testimonial2_cpf: formData.testimonial2_cpf || undefined,
+    testimonial2_email: formData.testimonial2_email || undefined,
     city: formData.city,
     description: formData.description || undefined,
   });
@@ -305,6 +421,7 @@ export default function CreateContractPage() {
 
       const previewPayload: PreviewContractData = {
         ...contractData,
+        return_url: `${window.location.origin}/specialist/contracts/preview-callback`,
       };
 
       const result = await previewContract(previewPayload);
@@ -407,19 +524,33 @@ export default function CreateContractPage() {
     });
   }, []);
 
-  // Calcular valor do vendedor automaticamente
+  // Calcular valor do vendedor automaticamente (seller = price - platform - office - specialist)
   useEffect(() => {
-    if (vehiclePrice && commissionValue) {
-      const sellerValue = vehiclePrice - commissionValue;
+    if (vehiclePrice && (platformValue || officeValue || specialistValue)) {
+      const sellerValue =
+        vehiclePrice - (platformValue || 0) - (officeValue || 0) - (specialistValue || 0);
       setValue("payment_seller_value", sellerValue > 0 ? sellerValue : 0);
     }
-  }, [vehiclePrice, commissionValue, setValue]);
+  }, [vehiclePrice, platformValue, officeValue, specialistValue, setValue]);
 
-  // Recalcular valor da comissão quando o preço muda (usa taxa do prefill)
+  // Recalcular valor da plataforma, escritório e especialista quando o preço muda (usa taxas do prefill)
   useEffect(() => {
-    if (prefillData?.commission?.rate != null && vehiclePrice > 0) {
-      const newCommission = Math.round(vehiclePrice * prefillData.commission.rate) / 100;
-      setValue("commission_value", newCommission);
+    if (vehiclePrice > 0) {
+      if (prefillData?.platform?.rate != null) {
+        const newPlatformValue =
+          Math.round(vehiclePrice * prefillData.platform.rate) / 100;
+        setValue("platform_value", newPlatformValue);
+      }
+      if (prefillData?.office?.rate != null) {
+        const newOfficeValue =
+          Math.round(vehiclePrice * prefillData.office.rate) / 100;
+        setValue("office_value", newOfficeValue);
+      }
+      if (prefillData?.specialist?.rate != null) {
+        const newSpecialistValue =
+          Math.round(vehiclePrice * prefillData.specialist.rate) / 100;
+        setValue("specialist_value", newSpecialistValue);
+      }
     }
   }, [vehiclePrice, prefillData, setValue]);
 
@@ -980,31 +1111,63 @@ export default function CreateContractPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Comissão da Plataforma *
-                  {prefillData?.commission?.rate != null && (
+                  {prefillData?.platform?.rate != null && (
                     <span className="text-xs text-gray-500 ml-1">
-                      ({prefillData.commission.rate}%)
+                      ({prefillData.platform.rate}%)
                     </span>
                   )}
                 </label>
                 <input
                   type="number"
                   step="0.01"
-                  {...register("commission_value", {
-                    required: "Comissão é obrigatória",
+                  {...register("platform_value", {
+                    required: "Comissão da plataforma é obrigatória",
                     valueAsNumber: true,
                     min: { value: 0, message: "Valor deve ser positivo" },
                   })}
                   readOnly
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                 />
-                {commissionValue > 0 && (
+                {platformValue > 0 && (
                   <p className="text-sm text-gray-500 mt-1">
-                    {formatBRL(commissionValue)}
+                    {formatBRL(platformValue)}
                   </p>
                 )}
-                {errors.commission_value && (
+                {errors.platform_value && (
                   <p className="text-red-500 text-sm mt-1">
-                    {errors.commission_value.message}
+                    {errors.platform_value.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Comissão do Escritório *
+                  {prefillData?.office?.rate != null && (
+                    <span className="text-xs text-gray-500 ml-1">
+                      ({prefillData.office.rate}%)
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  {...register("office_value", {
+                    required: "Comissão do escritório é obrigatória",
+                    valueAsNumber: true,
+                    min: { value: 0, message: "Valor deve ser positivo" },
+                  })}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                />
+                {officeValue > 0 && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    {formatBRL(officeValue)}
+                  </p>
+                )}
+                {errors.office_value && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.office_value.message}
                   </p>
                 )}
               </div>
@@ -1020,22 +1183,26 @@ export default function CreateContractPage() {
                   readOnly
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                 />
-                {vehiclePrice - commissionValue > 0 && (
+                {vehiclePrice - (platformValue || 0) - (officeValue || 0) >
+                  0 && (
                   <p className="text-sm text-green-600 mt-1">
-                    {formatBRL(vehiclePrice - commissionValue)}
+                    {formatBRL(
+                      vehiclePrice - (platformValue || 0) - (officeValue || 0),
+                    )}
                   </p>
                 )}
               </div>
             </div>
           </section>
 
-          {/* Seção: Comissão */}
+          {/* Seção: Dados da Plataforma */}
           <section className="bg-white rounded-lg border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">
-              Dados da Plataforma (Comissão)
+              Dados da Plataforma
             </h2>
             <p className="text-sm text-gray-500 mb-4">
-              Preenchido automaticamente com os dados cadastrados pelo administrador.
+              Preenchido automaticamente com os dados cadastrados pelo
+              administrador.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -1044,15 +1211,15 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("commission_name", {
+                  {...register("platform_name", {
                     required: "Razão social é obrigatória",
                   })}
                   readOnly
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                 />
-                {errors.commission_name && (
+                {errors.platform_name && (
                   <p className="text-red-500 text-sm mt-1">
-                    {errors.commission_name.message}
+                    {errors.platform_name.message}
                   </p>
                 )}
               </div>
@@ -1062,7 +1229,7 @@ export default function CreateContractPage() {
                   CNPJ *
                 </label>
                 <Controller
-                  name="commission_cpf"
+                  name="platform_cnpj"
                   control={control}
                   rules={{ required: "CNPJ é obrigatório" }}
                   render={({ field }) => (
@@ -1076,9 +1243,9 @@ export default function CreateContractPage() {
                     />
                   )}
                 />
-                {errors.commission_cpf && (
+                {errors.platform_cnpj && (
                   <p className="text-red-500 text-sm mt-1">
-                    {errors.commission_cpf.message}
+                    {errors.platform_cnpj.message}
                   </p>
                 )}
               </div>
@@ -1089,15 +1256,15 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("commission_bank", {
+                  {...register("platform_bank", {
                     required: "Banco é obrigatório",
                   })}
                   readOnly
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                 />
-                {errors.commission_bank && (
+                {errors.platform_bank && (
                   <p className="text-red-500 text-sm mt-1">
-                    {errors.commission_bank.message}
+                    {errors.platform_bank.message}
                   </p>
                 )}
               </div>
@@ -1108,15 +1275,15 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("commission_agency", {
+                  {...register("platform_agency", {
                     required: "Agência é obrigatória",
                   })}
                   readOnly
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                 />
-                {errors.commission_agency && (
+                {errors.platform_agency && (
                   <p className="text-red-500 text-sm mt-1">
-                    {errors.commission_agency.message}
+                    {errors.platform_agency.message}
                   </p>
                 )}
               </div>
@@ -1127,17 +1294,377 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("commission_checking_account", {
+                  {...register("platform_checking_account", {
                     required: "Conta é obrigatória",
                   })}
                   readOnly
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                 />
-                {errors.commission_checking_account && (
+                {errors.platform_checking_account && (
                   <p className="text-red-500 text-sm mt-1">
-                    {errors.commission_checking_account.message}
+                    {errors.platform_checking_account.message}
                   </p>
                 )}
+              </div>
+            </div>
+          </section>
+
+          {/* Seção: Dados do Escritório */}
+          <section className="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">
+              Dados do Escritório
+            </h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Dados do escritório/empresa responsável pela venda. Campos
+              bancários são opcionais.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Razão Social *
+                </label>
+                <input
+                  type="text"
+                  {...register("office_name", {
+                    required: "Razão social é obrigatória",
+                  })}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                />
+                {errors.office_name && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.office_name.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CNPJ *
+                </label>
+                <Controller
+                  name="office_cnpj"
+                  control={control}
+                  rules={{ required: "CNPJ é obrigatório" }}
+                  render={({ field }) => (
+                    <input
+                      type="text"
+                      {...field}
+                      readOnly
+                      maxLength={18}
+                      placeholder="00.000.000/0000-00"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                    />
+                  )}
+                />
+                {errors.office_cnpj && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.office_cnpj.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Banco
+                </label>
+                <input
+                  type="text"
+                  {...register("office_bank")}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                  placeholder="Opcional"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Agência
+                </label>
+                <input
+                  type="text"
+                  {...register("office_agency")}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                  placeholder="Opcional"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Conta Corrente
+                </label>
+                <input
+                  type="text"
+                  {...register("office_checking_account")}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                  placeholder="Opcional"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Seção: Dados do Especialista */}
+          <section className="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">
+              Dados do Especialista
+            </h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Dados do especialista responsável pelo produto. O especialista
+              receberá uma comissão sobre a venda e precisa assinar o contrato.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome *
+                </label>
+                <input
+                  type="text"
+                  {...register("specialist_name", {
+                    required: "Nome do especialista é obrigatório",
+                  })}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                />
+                {errors.specialist_name && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialist_name.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  E-mail *
+                </label>
+                <input
+                  type="email"
+                  {...register("specialist_email", {
+                    required: "E-mail do especialista é obrigatório",
+                  })}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                />
+                {errors.specialist_email && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialist_email.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CPF *
+                </label>
+                <Controller
+                  name="specialist_document"
+                  control={control}
+                  rules={{ required: "CPF do especialista é obrigatório" }}
+                  render={({ field }) => (
+                    <input
+                      type="text"
+                      {...field}
+                      readOnly
+                      maxLength={14}
+                      placeholder="000.000.000-00"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                    />
+                  )}
+                />
+                {errors.specialist_document && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialist_document.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Banco *
+                </label>
+                <input
+                  type="text"
+                  {...register("specialist_bank", {
+                    required: "Banco do especialista é obrigatório",
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  placeholder="Banco do especialista"
+                />
+                {errors.specialist_bank && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialist_bank.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Agência *
+                </label>
+                <input
+                  type="text"
+                  {...register("specialist_agency", {
+                    required: "Agência do especialista é obrigatória",
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  placeholder="Agência"
+                />
+                {errors.specialist_agency && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialist_agency.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Conta Corrente *
+                </label>
+                <input
+                  type="text"
+                  {...register("specialist_checking_account", {
+                    required: "Conta corrente do especialista é obrigatória",
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  placeholder="Conta corrente"
+                />
+                {errors.specialist_checking_account && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialist_checking_account.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Valor da Comissão *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                    R$
+                  </span>
+                  <input
+                    type="text"
+                    value={formatBRL(watch("specialist_value"))}
+                    readOnly
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Seção: Testemunhas (Opcional) */}
+          <section className="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">
+              Testemunhas (Opcional)
+            </h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Adicione até duas testemunhas para o contrato. Ambos os campos são
+              opcionais.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Testemunha 1 */}
+              <div className="md:col-span-2">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                  Testemunha 1
+                </h3>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome
+                </label>
+                <input
+                  type="text"
+                  {...register("testimonial1_name")}
+                  placeholder="Nome completo da testemunha 1"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CPF
+                </label>
+                <Controller
+                  name="testimonial1_cpf"
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      type="text"
+                      {...field}
+                      maxLength={14}
+                      placeholder="000.000.000-00"
+                      onChange={(e) => {
+                        const masked = applyCpfMask(e.target.value);
+                        field.onChange(masked);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    />
+                  )}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  E-mail
+                </label>
+                <input
+                  type="email"
+                  {...register("testimonial1_email")}
+                  placeholder="testemunha1@email.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Testemunha 2 */}
+              <div className="md:col-span-2 mt-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                  Testemunha 2
+                </h3>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome
+                </label>
+                <input
+                  type="text"
+                  {...register("testimonial2_name")}
+                  placeholder="Nome completo da testemunha 2"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CPF
+                </label>
+                <Controller
+                  name="testimonial2_cpf"
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      type="text"
+                      {...field}
+                      maxLength={14}
+                      placeholder="000.000.000-00"
+                      onChange={(e) => {
+                        const masked = applyCpfMask(e.target.value);
+                        field.onChange(masked);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    />
+                  )}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  E-mail
+                </label>
+                <input
+                  type="email"
+                  {...register("testimonial2_email")}
+                  placeholder="testemunha2@email.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                />
               </div>
             </div>
           </section>
@@ -1249,8 +1776,8 @@ export default function CreateContractPage() {
 
       {/* Modal de Preview do Contrato */}
       {showPreviewModal && previewData && (
-        <ContractPreviewModal
-          pdfBase64={previewData.pdf_base64}
+        <DocuSignPreviewModal
+          previewUrl={previewData.preview_url}
           envelopeId={previewData.envelope_id}
           expiresAt={previewData.expires_at}
           onConfirm={handleConfirmSend}

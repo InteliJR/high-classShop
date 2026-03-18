@@ -29,9 +29,18 @@ export const mockCars: CarMock[] = [
     combustivel: 'Gasolina',
     tipo_categoria: 'Esportivo',
     images: [
-      { url: 'cars/1/pexels-photo-358070.jpeg', is_primary: true },
-      { url: 'cars/1/pexels-photo-358070.jpeg', is_primary: false },
-      { url: 'cars/1/pexels-photo-358070.jpeg', is_primary: false },
+      {
+        url: 'https://stimg.cardekho.com/images/carexteriorimages/930x620/Porsche/911/11757/1762933836560/front-left-side-47.jpg',
+        is_primary: true,
+      },
+      {
+        url: 'https://stimg.cardekho.com/images/carexteriorimages/930x620/Porsche/911/11757/1762933836560/front-left-side-47.jpg',
+        is_primary: false,
+      },
+      {
+        url: 'https://stimg.cardekho.com/images/carexteriorimages/930x620/Porsche/911/11757/1762933836560/front-left-side-47.jpg',
+        is_primary: false,
+      },
     ],
   },
 ];
