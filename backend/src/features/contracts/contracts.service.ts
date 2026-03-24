@@ -213,11 +213,16 @@ export class ContractsService {
 
     // Buscar dados da empresa da plataforma + calcular comissão
     const platformCompany = await this.platformCompanyService.findOne();
-    const { platformRate, officeRate, officeData, specialistRate, specialistData } =
-      await this.calculateCommissionSplit(
-        processData.specialist,
-        platformCompany,
-      );
+    const {
+      platformRate,
+      officeRate,
+      officeData,
+      specialistRate,
+      specialistData,
+    } = await this.calculateCommissionSplit(
+      processData.specialist,
+      platformCompany,
+    );
 
     this.logger.debug(
       `Prefill data loaded successfully for process ${processId}`,
@@ -398,7 +403,13 @@ export class ContractsService {
       }
     }
 
-    return { platformRate, officeRate, officeData, specialistRate, specialistData };
+    return {
+      platformRate,
+      officeRate,
+      officeData,
+      specialistRate,
+      specialistData,
+    };
   }
 
   /**
@@ -650,7 +661,8 @@ export class ContractsService {
               specialist_document: dto.specialist_document,
               specialist_bank: dto.specialist_bank || null,
               specialist_agency: dto.specialist_agency || null,
-              specialist_checking_account: dto.specialist_checking_account || null,
+              specialist_checking_account:
+                dto.specialist_checking_account || null,
 
               // Testemunhas (opcionais)
               testimonial1_cpf: dto.testimonial1_cpf || null,
@@ -1269,7 +1281,8 @@ export class ContractsService {
               specialist_document: dto.specialist_document,
               specialist_bank: dto.specialist_bank || null,
               specialist_agency: dto.specialist_agency || null,
-              specialist_checking_account: dto.specialist_checking_account || null,
+              specialist_checking_account:
+                dto.specialist_checking_account || null,
 
               // Testemunhas (opcionais)
               testimonial1_cpf: dto.testimonial1_cpf || null,

@@ -9,6 +9,12 @@ export interface Process {
     | "DOCUMENTATION"
     | "COMPLETED"
     | "REJECTED";
+  appointment_status?:
+    | "PENDING"
+    | "SCHEDULED"
+    | "COMPLETED"
+    | "CANCELLED"
+    | null;
   product_type?: "CAR" | "BOAT" | "AIRCRAFT" | null;
   client_id: string;
   specialist_id: string;

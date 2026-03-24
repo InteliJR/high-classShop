@@ -9,6 +9,7 @@ import {
   Post,
   Put,
   Query,
+  UnauthorizedException,
   UseGuards,
   Req,
 } from '@nestjs/common';
@@ -215,8 +216,12 @@ export class ProcessesController {
     @Body() dto: AssignProductToProcessDto,
     @Req() req: any,
   ): Promise<ApiResponseDto<ProcessResponse>> {
-    const userId = req.user?.sub;
+    const userId = req.user?.sub || req.user?.id;
     const userRole = req.user?.role;
+
+    if (!userId) {
+      throw new UnauthorizedException('Usuário autenticado não identificado');
+    }
 
     const updatedProcess = await this.processesService.assignProduct(
       processId,

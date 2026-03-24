@@ -24,6 +24,29 @@ import {
   cancelAppointment,
 } from "../services/processes.service";
 
+function getActionErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "object" && error !== null) {
+    const maybeAxios = error as {
+      response?: { data?: { message?: string; error?: { message?: string } } };
+      message?: string;
+    };
+
+    const backendMessage =
+      maybeAxios.response?.data?.error?.message ||
+      maybeAxios.response?.data?.message;
+
+    if (backendMessage && typeof backendMessage === "string") {
+      return backendMessage;
+    }
+
+    if (maybeAxios.message && typeof maybeAxios.message === "string") {
+      return maybeAxios.message;
+    }
+  }
+
+  return fallback;
+}
+
 interface ProcessCardProps {
   process: Process;
   product?:
@@ -69,6 +92,9 @@ export default function ProcessCard({
 
   // Verifica se é um processo de consultoria (sem produto atribuído)
   const isConsultancy = !process.product_type || !process.product_id;
+  const isAppointmentConfirmed =
+    process.appointment_status === "SCHEDULED" ||
+    process.appointment_status === "COMPLETED";
 
   // Load completion reason and active contract on mount and when process changes
   useEffect(() => {
@@ -99,7 +125,12 @@ export default function ProcessCard({
       onStatusUpdated?.();
     } catch (error) {
       console.error("Error confirming appointment:", error);
-      alert("Erro ao confirmar agendamento. Tente novamente.");
+      alert(
+        getActionErrorMessage(
+          error,
+          "Erro ao confirmar agendamento. Tente novamente.",
+        ),
+      );
     } finally {
       setIsConfirming(false);
     }
@@ -123,7 +154,12 @@ export default function ProcessCard({
       onStatusUpdated?.();
     } catch (error) {
       console.error("Error cancelling appointment:", error);
-      alert("Erro ao cancelar agendamento. Tente novamente.");
+      alert(
+        getActionErrorMessage(
+          error,
+          "Erro ao cancelar agendamento. Tente novamente.",
+        ),
+      );
     } finally {
       setIsCancelling(false);
     }
@@ -156,12 +192,12 @@ export default function ProcessCard({
           : ""
       }`}
     >
-      {/* Negotiation button - always visible on NEGOTIATION status (visible for both specialist and client) */}
-      {process.status === "NEGOTIATION" && !isExpanded && (
+      {/* Negotiation button - visible only when process has a product */}
+      {process.status === "NEGOTIATION" && !isConsultancy && !isExpanded && (
         <div className="hidden md:block absolute top-6 right-6 z-20">
           <button
             onClick={() => navigate(`/processes/${process.id}/negotiation`)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 text-white text-xs md:text-sm font-medium rounded-lg shadow-lg hover:bg-slate-800 transition-colors whitespace-nowrap"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs md:text-sm font-medium rounded-lg shadow-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
           >
             <MessageSquare size={16} />
             Negociar
@@ -176,7 +212,7 @@ export default function ProcessCard({
           <div className="hidden md:block absolute top-6 right-6 z-20">
             <button
               onClick={onUploadDocuments}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 text-white text-xs md:text-sm font-medium rounded-lg shadow-lg hover:bg-slate-800 transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white text-xs md:text-sm font-medium rounded-lg shadow-lg hover:bg-orange-700 transition-colors whitespace-nowrap"
             >
               Enviar Contrato
             </button>
@@ -188,12 +224,17 @@ export default function ProcessCard({
       <div className="px-3 py-2 md:px-6 md:py-4 border-b border-gray-100 flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm md:text-lg font-semibold text-gray-900 truncate">
-            {isConsultancy ? "Consultoria" : "Processo"} - {process.client?.name || process.client_id} -{" "}
-            {isConsultancy ? "Aguardando produto" : (product?.modelo || "Produto")}
+            {isConsultancy ? "Consultoria" : "Processo"} -{" "}
+            {process.client?.name || process.client_id} -{" "}
+            {isConsultancy
+              ? "Aguardando produto"
+              : product?.modelo || "Produto"}
           </h3>
           {isConsultancy && (
             <p className="text-xs text-slate-600 mt-1">
-              Especialista precisa selecionar um produto
+              {isClientView
+                ? "Especialista irá direcionar você para o produto que melhor se encaixa no seu perfil"
+                : "Confirme a reunião e, em seguida, selecione o produto ideal para o cliente"}
             </p>
           )}
         </div>
@@ -219,7 +260,7 @@ export default function ProcessCard({
         <div className="mb-4">
           <div className="flex items-center gap-2">
             {process.status === "PROCESSING_CONTRACT" && (
-              <Loader size={18} className="animate-spin text-slate-700" />
+              <Loader size={18} className="animate-spin text-orange-600" />
             )}
             {isRejected && <X size={18} className="text-red-600" />}
             <p
@@ -236,108 +277,111 @@ export default function ProcessCard({
           </div>
         </div>
 
-        {/* Appointment Confirmation Buttons - SCHEDULING Status */}
-        {process.status === "SCHEDULING" && (
-          <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-slate-900 mb-2">
-                {isClientView
-                  ? "Aguardando confirmação do especialista"
-                  : "Solicitação de agendamento"}
-              </p>
+        {/* Appointment Confirmation Buttons - SCHEDULING Status (before appointment confirmation) */}
+        {process.status === "SCHEDULING" &&
+          !(isConsultancy && isAppointmentConfirmed) && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium text-amber-900 mb-2">
+                  {isClientView
+                    ? "Aguardando confirmação do especialista"
+                    : "Solicitação de agendamento"}
+                </p>
 
-              {!isClientView ? (
-                // Specialist view - Confirm or Reject buttons
-                <div className="flex gap-2">
+                {!isClientView ? (
+                  // Specialist view - Confirm or Reject buttons
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleCancelAppointment}
+                      disabled={isCancelling || isConfirming}
+                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition disabled:opacity-50"
+                    >
+                      {isCancelling ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
+                      ) : (
+                        <>
+                          <XCircle size={16} />
+                          Recusar
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleConfirmAppointment}
+                      disabled={isConfirming || isCancelling}
+                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50"
+                    >
+                      {isConfirming ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      ) : (
+                        <>
+                          <CheckCircle size={16} />
+                          Confirmar
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  // Client view - Only Cancel button
                   <button
                     onClick={handleCancelAppointment}
-                    disabled={isCancelling || isConfirming}
-                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition disabled:opacity-50"
+                    disabled={isCancelling}
+                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-50 border border-red-300 text-red-700 rounded-lg font-medium hover:bg-red-100 transition disabled:opacity-50"
                   >
                     {isCancelling ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-700"></div>
                     ) : (
                       <>
                         <XCircle size={16} />
-                        Recusar
+                        Cancelar Agendamento
                       </>
                     )}
                   </button>
-                  <button
-                    onClick={handleConfirmAppointment}
-                    disabled={isConfirming || isCancelling}
-                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg font-medium hover:bg-slate-800 transition disabled:opacity-50"
-                  >
-                    {isConfirming ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    ) : (
-                      <>
-                        <CheckCircle size={16} />
-                        Confirmar
-                      </>
+                )}
+              </div>
+            </div>
+          )}
+
+        {/* Consultancy - Post-confirmation state in SCHEDULING */}
+        {isConsultancy &&
+          process.status === "SCHEDULING" &&
+          isAppointmentConfirmed && (
+            <div className="mb-4 p-3 bg-slate-100 border border-slate-300 rounded-lg">
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium text-slate-900 mb-1">
+                  Reunião confirmada
+                </p>
+                {!isClientView ? (
+                  <>
+                    <p className="text-xs text-slate-700 mb-2">
+                      Agora selecione o produto para iniciar a negociação com o
+                      cliente.
+                    </p>
+                    {onSelectProduct && (
+                      <button
+                        onClick={onSelectProduct}
+                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-900 transition"
+                      >
+                        <Package size={16} />
+                        Selecionar Produto
+                      </button>
                     )}
-                  </button>
-                </div>
-              ) : (
-                // Client view - Only Cancel button
-                <button
-                  onClick={handleCancelAppointment}
-                  disabled={isCancelling}
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-50 border border-red-300 text-red-700 rounded-lg font-medium hover:bg-red-100 transition disabled:opacity-50"
-                >
-                  {isCancelling ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-700"></div>
-                  ) : (
-                    <>
-                      <XCircle size={16} />
-                      Cancelar Agendamento
-                    </>
-                  )}
-                </button>
-              )}
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-700">
+                    O especialista está escolhendo o produto ideal para iniciar
+                    a negociação.
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* Consultancy - Select Product Button (Specialist View Only) */}
-        {isConsultancy && !isClientView && onSelectProduct && (
-          <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-slate-900 mb-1">
-                Este é um processo de consultoria
-              </p>
-              <p className="text-xs text-slate-700 mb-2">
-                Após a reunião com o cliente, selecione o produto recomendado para continuar com a negociação.
-              </p>
-              <button
-                onClick={onSelectProduct}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg font-medium hover:bg-slate-800 transition"
-              >
-                <Package size={16} />
-                Selecionar Produto
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Consultancy - Client View Info */}
-        {isConsultancy && isClientView && (
-          <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
-            <p className="text-sm font-medium text-slate-900 mb-1">
-              Processo de consultoria
-            </p>
-            <p className="text-xs text-slate-700">
-              Após a reunião, o especialista irá selecionar o produto mais adequado para você.
-            </p>
-          </div>
-        )}
+          )}
 
         {/* Mobile: botões logo abaixo do status, antes do stepper */}
-        {process.status === "NEGOTIATION" && !isExpanded && (
+        {process.status === "NEGOTIATION" && !isConsultancy && !isExpanded && (
           <div className="md:hidden w-full mb-2 flex flex-col gap-2">
             <button
               onClick={() => navigate(`/processes/${process.id}/negotiation`)}
-              className="w-full px-4 py-2 bg-slate-700 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-slate-800 transition-colors inline-flex items-center justify-center gap-1"
+              className="w-full px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-blue-700 transition-colors inline-flex items-center justify-center gap-1"
             >
               <MessageSquare size={14} />
               Negociar
@@ -353,7 +397,7 @@ export default function ProcessCard({
             <div className="md:hidden w-full mb-2 flex flex-col gap-2">
               <button
                 onClick={onUploadDocuments}
-                className="w-full px-4 py-2 bg-slate-700 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-slate-800 transition-colors inline-flex items-center justify-center gap-1"
+                className="w-full px-4 py-2 bg-orange-600 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-orange-700 transition-colors inline-flex items-center justify-center gap-1"
               >
                 Enviar Contrato
               </button>
@@ -366,13 +410,13 @@ export default function ProcessCard({
         {(process.status === "DOCUMENTATION" ||
           process.status === "COMPLETED") &&
           activeContract && (
-            <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-slate-600 font-medium">
+                  <p className="text-xs text-gray-600 font-medium">
                     Documento Enviado
                   </p>
-                  <p className="text-sm text-slate-900 font-semibold truncate">
+                  <p className="text-sm text-blue-900 font-semibold truncate">
                     {activeContract.file_name || "Contrato"}
                   </p>
                 </div>
@@ -381,7 +425,7 @@ export default function ProcessCard({
                     href={activeContract.original_pdf_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 px-3 py-2 bg-slate-700 text-white text-xs font-medium rounded hover:bg-slate-800 transition-colors whitespace-nowrap"
+                    className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors whitespace-nowrap"
                   >
                     Baixar
                     <ExternalLink size={14} />
@@ -411,11 +455,11 @@ export default function ProcessCard({
                       isRejectedStep
                         ? "bg-red-500 text-white"
                         : isCompleted
-                          ? "bg-slate-700 text-white"
-                          : "bg-slate-200 text-slate-600"
+                          ? "bg-green-500 text-white"
+                          : "bg-gray-300 text-gray-600"
                     } ${
                       isActive && !isRejectedStep
-                        ? "ring-2 ring-slate-400 ring-offset-2"
+                        ? "ring-2 ring-green-300 ring-offset-2"
                         : ""
                     } ${
                       isRejectedStep ? "ring-2 ring-red-300 ring-offset-2" : ""
@@ -447,8 +491,8 @@ export default function ProcessCard({
                       isRejected && index >= currentStep - 1
                         ? "bg-red-400"
                         : index < currentStep
-                          ? "bg-slate-700"
-                          : "bg-slate-200"
+                          ? "bg-green-500"
+                          : "bg-gray-300"
                     }`}
                     style={{ minWidth: "40px" }}
                   />
@@ -474,11 +518,11 @@ export default function ProcessCard({
                       isRejectedStep
                         ? "bg-red-500 text-white"
                         : isCompleted
-                          ? "bg-slate-700 text-white"
-                          : "bg-slate-200 text-slate-600"
+                          ? "bg-green-500 text-white"
+                          : "bg-gray-300 text-gray-600"
                     } ${
                       isActive && !isRejectedStep
-                        ? "ring-2 ring-slate-400 ring-offset-1"
+                        ? "ring-2 ring-green-300 ring-offset-1"
                         : ""
                     } ${
                       isRejectedStep ? "ring-2 ring-red-300 ring-offset-1" : ""
@@ -498,8 +542,8 @@ export default function ProcessCard({
                         isRejected && index >= currentStep - 1
                           ? "bg-red-400"
                           : index < currentStep
-                            ? "bg-slate-700"
-                            : "bg-slate-200"
+                            ? "bg-green-500"
+                            : "bg-gray-300"
                       }`}
                     />
                   )}
@@ -586,11 +630,11 @@ export default function ProcessCard({
               Alterar Status
             </button>
 
-            {/* Negotiation Button: Only show if status is NEGOTIATION */}
-            {process.status === "NEGOTIATION" && (
+            {/* Negotiation Button: Only show if status is NEGOTIATION and process has product */}
+            {process.status === "NEGOTIATION" && !isConsultancy && (
               <button
                 onClick={() => navigate(`/processes/${process.id}/negotiation`)}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 bg-slate-700 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors whitespace-nowrap"
+                className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 bg-blue-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
               >
                 <MessageSquare size={16} />
                 Ver Negociação
@@ -601,7 +645,7 @@ export default function ProcessCard({
             {process.status === "DOCUMENTATION" && onUploadDocuments && (
               <button
                 onClick={onUploadDocuments}
-                className="flex-1 px-3 py-2 md:px-4 md:py-2 bg-slate-700 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors whitespace-nowrap"
+                className="flex-1 px-3 py-2 md:px-4 md:py-2 bg-orange-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors whitespace-nowrap"
               >
                 Enviar Contrato
               </button>

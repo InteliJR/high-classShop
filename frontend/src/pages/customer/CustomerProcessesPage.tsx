@@ -1,10 +1,5 @@
 import { useState, useEffect } from "react";
-import {
-  ChevronLeft,
-  ChevronRight,
-  FileText,
-  AlertCircle,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, AlertCircle } from "lucide-react";
 import { useAuth } from "../../store/authStateManager";
 import Loading from "../../components/ui/Loading";
 import ProcessCard from "../../components/ProcessCard";
@@ -19,6 +14,12 @@ interface ProcessClient {
     | "DOCUMENTATION"
     | "COMPLETED"
     | "REJECTED";
+  appointment_status?:
+    | "PENDING"
+    | "SCHEDULED"
+    | "COMPLETED"
+    | "CANCELLED"
+    | null;
   product_type: "CAR" | "BOAT" | "AIRCRAFT";
   notes?: string;
   created_at: string;
@@ -94,7 +95,7 @@ export default function CustomerProcessesPage() {
         {
           params: { page, perPage: itemsPerPage },
           withCredentials: true,
-        }
+        },
       );
 
       setProcesses(response.data.data || []);

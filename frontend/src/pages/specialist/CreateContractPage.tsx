@@ -397,7 +397,8 @@ export default function CreateContractPage() {
     specialist_document: formData.specialist_document || undefined,
     specialist_bank: formData.specialist_bank || undefined,
     specialist_agency: formData.specialist_agency || undefined,
-    specialist_checking_account: formData.specialist_checking_account || undefined,
+    specialist_checking_account:
+      formData.specialist_checking_account || undefined,
     // Witnesses (optional)
     testimonial1_name: formData.testimonial1_name || undefined,
     testimonial1_cpf: formData.testimonial1_cpf || undefined,
@@ -528,7 +529,10 @@ export default function CreateContractPage() {
   useEffect(() => {
     if (vehiclePrice && (platformValue || officeValue || specialistValue)) {
       const sellerValue =
-        vehiclePrice - (platformValue || 0) - (officeValue || 0) - (specialistValue || 0);
+        vehiclePrice -
+        (platformValue || 0) -
+        (officeValue || 0) -
+        (specialistValue || 0);
       setValue("payment_seller_value", sellerValue > 0 ? sellerValue : 0);
     }
   }, [vehiclePrice, platformValue, officeValue, specialistValue, setValue]);

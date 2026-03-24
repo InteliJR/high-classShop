@@ -684,7 +684,7 @@ model Process {
   boat_id       Int?
 
   product_id         String?       @db.Uuid
-  product_type       ProductType?  // Opcional para consultoria (null = consultoria sem produto)
+  product_type       ProductType? // Opcional para consultoria (null = consultoria sem produto)
   active_contract_id String?       @unique @db.Uuid
   status             ProcessStatus @default(SCHEDULING)
   notes              String?
@@ -946,7 +946,7 @@ model Appointment {
   client_id     String       @db.Uuid
   specialist_id String       @db.Uuid
   product_type  ProductType? // Opcional: null para consultoria sem produto específico
-  product_id    Int?         // Opcional: null para consultoria sem produto específico
+  product_id    Int? // Opcional: null para consultoria sem produto específico
 
   // Data e hora do agendamento em UTC (ISO 8601)
   // Exemplo: "2024-10-10T14:00:00Z"

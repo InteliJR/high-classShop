@@ -1,7 +1,11 @@
 import { useEffect, useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
-import { Car, Ship, Plane, Calendar, UserCircle2, ExternalLink, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
-import { getSpecialistsGroupedByCategory, type Specialist, type GroupedSpecialists } from "../../services/specialists.service";
+import { Car, Ship, Plane, Calendar, UserCircle2, Loader2 } from "lucide-react";
+import {
+  getSpecialistsGroupedByCategory,
+  type Specialist,
+  type GroupedSpecialists,
+} from "../../services/specialists.service";
 import { createConsultancyAppointment } from "../../services/appointments.service";
 import { AuthContext } from "../../contexts/AuthContext";
 import Button from "../../components/ui/button";
@@ -15,7 +19,10 @@ interface SpecialistGroup {
   specialists: Specialist[];
 }
 
-const specialityConfig: Record<SpecialityType, { label: string; icon: React.ReactNode }> = {
+const specialityConfig: Record<
+  SpecialityType,
+  { label: string; icon: React.ReactNode }
+> = {
   CAR: { label: "Carros", icon: <Car size={28} /> },
   BOAT: { label: "Barcos", icon: <Ship size={28} /> },
   AIRCRAFT: { label: "Aeronaves", icon: <Plane size={28} /> },
@@ -24,13 +31,13 @@ const specialityConfig: Record<SpecialityType, { label: string; icon: React.Reac
 export default function ConsultoriaPage() {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
-  const [groupedSpecialists, setGroupedSpecialists] = useState<GroupedSpecialists | null>(null);
+  const [groupedSpecialists, setGroupedSpecialists] =
+    useState<GroupedSpecialists | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedSpecialist, setSelectedSpecialist] = useState<Specialist | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [modalState, setModalState] = useState<"initial" | "loading" | "success" | "error">("initial");
+  const [requestingSpecialistId, setRequestingSpecialistId] = useState<
+    string | null
+  >(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const [calendlyOpened, setCalendlyOpened] = useState(false);
 
   useEffect(() => {
     async function fetchSpecialists() {
@@ -48,7 +55,7 @@ export default function ConsultoriaPage() {
 
   // Transform grouped data into display format
   const specialistGroups: SpecialistGroup[] = groupedSpecialists
-    ? (["CAR", "BOAT", "AIRCRAFT"] as SpecialityType[]).map(type => ({
+    ? (["CAR", "BOAT", "AIRCRAFT"] as SpecialityType[]).map((type) => ({
         type,
         label: specialityConfig[type].label,
         icon: specialityConfig[type].icon,
@@ -56,55 +63,33 @@ export default function ConsultoriaPage() {
       }))
     : [];
 
-  const handleRequestMeeting = (specialist: Specialist) => {
-    setSelectedSpecialist(specialist);
-    setShowModal(true);
-    setModalState("initial");
-    setErrorMessage("");
-    setCalendlyOpened(false);
-  };
+  const handleRequestMeeting = async (specialist: Specialist) => {
+    if (!user || requestingSpecialistId) return;
 
-  const handleOpenCalendly = () => {
-    if (selectedSpecialist?.calendly_url) {
-      window.open(selectedSpecialist.calendly_url, "_blank");
-      setCalendlyOpened(true);
-    }
-  };
-
-  const handleConfirmAppointment = async () => {
-    if (!selectedSpecialist || !user) return;
-
-    setModalState("loading");
+    setRequestingSpecialistId(specialist.id);
     setErrorMessage("");
 
     try {
       await createConsultancyAppointment({
         client_id: user.id,
-        specialist_id: selectedSpecialist.id,
+        specialist_id: specialist.id,
         notes: `Consultoria solicitada pelo cliente`,
       });
 
-      setModalState("success");
-      
-      // Redirecionar após 2 segundos
-      setTimeout(() => {
-        navigate("/cliente/processos");
-      }, 2000);
-    } catch (error: any) {
-      setModalState("error");
-      const message = error?.response?.data?.error?.message || 
-                      error?.message || 
-                      "Erro ao confirmar agendamento. Tente novamente.";
-      setErrorMessage(message);
-    }
-  };
+      if (specialist.calendly_url?.trim()) {
+        window.open(specialist.calendly_url, "_blank", "noopener,noreferrer");
+      }
 
-  const handleCloseModal = () => {
-    setShowModal(false);
-    setSelectedSpecialist(null);
-    setModalState("initial");
-    setErrorMessage("");
-    setCalendlyOpened(false);
+      navigate("/customer/processes");
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.error?.message ||
+        error?.message ||
+        "Erro ao solicitar agendamento. Tente novamente.";
+      setErrorMessage(message);
+    } finally {
+      setRequestingSpecialistId(null);
+    }
   };
 
   if (loading) {
@@ -126,9 +111,15 @@ export default function ConsultoriaPage() {
           Consultoria Especializada
         </h1>
         <p className="text-lg text-gray-600 max-w-3xl">
-          Nossos especialistas estão prontos para ajudá-lo a encontrar o veículo perfeito. 
-          Escolha um especialista na categoria de seu interesse para agendar uma consultoria.
+          Nossos especialistas estão prontos para ajudá-lo a encontrar o veículo
+          perfeito. Escolha um especialista na categoria de seu interesse para
+          agendar uma consultoria.
         </p>
+        {errorMessage && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {errorMessage}
+          </div>
+        )}
       </div>
 
       {/* Specialists by Category */}
@@ -140,9 +131,12 @@ export default function ConsultoriaPage() {
               <div className="p-3 bg-primary/10 rounded-full text-primary">
                 {group.icon}
               </div>
-              <h2 className="text-2xl font-bold text-gray-900">{group.label}</h2>
+              <h2 className="text-2xl font-bold text-gray-900">
+                {group.label}
+              </h2>
               <span className="text-sm text-gray-500">
-                ({group.specialists.length} especialista{group.specialists.length !== 1 ? 's' : ''})
+                ({group.specialists.length} especialista
+                {group.specialists.length !== 1 ? "s" : ""})
               </span>
             </div>
 
@@ -154,6 +148,7 @@ export default function ConsultoriaPage() {
                     key={specialist.id}
                     specialist={specialist}
                     onRequestMeeting={handleRequestMeeting}
+                    isRequesting={requestingSpecialistId === specialist.id}
                   />
                 ))}
               </div>
@@ -165,142 +160,21 @@ export default function ConsultoriaPage() {
           </div>
         ))}
       </div>
-
-      {/* Modal - Agendamento de Consultoria */}
-      {showModal && selectedSpecialist && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full space-y-6">
-            {modalState === "success" ? (
-              // Estado de sucesso
-              <>
-                <div className="flex flex-col items-center text-center space-y-4">
-                  <div className="p-4 bg-green-100 rounded-full">
-                    <CheckCircle2 size={48} className="text-green-600" />
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900">Agendamento Confirmado!</h3>
-                  <p className="text-gray-600">
-                    Sua consultoria com <strong>{selectedSpecialist.name} {selectedSpecialist.surname}</strong> foi registrada.
-                    Você será redirecionado para seus processos em breve.
-                  </p>
-                </div>
-              </>
-            ) : modalState === "error" ? (
-              // Estado de erro
-              <>
-                <div className="flex flex-col items-center text-center space-y-4">
-                  <div className="p-4 bg-red-100 rounded-full">
-                    <AlertCircle size={48} className="text-red-600" />
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900">Erro no Agendamento</h3>
-                  <p className="text-gray-600">{errorMessage}</p>
-                </div>
-                <div className="flex justify-end gap-3">
-                  <Button onClick={handleCloseModal} variant="outline">
-                    Fechar
-                  </Button>
-                  <Button onClick={handleConfirmAppointment} variant="solid">
-                    Tentar Novamente
-                  </Button>
-                </div>
-              </>
-            ) : (
-              // Estado inicial e loading
-              <>
-                <h3 className="text-xl font-bold text-gray-900">Agendar Consultoria</h3>
-                <div className="space-y-4">
-                  <p className="text-gray-600">
-                    Você está prestes a agendar uma consultoria com{" "}
-                    <strong>{selectedSpecialist.name} {selectedSpecialist.surname}</strong>.
-                  </p>
-                  
-                  {selectedSpecialist.calendly_url ? (
-                    <div className="space-y-4">
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <p className="text-sm text-blue-800 mb-3">
-                          <strong>Passo 1:</strong> Clique no botão abaixo para abrir o calendário do especialista 
-                          e escolher um horário disponível.
-                        </p>
-                        <Button
-                          onClick={handleOpenCalendly}
-                          variant="outline"
-                          className="w-full flex items-center justify-center gap-2"
-                          disabled={modalState === "loading"}
-                        >
-                          <Calendar size={18} />
-                          Abrir Calendário
-                          <ExternalLink size={14} />
-                        </Button>
-                        {calendlyOpened && (
-                          <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
-                            <CheckCircle2 size={14} />
-                            Calendário aberto em nova aba
-                          </p>
-                        )}
-                      </div>
-                      
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                        <p className="text-sm text-gray-700 mb-3">
-                          <strong>Passo 2:</strong> Após escolher o horário no calendário, 
-                          clique no botão abaixo para confirmar seu interesse.
-                        </p>
-                        <Button
-                          onClick={handleConfirmAppointment}
-                          variant="solid"
-                          className="w-full flex items-center justify-center gap-2"
-                          disabled={modalState === "loading" || !calendlyOpened}
-                        >
-                          {modalState === "loading" ? (
-                            <>
-                              <Loader2 size={18} className="animate-spin" />
-                              Confirmando...
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 size={18} />
-                              Confirmar Agendamento
-                            </>
-                          )}
-                        </Button>
-                        {!calendlyOpened && (
-                          <p className="text-xs text-gray-500 mt-2">
-                            Abra o calendário primeiro para habilitar a confirmação
-                          </p>
-                        )}
-                      </div>
-                      
-                      <p className="text-xs text-gray-500 text-center">
-                        Durante a consultoria, o especialista irá recomendar os melhores produtos para você.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                      <p className="text-sm text-yellow-800">
-                        Este especialista ainda não configurou seu calendário de agendamentos. 
-                        Por favor, entre em contato diretamente por e-mail: <strong>{selectedSpecialist.email}</strong>
-                      </p>
-                    </div>
-                  )}
-                </div>
-                <div className="flex justify-end">
-                  <Button onClick={handleCloseModal} variant="outline" disabled={modalState === "loading"}>
-                    Cancelar
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
 interface SpecialistCardProps {
   specialist: Specialist;
-  onRequestMeeting: (specialist: Specialist) => void;
+  onRequestMeeting: (specialist: Specialist) => Promise<void>;
+  isRequesting: boolean;
 }
 
-function SpecialistCard({ specialist, onRequestMeeting }: SpecialistCardProps) {
+function SpecialistCard({
+  specialist,
+  onRequestMeeting,
+  isRequesting,
+}: SpecialistCardProps) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
       <div className="flex flex-col items-center text-center space-y-4">
@@ -317,12 +191,21 @@ function SpecialistCard({ specialist, onRequestMeeting }: SpecialistCardProps) {
           onClick={() => onRequestMeeting(specialist)}
           className="w-full flex items-center justify-center gap-2"
           variant="solid"
+          disabled={isRequesting}
         >
-          <Calendar size={18} />
-          Solicitar Reunião
+          {isRequesting ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              Solicitando...
+            </>
+          ) : (
+            <>
+              <Calendar size={18} />
+              Solicitar Reunião
+            </>
+          )}
         </Button>
       </div>
     </div>
   );
 }
-
