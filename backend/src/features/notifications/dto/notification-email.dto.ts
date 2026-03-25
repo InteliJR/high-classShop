@@ -34,6 +34,15 @@ export interface AppointmentCancelledEmailDto {
   productDetails: string;
 }
 
+export interface MeetingStartedEmailDto {
+  clientEmail: string;
+  clientName: string;
+  specialistName: string;
+  processId: string;
+  platformMeetingUrl: string;
+  meetingLink?: string;
+}
+
 // ============================================================================
 // PROPOSAL NOTIFICATIONS
 // ============================================================================

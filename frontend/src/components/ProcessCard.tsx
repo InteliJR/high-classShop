@@ -9,6 +9,7 @@ import {
   CheckCircle,
   XCircle,
   Package,
+  Video,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -22,6 +23,10 @@ import {
   getProcessWithActiveContract,
   confirmAppointment,
   cancelAppointment,
+  getMeetingByProcess,
+  markConversationDone,
+  startMeeting,
+  type MeetingSession,
 } from "../services/processes.service";
 
 function getActionErrorMessage(error: unknown, fallback: string): string {
@@ -81,7 +86,6 @@ export default function ProcessCard({
   onStatusUpdated,
   isClientView = false,
   onSelectProduct,
-  specialistSpeciality,
 }: ProcessCardProps) {
   const navigate = useNavigate();
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -89,17 +93,30 @@ export default function ProcessCard({
   const [activeContract, setActiveContract] = useState<any>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [meetingSession, setMeetingSession] = useState<MeetingSession | null>(
+    null,
+  );
+  const [isStartingMeeting, setIsStartingMeeting] = useState(false);
+  const [isLoadingMeeting, setIsLoadingMeeting] = useState(false);
+  const [isConversationDoneLoading, setIsConversationDoneLoading] =
+    useState(false);
 
   // Verifica se é um processo de consultoria (sem produto atribuído)
   const isConsultancy = !process.product_type || !process.product_id;
   const isAppointmentConfirmed =
     process.appointment_status === "SCHEDULED" ||
     process.appointment_status === "COMPLETED";
+  const canStartOrJoinMeeting =
+    isAppointmentConfirmed &&
+    ["SCHEDULING", "NEGOTIATION", "PROCESSING_CONTRACT"].includes(
+      process.status,
+    );
 
   // Load completion reason and active contract on mount and when process changes
   useEffect(() => {
     const loadDetails = async () => {
       try {
+        setIsLoadingMeeting(true);
         const [reason, processData] = await Promise.all([
           getProcessCompletionReason(process.id),
           getProcessWithActiveContract(process.id),
@@ -107,13 +124,74 @@ export default function ProcessCard({
         setCompletionReason(reason);
         setActiveContract(processData.activeContract);
         console.log(processData);
+
+        const shouldCheckMeeting = canStartOrJoinMeeting;
+
+        if (shouldCheckMeeting) {
+          const meeting = await getMeetingByProcess(process.id);
+          setMeetingSession(meeting);
+        } else {
+          setMeetingSession(null);
+        }
       } catch (error) {
         console.error("Error loading process details:", error);
+      } finally {
+        setIsLoadingMeeting(false);
       }
     };
 
     loadDetails();
-  }, [process.id]);
+  }, [process.id, process.status, canStartOrJoinMeeting]);
+
+  const handleStartMeeting = async () => {
+    if (isStartingMeeting) return;
+
+    try {
+      setIsStartingMeeting(true);
+      await startMeeting(process.id);
+      onStatusUpdated?.();
+      navigate(`/processes/${process.id}/meeting`);
+    } catch (error) {
+      console.error("Error starting meeting:", error);
+      alert(
+        getActionErrorMessage(
+          error,
+          "Erro ao iniciar reunião. Tente novamente.",
+        ),
+      );
+    } finally {
+      setIsStartingMeeting(false);
+    }
+  };
+
+  const handleJoinMeeting = () => {
+    navigate(`/processes/${process.id}/meeting`);
+  };
+
+  const handleConversationDone = async () => {
+    if (isConversationDoneLoading) return;
+
+    try {
+      setIsConversationDoneLoading(true);
+      const result = await markConversationDone(process.id);
+
+      if (result.processTransition.requires_product_selection) {
+        onSelectProduct?.();
+      }
+
+      onStatusUpdated?.();
+    } catch (error) {
+      console.error("Error marking conversation as done:", error);
+      alert(
+        getActionErrorMessage(
+          error,
+          "Erro ao concluir conversa com cliente. Tente novamente.",
+        ),
+      );
+    } finally {
+      setIsConversationDoneLoading(false);
+    }
+  };
 
   // Handle confirm appointment
   const handleConfirmAppointment = async () => {
@@ -278,103 +356,151 @@ export default function ProcessCard({
         </div>
 
         {/* Appointment Confirmation Buttons - SCHEDULING Status (before appointment confirmation) */}
-        {process.status === "SCHEDULING" &&
-          !(isConsultancy && isAppointmentConfirmed) && (
-            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <div className="flex flex-col gap-2">
-                <p className="text-sm font-medium text-amber-900 mb-2">
-                  {isClientView
-                    ? "Aguardando confirmação do especialista"
-                    : "Solicitação de agendamento"}
-                </p>
+        {process.status === "SCHEDULING" && !isAppointmentConfirmed && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-amber-900 mb-2">
+                {isClientView
+                  ? "Aguardando confirmação do especialista"
+                  : "Solicitação de agendamento"}
+              </p>
 
-                {!isClientView ? (
-                  // Specialist view - Confirm or Reject buttons
-                  <div className="flex gap-2">
+              {!isClientView ? (
+                // Specialist view - Confirm or Reject buttons
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCancelAppointment}
+                    disabled={isCancelling || isConfirming}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition disabled:opacity-50"
+                  >
+                    {isCancelling ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
+                    ) : (
+                      <>
+                        <XCircle size={16} />
+                        Recusar
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={handleConfirmAppointment}
+                    disabled={isConfirming || isCancelling}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50"
+                  >
+                    {isConfirming ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <>
+                        <CheckCircle size={16} />
+                        Confirmar
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                // Client view - Only Cancel button
+                <button
+                  onClick={handleCancelAppointment}
+                  disabled={isCancelling}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-50 border border-red-300 text-red-700 rounded-lg font-medium hover:bg-red-100 transition disabled:opacity-50"
+                >
+                  {isCancelling ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-700"></div>
+                  ) : (
+                    <>
+                      <XCircle size={16} />
+                      Cancelar Agendamento
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Meeting actions - after appointment confirmation */}
+        {canStartOrJoinMeeting && (
+          <div className="mb-4 p-3 bg-slate-100 border border-slate-300 rounded-lg">
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-slate-900 mb-1">
+                Reunião confirmada
+              </p>
+              {!isClientView ? (
+                <>
+                  <p className="text-xs text-slate-700 mb-2">
+                    {isConsultancy
+                      ? "Agora selecione o produto para iniciar a negociação com o cliente."
+                      : "Inicie a reunião com o cliente ou entre na reunião já criada."}
+                  </p>
+                  <button
+                    onClick={
+                      meetingSession ? handleJoinMeeting : handleStartMeeting
+                    }
+                    disabled={isStartingMeeting || isLoadingMeeting}
+                    className="w-full mb-2 inline-flex items-center justify-center gap-2 px-4 py-2 bg-cyan-700 text-white rounded-lg font-medium hover:bg-cyan-800 transition disabled:opacity-50"
+                  >
+                    {isStartingMeeting || isLoadingMeeting ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <>
+                        <Video size={16} />
+                        {meetingSession ? "Entrar Reunião" : "Iniciar Reunião"}
+                      </>
+                    )}
+                  </button>
+                  {meetingSession && !meetingSession.ended_at && (
                     <button
-                      onClick={handleCancelAppointment}
-                      disabled={isCancelling || isConfirming}
-                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition disabled:opacity-50"
+                      onClick={handleConversationDone}
+                      disabled={isConversationDoneLoading}
+                      className="w-full mb-2 inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-700 text-white rounded-lg font-medium hover:bg-emerald-800 transition disabled:opacity-50"
                     >
-                      {isCancelling ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
-                      ) : (
-                        <>
-                          <XCircle size={16} />
-                          Recusar
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={handleConfirmAppointment}
-                      disabled={isConfirming || isCancelling}
-                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50"
-                    >
-                      {isConfirming ? (
+                      {isConversationDoneLoading ? (
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                       ) : (
                         <>
                           <CheckCircle size={16} />
-                          Confirmar
+                          Já conversei com o cliente
                         </>
                       )}
                     </button>
-                  </div>
-                ) : (
-                  // Client view - Only Cancel button
-                  <button
-                    onClick={handleCancelAppointment}
-                    disabled={isCancelling}
-                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-50 border border-red-300 text-red-700 rounded-lg font-medium hover:bg-red-100 transition disabled:opacity-50"
-                  >
-                    {isCancelling ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-700"></div>
-                    ) : (
-                      <>
-                        <XCircle size={16} />
-                        Cancelar Agendamento
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-        {/* Consultancy - Post-confirmation state in SCHEDULING */}
-        {isConsultancy &&
-          process.status === "SCHEDULING" &&
-          isAppointmentConfirmed && (
-            <div className="mb-4 p-3 bg-slate-100 border border-slate-300 rounded-lg">
-              <div className="flex flex-col gap-2">
-                <p className="text-sm font-medium text-slate-900 mb-1">
-                  Reunião confirmada
-                </p>
-                {!isClientView ? (
-                  <>
-                    <p className="text-xs text-slate-700 mb-2">
-                      Agora selecione o produto para iniciar a negociação com o
-                      cliente.
-                    </p>
-                    {onSelectProduct && (
-                      <button
-                        onClick={onSelectProduct}
-                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-900 transition"
-                      >
-                        <Package size={16} />
-                        Selecionar Produto
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-xs text-slate-700">
-                    O especialista está escolhendo o produto ideal para iniciar
-                    a negociação.
+                  )}
+                  {isConsultancy && onSelectProduct && (
+                    <button
+                      onClick={onSelectProduct}
+                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-900 transition"
+                    >
+                      <Package size={16} />
+                      Selecionar Produto
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-700 mb-2">
+                    {isConsultancy
+                      ? "O especialista está escolhendo o produto ideal para iniciar a negociação."
+                      : "Aguardando o especialista iniciar a reunião."}
                   </p>
-                )}
-              </div>
+                  {meetingSession ? (
+                    !meetingSession.ended_at ? (
+                      <button
+                        onClick={handleJoinMeeting}
+                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-cyan-700 text-white rounded-lg font-medium hover:bg-cyan-800 transition"
+                      >
+                        <Video size={16} />
+                        Entrar Reunião
+                      </button>
+                    ) : (
+                      <p className="text-xs text-slate-600">
+                        A reunião foi encerrada pelo especialista.
+                      </p>
+                    )
+                  ) : null}
+                </>
+              )}
             </div>
-          )}
+          </div>
+        )}
 
         {/* Mobile: botões logo abaixo do status, antes do stepper */}
         {process.status === "NEGOTIATION" && !isConsultancy && !isExpanded && (

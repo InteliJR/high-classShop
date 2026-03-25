@@ -6,6 +6,11 @@ import type {
   ResponseAPI,
 } from "../types/types";
 import api from "./api";
+import {
+  type CsvImportResponse,
+  type ImportJobAcceptedResponse,
+  resolveImportResponse,
+} from "./product-import-jobs.service";
 
 export interface RawBoat {
   id: number;
@@ -170,65 +175,42 @@ export async function deleteBoat(id: number): Promise<void> {
   }
 }
 
-// XLSX Import Types
-export interface XlsxErrorRow {
-  row: number;
-  reason: string;
-  fields?: Record<string, any>;
-  imageWarnings?: string[];
-}
-
-export interface XlsxImportResponse {
-  success: boolean;
-  message: string;
-  insertedCount: number;
-  updatedCount: number;
-  errorCount: number;
-  warningCount: number;
-  errorRows: XlsxErrorRow[];
-  warningRows: XlsxErrorRow[];
-  insertedIds?: number[];
-  updatedIds?: number[];
-}
-
-// Get /boats/xlsx-template (downloads binary .xlsx file)
-export async function getBoatsXlsxTemplate(): Promise<void> {
+// Get /boats/csv-template (downloads .csv file)
+export async function getBoatsCsvTemplate(): Promise<void> {
   try {
-    const response = await api.get("/boats/xlsx-template", {
+    const response = await api.get("/boats/csv-template", {
       responseType: "blob",
     });
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", "template_lanchas.xlsx");
+    link.setAttribute("download", "template_lanchas.csv");
     document.body.appendChild(link);
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
   } catch (error) {
-    console.error("Erro ao baixar template XLSX:", error);
+    console.error("Erro ao baixar template CSV:", error);
     throw error;
   }
 }
 
-// Post /boats/import-xlsx
-export async function importBoatsXlsx(file: File): Promise<XlsxImportResponse> {
+// Post /boats/import-csv
+export async function importBoatsCsv(file: File): Promise<CsvImportResponse> {
   try {
     const formData = new FormData();
     formData.append("file", file);
 
-    const response = await api.post<XlsxImportResponse>(
-      "/boats/import-xlsx",
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+    const response = await api.post<
+      CsvImportResponse | ImportJobAcceptedResponse
+    >("/boats/import-csv", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
       },
-    );
-    return response.data;
+    });
+    return await resolveImportResponse(response.data);
   } catch (error: any) {
-    console.error("Erro ao importar XLSX:", error);
+    console.error("Erro ao importar CSV:", error);
     if (error.response?.data) {
       throw error.response.data;
     }

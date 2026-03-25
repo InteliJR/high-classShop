@@ -7,6 +7,7 @@ import {
   AppointmentConfirmedEmailDto,
   AppointmentCreatedEmailDto,
   AppointmentCancelledEmailDto,
+  MeetingStartedEmailDto,
   ProposalReceivedEmailDto,
   ProposalAcceptedEmailDto,
   ProposalRejectedEmailDto,
@@ -721,6 +722,80 @@ ${
     await this.sendEmailSafely(
       'APPOINTMENT_CANCELLED',
       data.recipientEmail,
+      subject,
+      html,
+      text,
+    );
+  }
+
+  async sendMeetingStartedEmail(data: MeetingStartedEmailDto): Promise<void> {
+    if (!this.notificationsEnabled) {
+      this.logger.debug(
+        'Notifications disabled - skipping sendMeetingStartedEmail',
+      );
+      return;
+    }
+
+    const subject = `🎥 Sua reunião foi iniciada - High-class Shop`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
+        <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
+          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+        </div>
+        <div style="padding: 40px 30px; background-color: #ffffff;">
+          <h2 style="color: #1e293b; margin-top: 0;">Reunião iniciada! 🎥</h2>
+          <p style="font-size: 16px; color: #334155;">Olá <strong>${data.clientName}</strong>,</p>
+          <p style="font-size: 16px; color: #334155;">
+            Seu especialista <strong>${data.specialistName}</strong> iniciou a reunião.
+          </p>
+          <div style="background-color: #ecfeff; padding: 20px; border-left: 4px solid #06b6d4; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #155e75;"><strong>Processo:</strong> ${data.processId}</p>
+          </div>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${data.platformMeetingUrl}"
+               style="display: inline-block; background-color: #0ea5e9; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
+                      font-weight: 600; font-size: 16px;">
+              Entrar na Reunião
+            </a>
+          </div>
+          <p style="font-size: 14px; color: #64748b;">Se o botão não funcionar, acesse a plataforma:</p>
+          <p style="font-size: 14px; color: #334155; word-break: break-all;">${data.platformMeetingUrl}</p>
+          ${
+            data.meetingLink
+              ? `<p style="font-size: 12px; color: #64748b; margin-top: 12px;">Link direto alternativo da sala:</p>
+                 <p style="font-size: 12px; color: #334155; word-break: break-all;">${data.meetingLink}</p>`
+              : ''
+          }
+        </div>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
+          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+High-class Shop - Reunião iniciada
+
+Olá ${data.clientName},
+
+Seu especialista ${data.specialistName} iniciou a reunião.
+
+Processo: ${data.processId}
+Acesse a reunião em: ${data.platformMeetingUrl}
+${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
+
+© 2026 High-class Shop
+    `.trim();
+
+    await this.sendEmailSafely(
+      'MEETING_STARTED_CLIENT',
+      data.clientEmail,
       subject,
       html,
       text,

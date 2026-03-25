@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { X, Search, Car, Ship, Plane, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
-import { getCars, type RawCar } from "../services/cars.service";
-import { getBoats, type RawBoat } from "../services/boats.service";
-import { getAircrafts, type RawAircraft } from "../services/aircrafts.service";
+import { getCars } from "../services/cars.service";
+import { getBoats } from "../services/boats.service";
+import { getAircrafts } from "../services/aircrafts.service";
 import { assignProductToProcess, type Process } from "../services/processes.service";
-import type { Product, SpecialityType } from "../types/types";
+import type { SpecialityType } from "../types/types";
 import Button from "./ui/button";
 
 interface ProductSelectorModalProps {
@@ -94,7 +94,7 @@ export default function ProductSelectorModal({
             marca: car.marca,
             modelo: car.modelo,
             valor: car.valor,
-            ano: car.ano,
+            ano: car.ano ?? 0,
             imageUrl: car.imageUrl,
           }));
           break;
@@ -107,7 +107,7 @@ export default function ProductSelectorModal({
             marca: boat.marca,
             modelo: boat.modelo,
             valor: boat.valor,
-            ano: boat.ano,
+            ano: boat.ano ?? 0,
             imageUrl: boat.imageUrl,
           }));
           break;
@@ -120,7 +120,7 @@ export default function ProductSelectorModal({
             marca: aircraft.marca,
             modelo: aircraft.modelo,
             valor: aircraft.valor,
-            ano: aircraft.ano,
+            ano: aircraft.ano ?? 0,
             imageUrl: aircraft.imageUrl,
           }));
           break;
@@ -359,7 +359,7 @@ export default function ProductSelectorModal({
             <div className="flex gap-3">
               <Button
                 onClick={handleClose}
-                variant="outline"
+                variant="light"
                 disabled={modalState === "assigning"}
               >
                 Cancelar

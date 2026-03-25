@@ -56,6 +56,22 @@ enum ProductType {
   AIRCRAFT @map("AIRCRAFT")
 }
 
+enum ProductImportJobStatus {
+  PENDING               @map("PENDING")
+  PROCESSING            @map("PROCESSING")
+  COMPLETED             @map("COMPLETED")
+  COMPLETED_WITH_ERRORS @map("COMPLETED_WITH_ERRORS")
+  FAILED                @map("FAILED")
+}
+
+enum ProductImportItemStatus {
+  PENDING                 @map("PENDING")
+  PROCESSING              @map("PROCESSING")
+  COMPLETED               @map("COMPLETED")
+  COMPLETED_WITH_WARNINGS @map("COMPLETED_WITH_WARNINGS")
+  FAILED                  @map("FAILED")
+}
+
 // ProcessStatus: etapas do fluxo de processos de venda
 enum ProcessStatus {
   SCHEDULING          @map("SCHEDULING")
@@ -448,6 +464,9 @@ model User {
   // Propostas de negociação enviadas e recebidas pelo usuário
   proposals_sent           NegotiationProposal[] @relation("proposal_author")
   proposals_received       NegotiationProposal[] @relation("proposal_recipient")
+  meetings_started         MeetingSession[]      @relation("meeting_started_by")
+  meetings_ended           MeetingSession[]      @relation("meeting_ended_by")
+  product_import_jobs      ProductImportJob[]
 }
 
 // RefreshToken: tokens de sessão vinculados a usuários
@@ -715,6 +734,7 @@ model Process {
   // Proposta aceita final que definiu o valor de venda
   accepted_proposal    NegotiationProposal?  @relation("accepted_proposal", fields: [accepted_proposal_id], references: [id])
   accepted_proposal_id String?               @unique @db.Uuid
+  meeting_session      MeetingSession?
 
   // Constraint única: para processos com produto, evita duplicatas
   // Para consultoria (sem produto), appointment_id garante unicidade
@@ -723,6 +743,30 @@ model Process {
   @@index([product_type])
   @@index([product_id])
   @@index([created_at])
+}
+
+// MeetingSession: sessão de videoconferência criada na plataforma para um processo
+// MVP: usa uma única conta Google da plataforma para criar links do Google Meet
+model MeetingSession {
+  id                String   @id @default(uuid()) @db.Uuid
+  process_id        String   @unique @db.Uuid
+  calendar_event_id String   @unique
+  meet_link         String
+  started_by_id     String   @db.Uuid
+  started_at        DateTime @default(now())
+  ended_by_id       String?  @db.Uuid
+  ended_at          DateTime?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  process    Process @relation(fields: [process_id], references: [id], onDelete: Cascade)
+  started_by User    @relation("meeting_started_by", fields: [started_by_id], references: [id])
+  ended_by   User?   @relation("meeting_ended_by", fields: [ended_by_id], references: [id])
+
+  @@index([started_by_id])
+  @@index([started_at])
+  @@index([ended_by_id])
+  @@index([ended_at])
 }
 
 // ProcessStatusHistory: trilha de auditoria para alterações de status do processo
@@ -1094,6 +1138,54 @@ model Settings {
   updated_at  DateTime @updatedAt
 
   @@index([key])
+}
+
+model ProductImportJob {
+  id              String                 @id @default(uuid()) @db.Uuid
+  product_type    ProductType
+  specialist_id   String                 @db.Uuid
+  status          ProductImportJobStatus @default(PENDING)
+  total_items     Int                    @default(0)
+  processed_items Int                    @default(0)
+  success_items   Int                    @default(0)
+  warning_items   Int                    @default(0)
+  failed_items    Int                    @default(0)
+  started_at      DateTime?
+  finished_at     DateTime?
+  error_message   String?
+  created_at      DateTime               @default(now())
+  updated_at      DateTime               @updatedAt
+
+  specialist User                   @relation(fields: [specialist_id], references: [id], onDelete: Cascade)
+  items      ProductImportJobItem[]
+
+  @@index([specialist_id])
+  @@index([status])
+  @@index([product_type])
+  @@index([created_at])
+}
+
+model ProductImportJobItem {
+  id            String                  @id @default(uuid()) @db.Uuid
+  job_id        String                  @db.Uuid
+  row_number    Int
+  status        ProductImportItemStatus @default(PENDING)
+  payload       Json
+  folder_url    String?
+  product_id    Int?
+  action        String?
+  attempts      Int                     @default(0)
+  error_message String?
+  warnings      Json?
+  processed_at  DateTime?
+  created_at    DateTime                @default(now())
+  updated_at    DateTime                @updatedAt
+
+  job ProductImportJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+
+  @@index([job_id])
+  @@index([status])
+  @@index([row_number])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

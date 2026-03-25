@@ -472,7 +472,7 @@ export default function ProcessesPage() {
               <ProcessCard
                 key={process.id}
                 process={process}
-                product={process.product}
+                product={process.product ?? undefined}
                 isExpanded={expandedProcessId === process.id}
                 onToggleExpand={() => handleToggleExpand(process.id)}
                 onUploadDocuments={() => handleUploadDocuments(process.id)}

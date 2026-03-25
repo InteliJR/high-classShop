@@ -513,6 +513,8 @@ export class DocuSignService {
     buyerName: string;
     sellerEmail: string;
     sellerName: string;
+    specialistEmail?: string;
+    specialistName?: string;
     formFields: Record<string, string>;
     processId: string;
     returnUrl: string;
@@ -531,6 +533,8 @@ export class DocuSignService {
       buyerName,
       sellerEmail,
       sellerName,
+      specialistEmail,
+      specialistName,
       formFields,
       processId,
       returnUrl,
@@ -581,6 +585,15 @@ export class DocuSignService {
             name: sellerName,
             email: sellerEmail,
           },
+          ...(specialistEmail && specialistName
+            ? [
+                {
+                  roleName: 'Specialist',
+                  name: specialistName,
+                  email: specialistEmail,
+                },
+              ]
+            : []),
           // Testemunhas são obrigatórias no template — se não fornecidas, usar placeholder
           {
             roleName: 'Testimonial1',
@@ -706,6 +719,24 @@ export class DocuSignService {
     this.logger.log(`Enviando envelope DRAFT ${envelopeId}...`);
 
     try {
+      const currentEnvelope = await this.client.getEnvelope(envelopeId);
+      const currentStatus = currentEnvelope?.status as EnvelopeStatus | undefined;
+
+      if (
+        currentStatus === EnvelopeStatus.SENT ||
+        currentStatus === EnvelopeStatus.DELIVERED ||
+        currentStatus === EnvelopeStatus.COMPLETED
+      ) {
+        this.logger.warn(
+          `Envelope ${envelopeId} já está em status '${currentStatus}'. Tratando envio como idempotente.`,
+        );
+
+        return {
+          envelopeId,
+          status: EnvelopeStatus.SENT,
+        };
+      }
+
       await this.client.updateEnvelopeStatus(envelopeId, 'sent');
 
       this.logger.log(`✓ Envelope ${envelopeId} enviado com sucesso`);
@@ -715,6 +746,36 @@ export class DocuSignService {
         status: EnvelopeStatus.SENT,
       };
     } catch (error) {
+      try {
+        const envelopeAfterFailure = await this.client.getEnvelope(envelopeId);
+        const statusAfterFailure = envelopeAfterFailure?.status as
+          | EnvelopeStatus
+          | undefined;
+
+        if (
+          statusAfterFailure === EnvelopeStatus.SENT ||
+          statusAfterFailure === EnvelopeStatus.DELIVERED ||
+          statusAfterFailure === EnvelopeStatus.COMPLETED
+        ) {
+          this.logger.warn(
+            `Envelope ${envelopeId} retornou erro no update, mas já está '${statusAfterFailure}'. Prosseguindo como sucesso.`,
+          );
+
+          return {
+            envelopeId,
+            status: EnvelopeStatus.SENT,
+          };
+        }
+      } catch (statusCheckError) {
+        const statusCheckMessage =
+          statusCheckError instanceof Error
+            ? statusCheckError.message
+            : String(statusCheckError);
+        this.logger.warn(
+          `Não foi possível confirmar status do envelope após falha de envio: ${statusCheckMessage}`,
+        );
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : String(error);
 

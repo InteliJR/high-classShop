@@ -24,6 +24,7 @@ import ProductPage from "../pages/ProductPage";
 import CustomerProcessesPage from "../pages/customer/CustomerProcessesPage";
 import NegotiationPage from "../pages/negotiation/NegotiationPage";
 import LandingPage from "../pages/LandingPage";
+import MeetingRoomPage from "../pages/meetings/MeetingRoomPage";
 
 export default function RouterApp() {
   const routerApp = createBrowserRouter([
@@ -238,6 +239,16 @@ export default function RouterApp() {
         <MainLayout>
           <ProtectedRoute allowedRoles={["CUSTOMER", "SPECIALIST"]}>
             <NegotiationPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/processes/:processId/meeting",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["CUSTOMER", "SPECIALIST"]}>
+            <MeetingRoomPage />
           </ProtectedRoute>
         </MainLayout>
       ),

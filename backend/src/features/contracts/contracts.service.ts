@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -59,6 +60,37 @@ export class ContractsService {
     private readonly notificationService: NotificationService,
     private readonly platformCompanyService: PlatformCompanyService,
   ) {}
+
+  private assertSellerIndependentFromSpecialist(
+    sellerEmail: string,
+    specialistEmail?: string,
+  ): void {
+    if (!specialistEmail) {
+      return;
+    }
+
+    const normalizedSellerEmail = sellerEmail.trim().toLowerCase();
+    const normalizedSpecialistEmail = specialistEmail.trim().toLowerCase();
+
+    if (
+      normalizedSellerEmail.length > 0 &&
+      normalizedSellerEmail === normalizedSpecialistEmail
+    ) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message:
+            'O e-mail do vendedor deve ser diferente do e-mail do especialista.',
+          details: {
+            seller_email: sellerEmail,
+            specialist_email: specialistEmail,
+            hint: 'Preencha os dados do vendedor de forma independente do especialista.',
+          },
+        },
+      });
+    }
+  }
 
   /**
    * Pré-preenche dados do formulário de contrato
@@ -255,13 +287,9 @@ export class ContractsService {
         cep: processData.client.address?.cep || undefined,
       },
       seller: {
-        id: processData.specialist.id,
-        name: `${processData.specialist.name || ''} ${processData.specialist.surname || ''}`.trim(),
-        email: processData.specialist.email,
-        cpf: processData.specialist.cpf || undefined,
-        rg: processData.specialist.rg || undefined,
-        address: buildFullAddress(processData.specialist.address),
-        cep: processData.specialist.address?.cep || undefined,
+        id: 'MANUAL_SELLER',
+        name: '',
+        email: '',
       },
       product,
       proposal: processData.accepted_proposal
@@ -516,7 +544,13 @@ export class ContractsService {
         );
       }
 
-      // 1.5 Buscar dados do usuário que está criando (seller/specialist)
+      // 1.5 Garantir que vendedor seja independente do especialista
+      this.assertSellerIndependentFromSpecialist(
+        dto.seller_email,
+        dto.specialist_email,
+      );
+
+      // 1.6 Buscar dados do usuário que está criando
       const uploaderUser = await this.prismaService.user.findUnique({
         where: { id: userId },
         select: {
@@ -942,6 +976,11 @@ export class ContractsService {
         throw new ProcessNotFoundException(dto.process_id);
       }
 
+      this.assertSellerIndependentFromSpecialist(
+        dto.seller_email,
+        dto.specialist_email,
+      );
+
       // 1.2 Validar status do processo
       const allowedStatuses = ['PROCESSING_CONTRACT', 'DOCUMENTATION'];
       if (!allowedStatuses.includes(processRecord.status)) {
@@ -1065,6 +1104,8 @@ export class ContractsService {
         buyerName: dto.buyer_name,
         sellerEmail: dto.seller_email,
         sellerName: dto.seller_name,
+        specialistEmail: dto.specialist_email,
+        specialistName: dto.specialist_name,
         formFields,
         processId: dto.process_id,
         returnUrl: dto.return_url,
@@ -1187,6 +1228,11 @@ export class ContractsService {
         where: { email: dto.buyer_email },
         select: { id: true },
       });
+
+      this.assertSellerIndependentFromSpecialist(
+        dto.seller_email,
+        dto.specialist_email,
+      );
 
       // ===== ETAPA 2: ENVIAR ENVELOPE NO DOCUSIGN =====
       this.logger.log('Enviando envelope para DocuSign...');

@@ -44,6 +44,7 @@ export class AircraftsService {
     { name: 'assentos', required: false, type: 'number' },
     { name: 'tipo_aeronave', required: false, type: 'string' },
     { name: 'descricao', required: false, type: 'string' },
+    { name: 'folder_url', required: false, type: 'string' },
   ];
 
   constructor(
@@ -392,6 +393,8 @@ export class AircraftsService {
       tipo_aeronave:
         'Tipo: Jato Executivo, Turboélice, Helicóptero, etc (opcional)',
       descricao: 'Descrição detalhada da aeronave (texto, opcional)',
+      folder_url:
+        'Link da pasta pública do Google Drive com imagens deste produto (opcional)',
     };
 
     const example: Record<string, any> = {
@@ -404,12 +407,154 @@ export class AircraftsService {
       assentos: 8,
       tipo_aeronave: 'Jato Executivo',
       descricao: 'Aeronave com baixas horas de voo e interior renovado',
+      folder_url: 'https://drive.google.com/drive/folders/SEU_FOLDER_ID',
     };
 
     return this.xlsxImportService.generateTemplate(
       this.xlsxColumns,
       example,
       instructions,
+    );
+  }
+
+  async getCsvTemplate(): Promise<Buffer> {
+    const headers = this.xlsxColumns.map((column) => column.name).join(';');
+    const exampleValues = [
+      'Embraer',
+      'Phenom 300',
+      '15000000',
+      'São Paulo',
+      '2021',
+      'Light Jet',
+      '8',
+      'Jato Executivo',
+      'Aeronave com baixas horas de voo e interior renovado',
+      'https://drive.google.com/drive/folders/SEU_FOLDER_ID',
+    ].join(';');
+
+    return Buffer.from(`${headers}\n${exampleValues}\n`, 'utf-8');
+  }
+
+  /**
+   * Importa aeronaves a partir de um arquivo CSV
+   */
+  async importFromCsv(
+    fileBuffer: Buffer,
+    user: UserEntity,
+  ): Promise<ImportResponseDto> {
+    const { rows } = this.xlsxImportService.parseCsv(fileBuffer);
+
+    const structureValidation = this.xlsxImportService.validateStructure(
+      rows,
+      this.xlsxColumns,
+    );
+
+    if (!structureValidation.valid) {
+      throw new BadRequestException({
+        message: 'Estrutura do CSV inválida',
+        errors: structureValidation.errors,
+        missingRequired: structureValidation.missingRequired,
+        unknownColumns: structureValidation.unknownColumns,
+      });
+    }
+
+    const insertedIds: number[] = [];
+    const updatedIds: number[] = [];
+    const errorRows: ImportErrorRow[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const rowNumber = i + 2;
+      const row = rows[i];
+
+      try {
+        const aircraftData: any = {
+          marca: row.marca,
+          modelo: row.modelo,
+          valor: Number(row.valor),
+          estado: row.estado,
+          ano: Number(row.ano),
+          specialist_id: user.id,
+        };
+
+        if (row.categoria) aircraftData.categoria = row.categoria;
+        if (row.assentos) aircraftData.assentos = Number(row.assentos);
+        if (row.tipo_aeronave) aircraftData.tipo_aeronave = row.tipo_aeronave;
+        if (row.descricao) aircraftData.descricao = row.descricao;
+
+        const dto = plainToInstance(CreateAircraftDto, aircraftData);
+        const validationErrors = await validate(dto, { whitelist: true });
+
+        if (validationErrors.length > 0) {
+          const errorMessages = validationErrors.map((err) => {
+            const constraints = err.constraints
+              ? Object.values(err.constraints)
+              : [];
+            return `${err.property}: ${constraints.join(', ')}`;
+          });
+
+          errorRows.push({
+            row: rowNumber,
+            reason: errorMessages.join('; '),
+            fields: row,
+          });
+          continue;
+        }
+
+        const existingAircraft = await this.prismaService.aircraft.findFirst({
+          where: {
+            marca: row.marca?.trim(),
+            modelo: row.modelo?.trim(),
+            specialist_id: user.id,
+          },
+        });
+
+        if (existingAircraft) {
+          await this.prismaService.aircraft.update({
+            where: { id: existingAircraft.id },
+            data: {
+              categoria: aircraftData.categoria,
+              ano: aircraftData.ano,
+              marca: aircraftData.marca,
+              modelo: aircraftData.modelo,
+              assentos: aircraftData.assentos,
+              estado: aircraftData.estado,
+              descricao: aircraftData.descricao,
+              valor: aircraftData.valor,
+              tipo_aeronave: aircraftData.tipo_aeronave,
+            },
+          });
+          updatedIds.push(existingAircraft.id);
+        } else {
+          const createdAircraft = await this.prismaService.aircraft.create({
+            data: {
+              categoria: aircraftData.categoria,
+              ano: aircraftData.ano,
+              marca: aircraftData.marca,
+              modelo: aircraftData.modelo,
+              assentos: aircraftData.assentos,
+              estado: aircraftData.estado,
+              descricao: aircraftData.descricao,
+              valor: aircraftData.valor,
+              tipo_aeronave: aircraftData.tipo_aeronave,
+              specialist_id: aircraftData.specialist_id ?? null,
+            },
+          });
+          insertedIds.push(createdAircraft.id);
+        }
+      } catch (error) {
+        errorRows.push({
+          row: rowNumber,
+          reason: error.message || 'Erro desconhecido ao processar linha',
+          fields: row,
+        });
+      }
+    }
+
+    return this.xlsxImportService.createResponse(
+      insertedIds,
+      errorRows,
+      [],
+      updatedIds,
     );
   }
 

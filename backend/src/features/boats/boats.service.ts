@@ -48,6 +48,7 @@ export class BoatsService {
     { name: 'tipo_embarcacao', required: false, type: 'string' },
     { name: 'descricao_completa', required: false, type: 'string' },
     { name: 'acessorios', required: false, type: 'string' },
+    { name: 'folder_url', required: false, type: 'string' },
   ];
 
   constructor(
@@ -340,6 +341,8 @@ export class BoatsService {
       tipo_embarcacao: 'Tipo: Lancha, Veleiro, Iate, Jet Ski, etc (opcional)',
       descricao_completa: 'Descrição detalhada da embarcação (texto, opcional)',
       acessorios: 'Lista de acessórios separados por hífen (opcional)',
+      folder_url:
+        'Link da pasta pública do Google Drive com imagens deste produto (opcional)',
     };
 
     const example: Record<string, any> = {
@@ -358,12 +361,145 @@ export class BoatsService {
       descricao_completa:
         'Embarcação em excelente estado com todos os opcionais',
       acessorios: 'GPS Garmin - Ar condicionado - Gerador',
+      folder_url: 'https://drive.google.com/drive/folders/SEU_FOLDER_ID',
     };
 
     return this.xlsxImportService.generateTemplate(
       this.xlsxColumns,
       example,
       instructions,
+    );
+  }
+
+  async getCsvTemplate(): Promise<Buffer> {
+    const headers = this.xlsxColumns.map((column) => column.name).join(';');
+    const exampleValues = [
+      'Azimut',
+      '55 Fly',
+      '3500000',
+      'São Paulo',
+      '2022',
+      'Azimut',
+      '55 pés',
+      'Flybridge',
+      'Diesel',
+      'Volvo Penta D6',
+      '2022',
+      'Lancha',
+      'Embarcação em excelente estado com todos os opcionais',
+      'GPS Garmin - Ar condicionado - Gerador',
+      'https://drive.google.com/drive/folders/SEU_FOLDER_ID',
+    ].join(';');
+
+    return Buffer.from(`${headers}\n${exampleValues}\n`, 'utf-8');
+  }
+
+  /**
+   * Importa barcos a partir de um arquivo CSV
+   */
+  async importFromCsv(
+    fileBuffer: Buffer,
+    user: UserEntity,
+  ): Promise<ImportResponseDto> {
+    const { rows } = this.xlsxImportService.parseCsv(fileBuffer);
+
+    const structureValidation = this.xlsxImportService.validateStructure(
+      rows,
+      this.xlsxColumns,
+    );
+
+    if (!structureValidation.valid) {
+      throw new BadRequestException({
+        message: 'Estrutura do CSV inválida',
+        errors: structureValidation.errors,
+        missingRequired: structureValidation.missingRequired,
+        unknownColumns: structureValidation.unknownColumns,
+      });
+    }
+
+    const insertedIds: number[] = [];
+    const updatedIds: number[] = [];
+    const errorRows: ImportErrorRow[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const rowNumber = i + 2;
+      const row = rows[i];
+
+      try {
+        const boatData: any = {
+          marca: row.marca,
+          modelo: row.modelo,
+          valor: Number(row.valor),
+          estado: row.estado,
+          ano: Number(row.ano),
+          specialist_id: user.id,
+        };
+
+        if (row.fabricante) boatData.fabricante = row.fabricante;
+        if (row.tamanho) boatData.tamanho = row.tamanho;
+        if (row.estilo) boatData.estilo = row.estilo;
+        if (row.combustivel) boatData.combustivel = row.combustivel;
+        if (row.motor) boatData.motor = row.motor;
+        if (row.ano_motor) boatData.ano_motor = Number(row.ano_motor);
+        if (row.tipo_embarcacao) boatData.tipo_embarcacao = row.tipo_embarcacao;
+        if (row.descricao_completa)
+          boatData.descricao_completa = row.descricao_completa;
+        if (row.acessorios) boatData.acessorios = row.acessorios;
+
+        const dto = plainToInstance(CreateBoatDto, boatData);
+        const validationErrors = await validate(dto, { whitelist: true });
+
+        if (validationErrors.length > 0) {
+          const errorMessages = validationErrors.map((err) => {
+            const constraints = err.constraints
+              ? Object.values(err.constraints)
+              : [];
+            return `${err.property}: ${constraints.join(', ')}`;
+          });
+
+          errorRows.push({
+            row: rowNumber,
+            reason: errorMessages.join('; '),
+            fields: row,
+          });
+          continue;
+        }
+
+        const existingBoat = await this.prismaService.boat.findFirst({
+          where: {
+            marca: row.marca?.trim(),
+            modelo: row.modelo?.trim(),
+            specialist_id: user.id,
+          },
+        });
+
+        if (existingBoat) {
+          const { specialist_id, ...updateFields } = boatData;
+          await this.prismaService.boat.update({
+            where: { id: existingBoat.id },
+            data: updateFields,
+          });
+          updatedIds.push(existingBoat.id);
+        } else {
+          const createdBoat = await this.prismaService.boat.create({
+            data: boatData,
+          });
+          insertedIds.push(createdBoat.id);
+        }
+      } catch (error) {
+        errorRows.push({
+          row: rowNumber,
+          reason: error.message || 'Erro desconhecido ao processar linha',
+          fields: row,
+        });
+      }
+    }
+
+    return this.xlsxImportService.createResponse(
+      insertedIds,
+      errorRows,
+      [],
+      updatedIds,
     );
   }
 

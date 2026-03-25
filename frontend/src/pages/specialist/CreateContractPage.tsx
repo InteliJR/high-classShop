@@ -180,6 +180,11 @@ export default function CreateContractPage() {
   const platformValue = watch("platform_value");
   const officeValue = watch("office_value");
   const specialistValue = watch("specialist_value");
+  const sellerNetPreviewValue =
+    (vehiclePrice || 0) -
+    (platformValue || 0) -
+    (officeValue || 0) -
+    (specialistValue || 0);
 
   // Validate processId exists
   if (!processId) {
@@ -1084,7 +1089,7 @@ export default function CreateContractPage() {
             <h2 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">
               Valores da Transação
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Valor Total do{" "}
@@ -1178,6 +1183,38 @@ export default function CreateContractPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Comissão do Especialista *
+                  {prefillData?.specialist?.rate != null && (
+                    <span className="text-xs text-gray-500 ml-1">
+                      ({prefillData.specialist.rate}%)
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  {...register("specialist_value", {
+                    required: "Comissão do especialista é obrigatória",
+                    valueAsNumber: true,
+                    min: { value: 0, message: "Valor deve ser positivo" },
+                  })}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                />
+                {specialistValue > 0 && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    {formatBRL(specialistValue)}
+                  </p>
+                )}
+                {errors.specialist_value && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialist_value.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Valor Líquido do Vendedor
                 </label>
                 <input
@@ -1187,12 +1224,9 @@ export default function CreateContractPage() {
                   readOnly
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                 />
-                {vehiclePrice - (platformValue || 0) - (officeValue || 0) >
-                  0 && (
+                {sellerNetPreviewValue > 0 && (
                   <p className="text-sm text-green-600 mt-1">
-                    {formatBRL(
-                      vehiclePrice - (platformValue || 0) - (officeValue || 0),
-                    )}
+                    {formatBRL(sellerNetPreviewValue)}
                   </p>
                 )}
               </div>
@@ -1722,9 +1756,9 @@ export default function CreateContractPage() {
                 }`}
               >
                 {submitStatus.type === "success" ? (
-                  <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <CheckCircle className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
                 ) : (
-                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
                 )}
                 <p
                   className={`text-sm ${

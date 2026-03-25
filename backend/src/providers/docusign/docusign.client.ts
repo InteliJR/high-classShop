@@ -255,6 +255,12 @@ export class DocuSignClient {
       } catch (error) {
         lastError = error as Error;
 
+        if (axios.isAxiosError(error)) {
+          this.logger.error(
+            `[${method}] ${url} falhou com status ${error.response?.status ?? 'sem-status'}: ${JSON.stringify(error.response?.data ?? error.message)}`,
+          );
+        }
+
         // Verificar se é erro recuperável
         const isRecoverable = this.isRecoverableError(error);
 
