@@ -77,8 +77,10 @@ export default function ProcessesPage() {
 
   // Modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showProductSelectorModal, setShowProductSelectorModal] = useState(false);
-  const [selectedProcessForProduct, setSelectedProcessForProduct] = useState<ProcessWithProduct | null>(null);
+  const [showProductSelectorModal, setShowProductSelectorModal] =
+    useState(false);
+  const [selectedProcessForProduct, setSelectedProcessForProduct] =
+    useState<ProcessWithProduct | null>(null);
 
   const itemsPerPage = 10;
 

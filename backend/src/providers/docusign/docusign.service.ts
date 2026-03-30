@@ -720,7 +720,9 @@ export class DocuSignService {
 
     try {
       const currentEnvelope = await this.client.getEnvelope(envelopeId);
-      const currentStatus = currentEnvelope?.status as EnvelopeStatus | undefined;
+      const currentStatus = currentEnvelope?.status as
+        | EnvelopeStatus
+        | undefined;
 
       if (
         currentStatus === EnvelopeStatus.SENT ||

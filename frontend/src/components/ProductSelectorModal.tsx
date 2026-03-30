@@ -1,9 +1,21 @@
 import { useState, useEffect } from "react";
-import { X, Search, Car, Ship, Plane, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  X,
+  Search,
+  Car,
+  Ship,
+  Plane,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 import { getCars } from "../services/cars.service";
 import { getBoats } from "../services/boats.service";
 import { getAircrafts } from "../services/aircrafts.service";
-import { assignProductToProcess, type Process } from "../services/processes.service";
+import {
+  assignProductToProcess,
+  type Process,
+} from "../services/processes.service";
 import type { SpecialityType } from "../types/types";
 import Button from "./ui/button";
 
@@ -16,7 +28,13 @@ interface ProductSelectorModalProps {
   specialistSpeciality: SpecialityType;
 }
 
-type ModalState = "initial" | "loading" | "selecting" | "assigning" | "success" | "error";
+type ModalState =
+  | "initial"
+  | "loading"
+  | "selecting"
+  | "assigning"
+  | "success"
+  | "error";
 
 interface ProductItem {
   id: number;
@@ -44,10 +62,15 @@ export default function ProductSelectorModal({
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<ProductItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(
+    null,
+  );
   const [errorMessage, setErrorMessage] = useState("");
 
-  const productTypeConfig: Record<SpecialityType, { label: string; icon: React.ReactNode }> = {
+  const productTypeConfig: Record<
+    SpecialityType,
+    { label: string; icon: React.ReactNode }
+  > = {
     CAR: { label: "Carros", icon: <Car size={20} /> },
     BOAT: { label: "Barcos", icon: <Ship size={20} /> },
     AIRCRAFT: { label: "Aeronaves", icon: <Plane size={20} /> },
@@ -70,8 +93,8 @@ export default function ProductSelectorModal({
         products.filter(
           (p) =>
             p.marca.toLowerCase().includes(term) ||
-            p.modelo.toLowerCase().includes(term)
-        )
+            p.modelo.toLowerCase().includes(term),
+        ),
       );
     }
   }, [searchTerm, products]);
@@ -100,7 +123,9 @@ export default function ProductSelectorModal({
           break;
         }
         case "BOAT": {
-          const result = await getBoats(1, 100, { specialist_id: specialistId });
+          const result = await getBoats(1, 100, {
+            specialist_id: specialistId,
+          });
           productItems = result.boats.map((boat) => ({
             id: boat.id,
             type: "BOAT" as SpecialityType,
@@ -113,7 +138,9 @@ export default function ProductSelectorModal({
           break;
         }
         case "AIRCRAFT": {
-          const result = await getAircrafts(1, 100, { specialist_id: specialistId });
+          const result = await getAircrafts(1, 100, {
+            specialist_id: specialistId,
+          });
           productItems = result.aircrafts.map((aircraft) => ({
             id: aircraft.id,
             type: "AIRCRAFT" as SpecialityType,
@@ -135,7 +162,7 @@ export default function ProductSelectorModal({
       setErrorMessage(
         error?.response?.data?.error?.message ||
           error?.message ||
-          "Erro ao carregar produtos"
+          "Erro ao carregar produtos",
       );
     }
   };
@@ -154,7 +181,7 @@ export default function ProductSelectorModal({
       await assignProductToProcess(
         process.id,
         selectedProduct.type,
-        selectedProduct.id
+        selectedProduct.id,
       );
 
       setModalState("success");
@@ -169,7 +196,7 @@ export default function ProductSelectorModal({
       setErrorMessage(
         error?.response?.data?.error?.message ||
           error?.message ||
-          "Erro ao atribuir produto ao processo"
+          "Erro ao atribuir produto ao processo",
       );
     }
   };
@@ -207,7 +234,11 @@ export default function ProductSelectorModal({
                 Selecionar Produto
               </h2>
               <p className="text-sm text-gray-500">
-                Escolha um {productTypeConfig[specialistSpeciality].label.toLowerCase().slice(0, -1)} para este processo de consultoria
+                Escolha um{" "}
+                {productTypeConfig[specialistSpeciality].label
+                  .toLowerCase()
+                  .slice(0, -1)}{" "}
+                para este processo de consultoria
               </p>
             </div>
           </div>
@@ -235,7 +266,9 @@ export default function ProductSelectorModal({
                 <AlertCircle size={40} className="text-red-600" />
               </div>
               <p className="text-gray-800 font-medium">Erro</p>
-              <p className="text-gray-600 text-center max-w-md">{errorMessage}</p>
+              <p className="text-gray-600 text-center max-w-md">
+                {errorMessage}
+              </p>
               <Button onClick={loadProducts} variant="solid">
                 Tentar Novamente
               </Button>
@@ -285,7 +318,8 @@ export default function ProductSelectorModal({
                     <div
                       key={`${product.type}-${product.id}`}
                       onClick={() =>
-                        modalState !== "assigning" && handleSelectProduct(product)
+                        modalState !== "assigning" &&
+                        handleSelectProduct(product)
                       }
                       className={`
                         border rounded-xl p-4 cursor-pointer transition-all
@@ -319,7 +353,9 @@ export default function ProductSelectorModal({
                           <h3 className="font-medium text-gray-900 truncate">
                             {product.marca} {product.modelo}
                           </h3>
-                          <p className="text-sm text-gray-500">Ano: {product.ano}</p>
+                          <p className="text-sm text-gray-500">
+                            Ano: {product.ano}
+                          </p>
                           <p className="text-sm font-semibold text-primary mt-1">
                             {formatCurrency(product.valor)}
                           </p>
@@ -329,7 +365,10 @@ export default function ProductSelectorModal({
                         {selectedProduct?.id === product.id &&
                           selectedProduct?.type === product.type && (
                             <div className="flex-shrink-0">
-                              <CheckCircle2 size={24} className="text-primary" />
+                              <CheckCircle2
+                                size={24}
+                                className="text-primary"
+                              />
                             </div>
                           )}
                       </div>

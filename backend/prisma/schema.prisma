@@ -748,16 +748,16 @@ model Process {
 // MeetingSession: sessão de videoconferência criada na plataforma para um processo
 // MVP: usa uma única conta Google da plataforma para criar links do Google Meet
 model MeetingSession {
-  id                String   @id @default(uuid()) @db.Uuid
-  process_id        String   @unique @db.Uuid
-  calendar_event_id String   @unique
+  id                String    @id @default(uuid()) @db.Uuid
+  process_id        String    @unique @db.Uuid
+  calendar_event_id String    @unique
   meet_link         String
-  started_by_id     String   @db.Uuid
-  started_at        DateTime @default(now())
-  ended_by_id       String?  @db.Uuid
+  started_by_id     String    @db.Uuid
+  started_at        DateTime  @default(now())
+  ended_by_id       String?   @db.Uuid
   ended_at          DateTime?
-  created_at        DateTime @default(now())
-  updated_at        DateTime @updatedAt
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
 
   process    Process @relation(fields: [process_id], references: [id], onDelete: Cascade)
   started_by User    @relation("meeting_started_by", fields: [started_by_id], references: [id])
