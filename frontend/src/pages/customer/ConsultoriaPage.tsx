@@ -1,6 +1,13 @@
-import { useEffect, useState } from "react";
-import { Car, Ship, Plane, Calendar, UserCircle2 } from "lucide-react";
-import { getSpecialistsGroupedByCategory, type Specialist, type GroupedSpecialists } from "../../services/specialists.service";
+import { useEffect, useState, useContext } from "react";
+import { useNavigate } from "react-router-dom";
+import { Car, Ship, Plane, Calendar, UserCircle2, Loader2 } from "lucide-react";
+import {
+  getSpecialistsGroupedByCategory,
+  type Specialist,
+  type GroupedSpecialists,
+} from "../../services/specialists.service";
+import { createConsultancyAppointment } from "../../services/appointments.service";
+import { AuthContext } from "../../contexts/AuthContext";
 import Button from "../../components/ui/button";
 
 type SpecialityType = "CAR" | "BOAT" | "AIRCRAFT";
@@ -12,17 +19,25 @@ interface SpecialistGroup {
   specialists: Specialist[];
 }
 
-const specialityConfig: Record<SpecialityType, { label: string; icon: React.ReactNode }> = {
+const specialityConfig: Record<
+  SpecialityType,
+  { label: string; icon: React.ReactNode }
+> = {
   CAR: { label: "Carros", icon: <Car size={28} /> },
   BOAT: { label: "Barcos", icon: <Ship size={28} /> },
   AIRCRAFT: { label: "Aeronaves", icon: <Plane size={28} /> },
 };
 
 export default function ConsultoriaPage() {
-  const [groupedSpecialists, setGroupedSpecialists] = useState<GroupedSpecialists | null>(null);
+  const navigate = useNavigate();
+  const { user } = useContext(AuthContext);
+  const [groupedSpecialists, setGroupedSpecialists] =
+    useState<GroupedSpecialists | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedSpecialist, setSelectedSpecialist] = useState<Specialist | null>(null);
-  const [showModal, setShowModal] = useState(false);
+  const [requestingSpecialistId, setRequestingSpecialistId] = useState<
+    string | null
+  >(null);
+  const [errorMessage, setErrorMessage] = useState<string>("");
 
   useEffect(() => {
     async function fetchSpecialists() {
@@ -40,7 +55,7 @@ export default function ConsultoriaPage() {
 
   // Transform grouped data into display format
   const specialistGroups: SpecialistGroup[] = groupedSpecialists
-    ? (["CAR", "BOAT", "AIRCRAFT"] as SpecialityType[]).map(type => ({
+    ? (["CAR", "BOAT", "AIRCRAFT"] as SpecialityType[]).map((type) => ({
         type,
         label: specialityConfig[type].label,
         icon: specialityConfig[type].icon,
@@ -48,9 +63,33 @@ export default function ConsultoriaPage() {
       }))
     : [];
 
-  const handleRequestMeeting = (specialist: Specialist) => {
-    setSelectedSpecialist(specialist);
-    setShowModal(true);
+  const handleRequestMeeting = async (specialist: Specialist) => {
+    if (!user || requestingSpecialistId) return;
+
+    setRequestingSpecialistId(specialist.id);
+    setErrorMessage("");
+
+    try {
+      await createConsultancyAppointment({
+        client_id: user.id,
+        specialist_id: specialist.id,
+        notes: `Consultoria solicitada pelo cliente`,
+      });
+
+      if (specialist.calendly_url?.trim()) {
+        window.open(specialist.calendly_url, "_blank", "noopener,noreferrer");
+      }
+
+      navigate("/customer/processes");
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.error?.message ||
+        error?.message ||
+        "Erro ao solicitar agendamento. Tente novamente.";
+      setErrorMessage(message);
+    } finally {
+      setRequestingSpecialistId(null);
+    }
   };
 
   if (loading) {
@@ -72,9 +111,15 @@ export default function ConsultoriaPage() {
           Consultoria Especializada
         </h1>
         <p className="text-lg text-gray-600 max-w-3xl">
-          Nossos especialistas estão prontos para ajudá-lo a encontrar o veículo perfeito. 
-          Escolha um especialista na categoria de seu interesse para agendar uma consultoria.
+          Nossos especialistas estão prontos para ajudá-lo a encontrar o veículo
+          perfeito. Escolha um especialista na categoria de seu interesse para
+          agendar uma consultoria.
         </p>
+        {errorMessage && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {errorMessage}
+          </div>
+        )}
       </div>
 
       {/* Specialists by Category */}
@@ -86,9 +131,12 @@ export default function ConsultoriaPage() {
               <div className="p-3 bg-primary/10 rounded-full text-primary">
                 {group.icon}
               </div>
-              <h2 className="text-2xl font-bold text-gray-900">{group.label}</h2>
+              <h2 className="text-2xl font-bold text-gray-900">
+                {group.label}
+              </h2>
               <span className="text-sm text-gray-500">
-                ({group.specialists.length} especialista{group.specialists.length !== 1 ? 's' : ''})
+                ({group.specialists.length} especialista
+                {group.specialists.length !== 1 ? "s" : ""})
               </span>
             </div>
 
@@ -100,6 +148,7 @@ export default function ConsultoriaPage() {
                     key={specialist.id}
                     specialist={specialist}
                     onRequestMeeting={handleRequestMeeting}
+                    isRequesting={requestingSpecialistId === specialist.id}
                   />
                 ))}
               </div>
@@ -111,34 +160,21 @@ export default function ConsultoriaPage() {
           </div>
         ))}
       </div>
-
-      {/* Modal - Funcionalidade em desenvolvimento */}
-      {showModal && selectedSpecialist && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full space-y-6">
-            <h3 className="text-xl font-bold text-gray-900">Funcionalidade em Desenvolvimento</h3>
-            <p className="text-gray-600">
-              O agendamento de reuniões com <strong>{selectedSpecialist.name} {selectedSpecialist.surname}</strong> estará 
-              disponível em breve. Estamos trabalhando para trazer essa funcionalidade para você!
-            </p>
-            <div className="flex justify-end">
-              <Button onClick={() => setShowModal(false)} variant="solid">
-                Entendi
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
 interface SpecialistCardProps {
   specialist: Specialist;
-  onRequestMeeting: (specialist: Specialist) => void;
+  onRequestMeeting: (specialist: Specialist) => Promise<void>;
+  isRequesting: boolean;
 }
 
-function SpecialistCard({ specialist, onRequestMeeting }: SpecialistCardProps) {
+function SpecialistCard({
+  specialist,
+  onRequestMeeting,
+  isRequesting,
+}: SpecialistCardProps) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
       <div className="flex flex-col items-center text-center space-y-4">
@@ -155,12 +191,21 @@ function SpecialistCard({ specialist, onRequestMeeting }: SpecialistCardProps) {
           onClick={() => onRequestMeeting(specialist)}
           className="w-full flex items-center justify-center gap-2"
           variant="solid"
+          disabled={isRequesting}
         >
-          <Calendar size={18} />
-          Solicitar Reunião
+          {isRequesting ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              Solicitando...
+            </>
+          ) : (
+            <>
+              <Calendar size={18} />
+              Solicitar Reunião
+            </>
+          )}
         </Button>
       </div>
     </div>
   );
 }
-

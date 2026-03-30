@@ -131,3 +131,6 @@ Dockerfile.prod
 
 # Templates
 Contratodevenda.json
+
+# Contexto
+contexto/

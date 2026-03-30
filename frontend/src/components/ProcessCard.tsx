@@ -8,11 +8,13 @@ import {
   MessageSquare,
   CheckCircle,
   XCircle,
+  Package,
+  Video,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Process } from "../services/processes.service";
-import type { Product } from "../types/types";
+import type { Product, SpecialityType } from "../types/types";
 import React from "react";
 import UpdateProcessStatusModal from "./UpdateProcessStatusModal";
 import { getContextualStatusMessage } from "../utils/processStatusMessages";
@@ -21,7 +23,34 @@ import {
   getProcessWithActiveContract,
   confirmAppointment,
   cancelAppointment,
+  getMeetingByProcess,
+  markConversationDone,
+  startMeeting,
+  type MeetingSession,
 } from "../services/processes.service";
+
+function getActionErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "object" && error !== null) {
+    const maybeAxios = error as {
+      response?: { data?: { message?: string; error?: { message?: string } } };
+      message?: string;
+    };
+
+    const backendMessage =
+      maybeAxios.response?.data?.error?.message ||
+      maybeAxios.response?.data?.message;
+
+    if (backendMessage && typeof backendMessage === "string") {
+      return backendMessage;
+    }
+
+    if (maybeAxios.message && typeof maybeAxios.message === "string") {
+      return maybeAxios.message;
+    }
+  }
+
+  return fallback;
+}
 
 interface ProcessCardProps {
   process: Process;
@@ -40,6 +69,8 @@ interface ProcessCardProps {
   onUploadDocuments?: () => void;
   onStatusUpdated?: () => void;
   isClientView?: boolean; // Se true, remove botões de ação (apenas visualização)
+  onSelectProduct?: () => void; // Callback para abrir seleção de produto em consultoria
+  specialistSpeciality?: SpecialityType; // Especialidade do especialista para filtrar produtos
 }
 
 /**
@@ -54,6 +85,7 @@ export default function ProcessCard({
   onUploadDocuments,
   onStatusUpdated,
   isClientView = false,
+  onSelectProduct,
 }: ProcessCardProps) {
   const navigate = useNavigate();
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -61,11 +93,30 @@ export default function ProcessCard({
   const [activeContract, setActiveContract] = useState<any>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [meetingSession, setMeetingSession] = useState<MeetingSession | null>(
+    null,
+  );
+  const [isStartingMeeting, setIsStartingMeeting] = useState(false);
+  const [isLoadingMeeting, setIsLoadingMeeting] = useState(false);
+  const [isConversationDoneLoading, setIsConversationDoneLoading] =
+    useState(false);
+
+  // Verifica se é um processo de consultoria (sem produto atribuído)
+  const isConsultancy = !process.product_type || !process.product_id;
+  const isAppointmentConfirmed =
+    process.appointment_status === "SCHEDULED" ||
+    process.appointment_status === "COMPLETED";
+  const canStartOrJoinMeeting =
+    isAppointmentConfirmed &&
+    ["SCHEDULING", "NEGOTIATION", "PROCESSING_CONTRACT"].includes(
+      process.status,
+    );
 
   // Load completion reason and active contract on mount and when process changes
   useEffect(() => {
     const loadDetails = async () => {
       try {
+        setIsLoadingMeeting(true);
         const [reason, processData] = await Promise.all([
           getProcessCompletionReason(process.id),
           getProcessWithActiveContract(process.id),
@@ -73,13 +124,74 @@ export default function ProcessCard({
         setCompletionReason(reason);
         setActiveContract(processData.activeContract);
         console.log(processData);
+
+        const shouldCheckMeeting = canStartOrJoinMeeting;
+
+        if (shouldCheckMeeting) {
+          const meeting = await getMeetingByProcess(process.id);
+          setMeetingSession(meeting);
+        } else {
+          setMeetingSession(null);
+        }
       } catch (error) {
         console.error("Error loading process details:", error);
+      } finally {
+        setIsLoadingMeeting(false);
       }
     };
 
     loadDetails();
-  }, [process.id]);
+  }, [process.id, process.status, canStartOrJoinMeeting]);
+
+  const handleStartMeeting = async () => {
+    if (isStartingMeeting) return;
+
+    try {
+      setIsStartingMeeting(true);
+      await startMeeting(process.id);
+      onStatusUpdated?.();
+      navigate(`/processes/${process.id}/meeting`);
+    } catch (error) {
+      console.error("Error starting meeting:", error);
+      alert(
+        getActionErrorMessage(
+          error,
+          "Erro ao iniciar reunião. Tente novamente.",
+        ),
+      );
+    } finally {
+      setIsStartingMeeting(false);
+    }
+  };
+
+  const handleJoinMeeting = () => {
+    navigate(`/processes/${process.id}/meeting`);
+  };
+
+  const handleConversationDone = async () => {
+    if (isConversationDoneLoading) return;
+
+    try {
+      setIsConversationDoneLoading(true);
+      const result = await markConversationDone(process.id);
+
+      if (result.processTransition.requires_product_selection) {
+        onSelectProduct?.();
+      }
+
+      onStatusUpdated?.();
+    } catch (error) {
+      console.error("Error marking conversation as done:", error);
+      alert(
+        getActionErrorMessage(
+          error,
+          "Erro ao concluir conversa com cliente. Tente novamente.",
+        ),
+      );
+    } finally {
+      setIsConversationDoneLoading(false);
+    }
+  };
 
   // Handle confirm appointment
   const handleConfirmAppointment = async () => {
@@ -91,7 +203,12 @@ export default function ProcessCard({
       onStatusUpdated?.();
     } catch (error) {
       console.error("Error confirming appointment:", error);
-      alert("Erro ao confirmar agendamento. Tente novamente.");
+      alert(
+        getActionErrorMessage(
+          error,
+          "Erro ao confirmar agendamento. Tente novamente.",
+        ),
+      );
     } finally {
       setIsConfirming(false);
     }
@@ -115,7 +232,12 @@ export default function ProcessCard({
       onStatusUpdated?.();
     } catch (error) {
       console.error("Error cancelling appointment:", error);
-      alert("Erro ao cancelar agendamento. Tente novamente.");
+      alert(
+        getActionErrorMessage(
+          error,
+          "Erro ao cancelar agendamento. Tente novamente.",
+        ),
+      );
     } finally {
       setIsCancelling(false);
     }
@@ -148,8 +270,8 @@ export default function ProcessCard({
           : ""
       }`}
     >
-      {/* Negotiation button - always visible on NEGOTIATION status (visible for both specialist and client) */}
-      {process.status === "NEGOTIATION" && !isExpanded && (
+      {/* Negotiation button - visible only when process has a product */}
+      {process.status === "NEGOTIATION" && !isConsultancy && !isExpanded && (
         <div className="hidden md:block absolute top-6 right-6 z-20">
           <button
             onClick={() => navigate(`/processes/${process.id}/negotiation`)}
@@ -180,9 +302,19 @@ export default function ProcessCard({
       <div className="px-3 py-2 md:px-6 md:py-4 border-b border-gray-100 flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm md:text-lg font-semibold text-gray-900 truncate">
-            Processo - {process.client?.name || process.client_id} -{" "}
-            {product?.modelo || "Produto"}
+            {isConsultancy ? "Consultoria" : "Processo"} -{" "}
+            {process.client?.name || process.client_id} -{" "}
+            {isConsultancy
+              ? "Aguardando produto"
+              : product?.modelo || "Produto"}
           </h3>
+          {isConsultancy && (
+            <p className="text-xs text-slate-600 mt-1">
+              {isClientView
+                ? "Especialista irá direcionar você para o produto que melhor se encaixa no seu perfil"
+                : "Confirme a reunião e, em seguida, selecione o produto ideal para o cliente"}
+            </p>
+          )}
         </div>
         {onToggleExpand && (
           <button
@@ -223,8 +355,8 @@ export default function ProcessCard({
           </div>
         </div>
 
-        {/* Appointment Confirmation Buttons - SCHEDULING Status */}
-        {process.status === "SCHEDULING" && (
+        {/* Appointment Confirmation Buttons - SCHEDULING Status (before appointment confirmation) */}
+        {process.status === "SCHEDULING" && !isAppointmentConfirmed && (
           <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-amber-900 mb-2">
@@ -286,8 +418,92 @@ export default function ProcessCard({
           </div>
         )}
 
+        {/* Meeting actions - after appointment confirmation */}
+        {canStartOrJoinMeeting && (
+          <div className="mb-4 p-3 bg-slate-100 border border-slate-300 rounded-lg">
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-slate-900 mb-1">
+                Reunião confirmada
+              </p>
+              {!isClientView ? (
+                <>
+                  <p className="text-xs text-slate-700 mb-2">
+                    {isConsultancy
+                      ? "Agora selecione o produto para iniciar a negociação com o cliente."
+                      : "Inicie a reunião com o cliente ou entre na reunião já criada."}
+                  </p>
+                  <button
+                    onClick={
+                      meetingSession ? handleJoinMeeting : handleStartMeeting
+                    }
+                    disabled={isStartingMeeting || isLoadingMeeting}
+                    className="w-full mb-2 inline-flex items-center justify-center gap-2 px-4 py-2 bg-cyan-700 text-white rounded-lg font-medium hover:bg-cyan-800 transition disabled:opacity-50"
+                  >
+                    {isStartingMeeting || isLoadingMeeting ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <>
+                        <Video size={16} />
+                        {meetingSession ? "Entrar Reunião" : "Iniciar Reunião"}
+                      </>
+                    )}
+                  </button>
+                  {meetingSession && !meetingSession.ended_at && (
+                    <button
+                      onClick={handleConversationDone}
+                      disabled={isConversationDoneLoading}
+                      className="w-full mb-2 inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-700 text-white rounded-lg font-medium hover:bg-emerald-800 transition disabled:opacity-50"
+                    >
+                      {isConversationDoneLoading ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      ) : (
+                        <>
+                          <CheckCircle size={16} />
+                          Já conversei com o cliente
+                        </>
+                      )}
+                    </button>
+                  )}
+                  {isConsultancy && onSelectProduct && (
+                    <button
+                      onClick={onSelectProduct}
+                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-900 transition"
+                    >
+                      <Package size={16} />
+                      Selecionar Produto
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-700 mb-2">
+                    {isConsultancy
+                      ? "O especialista está escolhendo o produto ideal para iniciar a negociação."
+                      : "Aguardando o especialista iniciar a reunião."}
+                  </p>
+                  {meetingSession ? (
+                    !meetingSession.ended_at ? (
+                      <button
+                        onClick={handleJoinMeeting}
+                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-cyan-700 text-white rounded-lg font-medium hover:bg-cyan-800 transition"
+                      >
+                        <Video size={16} />
+                        Entrar Reunião
+                      </button>
+                    ) : (
+                      <p className="text-xs text-slate-600">
+                        A reunião foi encerrada pelo especialista.
+                      </p>
+                    )
+                  ) : null}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Mobile: botões logo abaixo do status, antes do stepper */}
-        {process.status === "NEGOTIATION" && !isExpanded && (
+        {process.status === "NEGOTIATION" && !isConsultancy && !isExpanded && (
           <div className="md:hidden w-full mb-2 flex flex-col gap-2">
             <button
               onClick={() => navigate(`/processes/${process.id}/negotiation`)}
@@ -540,8 +756,8 @@ export default function ProcessCard({
               Alterar Status
             </button>
 
-            {/* Negotiation Button: Only show if status is NEGOTIATION */}
-            {process.status === "NEGOTIATION" && (
+            {/* Negotiation Button: Only show if status is NEGOTIATION and process has product */}
+            {process.status === "NEGOTIATION" && !isConsultancy && (
               <button
                 onClick={() => navigate(`/processes/${process.id}/negotiation`)}
                 className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 bg-blue-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"

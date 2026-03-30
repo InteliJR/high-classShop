@@ -169,7 +169,7 @@ export default function PendingAppointmentsList({
                       className="text-gray-400 flex-shrink-0"
                     />
                     <span className="truncate">
-                      {getProductTypeLabel(appointment.product_type)} -{" "}
+                      {getProductTypeLabel(appointment.product_type ?? "CAR")} -{" "}
                       {appointment.product?.marca} {appointment.product?.modelo}
                     </span>
                   </div>

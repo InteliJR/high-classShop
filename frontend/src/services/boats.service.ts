@@ -6,6 +6,11 @@ import type {
   ResponseAPI,
 } from "../types/types";
 import api from "./api";
+import {
+  type CsvImportResponse,
+  type ImportJobAcceptedResponse,
+  resolveImportResponse,
+} from "./product-import-jobs.service";
 
 export interface RawBoat {
   id: number;
@@ -69,7 +74,7 @@ export interface UpdateBoatDto extends Partial<CreateBoatDto> {}
 export async function getBoats(
   page = 1,
   perPage = 20,
-  appliedFilters: Partial<FiltersBoatsMeta> = {}
+  appliedFilters: Partial<FiltersBoatsMeta> = {},
 ): Promise<{
   boats: Product[];
   pagination: PaginationMeta;
@@ -80,7 +85,7 @@ export async function getBoats(
       "/boats",
       {
         params: { page, perPage, ...appliedFilters },
-      }
+      },
     );
 
     //Extrai a respota da api
@@ -147,7 +152,10 @@ export async function createBoat(data: CreateBoatDto): Promise<RawBoat> {
 }
 
 // Patch /boats/:id
-export async function updateBoat(id: number, data: UpdateBoatDto): Promise<RawBoat> {
+export async function updateBoat(
+  id: number,
+  data: UpdateBoatDto,
+): Promise<RawBoat> {
   try {
     const response = await api.patch<RawBoat>(`/boats/${id}`, data);
     return response.data;
@@ -167,39 +175,22 @@ export async function deleteBoat(id: number): Promise<void> {
   }
 }
 
-// CSV Import Types
-export interface CsvErrorRow {
-  row: number;
-  reason: string;
-  fields?: Record<string, any>;
-}
-
-export interface CsvImportResponse {
-  success: boolean;
-  message: string;
-  insertedCount: number;
-  errorCount: number;
-  errorRows: CsvErrorRow[];
-  insertedIds?: number[];
-}
-
-export interface CsvTemplateResponse {
-  template: string;
-  columns: {
-    required: string[];
-    optional: string[];
-  };
-  instructions: Record<string, string>;
-  example: Record<string, any>;
-}
-
-// Get /boats/csv-template
-export async function getBoatsCsvTemplate(): Promise<CsvTemplateResponse> {
+// Get /boats/csv-template (downloads .csv file)
+export async function getBoatsCsvTemplate(): Promise<void> {
   try {
-    const response = await api.get<CsvTemplateResponse>("/boats/csv-template");
-    return response.data;
+    const response = await api.get("/boats/csv-template", {
+      responseType: "blob",
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "template_lanchas.csv");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   } catch (error) {
-    console.error("Erro ao buscar template CSV:", error);
+    console.error("Erro ao baixar template CSV:", error);
     throw error;
   }
 }
@@ -209,13 +200,15 @@ export async function importBoatsCsv(file: File): Promise<CsvImportResponse> {
   try {
     const formData = new FormData();
     formData.append("file", file);
-    
-    const response = await api.post<CsvImportResponse>("/boats/import-csv", formData, {
+
+    const response = await api.post<
+      CsvImportResponse | ImportJobAcceptedResponse
+    >("/boats/import-csv", formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
     });
-    return response.data;
+    return await resolveImportResponse(response.data);
   } catch (error: any) {
     console.error("Erro ao importar CSV:", error);
     if (error.response?.data) {

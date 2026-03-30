@@ -43,6 +43,9 @@ export class ProcessesService {
       AIRCRAFT: 'aircraft',
     } as const;
 
+    // Consultoria: processo sem produto_type
+    if (!process.product_type) return null;
+
     // Obtém qual é a relação de produto no process
     const relation = productMap[process.product_type];
     if (!relation) return null;
@@ -56,6 +59,28 @@ export class ProcessesService {
       marca: product.marca,
       modelo: product.modelo,
     };
+  }
+
+  /**
+   * Helper: Retorna o product_id (car_id, boat_id ou aircraft_id) do processo
+   *
+   * @param {ProcessWithProducts} process - processo com os produtos includos
+   * @returns {number | null} - ID do produto ou null se for consultoria
+   */
+  private getProductId(process: ProcessWithProducts | any): number | null {
+    if (!process.product_type) return null;
+
+    // Retorna o ID específico baseado no tipo de produto
+    switch (process.product_type) {
+      case 'CAR':
+        return process.car_id || null;
+      case 'BOAT':
+        return process.boat_id || null;
+      case 'AIRCRAFT':
+        return process.aircraft_id || null;
+      default:
+        return null;
+    }
   }
 
   /**
@@ -99,33 +124,43 @@ export class ProcessesService {
       BOAT: 'boat',
       AIRCRAFT: 'aircraft',
     } as const;
+
+    // Para processo com produto (não consultoria)
+    const hasProduct =
+      createProcessDto.product_type && createProcessDto.product_id;
+
     // Atribuir o produto correto passado pela req
-    const fieldName = productMap[createProcessDto.product_type];
+    const fieldName = hasProduct
+      ? productMap[createProcessDto.product_type!]
+      : null;
 
-    // TODO: Trocar para string quando o id for colocado como UUID
-    // Construção do where usando computed property
-    const whereClause: {
-      client_id: string;
-      specialist_id: string;
-      aircraft_id?: number;
-      boat_id?: number;
-      car_id?: number;
-    } = {
-      client_id,
-      specialist_id,
-      [`${fieldName}_id`]: Number(createProcessDto.product_id),
-    };
+    // Verificar se o processo já existe (apenas para processos com produto)
+    if (hasProduct) {
+      // TODO: Trocar para string quando o id for colocado como UUID
+      // Construção do where usando computed property
+      const whereClause: {
+        client_id: string;
+        specialist_id: string;
+        aircraft_id?: number;
+        boat_id?: number;
+        car_id?: number;
+      } = {
+        client_id,
+        specialist_id,
+        [`${fieldName}_id`]: Number(createProcessDto.product_id),
+      };
 
-    // Verificar se o processo já existe
-    this.logger.debug('[create] Verificando se processo já existe');
-    const processAlreadyExists = await this.prismaService.process.findFirst({
-      where: whereClause,
-    });
-    if (processAlreadyExists) {
-      this.logger.warn(
-        `[create] Processo já existe para cliente ${client_id} e produto ${product_id}`,
-      );
-      throw new BadRequestException();
+      // Verificar se o processo já existe
+      this.logger.debug('[create] Verificando se processo já existe');
+      const processAlreadyExists = await this.prismaService.process.findFirst({
+        where: whereClause,
+      });
+      if (processAlreadyExists) {
+        this.logger.warn(
+          `[create] Processo já existe para cliente ${client_id} e produto ${product_id}`,
+        );
+        throw new BadRequestException();
+      }
     }
 
     // Criação de um objeto para incluir na response do processo
@@ -185,6 +220,7 @@ export class ProcessesService {
       id: processCreated.id,
       status: processCreated.status,
       product_type: processCreated.product_type,
+      product_id: this.getProductId(processCreated),
       client: {
         id: processCreated.client_id,
         email: processCreated.client?.email,
@@ -296,6 +332,7 @@ export class ProcessesService {
             boat: true,
             car: true,
             specialist: true,
+            appointment: { select: { status: true } },
           },
         }),
         this.prismaService.process.count({ where }),
@@ -323,7 +360,9 @@ export class ProcessesService {
       (process: any) => ({
         id: process.id,
         status: process.status,
+        appointment_status: process.appointment?.status ?? null,
         product_type: process.product_type,
+        product_id: this.getProductId(process),
         client: {
           id: process.client_id,
           email: process.client?.email,
@@ -364,13 +403,16 @@ export class ProcessesService {
           boat: true,
           aircraft: true,
           specialist: true,
+          appointment: { select: { status: true } },
         },
       });
 
       return {
         id: process.id,
         status: process.status,
+        appointment_status: process.appointment?.status ?? null,
         product_type: process.product_type,
+        product_id: this.getProductId(process),
         client: {
           id: process.client_id,
           email: process.client?.email || '',
@@ -424,6 +466,7 @@ export class ProcessesService {
           boat: true,
           aircraft: true,
           specialist: true,
+          appointment: { select: { status: true } },
         },
         orderBy: { created_at: 'desc' },
         skip,
@@ -441,7 +484,9 @@ export class ProcessesService {
       (process: any) => ({
         id: process.id,
         status: process.status,
+        appointment_status: process.appointment?.status ?? null,
         product_type: process.product_type,
+        product_id: this.getProductId(process),
         client: {
           id: process.client_id,
           email: process.client?.email,
@@ -530,6 +575,7 @@ export class ProcessesService {
           boat: true,
           aircraft: true,
           specialist: true,
+          appointment: { select: { status: true } },
         },
         orderBy: { [sortBy]: order },
         skip,
@@ -543,7 +589,9 @@ export class ProcessesService {
       (process: any) => ({
         id: process.id,
         status: process.status,
+        appointment_status: process.appointment?.status ?? null,
         product_type: process.product_type,
+        product_id: this.getProductId(process),
         client: {
           id: process.client_id,
           email: process.client?.email,
@@ -633,6 +681,283 @@ export class ProcessesService {
       }
       throw new InternalServerErrorException();
     }
+  }
+
+  /**
+   * Associa um produto a um processo de consultoria
+   * Usado quando especialista seleciona o produto após reunião com cliente
+   *
+   * @param processId - ID do processo de consultoria
+   * @param dto - Dados do produto (product_type e product_id)
+   * @param userId - ID do usuário que está fazendo a associação
+   * @param userRole - Role do usuário
+   * @returns Processo atualizado com produto
+   * @throws NotFoundException - Processo não encontrado
+   * @throws BadRequestException - Processo não está em SCHEDULING ou já tem produto
+   * @throws ForbiddenException - Usuário não tem permissão
+   */
+  async assignProduct(
+    processId: string,
+    dto: { product_type: string; product_id: number },
+    userId: string,
+    userRole: string,
+  ): Promise<ProcessResponse> {
+    this.logger.log(
+      `[assignProduct] Iniciando associação de produto ao processo ${processId}`,
+    );
+
+    // 1. Buscar processo
+    const process = await this.prismaService.process.findUnique({
+      where: { id: processId },
+      include: {
+        client: true,
+        specialist: true,
+        car: true,
+        boat: true,
+        aircraft: true,
+      },
+    });
+
+    if (!process) {
+      throw new NotFoundException({
+        success: false,
+        error: {
+          code: 404,
+          message: 'Processo não encontrado',
+          details: { process_id: processId },
+        },
+      });
+    }
+
+    // 2. Verificar permissão: apenas especialista do processo ou ADMIN
+    if (process.specialist_id !== userId && userRole !== 'ADMIN') {
+      throw new ForbiddenException({
+        success: false,
+        error: {
+          code: 403,
+          message: 'Apenas o especialista do processo pode associar um produto',
+          details: { specialist_id: process.specialist_id, user_id: userId },
+        },
+      });
+    }
+
+    // 3. Verificar que processo está em SCHEDULING
+    if (process.status !== 'SCHEDULING') {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message:
+            'Produto só pode ser associado em processos no status SCHEDULING',
+          details: { current_status: process.status },
+        },
+      });
+    }
+
+    // 4. Verificar que processo não tem produto (é consultoria)
+    if (
+      process.product_type ||
+      process.car_id ||
+      process.boat_id ||
+      process.aircraft_id
+    ) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message: 'Este processo já possui um produto associado',
+          details: {
+            product_type: process.product_type,
+            car_id: process.car_id,
+            boat_id: process.boat_id,
+            aircraft_id: process.aircraft_id,
+          },
+        },
+      });
+    }
+
+    // 5. Validar que produto existe
+    const productType = dto.product_type as 'CAR' | 'BOAT' | 'AIRCRAFT';
+    let product: any = null;
+
+    switch (productType) {
+      case 'CAR':
+        product = await this.prismaService.car.findUnique({
+          where: { id: dto.product_id },
+        });
+        break;
+      case 'BOAT':
+        product = await this.prismaService.boat.findUnique({
+          where: { id: dto.product_id },
+        });
+        break;
+      case 'AIRCRAFT':
+        product = await this.prismaService.aircraft.findUnique({
+          where: { id: dto.product_id },
+        });
+        break;
+      default:
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message: 'Tipo de produto inválido',
+            details: { product_type: dto.product_type },
+          },
+        });
+    }
+
+    if (!product) {
+      throw new NotFoundException({
+        success: false,
+        error: {
+          code: 404,
+          message: 'Produto não encontrado',
+          details: { product_type: productType, product_id: dto.product_id },
+        },
+      });
+    }
+
+    // 6. Verificar que produto pertence ao especialista
+    if (product.specialist_id !== process.specialist_id) {
+      throw new ForbiddenException({
+        success: false,
+        error: {
+          code: 403,
+          message: 'O produto deve pertencer ao especialista do processo',
+          details: {
+            product_specialist_id: product.specialist_id,
+            process_specialist_id: process.specialist_id,
+          },
+        },
+      });
+    }
+
+    // 7. Verificar se agendamento foi confirmado pelo especialista
+    // Regra de negócio: processo só avança para NEGOTIATION no momento da atribuição do produto,
+    // desde que o appointment já esteja confirmado (SCHEDULED ou COMPLETED).
+    let shouldAdvanceToNegotiation = false;
+    if (process.appointment_id) {
+      const appointment = await this.prismaService.appointment.findUnique({
+        where: { id: process.appointment_id },
+      });
+
+      if (!appointment) {
+        throw new NotFoundException({
+          success: false,
+          error: {
+            code: 404,
+            message: 'Agendamento não encontrado para este processo',
+            details: { appointment_id: process.appointment_id },
+          },
+        });
+      }
+
+      if (
+        appointment.status === StatusAgendamento.SCHEDULED ||
+        appointment.status === StatusAgendamento.COMPLETED
+      ) {
+        shouldAdvanceToNegotiation = true;
+        this.logger.log(
+          `[assignProduct] Appointment ${appointment.id} confirmado (${appointment.status}) - processo avançará para NEGOTIATION`,
+        );
+      } else {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message:
+              'É necessário confirmar a reunião antes de associar o produto',
+            details: {
+              appointment_status: appointment.status,
+              required_statuses: [
+                StatusAgendamento.SCHEDULED,
+                StatusAgendamento.COMPLETED,
+              ],
+            },
+          },
+        });
+      }
+    } else {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message: 'Processo sem agendamento associado',
+          details: { process_id: processId },
+        },
+      });
+    }
+
+    // 8. Atualizar processo com produto em transação
+    const productField =
+      productType === 'CAR'
+        ? 'car_id'
+        : productType === 'BOAT'
+          ? 'boat_id'
+          : 'aircraft_id';
+
+    const updateData: any = {
+      product_type: productType,
+      [productField]: dto.product_id,
+      notes: `${process.notes || ''}\n[${new Date().toISOString()}] Produto associado: ${product.marca} ${product.modelo}`,
+      updated_at: new Date(),
+    };
+
+    // Se appointment já foi confirmado, avançar para NEGOTIATION
+    if (shouldAdvanceToNegotiation) {
+      updateData.status = 'NEGOTIATION';
+      updateData.notes += `\n[AUTO] Avançado para NEGOTIATION (produto atribuído após confirmação da reunião)`;
+    }
+
+    const nextStatus = (updateData.status ?? process.status) as ProcessStatus;
+
+    const [updatedProcess] = await this.prismaService.$transaction([
+      this.prismaService.process.update({
+        where: { id: processId },
+        data: updateData,
+        include: {
+          client: true,
+          specialist: true,
+          car: true,
+          boat: true,
+          aircraft: true,
+        },
+      }),
+      this.prismaService.processStatusHistory.create({
+        data: {
+          processId,
+          status: nextStatus,
+          changed_by: userId,
+          changed_at: new Date(),
+        },
+      }),
+    ]);
+
+    this.logger.log(
+      `[assignProduct] Produto ${productType}/${dto.product_id} associado ao processo ${processId}${shouldAdvanceToNegotiation ? ' - Avançado para NEGOTIATION' : ''}`,
+    );
+
+    // 8. Retornar processo atualizado
+    return {
+      id: updatedProcess.id,
+      status: updatedProcess.status,
+      product_type: updatedProcess.product_type,
+      product_id: this.getProductId(updatedProcess),
+      client: {
+        id: updatedProcess.client_id,
+        email: updatedProcess.client?.email,
+        name: updatedProcess.client?.name,
+      },
+      specialist: {
+        especialidade: updatedProcess.specialist.speciality,
+        id: updatedProcess.specialist.id,
+        name: updatedProcess.specialist.name,
+      },
+      product: this.buildProduct(updatedProcess),
+      created_at: updatedProcess.created_at,
+      notes: updatedProcess.notes,
+    };
   }
 
   /**
@@ -747,6 +1072,7 @@ export class ProcessesService {
           boat: true,
           aircraft: true,
           specialist: true,
+          appointment: { select: { status: true } },
           rejections: {
             orderBy: { rejected_at: 'desc' },
             take: 1,
@@ -766,7 +1092,9 @@ export class ProcessesService {
     const processEntities = processes.map((process: any) => ({
       id: process.id,
       status: process.status,
+      appointment_status: process.appointment?.status ?? null,
       product_type: process.product_type,
+      product_id: this.getProductId(process),
       client: {
         id: process.client_id,
         email: process.client?.email,
@@ -879,7 +1207,8 @@ export class ProcessesService {
 
   /**
    * Confirma um agendamento de um processo em status SCHEDULING
-   * Atualiza o appointment para SCHEDULED e move o processo para NEGOTIATION
+   * Atualiza o appointment para SCHEDULED
+   * Regra: o processo permanece em SCHEDULING e só avança para NEGOTIATION quando um produto for associado
    * Apenas o especialista pode confirmar
    *
    * @param {string} processId - Id do processo
@@ -936,7 +1265,14 @@ export class ProcessesService {
       );
     }
 
-    // Confirmar appointment e atualizar process em transação
+    if (
+      process.appointment.status === StatusAgendamento.SCHEDULED ||
+      process.appointment.status === StatusAgendamento.COMPLETED
+    ) {
+      throw new BadRequestException('Agendamento já foi confirmado');
+    }
+
+    // Confirmar appointment em transação (sem alterar status do processo)
     await this.prismaService.$transaction(async (tx) => {
       // Atualizar appointment para SCHEDULED
       await tx.appointment.update({
@@ -948,24 +1284,13 @@ export class ProcessesService {
         },
       });
 
-      // Atualizar process para NEGOTIATION
+      // Manter process em SCHEDULING e apenas registrar no histórico/notas
       await tx.process.update({
         where: { id: processId },
         data: {
-          status: 'NEGOTIATION',
           notes: process.notes
             ? `${process.notes}\n\nAgendamento confirmado pelo especialista (${new Date().toISOString()})`
             : `Agendamento confirmado pelo especialista (${new Date().toISOString()})`,
-        },
-      });
-
-      // Criar histórico
-      await tx.processStatusHistory.create({
-        data: {
-          processId,
-          status: 'NEGOTIATION',
-          changed_by: userId,
-          changed_at: new Date(),
         },
       });
     });
@@ -997,7 +1322,11 @@ export class ProcessesService {
         });
     });
 
-    return { processId, status: 'NEGOTIATION' };
+    return {
+      processId,
+      status: 'SCHEDULING',
+      appointment_status: StatusAgendamento.SCHEDULED,
+    };
   }
 
   /**

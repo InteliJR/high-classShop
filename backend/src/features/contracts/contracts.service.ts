@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -59,6 +60,37 @@ export class ContractsService {
     private readonly notificationService: NotificationService,
     private readonly platformCompanyService: PlatformCompanyService,
   ) {}
+
+  private assertSellerIndependentFromSpecialist(
+    sellerEmail: string,
+    specialistEmail?: string,
+  ): void {
+    if (!specialistEmail) {
+      return;
+    }
+
+    const normalizedSellerEmail = sellerEmail.trim().toLowerCase();
+    const normalizedSpecialistEmail = specialistEmail.trim().toLowerCase();
+
+    if (
+      normalizedSellerEmail.length > 0 &&
+      normalizedSellerEmail === normalizedSpecialistEmail
+    ) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message:
+            'O e-mail do vendedor deve ser diferente do e-mail do especialista.',
+          details: {
+            seller_email: sellerEmail,
+            specialist_email: specialistEmail,
+            hint: 'Preencha os dados do vendedor de forma independente do especialista.',
+          },
+        },
+      });
+    }
+  }
 
   /**
    * Pré-preenche dados do formulário de contrato
@@ -213,7 +245,13 @@ export class ContractsService {
 
     // Buscar dados da empresa da plataforma + calcular comissão
     const platformCompany = await this.platformCompanyService.findOne();
-    const commissionData = await this.calculateCommission(
+    const {
+      platformRate,
+      officeRate,
+      officeData,
+      specialistRate,
+      specialistData,
+    } = await this.calculateCommissionSplit(
       processData.specialist,
       platformCompany,
     );
@@ -227,9 +265,13 @@ export class ContractsService {
       ? Number(processData.accepted_proposal.proposed_value)
       : product.price;
 
-    // Calcular valor da comissão com base na taxa
-    const commissionValue = commissionData.rate
-      ? (proposalValue * commissionData.rate) / 100
+    // Calcular valores de comissão com base nas taxas
+    const platformValue = platformRate
+      ? (proposalValue * platformRate) / 100
+      : 0;
+    const officeValue = officeRate ? (proposalValue * officeRate) / 100 : 0;
+    const specialistValue = specialistRate
+      ? (proposalValue * specialistRate) / 100
       : 0;
 
     return {
@@ -245,13 +287,9 @@ export class ContractsService {
         cep: processData.client.address?.cep || undefined,
       },
       seller: {
-        id: processData.specialist.id,
-        name: `${processData.specialist.name || ''} ${processData.specialist.surname || ''}`.trim(),
-        email: processData.specialist.email,
-        cpf: processData.specialist.cpf || undefined,
-        rg: processData.specialist.rg || undefined,
-        address: buildFullAddress(processData.specialist.address),
-        cep: processData.specialist.address?.cep || undefined,
+        id: 'MANUAL_SELLER',
+        name: '',
+        email: '',
       },
       product,
       proposal: processData.accepted_proposal
@@ -260,61 +298,146 @@ export class ContractsService {
             value: Number(processData.accepted_proposal.proposed_value),
           }
         : undefined,
-      commission: platformCompany
+      platform: platformCompany
         ? {
             name: platformCompany.name,
-            cpf: platformCompany.cnpj,
+            cnpj: platformCompany.cnpj,
             bank: platformCompany.bank,
             agency: platformCompany.agency,
             checking_account: platformCompany.checking_account,
-            rate: commissionData.rate,
-            value: Math.round(commissionValue * 100) / 100,
-            source: commissionData.source,
+            rate: platformRate,
+            value: Math.round(platformValue * 100) / 100,
+          }
+        : undefined,
+      office: officeData
+        ? {
+            name: officeData.name,
+            cnpj: officeData.cnpj,
+            bank: officeData.bank || undefined,
+            agency: officeData.agency || undefined,
+            checking_account: officeData.checking_account || undefined,
+            rate: officeRate,
+            value: Math.round(officeValue * 100) / 100,
+          }
+        : undefined,
+      specialist: specialistData
+        ? {
+            id: specialistData.id,
+            name: specialistData.name,
+            email: specialistData.email || undefined,
+            cpf: specialistData.cpf || undefined,
+            bank: specialistData.bank || undefined,
+            agency: specialistData.agency || undefined,
+            checking_account: specialistData.checking_account || undefined,
+            rate: specialistRate,
+            value: Math.round(specialistValue * 100) / 100,
           }
         : undefined,
     };
   }
 
   /**
-   * Calcula a taxa de comissão com base na cadeia de prioridade:
-   * 1. Empresa do especialista (company.commission_rate)
-   * 2. Taxa individual do especialista (user.commission_rate)
-   * 3. Taxa padrão da plataforma (platformCompany.default_commission_rate)
+   * Calcula as taxas de comissão da plataforma, escritório e especialista separadamente
+   *
+   * Taxas de comissão:
+   * - Plataforma: sempre usa default_commission_rate da PlatformCompany
+   * - Escritório: usa company.commission_rate (se especialista tiver empresa)
+   * - Especialista: usa specialist.commission_rate (taxa individual do especialista)
+   *
+   * @returns { platformRate, officeRate, officeData, specialistRate, specialistData }
    */
-  private async calculateCommission(
-    specialist: { company_id?: string | null; commission_rate?: any },
+  private async calculateCommissionSplit(
+    specialist: {
+      id?: string;
+      name?: string;
+      surname?: string;
+      email?: string;
+      cpf?: string;
+      company_id?: string | null;
+      commission_rate?: any;
+      bank?: string | null;
+      agency?: string | null;
+      checking_account?: string | null;
+    },
     platformCompany: { default_commission_rate: number } | null,
-  ): Promise<{ rate: number; source: string }> {
-    // 1. Verificar taxa da empresa do especialista
+  ): Promise<{
+    platformRate: number;
+    officeRate: number;
+    officeData: {
+      name: string;
+      cnpj: string;
+      bank?: string | null;
+      agency?: string | null;
+      checking_account?: string | null;
+    } | null;
+    specialistRate: number;
+    specialistData: {
+      id: string;
+      name: string;
+      email?: string | null;
+      cpf?: string | null;
+      bank?: string | null;
+      agency?: string | null;
+      checking_account?: string | null;
+    } | null;
+  }> {
+    // Taxa da plataforma: sempre vem da PlatformCompany
+    const platformRate = platformCompany?.default_commission_rate ?? 0;
+
+    // Taxa do escritório: vem da empresa do especialista
+    let officeRate = 0;
+    let officeData: {
+      name: string;
+      cnpj: string;
+      bank?: string | null;
+      agency?: string | null;
+      checking_account?: string | null;
+    } | null = null;
+
+    // Taxa do especialista: taxa individual do especialista
+    const specialistRate = specialist.commission_rate
+      ? Number(specialist.commission_rate)
+      : 0;
+
+    // Dados do especialista para comissão
+    const specialistData = specialist.id
+      ? {
+          id: specialist.id,
+          name: `${specialist.name || ''} ${specialist.surname || ''}`.trim(),
+          email: specialist.email,
+          cpf: specialist.cpf,
+          bank: specialist.bank,
+          agency: specialist.agency,
+          checking_account: specialist.checking_account,
+        }
+      : null;
+
+    // 1. Verificar se especialista tem empresa associada
     if (specialist.company_id) {
       const company = await this.prismaService.company.findUnique({
         where: { id: specialist.company_id },
       });
-      if (company?.commission_rate) {
-        return {
-          rate: Number(company.commission_rate),
-          source: 'company',
+      if (company) {
+        officeData = {
+          name: company.name,
+          cnpj: company.cnpj,
+          bank: company.bank,
+          agency: company.agency,
+          checking_account: company.checking_account,
         };
+        officeRate = company.commission_rate
+          ? Number(company.commission_rate)
+          : 0;
       }
     }
 
-    // 2. Verificar taxa individual do especialista
-    if (specialist.commission_rate) {
-      return {
-        rate: Number(specialist.commission_rate),
-        source: 'specialist',
-      };
-    }
-
-    // 3. Fallback: taxa padrão da plataforma
-    if (platformCompany) {
-      return {
-        rate: platformCompany.default_commission_rate,
-        source: 'platform',
-      };
-    }
-
-    return { rate: 0, source: 'none' };
+    return {
+      platformRate,
+      officeRate,
+      officeData,
+      specialistRate,
+      specialistData,
+    };
   }
 
   /**
@@ -421,7 +544,13 @@ export class ContractsService {
         );
       }
 
-      // 1.5 Buscar dados do usuário que está criando (seller/specialist)
+      // 1.5 Garantir que vendedor seja independente do especialista
+      this.assertSellerIndependentFromSpecialist(
+        dto.seller_email,
+        dto.specialist_email,
+      );
+
+      // 1.6 Buscar dados do usuário que está criando
       const uploaderUser = await this.prismaService.user.findUnique({
         where: { id: userId },
         select: {
@@ -467,8 +596,14 @@ export class ContractsService {
           buyerName: dto.buyer_name,
           sellerEmail: dto.seller_email,
           sellerName: dto.seller_name,
+          specialistEmail: dto.specialist_email,
+          specialistName: dto.specialist_name,
           formFields,
           processId: dto.process_id,
+          testimonial1Name: dto.testimonial1_name,
+          testimonial1Email: dto.testimonial1_email,
+          testimonial2Name: dto.testimonial2_name,
+          testimonial2Email: dto.testimonial2_email,
         });
 
       this.logger.log(
@@ -532,14 +667,42 @@ export class ContractsService {
                 dto.payment_seller_value,
               ),
 
-              // Comissão
-              commission_value: dto.commission_value,
-              commission_value_written: numberToWords(dto.commission_value),
-              commission_name: dto.commission_name,
-              commission_cpf: dto.commission_cpf,
-              commission_bank: dto.commission_bank,
-              commission_agency: dto.commission_agency,
-              commission_checking_account: dto.commission_checking_account,
+              // Dados da Plataforma (Split 1)
+              platform_value: dto.platform_value,
+              platform_value_written: numberToWords(dto.platform_value),
+              platform_percentage: dto.platform_percentage,
+              platform_name: dto.platform_name,
+              platform_cnpj: dto.platform_cnpj,
+              platform_bank: dto.platform_bank,
+              platform_agency: dto.platform_agency,
+              platform_checking_account: dto.platform_checking_account,
+
+              // Dados do Escritório (Split 2)
+              office_value: dto.office_value,
+              office_value_written: numberToWords(dto.office_value),
+              office_name: dto.office_name,
+              office_cnpj: dto.office_cnpj,
+              office_bank: dto.office_bank || null,
+              office_agency: dto.office_agency || null,
+              office_checking_account: dto.office_checking_account || null,
+
+              // Dados do Especialista (Split 3)
+              specialist_commission_value: dto.specialist_value,
+              specialist_commission_value_written: numberToWords(
+                dto.specialist_value,
+              ),
+              specialist_name: dto.specialist_name,
+              specialist_document: dto.specialist_document,
+              specialist_bank: dto.specialist_bank || null,
+              specialist_agency: dto.specialist_agency || null,
+              specialist_checking_account:
+                dto.specialist_checking_account || null,
+
+              // Testemunhas (opcionais)
+              testimonial1_cpf: dto.testimonial1_cpf || null,
+              testimonial1_email: dto.testimonial1_email || null,
+              testimonial2_cpf: dto.testimonial2_cpf || null,
+              testimonial2_email: dto.testimonial2_email || null,
 
               // Cidade
               city: dto.city,
@@ -668,11 +831,11 @@ export class ContractsService {
    * Constrói os campos formatados para enviar ao DocuSign
    *
    * IMPORTANTE: Os labels devem corresponder EXATAMENTE aos definidos no template,
-   * incluindo erros de digitação como "commision" (com 1 'm') e "techinical".
+   * incluindo erros de digitação como "techinical".
    */
   private buildFormFields(
     dto: GenerateContractDto,
-    productType: ProductType,
+    productType: ProductType | null,
   ): Record<string, string> {
     const fields: Record<string, string> = {
       // Vendedor
@@ -706,16 +869,54 @@ export class ContractsService {
       payment_seller_value: formatBRL(dto.payment_seller_value),
       payment_seller_value_written: numberToWords(dto.payment_seller_value),
 
-      // Comissão
-      commission_value: formatBRL(dto.commission_value),
-      // ATENÇÃO: typo no template - "commision" com apenas 1 'm'
-      commision_value_written: numberToWords(dto.commission_value),
-      commission_name: dto.commission_name,
-      // ATENÇÃO: typo no template - "commision_cpf" com apenas 1 'm'
-      commision_cpf: formatCnpj(dto.commission_cpf),
-      commission_bank: dto.commission_bank,
-      commission_agency: dto.commission_agency,
-      commission_checking_account: dto.commission_checking_account,
+      // === Campos do template ANTIGO (compatibilidade) ===
+      commission_value: formatBRL(dto.platform_value),
+      // ATENÇÃO: typo no template antigo - "commision" com apenas 1 'm'
+      commision_value_written: numberToWords(dto.platform_value),
+      commission_name: dto.platform_name,
+      // ATENÇÃO: typo no template antigo - "commision_cpf" com apenas 1 'm'
+      commision_cpf: formatCnpj(dto.platform_cnpj),
+      commission_bank: dto.platform_bank,
+      commission_agency: dto.platform_agency,
+      commission_checking_account: dto.platform_checking_account,
+
+      // === Campos do template NOVO (split 3 vias) ===
+      // Dados da Plataforma (Split 1)
+      platform_value: formatBRL(dto.platform_value),
+      platform_value_written: numberToWords(dto.platform_value),
+      platform_percentage: String(dto.platform_percentage),
+      platform_name: dto.platform_name,
+      platform_cnpj: formatCnpj(dto.platform_cnpj),
+      platform_bank: dto.platform_bank,
+      platform_agency: dto.platform_agency,
+      platform_checking_account: dto.platform_checking_account,
+
+      // Dados do Escritório (Split 2)
+      commission_office_value: formatBRL(dto.office_value),
+      commission_office_written: numberToWords(dto.office_value),
+      office_name: dto.office_name,
+      office_cnpj: formatCnpj(dto.office_cnpj),
+      office_bank: dto.office_bank || '',
+      office_agency: dto.office_agency || '',
+      office_checking_account: dto.office_checking_account || '',
+
+      // Dados do Especialista (Split 3)
+      specialist_value: formatBRL(dto.specialist_value),
+      specialist_value_written: numberToWords(dto.specialist_value),
+      specialist_bank: dto.specialist_bank || '',
+      specialist_agency: dto.specialist_agency || '',
+      specialist_checking_account: dto.specialist_checking_account || '',
+      // NOTE: variável do template usa nome em português/inglês misturado
+      especialista_name: dto.specialist_name,
+      specialist_document: formatCpf(dto.specialist_document),
+
+      // Testemunhas (opcionais)
+      testimonial1_cpf: dto.testimonial1_cpf
+        ? formatCpf(dto.testimonial1_cpf)
+        : '',
+      testimonial2_cpf: dto.testimonial2_cpf
+        ? formatCpf(dto.testimonial2_cpf)
+        : '',
 
       // Cidade
       city: dto.city,
@@ -774,6 +975,11 @@ export class ContractsService {
         this.logger.warn(`Processo ${dto.process_id} não encontrado`);
         throw new ProcessNotFoundException(dto.process_id);
       }
+
+      this.assertSellerIndependentFromSpecialist(
+        dto.seller_email,
+        dto.specialist_email,
+      );
 
       // 1.2 Validar status do processo
       const allowedStatuses = ['PROCESSING_CONTRACT', 'DOCUMENTATION'];
@@ -845,12 +1051,30 @@ export class ContractsService {
         vehicle_technical_info: dto.vehicle_technical_info,
         vehicle_price: dto.vehicle_price,
         payment_seller_value: dto.payment_seller_value,
-        commission_value: dto.commission_value,
-        commission_name: dto.commission_name,
-        commission_cpf: dto.commission_cpf,
-        commission_bank: dto.commission_bank,
-        commission_agency: dto.commission_agency,
-        commission_checking_account: dto.commission_checking_account,
+        platform_value: dto.platform_value,
+        platform_percentage: dto.platform_percentage,
+        platform_name: dto.platform_name,
+        platform_cnpj: dto.platform_cnpj,
+        platform_bank: dto.platform_bank,
+        platform_agency: dto.platform_agency,
+        platform_checking_account: dto.platform_checking_account,
+        office_value: dto.office_value,
+        office_name: dto.office_name,
+        office_cnpj: dto.office_cnpj,
+        office_bank: dto.office_bank,
+        office_agency: dto.office_agency,
+        office_checking_account: dto.office_checking_account,
+        specialist_value: dto.specialist_value,
+        specialist_name: dto.specialist_name,
+        specialist_email: dto.specialist_email,
+        specialist_document: dto.specialist_document,
+        specialist_bank: dto.specialist_bank,
+        specialist_agency: dto.specialist_agency,
+        specialist_checking_account: dto.specialist_checking_account,
+        testimonial1_cpf: dto.testimonial1_cpf,
+        testimonial1_email: dto.testimonial1_email,
+        testimonial2_cpf: dto.testimonial2_cpf,
+        testimonial2_email: dto.testimonial2_email,
         city: dto.city,
         description: dto.description,
       };
@@ -880,8 +1104,15 @@ export class ContractsService {
         buyerName: dto.buyer_name,
         sellerEmail: dto.seller_email,
         sellerName: dto.seller_name,
+        specialistEmail: dto.specialist_email,
+        specialistName: dto.specialist_name,
         formFields,
         processId: dto.process_id,
+        returnUrl: dto.return_url,
+        testimonial1Name: dto.testimonial1_name,
+        testimonial1Email: dto.testimonial1_email,
+        testimonial2Name: dto.testimonial2_name,
+        testimonial2Email: dto.testimonial2_email,
       });
 
       this.logger.log(
@@ -890,7 +1121,7 @@ export class ContractsService {
       this.logger.log(`=== PREVIEW CONCLUÍDO COM SUCESSO ===`);
 
       return {
-        pdf_base64: previewResponse.pdfBase64,
+        preview_url: previewResponse.previewUrl,
         envelope_id: previewResponse.envelopeId,
         expires_at: previewResponse.expiresAt,
         process_id: dto.process_id,
@@ -998,6 +1229,11 @@ export class ContractsService {
         select: { id: true },
       });
 
+      this.assertSellerIndependentFromSpecialist(
+        dto.seller_email,
+        dto.specialist_email,
+      );
+
       // ===== ETAPA 2: ENVIAR ENVELOPE NO DOCUSIGN =====
       this.logger.log('Enviando envelope para DocuSign...');
 
@@ -1063,14 +1299,42 @@ export class ContractsService {
                 dto.payment_seller_value,
               ),
 
-              // Comissão
-              commission_value: dto.commission_value,
-              commission_value_written: numberToWords(dto.commission_value),
-              commission_name: dto.commission_name,
-              commission_cpf: dto.commission_cpf,
-              commission_bank: dto.commission_bank,
-              commission_agency: dto.commission_agency,
-              commission_checking_account: dto.commission_checking_account,
+              // Dados da Plataforma (Split 1)
+              platform_value: dto.platform_value,
+              platform_value_written: numberToWords(dto.platform_value),
+              platform_percentage: dto.platform_percentage,
+              platform_name: dto.platform_name,
+              platform_cnpj: dto.platform_cnpj,
+              platform_bank: dto.platform_bank,
+              platform_agency: dto.platform_agency,
+              platform_checking_account: dto.platform_checking_account,
+
+              // Dados do Escritório (Split 2)
+              office_value: dto.office_value,
+              office_value_written: numberToWords(dto.office_value),
+              office_name: dto.office_name,
+              office_cnpj: dto.office_cnpj,
+              office_bank: dto.office_bank || null,
+              office_agency: dto.office_agency || null,
+              office_checking_account: dto.office_checking_account || null,
+
+              // Dados do Especialista (Split 3)
+              specialist_commission_value: dto.specialist_value,
+              specialist_commission_value_written: numberToWords(
+                dto.specialist_value,
+              ),
+              specialist_name: dto.specialist_name,
+              specialist_document: dto.specialist_document,
+              specialist_bank: dto.specialist_bank || null,
+              specialist_agency: dto.specialist_agency || null,
+              specialist_checking_account:
+                dto.specialist_checking_account || null,
+
+              // Testemunhas (opcionais)
+              testimonial1_cpf: dto.testimonial1_cpf || null,
+              testimonial1_email: dto.testimonial1_email || null,
+              testimonial2_cpf: dto.testimonial2_cpf || null,
+              testimonial2_email: dto.testimonial2_email || null,
 
               // Cidade
               city: dto.city,

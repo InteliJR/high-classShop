@@ -4,7 +4,7 @@
 Breve descrição do projeto, incluindo o objetivo, nome do cliente e o setor envolvido.
 -->
 
-Exemplo: _Aplicação web para gestão de processos internos da Empresa X, no setor de logística._
+Exemplo: _Aplicação web para gestão de kprocessos internos da Empresa X, no setor de logística._
 
 Acesse a solução por meio deste [🔗 Link](https://www.nasa.gov/)
 

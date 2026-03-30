@@ -1,4 +1,7 @@
+import * as dotenv from 'dotenv';
+import * as path from 'path';
 import { PrismaClient } from '@prisma/client';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { mockCars } from '../src/mocks/car.mock';
 import { mockBoats } from '../src/mocks/boat.mock';
 import { mockAircrafts } from '../src/mocks/aircrafts.mock';
@@ -7,6 +10,65 @@ import {
   mockCompanies,
   GENIUS_COMPANY_REF,
 } from '../src/mocks/user.mock';
+
+// Carrega variáveis do .env (necessário para o seed fora do contexto NestJS)
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+// ── S3 ──────────────────────────────────────────────────────────────────────
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION!,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
+  ...(process.env.AWS_ENDPOINT
+    ? { endpoint: process.env.AWS_ENDPOINT, forcePathStyle: true }
+    : {}),
+});
+
+const BUCKET_NAME = process.env.AWS_BUCKET_NAME!;
+
+/**
+ * Faz download de uma imagem a partir de uma URL externa e faz upload para o S3.
+ * Retorna a key do objeto salvo (usada para gerar presigned URLs depois).
+ * Se o valor já for uma key S3 (não começa com http), retorna como está.
+ */
+async function uploadImageFromUrl(
+  imageUrl: string,
+  key: string,
+): Promise<string> {
+  if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+    return imageUrl; // Já é uma key S3
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+
+  const response = await fetch(imageUrl, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SeedBot/1.0)' },
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeout));
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} ao baixar: ${imageUrl}`);
+  }
+
+  const contentType = response.headers.get('content-type') || 'image/jpeg';
+  const buffer = Buffer.from(await response.arrayBuffer());
+
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+    }),
+  );
+
+  console.log(`    📤 Uploaded → s3://${BUCKET_NAME}/${key}`);
+  return key;
+}
+// ────────────────────────────────────────────────────────────────────────────
 
 const prisma = new PrismaClient();
 
@@ -90,6 +152,7 @@ async function main() {
         speciality: userMock.speciality ?? null,
         identification_number: userMock.identification_number ?? null,
         commission_rate: userMock.commission_rate ?? null,
+        calendly_url: userMock.calendly_url ?? null,
 
         address_id: userMock.address_id ?? null,
         consultant_id: userMock.consultant_id ?? null,
@@ -130,15 +193,24 @@ async function main() {
     });
 
     // Create images for this car
-    for (const image of carMock.images) {
-      await prisma.car_image.create({
-        data: {
-          product_type: 'CAR',
-          image_url: image.url,
-          is_primary: image.is_primary,
-          car_id: car.id,
-        },
-      });
+    for (let imgIdx = 0; imgIdx < carMock.images.length; imgIdx++) {
+      const image = carMock.images[imgIdx];
+      const key = `cars/${car.id}/${Date.now()}-${imgIdx}.jpg`;
+      try {
+        const imageKey = await uploadImageFromUrl(image.url, key);
+        await prisma.car_image.create({
+          data: {
+            product_type: 'CAR',
+            image_url: imageKey,
+            is_primary: image.is_primary,
+            car_id: car.id,
+          },
+        });
+      } catch (imgErr: any) {
+        console.warn(
+          `    ⚠️  Imagem ${imgIdx + 1} ignorada (${imgErr.message})`,
+        );
+      }
     }
     console.log(`  ✅ Created car: ${car.marca} ${car.modelo}`);
   }
@@ -167,15 +239,24 @@ async function main() {
     });
 
     // Create images for this boat
-    for (const image of boatMock.images) {
-      await prisma.boat_image.create({
-        data: {
-          product_type: 'BOAT',
-          image_url: image.url,
-          is_primary: image.is_primary,
-          boat_id: boat.id,
-        },
-      });
+    for (let imgIdx = 0; imgIdx < boatMock.images.length; imgIdx++) {
+      const image = boatMock.images[imgIdx];
+      const key = `boats/${boat.id}/${Date.now()}-${imgIdx}.jpg`;
+      try {
+        const imageKey = await uploadImageFromUrl(image.url, key);
+        await prisma.boat_image.create({
+          data: {
+            product_type: 'BOAT',
+            image_url: imageKey,
+            is_primary: image.is_primary,
+            boat_id: boat.id,
+          },
+        });
+      } catch (imgErr: any) {
+        console.warn(
+          `    ⚠️  Imagem ${imgIdx + 1} ignorada (${imgErr.message})`,
+        );
+      }
     }
     console.log(`  ✅ Created boat: ${boat.marca} ${boat.modelo}`);
   }
@@ -199,15 +280,24 @@ async function main() {
     });
 
     // Create images for this aircraft
-    for (const image of aircraftMock.images) {
-      await prisma.aircraft_image.create({
-        data: {
-          product_type: 'AIRCRAFT',
-          image_url: image.url,
-          is_primary: image.is_primary,
-          aircraft_id: aircraft.id,
-        },
-      });
+    for (let imgIdx = 0; imgIdx < aircraftMock.images.length; imgIdx++) {
+      const image = aircraftMock.images[imgIdx];
+      const key = `aircrafts/${aircraft.id}/${Date.now()}-${imgIdx}.jpg`;
+      try {
+        const imageKey = await uploadImageFromUrl(image.url, key);
+        await prisma.aircraft_image.create({
+          data: {
+            product_type: 'AIRCRAFT',
+            image_url: imageKey,
+            is_primary: image.is_primary,
+            aircraft_id: aircraft.id,
+          },
+        });
+      } catch (imgErr: any) {
+        console.warn(
+          `    ⚠️  Imagem ${imgIdx + 1} ignorada (${imgErr.message})`,
+        );
+      }
     }
     console.log(`  ✅ Created aircraft: ${aircraft.marca} ${aircraft.modelo}`);
   }

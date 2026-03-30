@@ -6,6 +6,11 @@ import type {
   ResponseAPI,
 } from "../types/types";
 import api from "./api";
+import {
+  type CsvImportResponse,
+  type ImportJobAcceptedResponse,
+  resolveImportResponse,
+} from "./product-import-jobs.service";
 
 export interface RawCar {
   id: number;
@@ -63,7 +68,7 @@ export interface UpdateCarDto extends Partial<CreateCarDto> {}
 export async function getCars(
   page = 1,
   perPage = 20,
-  appliedFilters: Partial<FiltersCarMeta> = {}
+  appliedFilters: Partial<FiltersCarMeta> = {},
 ): Promise<{
   cars: Product[];
   pagination: PaginationMeta;
@@ -74,7 +79,7 @@ export async function getCars(
       "/cars",
       {
         params: { page, perPage, ...appliedFilters },
-      }
+      },
     );
 
     //Extrai a respota da api
@@ -136,7 +141,10 @@ export async function createCar(data: CreateCarDto): Promise<RawCar> {
 }
 
 // Patch /cars/:id
-export async function updateCar(id: number, data: UpdateCarDto): Promise<RawCar> {
+export async function updateCar(
+  id: number,
+  data: UpdateCarDto,
+): Promise<RawCar> {
   try {
     const response = await api.patch<RawCar>(`/cars/${id}`, data);
     return response.data;
@@ -156,39 +164,22 @@ export async function deleteCar(id: number): Promise<void> {
   }
 }
 
-// CSV Import Types
-export interface CsvErrorRow {
-  row: number;
-  reason: string;
-  fields?: Record<string, any>;
-}
-
-export interface CsvImportResponse {
-  success: boolean;
-  message: string;
-  insertedCount: number;
-  errorCount: number;
-  errorRows: CsvErrorRow[];
-  insertedIds?: number[];
-}
-
-export interface CsvTemplateResponse {
-  template: string;
-  columns: {
-    required: string[];
-    optional: string[];
-  };
-  instructions: Record<string, string>;
-  example: Record<string, any>;
-}
-
-// Get /cars/csv-template
-export async function getCarsCsvTemplate(): Promise<CsvTemplateResponse> {
+// Get /cars/csv-template (downloads .csv file)
+export async function getCarsCsvTemplate(): Promise<void> {
   try {
-    const response = await api.get<CsvTemplateResponse>("/cars/csv-template");
-    return response.data;
+    const response = await api.get("/cars/csv-template", {
+      responseType: "blob",
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "template_carros.csv");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   } catch (error) {
-    console.error("Erro ao buscar template CSV:", error);
+    console.error("Erro ao baixar template CSV:", error);
     throw error;
   }
 }
@@ -198,16 +189,17 @@ export async function importCarsCsv(file: File): Promise<CsvImportResponse> {
   try {
     const formData = new FormData();
     formData.append("file", file);
-    
-    const response = await api.post<CsvImportResponse>("/cars/import-csv", formData, {
+
+    const response = await api.post<
+      CsvImportResponse | ImportJobAcceptedResponse
+    >("/cars/import-csv", formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
     });
-    return response.data;
+    return await resolveImportResponse(response.data);
   } catch (error: any) {
     console.error("Erro ao importar CSV:", error);
-    // Se o backend retornou erros de validação de estrutura
     if (error.response?.data) {
       throw error.response.data;
     }

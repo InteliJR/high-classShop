@@ -11,6 +11,8 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CarsService } from './cars.service';
@@ -19,22 +21,21 @@ import { UpdateCarDto } from './dto/update-car.dto';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { FiltersCarMeta } from 'src/shared/dto/filters.dto';
 import { Roles } from 'src/shared/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import { ProductType, UserRole } from '@prisma/client';
 import { CurrentUser } from 'src/shared/decorators/current-user.decorator';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import {
   assertSpecialistCanCreate,
   assertSpecialistCanModify,
 } from 'src/shared/helpers/specialist-auth.helper';
-import { CsvImportService } from 'src/shared/services/csv-import.service';
-import { CsvImportResponseDto } from 'src/shared/dto/csv-import-response.dto';
 import { Public } from 'src/shared/decorators/public.decorator';
+import { ProductImportJobsService } from '../product-import-jobs/product-import-jobs.service';
 
 @Controller('cars')
 export class CarsController {
   constructor(
     private readonly carsService: CarsService,
-    private readonly csvImportService: CsvImportService,
+    private readonly productImportJobsService: ProductImportJobsService,
   ) {}
 
   @Post()
@@ -47,25 +48,43 @@ export class CarsController {
 
   @Post('import-csv')
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }),
+  )
   async importCsv(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: UserEntity,
-  ): Promise<CsvImportResponseDto> {
-    // Validar permissão do usuário
+  ) {
     assertSpecialistCanCreate('CAR', user);
 
     if (!file) {
       throw new BadRequestException('Arquivo CSV é obrigatório.');
     }
 
-    const csvContent = file.buffer.toString('utf-8');
-    return this.carsService.importFromCsv(csvContent, user);
+    const isCsvFile =
+      file.mimetype === 'text/csv' ||
+      file.mimetype === 'application/vnd.ms-excel' ||
+      file.originalname?.toLowerCase().endsWith('.csv');
+
+    if (!isCsvFile) {
+      throw new BadRequestException('Apenas arquivos .csv são aceitos.');
+    }
+
+    return this.productImportJobsService.createJobFromCsv(
+      file.buffer,
+      user,
+      ProductType.CAR,
+    );
   }
 
   @Get('csv-template')
-  getCsvTemplate() {
-    return this.carsService.getCsvTemplate();
+  async getCsvTemplate(@Res({ passthrough: true }) res: any) {
+    const buffer = await this.carsService.getCsvTemplate();
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': 'attachment; filename=template_carros.csv',
+    });
+    return new StreamableFile(buffer);
   }
 
   @Get()

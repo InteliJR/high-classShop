@@ -90,6 +90,7 @@ export default function DocuSignPreviewModal({
       } else if (typeof data === "object" && data !== null) {
         // Mensagem estruturada
         const eventType = data.event || data.type || data.action;
+        console.log("[DocuSignPreview] Parsed event type:", eventType);
         if (eventType === "send" || eventType === "signing_complete") {
           onConfirm();
         } else if (
@@ -99,6 +100,7 @@ export default function DocuSignPreviewModal({
         ) {
           onCancel();
         }
+        // 'unknown', 'save' e 'error' são apenas logados, sem ação automática
       }
     },
     [onConfirm, onCancel],

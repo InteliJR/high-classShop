@@ -6,8 +6,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -53,6 +54,22 @@ enum ProductType {
   CAR      @map("CAR")
   BOAT     @map("BOAT")
   AIRCRAFT @map("AIRCRAFT")
+}
+
+enum ProductImportJobStatus {
+  PENDING               @map("PENDING")
+  PROCESSING            @map("PROCESSING")
+  COMPLETED             @map("COMPLETED")
+  COMPLETED_WITH_ERRORS @map("COMPLETED_WITH_ERRORS")
+  FAILED                @map("FAILED")
+}
+
+enum ProductImportItemStatus {
+  PENDING                 @map("PENDING")
+  PROCESSING              @map("PROCESSING")
+  COMPLETED               @map("COMPLETED")
+  COMPLETED_WITH_WARNINGS @map("COMPLETED_WITH_WARNINGS")
+  FAILED                  @map("FAILED")
 }
 
 // ProcessStatus: etapas do fluxo de processos de venda
@@ -410,6 +427,11 @@ model User {
   identification_number String?      @unique @db.VarChar(50)
   commission_rate       Decimal?     @db.Decimal(5, 2) // Taxa individual (especialistas sem empresa)
 
+  // Dados bancários do especialista (para receber comissão)
+  bank             String?
+  agency           String? @db.VarChar(10)
+  checking_account String? @db.VarChar(20)
+
   address_id    String? @db.Uuid
   consultant_id String? @db.Uuid
   company_id    String? @db.Uuid
@@ -442,6 +464,9 @@ model User {
   // Propostas de negociação enviadas e recebidas pelo usuário
   proposals_sent           NegotiationProposal[] @relation("proposal_author")
   proposals_received       NegotiationProposal[] @relation("proposal_recipient")
+  meetings_started         MeetingSession[]      @relation("meeting_started_by")
+  meetings_ended           MeetingSession[]      @relation("meeting_ended_by")
+  product_import_jobs      ProductImportJob[]
 }
 
 // RefreshToken: tokens de sessão vinculados a usuários
@@ -485,8 +510,14 @@ model Company {
   logo            String?
   description     String?
   commission_rate Decimal? @db.Decimal(5, 2) // Taxa de comissão do escritório (ex: 15.00 = 15%)
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+
+  // Dados bancários (opcionais - se preenchidos, são usados no contrato)
+  bank             String?
+  agency           String? @db.VarChar(10)
+  checking_account String? @db.VarChar(20)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   users User[] // Consultores e Especialistas associados
 }
@@ -660,6 +691,8 @@ model Product {
 
 // === Processes & Contracts ===
 // Process: fluxo de negociação/venda vinculando cliente, especialista e produto
+// Suporta fluxo de consultoria: product_type e car_id/boat_id/aircraft_id opcionais
+// Se product_type for null, é um processo de consultoria sem produto definido
 // TODO: converter car_id, boat_id, aircraft_id para UUID em migração futura
 model Process {
   id            String @id @default(uuid()) @db.Uuid
@@ -670,7 +703,7 @@ model Process {
   boat_id       Int?
 
   product_id         String?       @db.Uuid
-  product_type       ProductType
+  product_type       ProductType? // Opcional para consultoria (null = consultoria sem produto)
   active_contract_id String?       @unique @db.Uuid
   status             ProcessStatus @default(SCHEDULING)
   notes              String?
@@ -701,12 +734,39 @@ model Process {
   // Proposta aceita final que definiu o valor de venda
   accepted_proposal    NegotiationProposal?  @relation("accepted_proposal", fields: [accepted_proposal_id], references: [id])
   accepted_proposal_id String?               @unique @db.Uuid
+  meeting_session      MeetingSession?
 
-  @@unique([client_id, specialist_id, car_id, boat_id, aircraft_id], name: "unique_active_product")
+  // Constraint única: para processos com produto, evita duplicatas
+  // Para consultoria (sem produto), appointment_id garante unicidade
+  @@unique([client_id, specialist_id, car_id, boat_id, aircraft_id, appointment_id], name: "unique_active_product")
   @@index([status])
   @@index([product_type])
   @@index([product_id])
   @@index([created_at])
+}
+
+// MeetingSession: sessão de videoconferência criada na plataforma para um processo
+// MVP: usa uma única conta Google da plataforma para criar links do Google Meet
+model MeetingSession {
+  id                String    @id @default(uuid()) @db.Uuid
+  process_id        String    @unique @db.Uuid
+  calendar_event_id String    @unique
+  meet_link         String
+  started_by_id     String    @db.Uuid
+  started_at        DateTime  @default(now())
+  ended_by_id       String?   @db.Uuid
+  ended_at          DateTime?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  process    Process @relation(fields: [process_id], references: [id], onDelete: Cascade)
+  started_by User    @relation("meeting_started_by", fields: [started_by_id], references: [id])
+  ended_by   User?   @relation("meeting_ended_by", fields: [ended_by_id], references: [id])
+
+  @@index([started_by_id])
+  @@index([started_at])
+  @@index([ended_by_id])
+  @@index([ended_at])
 }
 
 // ProcessStatusHistory: trilha de auditoria para alterações de status do processo
@@ -841,14 +901,40 @@ model Contract {
   payment_seller_value         Decimal? @db.Decimal(15, 2)
   payment_seller_value_written String?  @db.VarChar(500)
 
-  // Comissão da Plataforma
-  commission_value            Decimal? @db.Decimal(15, 2)
-  commission_value_written    String?  @db.VarChar(500)
-  commission_name             String?
-  commission_cpf              String?  @db.VarChar(18) // CNPJ formatado
-  commission_bank             String?
-  commission_agency           String?
-  commission_checking_account String?
+  // Dados da Plataforma (Split 1)
+  platform_value            Decimal? @db.Decimal(15, 2)
+  platform_value_written    String?  @db.VarChar(500)
+  platform_percentage       Decimal? @db.Decimal(5, 2) // Ex: 5.00 = 5%
+  platform_name             String?
+  platform_cnpj             String?  @db.VarChar(18)
+  platform_bank             String?
+  platform_agency           String?
+  platform_checking_account String?
+
+  // Dados do Escritório/Empresa Parceira (Split 2)
+  office_value            Decimal? @db.Decimal(15, 2)
+  office_value_written    String?  @db.VarChar(500)
+  office_name             String?
+  office_cnpj             String?  @db.VarChar(18)
+  office_bank             String?
+  office_agency           String?
+  office_checking_account String?
+
+  // Dados do Especialista (Split 3) - Comissão do especialista
+  specialist_commission_value         Decimal? @db.Decimal(15, 2)
+  specialist_commission_value_written String?  @db.VarChar(500)
+  specialist_commission_rate          Decimal? @db.Decimal(5, 2)
+  specialist_name                     String?
+  specialist_document                 String?  @db.VarChar(14) // CPF do especialista
+  specialist_bank                     String?
+  specialist_agency                   String?
+  specialist_checking_account         String?
+
+  // Testemunhas (opcionais)
+  testimonial1_cpf   String? @db.VarChar(14)
+  testimonial1_email String?
+  testimonial2_cpf   String? @db.VarChar(14)
+  testimonial2_email String?
 
   // Cidade de assinatura
   city String?
@@ -896,15 +982,15 @@ model Contract {
 // - id: UUID para consistência com resto do sistema
 // - appointment_datetime: ISO 8601 em UTC. Frontend converte para horário local do usuário
 // - status: StatusAgendamento enum (SCHEDULED, COMPLETED, CANCELLED)
-// - product_type: tipo do produto (car, boat, aircraft) - obrigatório
-// - product_id: identificador do produto (car_id, boat_id ou aircraft_id) - obrigatório
+// - product_type: tipo do produto (car, boat, aircraft) - opcional para consultoria
+// - product_id: identificador do produto (car_id, boat_id ou aircraft_id) - opcional para consultoria
 // - notes: anotações opcionais sobre o agendamento
 model Appointment {
-  id            String      @id @default(uuid()) @db.Uuid
-  client_id     String      @db.Uuid
-  specialist_id String      @db.Uuid
-  product_type  ProductType // CAR, BOAT ou AIRCRAFT
-  product_id    Int // id do Car, Boat ou Aircraft específico
+  id            String       @id @default(uuid()) @db.Uuid
+  client_id     String       @db.Uuid
+  specialist_id String       @db.Uuid
+  product_type  ProductType? // Opcional: null para consultoria sem produto específico
+  product_id    Int? // Opcional: null para consultoria sem produto específico
 
   // Data e hora do agendamento em UTC (ISO 8601)
   // Exemplo: "2024-10-10T14:00:00Z"
@@ -1052,6 +1138,54 @@ model Settings {
   updated_at  DateTime @updatedAt
 
   @@index([key])
+}
+
+model ProductImportJob {
+  id              String                 @id @default(uuid()) @db.Uuid
+  product_type    ProductType
+  specialist_id   String                 @db.Uuid
+  status          ProductImportJobStatus @default(PENDING)
+  total_items     Int                    @default(0)
+  processed_items Int                    @default(0)
+  success_items   Int                    @default(0)
+  warning_items   Int                    @default(0)
+  failed_items    Int                    @default(0)
+  started_at      DateTime?
+  finished_at     DateTime?
+  error_message   String?
+  created_at      DateTime               @default(now())
+  updated_at      DateTime               @updatedAt
+
+  specialist User                   @relation(fields: [specialist_id], references: [id], onDelete: Cascade)
+  items      ProductImportJobItem[]
+
+  @@index([specialist_id])
+  @@index([status])
+  @@index([product_type])
+  @@index([created_at])
+}
+
+model ProductImportJobItem {
+  id            String                  @id @default(uuid()) @db.Uuid
+  job_id        String                  @db.Uuid
+  row_number    Int
+  status        ProductImportItemStatus @default(PENDING)
+  payload       Json
+  folder_url    String?
+  product_id    Int?
+  action        String?
+  attempts      Int                     @default(0)
+  error_message String?
+  warnings      Json?
+  processed_at  DateTime?
+  created_at    DateTime                @default(now())
+  updated_at    DateTime                @updatedAt
+
+  job ProductImportJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+
+  @@index([job_id])
+  @@index([status])
+  @@index([row_number])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

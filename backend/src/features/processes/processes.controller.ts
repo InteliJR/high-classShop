@@ -9,11 +9,13 @@ import {
   Post,
   Put,
   Query,
+  UnauthorizedException,
   UseGuards,
   Req,
 } from '@nestjs/common';
 import { ProcessesService } from './processes.service';
 import { CreateProcessDTO } from './dto/create-process.dto';
+import { AssignProductToProcessDto } from './dto/assign-product.dto';
 import { ApiResponseDto } from 'src/shared/dto/api-response.dto';
 import { ProcessResponse } from './entity/process.response.entity';
 import { QueryDto } from 'src/shared/dto/query.dto';
@@ -190,6 +192,47 @@ export class ProcessesController {
     return {
       sucess: true,
       message: 'Status do processo atualizado com sucesso',
+      data: updatedProcess,
+    };
+  }
+
+  /**
+   * PATCH /api/processes/:id/assign-product
+   * Associa um produto a um processo de consultoria
+   * Usado quando especialista seleciona o produto após reunião
+   *
+   * @param {string} processId - Id do processo de consultoria
+   * @param {AssignProductToProcessDto} dto - Dados do produto
+   * @param {Request} req - Request com usuário autenticado
+   * @returns {Promise<ApiResponseDto<ProcessResponse>>}
+   * @throws {NotFoundException} - Processo não encontrado
+   * @throws {BadRequestException} - Processo não é consultoria ou não está em SCHEDULING
+   * @throws {ForbiddenException} - Usuário não tem permissão
+   */
+  @UseGuards(AuthGuard)
+  @Patch(':id/assign-product')
+  async assignProduct(
+    @Param('id', new ParseUUIDPipe()) processId: string,
+    @Body() dto: AssignProductToProcessDto,
+    @Req() req: any,
+  ): Promise<ApiResponseDto<ProcessResponse>> {
+    const userId = req.user?.sub || req.user?.id;
+    const userRole = req.user?.role;
+
+    if (!userId) {
+      throw new UnauthorizedException('Usuário autenticado não identificado');
+    }
+
+    const updatedProcess = await this.processesService.assignProduct(
+      processId,
+      dto,
+      userId,
+      userRole,
+    );
+
+    return {
+      sucess: true,
+      message: 'Produto associado ao processo com sucesso',
       data: updatedProcess,
     };
   }

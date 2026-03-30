@@ -7,10 +7,31 @@ import CarFields from "./CarFields";
 import BoatFields from "./BoatFields";
 import AircraftFields from "./AircraftFields";
 import { ImageUploader, type ImageData } from "../../components/ImageUploader";
-import { createCar, updateCar, type RawCar, importCarsCsv, getCarsCsvTemplate, type CsvImportResponse, type CsvTemplateResponse } from "../../services/cars.service";
-import { createBoat, updateBoat, type RawBoat, importBoatsCsv, getBoatsCsvTemplate } from "../../services/boats.service";
-import { createAircraft, updateAircraft, type RawAircraft, importAircraftsCsv, getAircraftsCsvTemplate } from "../../services/aircrafts.service";
-import { CsvImporter } from "../../components/CsvImporter";
+import {
+  createCar,
+  updateCar,
+  type RawCar,
+  importCarsCsv,
+  getCarsCsvTemplate,
+} from "../../services/cars.service";
+import {
+  createBoat,
+  updateBoat,
+  type RawBoat,
+  importBoatsCsv,
+  getBoatsCsvTemplate,
+} from "../../services/boats.service";
+import {
+  createAircraft,
+  updateAircraft,
+  type RawAircraft,
+  importAircraftsCsv,
+  getAircraftsCsvTemplate,
+} from "../../services/aircrafts.service";
+import {
+  XlsxImporter,
+  type CsvImportResponse,
+} from "../../components/XlsxImporter";
 import { Modal } from "../../components/Modal";
 import type { SpecialityType, UserRole } from "../../types/types";
 
@@ -32,7 +53,12 @@ interface ProductFormProps {
   productId?: number;
 }
 
-export default function ProductForm({ mode, productType: initialProductType, productData, productId }: ProductFormProps) {
+export default function ProductForm({
+  mode,
+  productType: initialProductType,
+  productData,
+  productId,
+}: ProductFormProps) {
   const navigate = useNavigate();
   const user = useAuth((state) => state.user);
   const userSpeciality = user?.speciality as SpecialityType;
@@ -40,41 +66,49 @@ export default function ProductForm({ mode, productType: initialProductType, pro
 
   // Define o tipo de produto baseado na especialidade do usuário
   const [productType, setProductType] = useState<ProductType>(
-    initialProductType || userSpeciality || "CAR"
+    initialProductType || userSpeciality || "CAR",
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [images, setImages] = useState<ImageData[]>([]);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
 
   // Validação de autorização: ADMIN pode criar qualquer tipo, SPECIALIST só do seu tipo
-  const canCreateProductType = useCallback((type: ProductType): boolean => {
-    if (userRole === "ADMIN") return true;
-    if (userRole === "SPECIALIST") {
-      return userSpeciality === type;
-    }
-    return false;
-  }, [userRole, userSpeciality]);
+  const canCreateProductType = useCallback(
+    (type: ProductType): boolean => {
+      if (userRole === "ADMIN") return true;
+      if (userRole === "SPECIALIST") {
+        return userSpeciality === type;
+      }
+      return false;
+    },
+    [userRole, userSpeciality],
+  );
 
   // Verificar se o usuário pode criar o tipo de produto selecionado
   const isAuthorized = canCreateProductType(productType);
 
   // Funções de import/template por tipo
-  const handleCsvImport = useCallback(async (file: File): Promise<CsvImportResponse> => {
-    if (!canCreateProductType(productType)) {
-      throw { message: `Você não tem permissão para criar ${productType === "CAR" ? "carros" : productType === "BOAT" ? "lanchas" : "aeronaves"}.` };
-    }
-    
-    switch (productType) {
-      case "CAR":
-        return importCarsCsv(file);
-      case "BOAT":
-        return importBoatsCsv(file);
-      case "AIRCRAFT":
-        return importAircraftsCsv(file);
-    }
-  }, [productType, canCreateProductType]);
+  const handleCsvImport = useCallback(
+    async (file: File): Promise<CsvImportResponse> => {
+      if (!canCreateProductType(productType)) {
+        throw {
+          message: `Você não tem permissão para criar ${productType === "CAR" ? "carros" : productType === "BOAT" ? "lanchas" : "aeronaves"}.`,
+        };
+      }
 
-  const handleGetCsvTemplate = useCallback(async (): Promise<CsvTemplateResponse> => {
+      switch (productType) {
+        case "CAR":
+          return importCarsCsv(file);
+        case "BOAT":
+          return importBoatsCsv(file);
+        case "AIRCRAFT":
+          return importAircraftsCsv(file);
+      }
+    },
+    [productType, canCreateProductType],
+  );
+
+  const handleDownloadXlsxTemplate = useCallback(async (): Promise<void> => {
     switch (productType) {
       case "CAR":
         return getCarsCsvTemplate();
@@ -91,13 +125,13 @@ export default function ProductForm({ mode, productType: initialProductType, pro
     formState: { errors },
     reset,
   } = useForm<ProductFormData>({
-    defaultValues: productData as any || {},
+    defaultValues: (productData as any) || {},
   });
 
   // Função para converter URL de imagem para base64
   const urlToBase64 = async (url: string): Promise<string> => {
     try {
-      const response = await fetch(url, { mode: 'cors' });
+      const response = await fetch(url, { mode: "cors" });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -122,7 +156,11 @@ export default function ProductForm({ mode, productType: initialProductType, pro
         reset(productData as any);
 
         // Carregar imagens existentes no modo de edição
-        if (mode === "edit" && productData.images && productData.images.length > 0) {
+        if (
+          mode === "edit" &&
+          productData.images &&
+          productData.images.length > 0
+        ) {
           // Converter URLs do S3 para base64
           const existingImages: ImageData[] = await Promise.all(
             productData.images.map(async (img: any) => ({
@@ -131,7 +169,7 @@ export default function ProductForm({ mode, productType: initialProductType, pro
               is_primary: img.is_primary,
               preview: img.image_url, // Manter URL para preview
               isExisting: true,
-            }))
+            })),
           );
           setImages(existingImages);
         }
@@ -144,7 +182,9 @@ export default function ProductForm({ mode, productType: initialProductType, pro
   const onSubmit = async (data: any) => {
     // Validar autorização antes de enviar
     if (!canCreateProductType(productType)) {
-      window.alert(`Você não tem permissão para ${mode === "create" ? "criar" : "editar"} ${productType === "CAR" ? "carros" : productType === "BOAT" ? "lanchas" : "aeronaves"}.`);
+      window.alert(
+        `Você não tem permissão para ${mode === "create" ? "criar" : "editar"} ${productType === "CAR" ? "carros" : productType === "BOAT" ? "lanchas" : "aeronaves"}.`,
+      );
       return;
     }
 
@@ -176,7 +216,8 @@ export default function ProductForm({ mode, productType: initialProductType, pro
         if (data.km) formattedData.km = Number(data.km);
         if (data.cambio) formattedData.cambio = data.cambio;
         if (data.combustivel) formattedData.combustivel = data.combustivel;
-        if (data.tipo_categoria) formattedData.tipo_categoria = data.tipo_categoria;
+        if (data.tipo_categoria)
+          formattedData.tipo_categoria = data.tipo_categoria;
         if (data.descricao) formattedData.descricao = data.descricao;
       } else if (productType === "BOAT") {
         if (data.fabricante) formattedData.fabricante = data.fabricante;
@@ -185,13 +226,16 @@ export default function ProductForm({ mode, productType: initialProductType, pro
         if (data.combustivel) formattedData.combustivel = data.combustivel;
         if (data.motor) formattedData.motor = data.motor;
         if (data.ano_motor) formattedData.ano_motor = Number(data.ano_motor);
-        if (data.tipo_embarcacao) formattedData.tipo_embarcacao = data.tipo_embarcacao;
-        if (data.descricao_completa) formattedData.descricao_completa = data.descricao_completa;
+        if (data.tipo_embarcacao)
+          formattedData.tipo_embarcacao = data.tipo_embarcacao;
+        if (data.descricao_completa)
+          formattedData.descricao_completa = data.descricao_completa;
         if (data.acessorios) formattedData.acessorios = data.acessorios;
       } else if (productType === "AIRCRAFT") {
         if (data.categoria) formattedData.categoria = data.categoria;
         if (data.assentos) formattedData.assentos = Number(data.assentos);
-        if (data.tipo_aeronave) formattedData.tipo_aeronave = data.tipo_aeronave;
+        if (data.tipo_aeronave)
+          formattedData.tipo_aeronave = data.tipo_aeronave;
         if (data.descricao) formattedData.descricao = data.descricao;
       }
 
@@ -257,10 +301,17 @@ export default function ProductForm({ mode, productType: initialProductType, pro
       {!isAuthorized && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-800 font-semibold">
-            Voce nao tem permissao para criar {productType === "CAR" ? "carros" : productType === "BOAT" ? "lanchas" : "aeronaves"}.
+            Voce nao tem permissao para criar{" "}
+            {productType === "CAR"
+              ? "carros"
+              : productType === "BOAT"
+                ? "lanchas"
+                : "aeronaves"}
+            .
           </p>
           <p className="text-red-600 text-sm mt-1">
-            Sua especialidade é: {userSpeciality || "não definida"}. Apenas ADMIN pode criar qualquer tipo de produto.
+            Sua especialidade é: {userSpeciality || "não definida"}. Apenas
+            ADMIN pode criar qualquer tipo de produto.
           </p>
         </div>
       )}
@@ -268,7 +319,10 @@ export default function ProductForm({ mode, productType: initialProductType, pro
       {/* Seletor de Tipo de Produto (apenas no modo criar e se for ADMIN sem especialidade) */}
       {mode === "create" && userRole === "ADMIN" && (
         <div className="flex flex-col gap-2">
-          <label htmlFor="productType" className="text-lg font-semibold text-text-primary">
+          <label
+            htmlFor="productType"
+            className="text-lg font-semibold text-text-primary"
+          >
             Tipo de Produto *
           </label>
           <select
@@ -296,12 +350,12 @@ export default function ProductForm({ mode, productType: initialProductType, pro
         </div>
       )}
 
-      {/* Botao para abrir modal de importacao CSV - apenas no modo criar */}
+      {/* Botao para abrir modal de importacao XLSX - apenas no modo criar */}
       {mode === "create" && (
         <div className="border-t pt-6">
           <div className="flex items-center gap-4">
             <h3 className="text-lg font-semibold text-text-primary">
-              Importacao em Lote
+              Importação em Lote
             </h3>
             <button
               type="button"
@@ -309,26 +363,26 @@ export default function ProductForm({ mode, productType: initialProductType, pro
               disabled={!isAuthorized || isSubmitting}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              Upload CSV
+              Upload Planilha
             </button>
           </div>
           <p className="text-gray-500 text-sm mt-2">
-            Importe varios produtos de uma vez usando um arquivo CSV.
+            Importe vários produtos de uma vez usando um arquivo CSV.
           </p>
         </div>
       )}
 
-      {/* Modal de importacao CSV */}
+      {/* Modal de importacao XLSX */}
       <Modal
         isOpen={isCsvModalOpen}
         onClose={() => setIsCsvModalOpen(false)}
         title={`Importar ${productType === "CAR" ? "Carros" : productType === "BOAT" ? "Lanchas" : "Aeronaves"} via CSV`}
         size="lg"
       >
-        <CsvImporter
+        <XlsxImporter
           productType={productType}
           onImport={handleCsvImport}
-          onGetTemplate={handleGetCsvTemplate}
+          onDownloadTemplate={handleDownloadXlsxTemplate}
           disabled={!isAuthorized || isSubmitting}
           onSuccess={() => setIsCsvModalOpen(false)}
         />
@@ -336,7 +390,11 @@ export default function ProductForm({ mode, productType: initialProductType, pro
 
       {/* Campos Comuns */}
       <div className="grid grid-cols-2 gap-4">
-        <CommonProductFields register={register} errors={errors} productType={productType} />
+        <CommonProductFields
+          register={register}
+          errors={errors}
+          productType={productType}
+        />
       </div>
 
       {/* Campos Específicos por Tipo */}
@@ -345,9 +403,15 @@ export default function ProductForm({ mode, productType: initialProductType, pro
           Informações Específicas
         </h3>
         <div className="grid grid-cols-2 gap-4">
-          {productType === "CAR" && <CarFields register={register} errors={errors} />}
-          {productType === "BOAT" && <BoatFields register={register} errors={errors} />}
-          {productType === "AIRCRAFT" && <AircraftFields register={register} errors={errors} />}
+          {productType === "CAR" && (
+            <CarFields register={register} errors={errors} />
+          )}
+          {productType === "BOAT" && (
+            <BoatFields register={register} errors={errors} />
+          )}
+          {productType === "AIRCRAFT" && (
+            <AircraftFields register={register} errors={errors} />
+          )}
         </div>
       </div>
 
@@ -379,10 +443,13 @@ export default function ProductForm({ mode, productType: initialProductType, pro
           className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:bg-gray-400"
           disabled={isSubmitting || !isAuthorized}
         >
-          {isSubmitting ? "Salvando..." : mode === "create" ? "Criar Produto" : "Salvar Alterações"}
+          {isSubmitting
+            ? "Salvando..."
+            : mode === "create"
+              ? "Criar Produto"
+              : "Salvar Alterações"}
         </button>
       </div>
     </form>
   );
 }
-

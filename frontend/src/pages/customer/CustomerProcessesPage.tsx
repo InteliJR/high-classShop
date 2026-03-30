@@ -1,10 +1,5 @@
 import { useState, useEffect } from "react";
-import {
-  ChevronLeft,
-  ChevronRight,
-  FileText,
-  AlertCircle,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, AlertCircle } from "lucide-react";
 import { useAuth } from "../../store/authStateManager";
 import Loading from "../../components/ui/Loading";
 import ProcessCard from "../../components/ProcessCard";
@@ -19,6 +14,12 @@ interface ProcessClient {
     | "DOCUMENTATION"
     | "COMPLETED"
     | "REJECTED";
+  appointment_status?:
+    | "PENDING"
+    | "SCHEDULED"
+    | "COMPLETED"
+    | "CANCELLED"
+    | null;
   product_type: "CAR" | "BOAT" | "AIRCRAFT";
   notes?: string;
   created_at: string;
@@ -81,6 +82,15 @@ export default function CustomerProcessesPage() {
 
   const itemsPerPage = 10;
 
+  const hasMeetingRelevantProcesses = (list: ProcessClient[]): boolean => {
+    return list.some(
+      (p) =>
+        p.status === "SCHEDULING" ||
+        p.status === "NEGOTIATION" ||
+        p.status === "PROCESSING_CONTRACT",
+    );
+  };
+
   // Buscar processos do cliente
   const loadProcesses = async (page: number) => {
     if (!user?.id) return;
@@ -94,7 +104,7 @@ export default function CustomerProcessesPage() {
         {
           params: { page, perPage: itemsPerPage },
           withCredentials: true,
-        }
+        },
       );
 
       setProcesses(response.data.data || []);
@@ -119,6 +129,18 @@ export default function CustomerProcessesPage() {
       loadProcesses(1);
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    if (!hasMeetingRelevantProcesses(processes)) return;
+
+    const interval = setInterval(() => {
+      loadProcesses(currentPage);
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [user?.id, currentPage, processes]);
 
   const handleNextPage = () => {
     if (hasNextPage) {

@@ -146,6 +146,9 @@ export interface UserProps {
   address_id?: string;
   consultant_id?: string;
   company_id?: string;
+  bank?: string;
+  agency?: string;
+  checking_account?: string;
   created_at?: Date;
 }
 

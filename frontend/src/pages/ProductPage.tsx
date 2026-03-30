@@ -184,9 +184,22 @@ export default function ProductPage() {
   const handleCalendlyClick = async () => {
     if (!specialist?.calendly_url || !user || !product) return;
 
+    // Garantir que a URL tenha protocolo https://
+    let formattedUrl = specialist.calendly_url.trim();
+    if (
+      !formattedUrl.startsWith("http://") &&
+      !formattedUrl.startsWith("https://")
+    ) {
+      formattedUrl = `https://${formattedUrl}`;
+    }
+
+    // IMPORTANTE: Abrir o Calendly ANTES do await para não perder o contexto do click
+    // Navegadores bloqueiam popups que não são abertos sincronamente após click do usuário
+    window.open(formattedUrl, "_blank", "noopener,noreferrer");
+
     setIsCreatingPending(true);
     try {
-      // Criar agendamento PENDING
+      // Criar agendamento PENDING (após abrir a aba)
       await createPendingAppointment({
         client_id: user.id,
         specialist_id: specialist.id,
@@ -196,9 +209,6 @@ export default function ProductPage() {
         notes: "Cliente acessou link do Calendly",
       });
 
-      // Abrir Calendly em nova aba
-      window.open(specialist.calendly_url, "_blank");
-
       // Redirecionar para página de processos do cliente
       navigate("/customer/processes", {
         state: {
@@ -207,9 +217,10 @@ export default function ProductPage() {
         },
       });
     } catch (err: any) {
-      // Se já existe agendamento, apenas abrir o Calendly
+      // Se já existe agendamento (409), não fazer nada pois a aba já foi aberta
       if (err.response?.status === 409) {
-        window.open(specialist.calendly_url, "_blank");
+        // Aba já foi aberta acima, apenas informar ao usuário
+        console.log("Agendamento já existe, mas Calendly foi aberto");
       } else {
         console.error("Erro ao criar agendamento pendente:", err);
         alert("Erro ao criar agendamento. Tente novamente.");
@@ -420,7 +431,7 @@ export default function ProductPage() {
                 </p>
               </div>
             </div>
-          ) : specialist.calendly_url ? (
+          ) : specialist.calendly_url?.trim() ? (
             /* Com Calendly URL - Botão para acessar e criar PENDING */
             <div className="space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

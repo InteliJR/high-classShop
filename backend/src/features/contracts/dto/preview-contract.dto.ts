@@ -21,6 +21,17 @@ import {
  */
 export class PreviewContractDto {
   /**
+   * URL para callback após sair do DocuSign Sender View
+   * @example "https://app.example.com/contracts/preview-callback"
+   */
+  @IsUrl(
+    { require_tld: false },
+    { message: 'return_url deve ser uma URL válida' },
+  )
+  @IsNotEmpty({ message: 'return_url é obrigatório' })
+  return_url: string;
+
+  /**
    * ID do processo ao qual este contrato pertence
    * @example "550e8400-e29b-41d4-a716-446655440000"
    */
@@ -128,32 +139,121 @@ export class PreviewContractDto {
   @Min(0, { message: 'payment_seller_value deve ser maior ou igual a zero' })
   payment_seller_value: number;
 
-  // === COMISSÃO DA PLATAFORMA ===
+  // === DADOS DA PLATAFORMA (SPLIT 1) ===
 
-  @IsNumber({}, { message: 'commission_value deve ser um número' })
-  @IsNotEmpty({ message: 'commission_value é obrigatório' })
-  @Min(0, { message: 'commission_value deve ser maior ou igual a zero' })
-  commission_value: number;
+  @IsNumber({}, { message: 'platform_value deve ser um número' })
+  @IsNotEmpty({ message: 'platform_value é obrigatório' })
+  @Min(0, { message: 'platform_value deve ser maior ou igual a zero' })
+  platform_value: number;
 
-  @IsString({ message: 'commission_name deve ser uma string' })
-  @IsNotEmpty({ message: 'commission_name é obrigatório' })
-  commission_name: string;
+  @IsNumber({}, { message: 'platform_percentage deve ser um número' })
+  @IsNotEmpty({ message: 'platform_percentage é obrigatório' })
+  @Min(0, { message: 'platform_percentage deve ser maior ou igual a zero' })
+  platform_percentage: number;
 
-  @IsString({ message: 'commission_cpf deve ser uma string' })
-  @IsNotEmpty({ message: 'commission_cpf é obrigatório (CNPJ)' })
-  commission_cpf: string;
+  @IsString({ message: 'platform_name deve ser uma string' })
+  @IsNotEmpty({ message: 'platform_name é obrigatório' })
+  platform_name: string;
 
-  @IsString({ message: 'commission_bank deve ser uma string' })
-  @IsNotEmpty({ message: 'commission_bank é obrigatório' })
-  commission_bank: string;
+  @IsString({ message: 'platform_cnpj deve ser uma string' })
+  @IsNotEmpty({ message: 'platform_cnpj é obrigatório' })
+  platform_cnpj: string;
 
-  @IsString({ message: 'commission_agency deve ser uma string' })
-  @IsNotEmpty({ message: 'commission_agency é obrigatório' })
-  commission_agency: string;
+  @IsString({ message: 'platform_bank deve ser uma string' })
+  @IsNotEmpty({ message: 'platform_bank é obrigatório' })
+  platform_bank: string;
 
-  @IsString({ message: 'commission_checking_account deve ser uma string' })
-  @IsNotEmpty({ message: 'commission_checking_account é obrigatório' })
-  commission_checking_account: string;
+  @IsString({ message: 'platform_agency deve ser uma string' })
+  @IsNotEmpty({ message: 'platform_agency é obrigatório' })
+  platform_agency: string;
+
+  @IsString({ message: 'platform_checking_account deve ser uma string' })
+  @IsNotEmpty({ message: 'platform_checking_account é obrigatório' })
+  platform_checking_account: string;
+
+  // === DADOS DO ESCRITÓRIO/EMPRESA PARCEIRA (SPLIT 2) ===
+
+  @IsNumber({}, { message: 'office_value deve ser um número' })
+  @IsNotEmpty({ message: 'office_value é obrigatório' })
+  @Min(0, { message: 'office_value deve ser maior ou igual a zero' })
+  office_value: number;
+
+  @IsString({ message: 'office_name deve ser uma string' })
+  @IsNotEmpty({ message: 'office_name é obrigatório' })
+  office_name: string;
+
+  @IsString({ message: 'office_cnpj deve ser uma string' })
+  @IsNotEmpty({ message: 'office_cnpj é obrigatório' })
+  office_cnpj: string;
+
+  @IsString({ message: 'office_bank deve ser uma string' })
+  @IsOptional()
+  office_bank?: string;
+
+  @IsString({ message: 'office_agency deve ser uma string' })
+  @IsOptional()
+  office_agency?: string;
+
+  @IsString({ message: 'office_checking_account deve ser uma string' })
+  @IsOptional()
+  office_checking_account?: string;
+
+  // === DADOS DO ESPECIALISTA (SPLIT 3) ===
+
+  @IsNumber({}, { message: 'specialist_value deve ser um número' })
+  @IsNotEmpty({ message: 'specialist_value é obrigatório' })
+  @Min(0, { message: 'specialist_value deve ser maior ou igual a zero' })
+  specialist_value: number;
+
+  @IsString({ message: 'specialist_name deve ser uma string' })
+  @IsNotEmpty({ message: 'specialist_name é obrigatório' })
+  specialist_name: string;
+
+  @IsEmail({}, { message: 'specialist_email deve ser um email válido' })
+  @IsNotEmpty({ message: 'specialist_email é obrigatório' })
+  specialist_email: string;
+
+  @IsString({ message: 'specialist_document deve ser uma string' })
+  @IsNotEmpty({ message: 'specialist_document é obrigatório' })
+  specialist_document: string;
+
+  @IsString({ message: 'specialist_bank deve ser uma string' })
+  @IsOptional()
+  specialist_bank?: string;
+
+  @IsString({ message: 'specialist_agency deve ser uma string' })
+  @IsOptional()
+  specialist_agency?: string;
+
+  @IsString({ message: 'specialist_checking_account deve ser uma string' })
+  @IsOptional()
+  specialist_checking_account?: string;
+
+  // === TESTEMUNHAS (OPCIONAIS) ===
+
+  @IsString({ message: 'testimonial1_name deve ser uma string' })
+  @IsOptional()
+  testimonial1_name?: string;
+
+  @IsString({ message: 'testimonial1_cpf deve ser uma string' })
+  @IsOptional()
+  testimonial1_cpf?: string;
+
+  @IsEmail({}, { message: 'testimonial1_email deve ser um email válido' })
+  @IsOptional()
+  testimonial1_email?: string;
+
+  @IsString({ message: 'testimonial2_name deve ser uma string' })
+  @IsOptional()
+  testimonial2_name?: string;
+
+  @IsString({ message: 'testimonial2_cpf deve ser uma string' })
+  @IsOptional()
+  testimonial2_cpf?: string;
+
+  @IsEmail({}, { message: 'testimonial2_email deve ser um email válido' })
+  @IsOptional()
+  testimonial2_email?: string;
 
   // === CIDADE DE ASSINATURA ===
 

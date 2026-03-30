@@ -38,15 +38,36 @@ export interface PrefillProposal {
   value: number;
 }
 
-export interface PrefillCommission {
+export interface PrefillPlatform {
   name?: string;
+  cnpj?: string;
+  bank?: string;
+  agency?: string;
+  checking_account?: string;
+  rate?: number;
+  value?: number;
+}
+
+export interface PrefillOffice {
+  name?: string;
+  cnpj?: string;
+  bank?: string;
+  agency?: string;
+  checking_account?: string;
+  rate?: number;
+  value?: number;
+}
+
+export interface PrefillSpecialist {
+  id?: string;
+  name?: string;
+  email?: string;
   cpf?: string;
   bank?: string;
   agency?: string;
   checking_account?: string;
   rate?: number;
   value?: number;
-  source?: string;
 }
 
 export interface PrefillContractResponse {
@@ -56,7 +77,9 @@ export interface PrefillContractResponse {
   seller: PrefillSeller;
   product: PrefillProduct;
   proposal?: PrefillProposal;
-  commission?: PrefillCommission;
+  platform?: PrefillPlatform;
+  office?: PrefillOffice;
+  specialist?: PrefillSpecialist;
 }
 
 // === TIPOS PARA GERAÇÃO DE CONTRATO ===
@@ -94,13 +117,39 @@ export interface GenerateContractData {
   // Pagamento
   payment_seller_value: number;
 
-  // Comissão
-  commission_value: number;
-  commission_name: string;
-  commission_cpf: string;
-  commission_bank: string;
-  commission_agency: string;
-  commission_checking_account: string;
+  // Dados da Plataforma (Split 1)
+  platform_value: number;
+  platform_percentage: number;
+  platform_name: string;
+  platform_cnpj: string;
+  platform_bank: string;
+  platform_agency: string;
+  platform_checking_account: string;
+
+  // Dados do Escritório (Split 2)
+  office_value: number;
+  office_name: string;
+  office_cnpj: string;
+  office_bank?: string;
+  office_agency?: string;
+  office_checking_account?: string;
+
+  // Dados do Especialista (Split 3)
+  specialist_value?: number;
+  specialist_name?: string;
+  specialist_email?: string;
+  specialist_document?: string;
+  specialist_bank?: string;
+  specialist_agency?: string;
+  specialist_checking_account?: string;
+
+  // Testemunhas (opcionais)
+  testimonial1_name?: string;
+  testimonial1_cpf?: string;
+  testimonial1_email?: string;
+  testimonial2_name?: string;
+  testimonial2_cpf?: string;
+  testimonial2_email?: string;
 
   // Cidade
   city: string;
@@ -121,12 +170,13 @@ export interface ContractResponse {
 
 // === TIPOS PARA PREVIEW ===
 
-// PreviewContractData não precisa mais de return_url
-// O preview agora retorna o PDF diretamente em base64
-export type PreviewContractData = GenerateContractData;
+// PreviewContractData inclui return_url para callback do DocuSign
+export interface PreviewContractData extends GenerateContractData {
+  return_url: string;
+}
 
 export interface PreviewContractResponse {
-  pdf_base64: string;
+  preview_url: string;
   envelope_id: string;
   expires_at: string;
   process_id: string;
@@ -180,7 +230,17 @@ export async function generateContract(
     buyer_cpf: stripFormatting(data.buyer_cpf),
     buyer_rg: data.buyer_rg ? stripFormatting(data.buyer_rg) : undefined,
     buyer_cep: stripFormatting(data.buyer_cep),
-    commission_cpf: stripFormatting(data.commission_cpf),
+    platform_cnpj: stripFormatting(data.platform_cnpj),
+    office_cnpj: stripFormatting(data.office_cnpj),
+    specialist_document: data.specialist_document
+      ? stripFormatting(data.specialist_document)
+      : undefined,
+    testimonial1_cpf: data.testimonial1_cpf
+      ? stripFormatting(data.testimonial1_cpf)
+      : undefined,
+    testimonial2_cpf: data.testimonial2_cpf
+      ? stripFormatting(data.testimonial2_cpf)
+      : undefined,
   };
 
   const response = await api.post<ApiResponse<ContractResponse>>(
@@ -241,7 +301,17 @@ export async function previewContract(
     buyer_cpf: stripFormatting(data.buyer_cpf),
     buyer_rg: data.buyer_rg ? stripFormatting(data.buyer_rg) : undefined,
     buyer_cep: stripFormatting(data.buyer_cep),
-    commission_cpf: stripFormatting(data.commission_cpf),
+    platform_cnpj: stripFormatting(data.platform_cnpj),
+    office_cnpj: stripFormatting(data.office_cnpj),
+    specialist_document: data.specialist_document
+      ? stripFormatting(data.specialist_document)
+      : undefined,
+    testimonial1_cpf: data.testimonial1_cpf
+      ? stripFormatting(data.testimonial1_cpf)
+      : undefined,
+    testimonial2_cpf: data.testimonial2_cpf
+      ? stripFormatting(data.testimonial2_cpf)
+      : undefined,
   };
 
   const response = await api.post<ApiResponse<PreviewContractResponse>>(
@@ -277,7 +347,17 @@ export async function sendContractAfterPreview(
     buyer_cpf: stripFormatting(data.buyer_cpf),
     buyer_rg: data.buyer_rg ? stripFormatting(data.buyer_rg) : undefined,
     buyer_cep: stripFormatting(data.buyer_cep),
-    commission_cpf: stripFormatting(data.commission_cpf),
+    platform_cnpj: stripFormatting(data.platform_cnpj),
+    office_cnpj: stripFormatting(data.office_cnpj),
+    specialist_document: data.specialist_document
+      ? stripFormatting(data.specialist_document)
+      : undefined,
+    testimonial1_cpf: data.testimonial1_cpf
+      ? stripFormatting(data.testimonial1_cpf)
+      : undefined,
+    testimonial2_cpf: data.testimonial2_cpf
+      ? stripFormatting(data.testimonial2_cpf)
+      : undefined,
   };
 
   const response = await api.post<ApiResponse<SendContractResponse>>(

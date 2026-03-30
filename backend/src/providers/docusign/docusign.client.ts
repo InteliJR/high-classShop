@@ -255,6 +255,12 @@ export class DocuSignClient {
       } catch (error) {
         lastError = error as Error;
 
+        if (axios.isAxiosError(error)) {
+          this.logger.error(
+            `[${method}] ${url} falhou com status ${error.response?.status ?? 'sem-status'}: ${JSON.stringify(error.response?.data ?? error.message)}`,
+          );
+        }
+
         // Verificar se é erro recuperável
         const isRecoverable = this.isRecoverableError(error);
 
@@ -559,7 +565,7 @@ export class DocuSignClient {
       settings: {
         startingScreen: viewSettings.startingScreen,
         showBackButton: viewSettings.showBackButton,
-        showHeaderActions: 'false', // Esconde menu avançado (editar mensagem, docs, etc)
+        showHeaderActions: 'false',
         showDiscardAction: viewSettings.showDiscardAction,
         sendButtonAction: viewSettings.sendButtonAction,
         recipientSettings: {
@@ -568,25 +574,25 @@ export class DocuSignClient {
         },
         documentSettings: {
           showEditDocuments: viewSettings.showEditDocuments,
-          showEditPages: 'false', // Impede deletar/rotacionar páginas
+          showEditPages: 'false',
           showEditDocumentVisibility: 'false',
         },
         templateSettings: {
-          showMatchingTemplatesPrompt: 'false', // Esconde diálogo de template matching
+          showMatchingTemplatesPrompt: 'false',
         },
-        // IMPORTANTE: Esconde a tela de edição de campos do remetente (seller_name, seller_cpf, etc)
-        // Isso impede que o usuário altere dados sensíveis pré-preenchidos
         prefillSettings: {
-          showPrefillTags: 'false', // Esconde a edição de sender field data
+          showPrefillTags: 'false',
         },
         taggerSettings: {
-          showTagLibrary: 'false', // Esconde biblioteca de tags
-          showTagBulkSend: 'false', // Esconde envio em massa
+          showTagLibrary: 'false',
+          showTagBulkSend: 'false',
         },
       },
     };
 
-    this.logger.debug(`Sender View request body: ${JSON.stringify(requestBody, null, 2)}`);
+    this.logger.debug(
+      `Sender View request body: ${JSON.stringify(requestBody, null, 2)}`,
+    );
 
     return this.post(
       `/v2.1/accounts/${this.accountId}/envelopes/${envelopeId}/views/sender`,
@@ -605,7 +611,9 @@ export class DocuSignClient {
    * @returns {Promise<{ pdfBase64: string }>} PDF em formato base64
    * @throws ProviderUnavailableException - Se DocuSign está indisponível
    */
-  async getCombinedDocument(envelopeId: string): Promise<{ pdfBase64: string }> {
+  async getCombinedDocument(
+    envelopeId: string,
+  ): Promise<{ pdfBase64: string }> {
     const token = await this.getAccessToken();
 
     this.logger.log(`Downloading combined document for envelope ${envelopeId}`);
@@ -631,7 +639,9 @@ export class DocuSignClient {
     // Converter ArrayBuffer para base64
     const pdfBase64 = Buffer.from(response.data).toString('base64');
 
-    this.logger.log(`Combined document downloaded (${pdfBase64.length} chars base64)`);
+    this.logger.log(
+      `Combined document downloaded (${pdfBase64.length} chars base64)`,
+    );
 
     return { pdfBase64 };
   }

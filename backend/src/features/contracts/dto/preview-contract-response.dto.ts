@@ -1,16 +1,16 @@
 /**
  * Response DTO para a criação de preview de contrato
  *
- * Contém o PDF do contrato em base64 para visualização direta
- * no frontend, sem interface do DocuSign.
+ * Contém a URL do DocuSign Sender View para visualização
+ * e edição do contrato antes do envio.
  */
 export class PreviewContractResponseDto {
   /**
-   * PDF do contrato codificado em base64
-   * Pode ser exibido diretamente em um viewer de PDF no frontend
-   * @example "JVBERi0xLjQKJ..." (base64 encoded PDF)
+   * URL do DocuSign Sender View para visualização/edição do contrato
+   * URL expira em aproximadamente 10 minutos
+   * @example "https://demo.docusign.net/Sender/..."
    */
-  pdf_base64: string;
+  preview_url: string;
 
   /**
    * ID do envelope no DocuSign (formato GUID)

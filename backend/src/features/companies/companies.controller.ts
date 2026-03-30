@@ -6,6 +6,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
 } from '@nestjs/common';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
@@ -26,7 +27,8 @@ export class CompaniesController {
 
   // Rota para buscar todos os escritórios.
   @Get()
-  findAll() { // Busca todas as empresas
+  findAll() {
+    // Busca todas as empresas
     return this.companiesService.findAll();
   }
 
@@ -34,6 +36,20 @@ export class CompaniesController {
   @Post()
   create(@Body() body: CreateCompanyDto) {
     return this.companiesService.create(body);
+  }
+
+  // Rota para buscar especialistas de um escritório (lazy loading com paginação).
+  @Get(':id/specialists')
+  findSpecialists(
+    @Param('id') id: string,
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string,
+  ) {
+    return this.companiesService.findSpecialistsByCompany(
+      id,
+      page ? Number(page) : 1,
+      perPage ? Number(perPage) : 5,
+    );
   }
 
   // Rota para buscar um único escritório pelo seu ID.
@@ -44,10 +60,7 @@ export class CompaniesController {
 
   // Rota para atualizar os dados de um escritório.
   @Put(':id')
-  update(
-    @Param('id') id: string,
-    @Body() body: UpdateCompanyDto,
-  ) {
+  update(@Param('id') id: string, @Body() body: UpdateCompanyDto) {
     return this.companiesService.update(id, body);
   }
 

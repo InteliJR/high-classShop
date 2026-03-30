@@ -22,7 +22,7 @@ export default function CustomerProfilePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"personal" | "password">(
-    "personal"
+    "personal",
   );
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -87,7 +87,8 @@ export default function CustomerProfilePage() {
 
       // Só envia calendly_url se for especialista
       if (user.role === "SPECIALIST") {
-        dataToUpdate.calendly_url = formData.calendly_url;
+        const trimmedUrl = formData.calendly_url?.trim();
+        dataToUpdate.calendly_url = trimmedUrl || undefined;
       }
 
       await updateUser(user.id, dataToUpdate);

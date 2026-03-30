@@ -56,6 +56,16 @@ export class UserEntity
   @Expose()
   commission_rate: any | null;
 
+  // Dados bancários do especialista para comissão
+  @Expose()
+  bank: string | null;
+
+  @Expose()
+  agency: string | null;
+
+  @Expose()
+  checking_account: string | null;
+
   @Exclude()
   password_hash: string;
 

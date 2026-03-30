@@ -31,8 +31,14 @@ export const mockAircrafts: AircraftMock[] = [
     motores: 'Pratt & Whitney Canada PW535E1',
     horas_voo: 0,
     images: [
-      { url: 'aircrafts/1/2017-10-09t182910z-625694718-rc19aca9ba50-rtrmadp-3-embraer-phenom.webp', is_primary: true },
-      { url: 'aircrafts/1/2017-10-09t182910z-625694718-rc19aca9ba50-rtrmadp-3-embraer-phenom.webp', is_primary: false },
+      {
+        url: 'https://www.portalin.com.br/wp-content/uploads/2026/02/phenom-300-embraer-jato.jpg',
+        is_primary: true,
+      },
+      {
+        url: 'https://www.portalin.com.br/wp-content/uploads/2026/02/phenom-300-embraer-jato.jpg',
+        is_primary: false,
+      },
     ],
-  }
+  },
 ];

@@ -7,6 +7,7 @@ import {
   IsNumber,
   Min,
   Max,
+  MaxLength,
 } from 'class-validator';
 
 export class CreateCompanyDto {
@@ -33,4 +34,23 @@ export class CreateCompanyDto {
   @Min(0, { message: 'Taxa de comissão deve ser >= 0' })
   @Max(100, { message: 'Taxa de comissão deve ser <= 100' })
   commission_rate?: number;
+
+  // === DADOS BANCÁRIOS (OPCIONAIS) ===
+
+  @IsString({ message: 'bank deve ser uma string' })
+  @IsOptional()
+  @MaxLength(100, { message: 'bank deve ter no máximo 100 caracteres' })
+  bank?: string;
+
+  @IsString({ message: 'agency deve ser uma string' })
+  @IsOptional()
+  @MaxLength(10, { message: 'agency deve ter no máximo 10 caracteres' })
+  agency?: string;
+
+  @IsString({ message: 'checking_account deve ser uma string' })
+  @IsOptional()
+  @MaxLength(20, {
+    message: 'checking_account deve ter no máximo 20 caracteres',
+  })
+  checking_account?: string;
 }
