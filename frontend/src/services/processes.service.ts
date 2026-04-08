@@ -15,6 +15,7 @@ export interface Process {
     | "COMPLETED"
     | "CANCELLED"
     | null;
+  appointment_datetime?: string | null;
   product_type?: "CAR" | "BOAT" | "AIRCRAFT" | null;
   client_id: string;
   specialist_id: string;

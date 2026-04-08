@@ -87,9 +87,9 @@ export class ProposalsService {
             role: true,
           },
         },
-        car: { select: { id: true, valor: true } },
-        boat: { select: { id: true, valor: true } },
-        aircraft: { select: { id: true, valor: true } },
+        car: { select: { id: true, valor: true, is_active: true } },
+        boat: { select: { id: true, valor: true, is_active: true } },
+        aircraft: { select: { id: true, valor: true, is_active: true } },
         proposals: {
           orderBy: { created_at: 'desc' },
           take: 1,
@@ -355,10 +355,14 @@ export class ProposalsService {
         specialist: {
           select: { id: true, name: true, surname: true, role: true },
         },
-        car: { select: { id: true, valor: true, marca: true, modelo: true } },
-        boat: { select: { id: true, valor: true, marca: true, modelo: true } },
+        car: {
+          select: { id: true, valor: true, marca: true, modelo: true, is_active: true },
+        },
+        boat: {
+          select: { id: true, valor: true, marca: true, modelo: true, is_active: true },
+        },
         aircraft: {
-          select: { id: true, valor: true, marca: true, modelo: true },
+          select: { id: true, valor: true, marca: true, modelo: true, is_active: true },
         },
         accepted_proposal: { select: { id: true } },
         proposals: {
@@ -446,6 +450,10 @@ export class ProposalsService {
         id: process.id,
         status: process.status,
         product_type: process.product_type,
+        product_is_active:
+          product && typeof product === 'object' && 'is_active' in product
+            ? Boolean((product as any).is_active)
+            : undefined,
         product_value: productValue,
         minimum_value: minimumValue,
         client: {
@@ -562,6 +570,57 @@ export class ProposalsService {
               error: err.message,
             });
           });
+      });
+    }
+
+    const processForNotification = await this.prisma.process.findUnique({
+      where: { id: proposal.process_id },
+      include: {
+        client: {
+          select: { email: true, name: true, surname: true },
+        },
+        specialist: {
+          select: { email: true, name: true, surname: true },
+        },
+      },
+    });
+
+    if (processForNotification) {
+      setImmediate(() => {
+        const recipients = [
+          {
+            email: processForNotification.client.email,
+            name: `${processForNotification.client.name} ${processForNotification.client.surname || ''}`.trim(),
+          },
+          {
+            email: processForNotification.specialist.email,
+            name: `${processForNotification.specialist.name} ${processForNotification.specialist.surname || ''}`.trim(),
+          },
+        ].filter((recipient) => Boolean(recipient.email));
+
+        const changedByName = proposalWithEmails
+          ? `${proposalWithEmails.proposed_to.name} ${proposalWithEmails.proposed_to.surname || ''}`.trim()
+          : undefined;
+
+        Promise.allSettled(
+          recipients.map((recipient) =>
+            this.notificationService.sendProcessStatusChangedEmail({
+              recipientEmail: recipient.email!,
+              recipientName: recipient.name || 'Usuário',
+              processId: proposal.process_id,
+              previousStatus: ProcessStatus.NEGOTIATION,
+              currentStatus: ProcessStatus.DOCUMENTATION,
+              changedByName,
+              reason: 'Proposta aceita. Processo avançou para documentação.',
+            }),
+          ),
+        ).catch((err) => {
+          this.logger.error('Notification failed (non-critical)', {
+            method: 'accept-process-status-changed',
+            processId: proposal.process_id,
+            error: err.message,
+          });
+        });
       });
     }
 

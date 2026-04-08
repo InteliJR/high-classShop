@@ -54,6 +54,12 @@ export class UserEntity
   calendly_url: string | null;
 
   @Expose()
+  calendly_user_uri: string | null;
+
+  @Expose()
+  calendly_organization_uri: string | null;
+
+  @Expose()
   commission_rate: any | null;
 
   // Dados bancários do especialista para comissão

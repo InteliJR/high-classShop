@@ -41,6 +41,7 @@ export class ProposalListResponseEntity {
     id: string;
     status: string;
     product_type: string | null; // Null para processos de consultoria sem produto atribuído
+    product_is_active?: boolean;
     product_value: number;
     minimum_value: number; // 80% do valor do produto
     client: {

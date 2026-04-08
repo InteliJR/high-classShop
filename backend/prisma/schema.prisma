@@ -211,6 +211,13 @@ enum StatusAgendamento {
   CANCELLED @map("cancelled")
 }
 
+// Status de sincronização do agendamento com dados do Calendly
+enum CalendlySyncStatus {
+  PENDING @map("pending")
+  SYNCED  @map("synced")
+  FAILED  @map("failed")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ▸ INTERESSES (Preferências de Barcos)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -443,7 +450,9 @@ model User {
 
   // Campo para integração com Calendly - especialistas armazenam seu link de agendamento
   // Ex: https://calendly.com/nome-especialista
-  calendly_url String?
+  calendly_url              String?
+  calendly_user_uri         String?
+  calendly_organization_uri String?
 
   created_at               DateTime              @default(now())
   updated_at               DateTime              @updatedAt
@@ -467,6 +476,45 @@ model User {
   meetings_started         MeetingSession[]      @relation("meeting_started_by")
   meetings_ended           MeetingSession[]      @relation("meeting_ended_by")
   product_import_jobs      ProductImportJob[]
+  calendly_connection      CalendlyConnection?
+  calendly_oauth_states    CalendlyOauthState[]
+}
+
+model CalendlyConnection {
+  id                        String    @id @default(uuid()) @db.Uuid
+  user_id                   String    @unique @db.Uuid
+  user                      User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  access_token_encrypted    String
+  refresh_token_encrypted   String
+  token_type                String    @default("Bearer")
+  scope                     String?
+  expires_at                DateTime?
+  calendly_user_uri         String    @unique
+  calendly_organization_uri String?
+  webhook_uri               String?
+  webhook_subscription_uri  String?
+  is_active                 Boolean   @default(true)
+  last_sync_at              DateTime?
+  last_error                String?
+  created_at                DateTime  @default(now())
+  updated_at                DateTime  @updatedAt
+
+  @@index([user_id])
+  @@index([is_active])
+}
+
+model CalendlyOauthState {
+  id            String    @id @default(uuid()) @db.Uuid
+  user_id       String    @db.Uuid
+  user          User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  state         String    @unique
+  code_verifier String?
+  expires_at    DateTime
+  used_at       DateTime?
+  created_at    DateTime  @default(now())
+
+  @@index([user_id])
+  @@index([expires_at])
 }
 
 // RefreshToken: tokens de sessão vinculados a usuários
@@ -549,27 +597,31 @@ model PlatformCompany {
 // Car: inventário de automóveis de luxo
 // TODO: converter id Int para UUID em migração futura
 model Car {
-  id             Int      @id @default(autoincrement())
-  specialist_id  String?  @db.Uuid
-  marca          String
-  modelo         String
-  valor          Decimal
-  estado         String
-  ano            Int
-  descricao      String?
-  cor            String?
-  km             Int?
-  cambio         String?
-  combustivel    String?
-  tipo_categoria String?
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
+  id                         Int       @id @default(autoincrement())
+  specialist_id              String?   @db.Uuid
+  is_active                  Boolean   @default(true)
+  deactivated_at             DateTime?
+  deactivated_by_sync_job_id String?   @db.Uuid
+  marca                      String
+  modelo                     String
+  valor                      Decimal
+  estado                     String
+  ano                        Int
+  descricao                  String?
+  cor                        String?
+  km                         Int?
+  cambio                     String?
+  combustivel                String?
+  tipo_categoria             String?
+  created_at                 DateTime  @default(now())
+  updated_at                 DateTime  @updatedAt
 
   specialist User?       @relation(fields: [specialist_id], references: [id])
   images     Car_image[]
   processes  Process[]
 
   @@index([specialist_id])
+  @@index([specialist_id, is_active])
 }
 
 // Car_image: imagens associadas aos anúncios de Car
@@ -589,30 +641,34 @@ model Car_image {
 // Boat: inventário de iates/embarcações de luxo
 // TODO: converter id Int para UUID em migração futura
 model Boat {
-  id                 Int      @id @default(autoincrement())
-  specialist_id      String?  @db.Uuid
-  marca              String
-  modelo             String
-  valor              Decimal
-  ano                Int
-  fabricante         String?
-  tamanho            String?
-  estilo             String?
-  combustivel        String?
-  motor              String?
-  ano_motor          Int?
-  descricao_completa String?
-  acessorios         String?
-  estado             String
-  tipo_embarcacao    String?
-  created_at         DateTime @default(now())
-  updated_at         DateTime @updatedAt
+  id                         Int       @id @default(autoincrement())
+  specialist_id              String?   @db.Uuid
+  is_active                  Boolean   @default(true)
+  deactivated_at             DateTime?
+  deactivated_by_sync_job_id String?   @db.Uuid
+  marca                      String
+  modelo                     String
+  valor                      Decimal
+  ano                        Int
+  fabricante                 String?
+  tamanho                    String?
+  estilo                     String?
+  combustivel                String?
+  motor                      String?
+  ano_motor                  Int?
+  descricao_completa         String?
+  acessorios                 String?
+  estado                     String
+  tipo_embarcacao            String?
+  created_at                 DateTime  @default(now())
+  updated_at                 DateTime  @updatedAt
 
   specialist User?        @relation(fields: [specialist_id], references: [id])
   images     Boat_image[]
   processes  Process[]
 
   @@index([specialist_id])
+  @@index([specialist_id, is_active])
 }
 
 // Boat_image: imagens associadas aos anúncios de Boat
@@ -632,25 +688,29 @@ model Boat_image {
 // Aircraft: inventário de aeronaves de luxo
 // TODO: converter id Int para UUID em migração futura
 model Aircraft {
-  id            Int      @id @default(autoincrement())
-  specialist_id String?  @db.Uuid
-  categoria     String?
-  ano           Int
-  marca         String
-  modelo        String
-  assentos      Int?
-  estado        String
-  descricao     String?
-  valor         Decimal
-  tipo_aeronave String?
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
+  id                         Int       @id @default(autoincrement())
+  specialist_id              String?   @db.Uuid
+  is_active                  Boolean   @default(true)
+  deactivated_at             DateTime?
+  deactivated_by_sync_job_id String?   @db.Uuid
+  categoria                  String?
+  ano                        Int
+  marca                      String
+  modelo                     String
+  assentos                   Int?
+  estado                     String
+  descricao                  String?
+  valor                      Decimal
+  tipo_aeronave              String?
+  created_at                 DateTime  @default(now())
+  updated_at                 DateTime  @updatedAt
 
   specialist User?            @relation(fields: [specialist_id], references: [id])
   images     Aircraft_image[]
   processes  Process[]
 
   @@index([specialist_id])
+  @@index([specialist_id, is_active])
 }
 
 // Aircraft_image: imagens associadas aos anúncios de Aircraft
@@ -1014,6 +1074,13 @@ model Appointment {
   confirmed_at       DateTime?
   confirmed_by_id    String?   @db.Uuid
 
+  // Campos de sincronização com callback/embed do Calendly
+  calendly_event_uri    String?            @db.VarChar(255)
+  calendly_invitee_uri  String?            @db.VarChar(255)
+  calendly_scheduled_at DateTime?
+  calendly_last_sync_at DateTime?
+  calendly_sync_status  CalendlySyncStatus @default(PENDING)
+
   // Rastreabilidade e auditoria
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -1031,6 +1098,8 @@ model Appointment {
   @@index([appointment_datetime])
   @@index([status])
   @@index([product_type])
+  @@index([calendly_event_uri])
+  @@index([calendly_sync_status])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1141,20 +1210,23 @@ model Settings {
 }
 
 model ProductImportJob {
-  id              String                 @id @default(uuid()) @db.Uuid
-  product_type    ProductType
-  specialist_id   String                 @db.Uuid
-  status          ProductImportJobStatus @default(PENDING)
-  total_items     Int                    @default(0)
-  processed_items Int                    @default(0)
-  success_items   Int                    @default(0)
-  warning_items   Int                    @default(0)
-  failed_items    Int                    @default(0)
-  started_at      DateTime?
-  finished_at     DateTime?
-  error_message   String?
-  created_at      DateTime               @default(now())
-  updated_at      DateTime               @updatedAt
+  id                      String                 @id @default(uuid()) @db.Uuid
+  product_type            ProductType
+  specialist_id           String                 @db.Uuid
+  status                  ProductImportJobStatus @default(PENDING)
+  total_items             Int                    @default(0)
+  processed_items         Int                    @default(0)
+  success_items           Int                    @default(0)
+  warning_items           Int                    @default(0)
+  failed_items            Int                    @default(0)
+  deactivated_items       Int                    @default(0)
+  reactivated_items       Int                    @default(0)
+  deactivated_product_ids Json?
+  started_at              DateTime?
+  finished_at             DateTime?
+  error_message           String?
+  created_at              DateTime               @default(now())
+  updated_at              DateTime               @updatedAt
 
   specialist User                   @relation(fields: [specialist_id], references: [id], onDelete: Cascade)
   items      ProductImportJobItem[]

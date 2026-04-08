@@ -20,6 +20,20 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+function printConnectionHints() {
+  console.log('\n🔎 Diagnóstico rápido:');
+  console.log(
+    '   - Verifique se DATABASE_URL aponta para o banco correto (Supabase).',
+  );
+  console.log('   - Se usar Prisma CLI/migrations, defina também DIRECT_URL.');
+  console.log(
+    '   - Garanta que as migrations do projeto foram aplicadas nesse banco.',
+  );
+  console.log(
+    '   - Se faltar tabela como "Contract", você está em schema antigo/errado.',
+  );
+}
+
 async function main() {
   const isDryRun = process.argv.includes('--dry-run');
 
@@ -170,6 +184,31 @@ async function main() {
     );
   } catch (error) {
     console.error('\n❌ Erro durante a limpeza:', error);
+
+    const maybePrismaError = error as {
+      code?: string;
+      meta?: { modelName?: string; table?: string };
+      message?: string;
+    };
+
+    if (maybePrismaError?.code === 'P2021') {
+      console.error(
+        `\n⚠️  Tabela não encontrada no banco atual: ${maybePrismaError.meta?.table ?? maybePrismaError.meta?.modelName ?? 'desconhecida'}`,
+      );
+      console.error(
+        '   Este script foi escrito para o schema atual (Process/Contract/NegotiationProposal etc).',
+      );
+      printConnectionHints();
+    }
+
+    if (
+      maybePrismaError?.message?.includes("Can't reach database server") ||
+      maybePrismaError?.code === 'P1001'
+    ) {
+      console.error('\n⚠️  Não foi possível conectar ao banco.');
+      printConnectionHints();
+    }
+
     throw error;
   }
 }

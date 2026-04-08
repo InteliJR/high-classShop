@@ -135,6 +135,7 @@ export class BoatsService {
 
     //Exact
     const where: any = {};
+    where.is_active = true;
     const exacts: ExactBoatFilters = {
       estado: appliedFilters?.estado,
       tipo_embarcacao: appliedFilters?.tipo_embarcacao,
@@ -315,7 +316,14 @@ export class BoatsService {
     await this.findOne(id);
 
     try {
-      await this.prismaService.boat.delete({ where: { id } });
+      await this.prismaService.boat.update({
+        where: { id },
+        data: {
+          is_active: false,
+          deactivated_at: new Date(),
+          deactivated_by_sync_job_id: null,
+        },
+      });
       return { ok: true };
     } catch (error) {
       throw new Error(`Erro ao deletar lancha: ${error.message}`);

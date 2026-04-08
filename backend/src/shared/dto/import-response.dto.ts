@@ -36,6 +36,12 @@ export interface ImportResponseDto {
   insertedIds?: number[];
   /** IDs dos produtos atualizados (opcional) */
   updatedIds?: number[];
+  /** Quantidade de produtos inativados por ausência na planilha */
+  deactivatedCount: number;
+  /** IDs dos produtos inativados por ausência na planilha */
+  deactivatedIds: number[];
+  /** Quantidade de produtos reativados (voltaram na planilha) */
+  reactivatedCount: number;
 }
 
 /**

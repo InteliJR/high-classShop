@@ -14,6 +14,9 @@ export interface CsvImportResponse {
   updatedCount: number;
   errorCount: number;
   warningCount: number;
+  deactivatedCount: number;
+  deactivatedIds: number[];
+  reactivatedCount: number;
   errorRows: CsvErrorRow[];
   warningRows: CsvErrorRow[];
   insertedIds?: number[];
@@ -38,6 +41,8 @@ export interface ImportJobStatusResponse {
   successItems: number;
   warningItems: number;
   failedItems: number;
+  deactivatedItems: number;
+  reactivatedItems: number;
   startedAt?: string;
   finishedAt?: string;
   errorMessage?: string;
