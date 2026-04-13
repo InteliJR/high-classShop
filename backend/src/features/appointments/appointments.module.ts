@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { AppointmentsController } from './appointments.controller';
 import { AppointmentsService } from './appointments.service';
 import { NotificationModule } from 'src/features/notifications/notification.module';
+import { CalendlyIntegrationService } from './calendly-integration.service';
+import { CalendlyController } from './calendly.controller';
 
 /**
  * AppointmentsModule
@@ -24,8 +26,8 @@ import { NotificationModule } from 'src/features/notifications/notification.modu
  */
 @Module({
   imports: [NotificationModule],
-  controllers: [AppointmentsController],
-  providers: [AppointmentsService],
+  controllers: [AppointmentsController, CalendlyController],
+  providers: [AppointmentsService, CalendlyIntegrationService],
   exports: [AppointmentsService],
 })
 export class AppointmentsModule {}

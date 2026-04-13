@@ -1,14 +1,22 @@
 import { useEffect, useState, useContext } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Car, Ship, Plane, Calendar, UserCircle2, Loader2 } from "lucide-react";
+import { PopupModal, useCalendlyEventListener } from "react-calendly";
 import {
   getSpecialistsGroupedByCategory,
   type Specialist,
   type GroupedSpecialists,
 } from "../../services/specialists.service";
-import { createConsultancyAppointment } from "../../services/appointments.service";
+import {
+  createConsultancyAppointment,
+  getCalendlySyncStatus,
+  registerCalendlyScheduledEvent,
+} from "../../services/appointments.service";
 import { AuthContext } from "../../contexts/AuthContext";
 import Button from "../../components/ui/button";
+import ProductTypePreferenceModal, {
+  type PreferredProductType,
+} from "../../components/ProductTypePreferenceModal";
 
 type SpecialityType = "CAR" | "BOAT" | "AIRCRAFT";
 
@@ -30,6 +38,7 @@ const specialityConfig: Record<
 
 export default function ConsultoriaPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useContext(AuthContext);
   const [groupedSpecialists, setGroupedSpecialists] =
     useState<GroupedSpecialists | null>(null);
@@ -38,6 +47,28 @@ export default function ConsultoriaPage() {
     string | null
   >(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [isCalendlyModalOpen, setIsCalendlyModalOpen] = useState(false);
+  const [calendlyModalUrl, setCalendlyModalUrl] = useState<string | null>(null);
+  const [pendingAppointmentId, setPendingAppointmentId] = useState<
+    string | null
+  >(null);
+  const [syncMessage, setSyncMessage] = useState("");
+  const [syncState, setSyncState] = useState<
+    "idle" | "waiting_event" | "syncing" | "done" | "error"
+  >("idle");
+  const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
+
+  const typeFromUrl = searchParams.get("type") as PreferredProductType | null;
+  const selectedType: PreferredProductType | null =
+    typeFromUrl && ["CAR", "BOAT", "AIRCRAFT"].includes(typeFromUrl)
+      ? typeFromUrl
+      : null;
+
+  useEffect(() => {
+    if (!selectedType) {
+      setIsTypeModalOpen(true);
+    }
+  }, [selectedType]);
 
   useEffect(() => {
     async function fetchSpecialists() {
@@ -63,6 +94,96 @@ export default function ConsultoriaPage() {
       }))
     : [];
 
+  const visibleGroups = selectedType
+    ? specialistGroups.filter((group) => group.type === selectedType)
+    : specialistGroups;
+
+  const selectedTypeLabel = selectedType
+    ? specialityConfig[selectedType].label
+    : null;
+
+  const handleSelectConsultancyType = (type: PreferredProductType) => {
+    setSearchParams({ type });
+    setIsTypeModalOpen(false);
+  };
+
+  const pollCalendlySyncStatus = async (appointmentId: string) => {
+    const maxAttempts = 8;
+    const intervalMs = 3500;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const syncStatus = await getCalendlySyncStatus(appointmentId);
+
+      if (
+        syncStatus.calendly_sync_status === "SYNCED" ||
+        syncStatus.appointment_datetime
+      ) {
+        setSyncState("done");
+        setSyncMessage(
+          "Agendamento recebido! Você pode acompanhar os detalhes em Meus Processos."
+        );
+
+        setTimeout(() => {
+          navigate("/customer/processes", {
+            state: {
+              message:
+                "Solicitação de consultoria registrada com sucesso! Verifique seus processos.",
+            },
+          });
+        }, 900);
+        return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+
+    setSyncState("done");
+    setSyncMessage(
+      "Solicitação registrada. Estamos finalizando a sincronização do horário com o calendário."
+    );
+  };
+
+  useCalendlyEventListener({
+    onEventScheduled: async (event) => {
+      if (!pendingAppointmentId) {
+        return;
+      }
+
+      const payload = (event as any)?.data?.payload;
+      const eventUri = payload?.event?.uri;
+      const inviteeUri = payload?.invitee?.uri;
+
+      if (!eventUri || !inviteeUri) {
+        setSyncState("error");
+        setSyncMessage(
+          "Não foi possível capturar os dados do agendamento. Verifique seus processos para confirmar."
+        );
+        return;
+      }
+
+      try {
+        setSyncState("syncing");
+        setSyncMessage("Sincronizando seu agendamento...");
+
+        await registerCalendlyScheduledEvent(pendingAppointmentId, {
+          event_uri: eventUri,
+          invitee_uri: inviteeUri,
+          client_event: "calendly.event_scheduled",
+          client_observed_at: new Date().toISOString(),
+        });
+
+        setIsCalendlyModalOpen(false);
+        await pollCalendlySyncStatus(pendingAppointmentId);
+      } catch (error) {
+        console.error("Erro ao sincronizar evento do Calendly:", error);
+        setSyncState("error");
+        setSyncMessage(
+          "Agendamento criado, mas houve falha na sincronização automática. Você pode seguir em Meus Processos."
+        );
+      }
+    },
+  });
+
   const handleRequestMeeting = async (specialist: Specialist) => {
     if (!user || requestingSpecialistId) return;
 
@@ -70,17 +191,34 @@ export default function ConsultoriaPage() {
     setErrorMessage("");
 
     try {
-      await createConsultancyAppointment({
+      const pendingAppointment = await createConsultancyAppointment({
         client_id: user.id,
         specialist_id: specialist.id,
         notes: `Consultoria solicitada pelo cliente`,
       });
 
-      if (specialist.calendly_url?.trim()) {
-        window.open(specialist.calendly_url, "_blank", "noopener,noreferrer");
+      const rawCalendlyUrl = specialist.calendly_url?.trim();
+      if (!rawCalendlyUrl) {
+        navigate("/customer/processes", {
+          state: {
+            message:
+              "Solicitação enviada. O especialista entrará em contato para definir o horário.",
+          },
+        });
+        return;
       }
 
-      navigate("/customer/processes");
+      const formattedUrl = /^https?:\/\//i.test(rawCalendlyUrl)
+        ? rawCalendlyUrl
+        : `https://${rawCalendlyUrl}`;
+
+      setPendingAppointmentId(pendingAppointment.id);
+      setCalendlyModalUrl(formattedUrl);
+      setSyncState("waiting_event");
+      setSyncMessage(
+        "Conclua seu agendamento no Calendly para sincronizar automaticamente com a plataforma."
+      );
+      setIsCalendlyModalOpen(true);
     } catch (error: any) {
       const message =
         error?.response?.data?.error?.message ||
@@ -115,16 +253,44 @@ export default function ConsultoriaPage() {
           perfeito. Escolha um especialista na categoria de seu interesse para
           agendar uma consultoria.
         </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="rounded-md bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+            {selectedTypeLabel
+              ? `Consultoria de ${selectedTypeLabel}`
+              : "Selecione uma categoria"}
+          </span>
+          <Button
+            onClick={() => setIsTypeModalOpen(true)}
+            variant="light"
+            className="text-sm"
+          >
+            Trocar categoria
+          </Button>
+        </div>
         {errorMessage && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {errorMessage}
+          </div>
+        )}
+
+        {syncState !== "idle" && syncMessage && (
+          <div
+            className={`rounded-lg border px-4 py-3 text-sm ${
+              syncState === "error"
+                ? "border-red-200 bg-red-50 text-red-700"
+                : syncState === "done"
+                  ? "border-green-200 bg-green-50 text-green-700"
+                  : "border-amber-200 bg-amber-50 text-amber-700"
+            }`}
+          >
+            {syncMessage}
           </div>
         )}
       </div>
 
       {/* Specialists by Category */}
       <div className="space-y-12">
-        {specialistGroups.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.type} className="space-y-6">
             {/* Category Header */}
             <div className="flex items-center gap-4 border-b-2 border-gray-200 pb-4">
@@ -160,6 +326,31 @@ export default function ConsultoriaPage() {
           </div>
         ))}
       </div>
+
+      {calendlyModalUrl && isCalendlyModalOpen && (
+        <PopupModal
+          url={calendlyModalUrl}
+          open={isCalendlyModalOpen}
+          onModalClose={() => setIsCalendlyModalOpen(false)}
+          rootElement={document.getElementById("root") ?? document.body}
+          prefill={{
+            name: user ? `${user.name} ${user.surname}`.trim() : undefined,
+            email: user?.email,
+          }}
+        />
+      )}
+
+      <ProductTypePreferenceModal
+        isOpen={isTypeModalOpen}
+        title="Qual tipo de consultoria você deseja?"
+        description="Escolha a categoria para ver especialistas da área certa."
+        onClose={() => {
+          if (selectedType) {
+            setIsTypeModalOpen(false);
+          }
+        }}
+        onSelect={handleSelectConsultancyType}
+      />
     </div>
   );
 }

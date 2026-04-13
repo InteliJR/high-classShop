@@ -20,6 +20,9 @@ export interface CsvImportResponse {
   updatedCount: number;
   errorCount: number;
   warningCount: number;
+  deactivatedCount: number;
+  deactivatedIds: number[];
+  reactivatedCount: number;
   errorRows: CsvErrorRow[];
   warningRows: CsvErrorRow[];
   insertedIds?: number[];
@@ -523,6 +526,28 @@ export function XlsxImporter({
                     </span>
                   </div>
                 )}
+                {importResult.deactivatedCount > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-slate-500 rounded-full"></div>
+                    <span className="text-sm text-gray-700">
+                      <span className="font-semibold text-slate-700">
+                        {importResult.deactivatedCount}
+                      </span>{" "}
+                      inativados
+                    </span>
+                  </div>
+                )}
+                {importResult.reactivatedCount > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
+                    <span className="text-sm text-gray-700">
+                      <span className="font-semibold text-emerald-700">
+                        {importResult.reactivatedCount}
+                      </span>{" "}
+                      reativados
+                    </span>
+                  </div>
+                )}
                 {importResult.warningCount > 0 && (
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
@@ -544,6 +569,13 @@ export function XlsxImporter({
                   </span>
                 </div>
               </div>
+
+              {importResult.deactivatedCount > 0 && (
+                <p className="text-xs text-gray-500 mt-3">
+                  Produtos ausentes na planilha foram removidos do catálogo
+                  ativo (inativados), sem apagar histórico de processos.
+                </p>
+              )}
 
               {/* Lista de erros por linha */}
               {importResult.errorRows.length > 0 && (

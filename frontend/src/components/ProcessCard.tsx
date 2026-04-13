@@ -106,11 +106,39 @@ export default function ProcessCard({
   const isAppointmentConfirmed =
     process.appointment_status === "SCHEDULED" ||
     process.appointment_status === "COMPLETED";
+  const scheduledMeetingDate = process.appointment_datetime
+    ? new Date(process.appointment_datetime)
+    : null;
+  const hasValidScheduledMeetingDate =
+    Boolean(scheduledMeetingDate) &&
+    !Number.isNaN(scheduledMeetingDate?.getTime() ?? NaN);
+  const canEnterMeetingWindow =
+    !hasValidScheduledMeetingDate ||
+    Date.now() >= (scheduledMeetingDate as Date).getTime() - 30 * 60 * 1000;
   const canStartOrJoinMeeting =
     isAppointmentConfirmed &&
-    ["SCHEDULING", "NEGOTIATION", "PROCESSING_CONTRACT"].includes(
-      process.status,
-    );
+    process.status === "SCHEDULING" &&
+    canEnterMeetingWindow;
+
+  const formattedAppointmentDate = hasValidScheduledMeetingDate
+    ? (scheduledMeetingDate as Date).toLocaleDateString("pt-BR", {
+        weekday: "short",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
+    : null;
+
+  const formattedAppointmentTime = hasValidScheduledMeetingDate
+    ? (scheduledMeetingDate as Date).toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
+  const meetingWindowAvailableAt = hasValidScheduledMeetingDate
+    ? new Date((scheduledMeetingDate as Date).getTime() - 30 * 60 * 1000)
+    : null;
 
   // Load completion reason and active contract on mount and when process changes
   useEffect(() => {
@@ -353,6 +381,15 @@ export default function ProcessCard({
               )}
             </p>
           </div>
+          {formattedAppointmentDate && formattedAppointmentTime && (
+            <p className="mt-2 text-xs text-slate-700">
+              Reunião agendada para <strong>{formattedAppointmentDate}</strong> às{" "}
+              <strong>{formattedAppointmentTime}</strong>
+              {isAppointmentConfirmed
+                ? "."
+                : " (aguardando confirmação do especialista)."}
+            </p>
+          )}
         </div>
 
         {/* Appointment Confirmation Buttons - SCHEDULING Status (before appointment confirmation) */}
@@ -501,6 +538,38 @@ export default function ProcessCard({
             </div>
           </div>
         )}
+
+        {isAppointmentConfirmed &&
+          process.status === "SCHEDULING" &&
+          !canEnterMeetingWindow && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm font-medium text-blue-900">Reunião confirmada</p>
+              {formattedAppointmentDate && formattedAppointmentTime && (
+                <p className="text-xs text-blue-800 mt-1">
+                  Horário agendado: <strong>{formattedAppointmentDate}</strong> às{" "}
+                  <strong>{formattedAppointmentTime}</strong>.
+                </p>
+              )}
+              {meetingWindowAvailableAt && (
+                <p className="text-xs text-blue-700 mt-2">
+                  A sala será liberada 30 minutos antes, a partir de{" "}
+                  <strong>
+                    {meetingWindowAvailableAt.toLocaleDateString("pt-BR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                    })}{" "}
+                    às{" "}
+                    {meetingWindowAvailableAt.toLocaleTimeString("pt-BR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </strong>
+                  .
+                </p>
+              )}
+            </div>
+          )}
 
         {/* Mobile: botões logo abaixo do status, antes do stepper */}
         {process.status === "NEGOTIATION" && !isConsultancy && !isExpanded && (

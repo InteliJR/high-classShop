@@ -13,6 +13,7 @@ import {
 import { AppointmentsService } from './appointments.service';
 import {
   CreateAppointmentDto,
+  CalendlyScheduledDto,
   GetAppointmentsQueryDto,
   UpdateAppointmentStatusDto,
 } from './dto';
@@ -151,7 +152,7 @@ export class AppointmentsController {
   async checkExisting(@Query() query: any, @Request() req: any) {
     const { client_id, specialist_id, product_type, product_id } = query;
 
-    const appointment = await this.appointmentsService.findScheduledAppointment(
+    const appointment = await this.appointmentsService.findExistingAppointment(
       client_id,
       specialist_id,
       product_type,
@@ -498,5 +499,44 @@ export class AppointmentsController {
     const result = await this.appointmentsService.cancelPending(id, userId);
 
     return result;
+  }
+
+  @Post('pending/:id/calendly-scheduled')
+  async registerCalendlyScheduled(
+    @Param('id') id: string,
+    @Body() dto: CalendlyScheduledDto,
+    @Request() req: any,
+  ) {
+    const userId = req.user.id;
+
+    const data = await this.appointmentsService.registerCalendlyScheduled(
+      id,
+      userId,
+      dto,
+    );
+
+    return {
+      success: true,
+      message: 'Evento do Calendly registrado com sucesso',
+      data,
+    };
+  }
+
+  @Get(':id/calendly-sync-status')
+  async getCalendlySyncStatus(@Param('id') id: string, @Request() req: any) {
+    const userId = req.user.id;
+    const userRole = req.user.role as UserEntity['role'];
+
+    const data = await this.appointmentsService.getCalendlySyncStatus(
+      id,
+      userId,
+      userRole,
+    );
+
+    return {
+      success: true,
+      message: 'Status de sincronização obtido com sucesso',
+      data,
+    };
   }
 }

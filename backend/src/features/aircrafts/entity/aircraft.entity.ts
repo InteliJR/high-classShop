@@ -3,6 +3,9 @@ import { UserEntity } from "src/auth/entities/user.entity";
 
 export class Aircraft {
     id: number;
+    is_active: boolean;
+    deactivated_at: Date | null;
+    deactivated_by_sync_job_id: string | null;
     categoria: string | null;
     specialist_id: string | null;
     ano: number;

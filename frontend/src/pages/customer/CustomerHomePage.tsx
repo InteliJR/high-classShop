@@ -1,10 +1,38 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../store/authStateManager";
 import { Search, BookOpen, Car, Ship, Plane } from "lucide-react";
+import ProductTypePreferenceModal, {
+  type PreferredProductType,
+} from "../../components/ProductTypePreferenceModal";
 
 export default function CustomerHomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [interestModalOpen, setInterestModalOpen] = useState(false);
+  const [interestTarget, setInterestTarget] = useState<"catalog" | "consultoria" | null>(null);
+
+  const catalogRouteMap: Record<PreferredProductType, string> = {
+    CAR: "/catalog/cars",
+    BOAT: "/catalog/boats",
+    AIRCRAFT: "/catalog/aircrafts",
+  };
+
+  const handleOpenInterestModal = (target: "catalog" | "consultoria") => {
+    setInterestTarget(target);
+    setInterestModalOpen(true);
+  };
+
+  const handleSelectInterest = (type: PreferredProductType) => {
+    setInterestModalOpen(false);
+
+    if (interestTarget === "consultoria") {
+      navigate(`/customer/consultoria?type=${type}`);
+      return;
+    }
+
+    navigate(catalogRouteMap[type]);
+  };
 
   return (
     <div className="flex flex-col w-full max-w-6xl mx-auto py-8 px-4">
@@ -22,7 +50,7 @@ export default function CustomerHomePage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
         {/* Explorar Catálogo Card */}
         <div 
-          onClick={() => navigate("/catalog/cars")}
+          onClick={() => handleOpenInterestModal("catalog")}
           className="bg-white border-2 border-gray-200 rounded-2xl p-8 cursor-pointer hover:border-primary hover:shadow-xl transition-all duration-300 group"
         >
           <div className="flex flex-col items-center text-center space-y-6">
@@ -61,7 +89,7 @@ export default function CustomerHomePage() {
 
         {/* Pedir Consultoria Card */}
         <div 
-          onClick={() => navigate("/customer/consultoria")}
+          onClick={() => handleOpenInterestModal("consultoria")}
           className="bg-white border-2 border-gray-200 rounded-2xl p-8 cursor-pointer hover:border-primary hover:shadow-xl transition-all duration-300 group"
         >
           <div className="flex flex-col items-center text-center space-y-6">
@@ -119,6 +147,18 @@ export default function CustomerHomePage() {
           </button>
         </div>
       </div>
+
+      <ProductTypePreferenceModal
+        isOpen={interestModalOpen}
+        title="Qual tipo de produto você prefere?"
+        description={
+          interestTarget === "consultoria"
+            ? "Vamos direcionar você para especialistas da categoria escolhida."
+            : "Vamos abrir o catálogo da categoria que você quer explorar."
+        }
+        onClose={() => setInterestModalOpen(false)}
+        onSelect={handleSelectInterest}
+      />
     </div>
   );
 }

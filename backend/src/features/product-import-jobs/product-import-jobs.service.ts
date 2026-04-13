@@ -35,6 +35,7 @@ import { DriveImportService } from '../drive-import/drive-import.service';
 type UpsertResult = {
   productId: number;
   action: 'CREATED' | 'UPDATED';
+  reactivated?: boolean;
 };
 
 @Injectable()
@@ -227,7 +228,12 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    const response = this.buildImportResponse(job.items);
+    const response = this.buildImportResponse(job.items, {
+      deactivatedIds: Array.isArray(job.deactivated_product_ids)
+        ? (job.deactivated_product_ids as number[])
+        : [],
+      reactivatedCount: job.reactivated_items,
+    });
 
     return {
       jobId: job.id,
@@ -238,6 +244,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       successItems: job.success_items,
       warningItems: job.warning_items,
       failedItems: job.failed_items,
+      deactivatedItems: job.deactivated_items,
+      reactivatedItems: job.reactivated_items,
       startedAt: job.started_at,
       finishedAt: job.finished_at,
       errorMessage: job.error_message,
@@ -330,6 +338,9 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     });
 
     try {
+      const seenProductIds = new Set<number>();
+      let reactivatedCount = 0;
+
       for (const item of job.items) {
         if (
           item.status !== ProductImportItemStatus.PENDING &&
@@ -353,6 +364,10 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
             row,
             job.specialist_id,
           );
+          seenProductIds.add(upsertResult.productId);
+          if (upsertResult.reactivated) {
+            reactivatedCount += 1;
+          }
 
           const warnings: string[] = [];
           const folderUrl = item.folder_url?.trim();
@@ -400,7 +415,17 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      await this.refreshJobCounters(jobId);
+      const deactivatedIds = await this.deactivateMissingProducts(
+        job.product_type,
+        job.specialist_id,
+        seenProductIds,
+        job.id,
+      );
+
+      await this.refreshJobCounters(jobId, {
+        deactivatedIds,
+        reactivatedCount,
+      });
     } catch (error) {
       await this.prisma.productImportJob.update({
         where: { id: jobId },
@@ -414,7 +439,10 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async refreshJobCounters(jobId: string) {
+  private async refreshJobCounters(
+    jobId: string,
+    syncSummary?: { deactivatedIds: number[]; reactivatedCount: number },
+  ) {
     const items = await this.prisma.productImportJobItem.findMany({
       where: { job_id: jobId },
       select: {
@@ -462,9 +490,82 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         success_items: successItems,
         warning_items: warningItems,
         failed_items: failedItems,
+        deactivated_items: syncSummary?.deactivatedIds.length ?? 0,
+        reactivated_items: syncSummary?.reactivatedCount ?? 0,
+        deactivated_product_ids: syncSummary?.deactivatedIds ?? [],
         finished_at: new Date(),
       },
     });
+  }
+
+  private async deactivateMissingProducts(
+    productType: ProductType,
+    specialistId: string,
+    seenProductIds: Set<number>,
+    jobId: string,
+  ): Promise<number[]> {
+    const activeProductIds = await this.getActiveProductIdsByType(
+      productType,
+      specialistId,
+    );
+
+    const staleIds = activeProductIds.filter((id) => !seenProductIds.has(id));
+
+    if (staleIds.length === 0) {
+      return [];
+    }
+
+    const data = {
+      is_active: false,
+      deactivated_at: new Date(),
+      deactivated_by_sync_job_id: jobId,
+    };
+
+    if (productType === ProductType.CAR) {
+      await this.prisma.car.updateMany({
+        where: { id: { in: staleIds }, specialist_id: specialistId },
+        data,
+      });
+    } else if (productType === ProductType.BOAT) {
+      await this.prisma.boat.updateMany({
+        where: { id: { in: staleIds }, specialist_id: specialistId },
+        data,
+      });
+    } else {
+      await this.prisma.aircraft.updateMany({
+        where: { id: { in: staleIds }, specialist_id: specialistId },
+        data,
+      });
+    }
+
+    return staleIds;
+  }
+
+  private async getActiveProductIdsByType(
+    productType: ProductType,
+    specialistId: string,
+  ): Promise<number[]> {
+    if (productType === ProductType.CAR) {
+      const cars = await this.prisma.car.findMany({
+        where: { specialist_id: specialistId, is_active: true },
+        select: { id: true },
+      });
+      return cars.map((item) => item.id);
+    }
+
+    if (productType === ProductType.BOAT) {
+      const boats = await this.prisma.boat.findMany({
+        where: { specialist_id: specialistId, is_active: true },
+        select: { id: true },
+      });
+      return boats.map((item) => item.id);
+    }
+
+    const aircrafts = await this.prisma.aircraft.findMany({
+      where: { specialist_id: specialistId, is_active: true },
+      select: { id: true },
+    });
+    return aircrafts.map((item) => item.id);
   }
 
   private async upsertProductFromRow(
@@ -500,12 +601,18 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
       if (existing) {
         const { specialist_id, ...updateData } = data;
+        const reactivated = !existing.is_active;
         await this.prisma.car.update({
           where: { id: existing.id },
-          data: updateData,
+          data: {
+            ...updateData,
+            is_active: true,
+            deactivated_at: null,
+            deactivated_by_sync_job_id: null,
+          },
         });
 
-        return { productId: existing.id, action: 'UPDATED' };
+        return { productId: existing.id, action: 'UPDATED', reactivated };
       }
 
       const created = await this.prisma.car.create({ data });
@@ -543,12 +650,18 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
       if (existing) {
         const { specialist_id, ...updateData } = data;
+        const reactivated = !existing.is_active;
         await this.prisma.boat.update({
           where: { id: existing.id },
-          data: updateData,
+          data: {
+            ...updateData,
+            is_active: true,
+            deactivated_at: null,
+            deactivated_by_sync_job_id: null,
+          },
         });
 
-        return { productId: existing.id, action: 'UPDATED' };
+        return { productId: existing.id, action: 'UPDATED', reactivated };
       }
 
       const created = await this.prisma.boat.create({ data });
@@ -580,12 +693,18 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
     if (existing) {
       const { specialist_id, ...updateData } = data;
+      const reactivated = !existing.is_active;
       await this.prisma.aircraft.update({
         where: { id: existing.id },
-        data: updateData,
+        data: {
+          ...updateData,
+          is_active: true,
+          deactivated_at: null,
+          deactivated_by_sync_job_id: null,
+        },
       });
 
-      return { productId: existing.id, action: 'UPDATED' };
+      return { productId: existing.id, action: 'UPDATED', reactivated };
     }
 
     const created = await this.prisma.aircraft.create({ data });
@@ -625,6 +744,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       error_message: string | null;
       warnings: unknown;
     }>,
+    syncSummary?: { deactivatedIds: number[]; reactivatedCount: number },
   ): ImportResponseDto {
     const insertedIds: number[] = [];
     const updatedIds: number[] = [];
@@ -669,16 +789,19 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     const updatedCount = updatedIds.length;
     const errorCount = errorRows.length;
     const warningCount = warningRows.length;
+    const deactivatedIds = syncSummary?.deactivatedIds ?? [];
+    const deactivatedCount = deactivatedIds.length;
+    const reactivatedCount = syncSummary?.reactivatedCount ?? 0;
 
     let message = 'Importação em andamento.';
     let success = true;
 
     if (errorCount === 0 && insertedCount + updatedCount > 0) {
-      message = `Importação concluída com sucesso. ${insertedCount} inserido(s), ${updatedCount} atualizado(s).`;
+      message = `Importação concluída com sucesso. ${insertedCount} inserido(s), ${updatedCount} atualizado(s), ${deactivatedCount} inativado(s).`;
     }
 
     if (errorCount > 0 && insertedCount + updatedCount > 0) {
-      message = `Importação parcial. ${insertedCount} inserido(s), ${updatedCount} atualizado(s), ${errorCount} erro(s).`;
+      message = `Importação parcial. ${insertedCount} inserido(s), ${updatedCount} atualizado(s), ${deactivatedCount} inativado(s), ${errorCount} erro(s).`;
     }
 
     if (errorCount > 0 && insertedCount + updatedCount === 0) {
@@ -697,6 +820,9 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       warningRows,
       insertedIds,
       updatedIds,
+      deactivatedCount,
+      deactivatedIds,
+      reactivatedCount,
     };
   }
 

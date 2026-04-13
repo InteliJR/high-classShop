@@ -164,6 +164,21 @@ export class AppointmentResponseEntity {
   @Expose()
   notes?: string;
 
+  @Expose()
+  calendly_event_uri?: string | null;
+
+  @Expose()
+  calendly_invitee_uri?: string | null;
+
+  @Expose()
+  calendly_scheduled_at?: Date | null;
+
+  @Expose()
+  calendly_last_sync_at?: Date | null;
+
+  @Expose()
+  calendly_sync_status?: string;
+
   /**
    * Cliente que agendou
    * Dados aninhados com informações essenciais

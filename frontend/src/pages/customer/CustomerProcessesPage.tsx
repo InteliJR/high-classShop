@@ -20,6 +20,7 @@ interface ProcessClient {
     | "COMPLETED"
     | "CANCELLED"
     | null;
+  appointment_datetime?: string | null;
   product_type: "CAR" | "BOAT" | "AIRCRAFT";
   notes?: string;
   created_at: string;

@@ -255,6 +255,22 @@ export class MeetingsService {
     };
   }
 
+  private getProductDetails(process: any): string {
+    const productMap: Record<string, string> = {
+      CAR: 'car',
+      BOAT: 'boat',
+      AIRCRAFT: 'aircraft',
+    };
+
+    const relation = productMap[process.product_type];
+    if (!relation || !process[relation]) {
+      return 'Produto não especificado';
+    }
+
+    const product = process[relation];
+    return `${product.marca || ''} ${product.modelo || ''}`.trim() || 'Produto';
+  }
+
   private async advanceProcessAfterConversation(
     processId: string,
     userId: string,
@@ -275,6 +291,15 @@ export class MeetingsService {
         car_id: true,
         boat_id: true,
         aircraft_id: true,
+        client: {
+          select: { email: true, name: true, surname: true },
+        },
+        specialist: {
+          select: { email: true, name: true, surname: true },
+        },
+        car: { select: { marca: true, modelo: true } },
+        boat: { select: { marca: true, modelo: true } },
+        aircraft: { select: { marca: true, modelo: true } },
       },
     });
 
@@ -344,6 +369,40 @@ export class MeetingsService {
       return updatedProcess;
     });
 
+    setImmediate(() => {
+      const recipients = [
+        {
+          email: process.client.email,
+          name: `${process.client.name} ${process.client.surname || ''}`.trim(),
+        },
+        {
+          email: process.specialist.email,
+          name: `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+        },
+      ].filter((recipient) => Boolean(recipient.email));
+
+      Promise.allSettled(
+        recipients.map((recipient) =>
+          this.notificationService.sendProcessStatusChangedEmail({
+            recipientEmail: recipient.email!,
+            recipientName: recipient.name || 'Usuário',
+            processId,
+            previousStatus: ProcessStatus.SCHEDULING,
+            currentStatus: ProcessStatus.NEGOTIATION,
+            changedByName: `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+            reason: 'Conversa concluída e processo avançado para negociação.',
+            productDetails: this.getProductDetails(process),
+          }),
+        ),
+      ).catch((err) => {
+        this.logger.error('Notification failed (non-critical)', {
+          method: 'advanceProcessAfterConversation',
+          processId,
+          error: err.message,
+        });
+      });
+    });
+
     return {
       advanced: true,
       previous_status: previousStatus,
@@ -395,6 +454,23 @@ export class MeetingsService {
     ) {
       throw new BadRequestException(
         'O agendamento ainda não foi confirmado pelo especialista',
+      );
+    }
+
+    if (!process.appointment.appointment_datetime) {
+      throw new BadRequestException(
+        'Horário da reunião não encontrado. Verifique o agendamento no Calendly antes de iniciar a reunião.',
+      );
+    }
+
+    const nowTime = Date.now();
+    const appointmentTime = process.appointment.appointment_datetime.getTime();
+    const thirtyMinutesBefore = appointmentTime - 30 * 60 * 1000;
+
+    if (nowTime < thirtyMinutesBefore) {
+      const availableAt = new Date(thirtyMinutesBefore).toISOString();
+      throw new BadRequestException(
+        `A reunião só pode ser iniciada nos 30 minutos anteriores ao horário agendado. Disponível a partir de ${availableAt}.`,
       );
     }
 

@@ -7,6 +7,12 @@ import {
   updateUser,
   type UpdateUserData,
 } from "../services/users.service";
+import {
+  disconnectCalendlyOAuth,
+  getCalendlyAuthorizeUrl,
+  getCalendlyOAuthStatus,
+  type CalendlyOAuthStatus,
+} from "../services/appointments.service";
 
 /**
  * CustomerProfilePage
@@ -28,6 +34,10 @@ export default function CustomerProfilePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [calendlyOAuthStatus, setCalendlyOAuthStatus] =
+    useState<CalendlyOAuthStatus | null>(null);
+  const [loadingCalendlyOAuth, setLoadingCalendlyOAuth] = useState(false);
+  const [processingCalendlyOAuth, setProcessingCalendlyOAuth] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -63,6 +73,82 @@ export default function CustomerProfilePage() {
 
     loadUserData();
   }, [user?.id]);
+
+  useEffect(() => {
+    async function loadCalendlyStatus() {
+      if (!user?.id || user.role !== "SPECIALIST") return;
+
+      setLoadingCalendlyOAuth(true);
+      try {
+        const status = await getCalendlyOAuthStatus();
+        setCalendlyOAuthStatus(status);
+      } catch {
+        setCalendlyOAuthStatus(null);
+      } finally {
+        setLoadingCalendlyOAuth(false);
+      }
+    }
+
+    loadCalendlyStatus();
+  }, [user?.id, user?.role]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const calendly = params.get("calendly");
+    const reason = params.get("reason");
+
+    if (calendly === "connected") {
+      setSuccess("Conta Calendly conectada com sucesso!");
+    }
+
+    if (calendly === "error") {
+      setError(
+        `Falha ao conectar Calendly${reason ? `: ${decodeURIComponent(reason)}` : ""}`,
+      );
+    }
+
+    if (calendly) {
+      params.delete("calendly");
+      params.delete("reason");
+      const query = params.toString();
+      const newUrl = `${window.location.pathname}${query ? `?${query}` : ""}`;
+      window.history.replaceState({}, "", newUrl);
+    }
+  }, []);
+
+  const handleCalendlyConnect = async () => {
+    setProcessingCalendlyOAuth(true);
+    setError(null);
+
+    try {
+      const authorizeUrl = await getCalendlyAuthorizeUrl();
+      window.location.href = authorizeUrl;
+    } catch {
+      setError("Não foi possível iniciar a conexão com o Calendly");
+      setProcessingCalendlyOAuth(false);
+    }
+  };
+
+  const handleCalendlyDisconnect = async () => {
+    setProcessingCalendlyOAuth(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await disconnectCalendlyOAuth();
+      setCalendlyOAuthStatus({
+        connected: false,
+        calendly_user_uri: null,
+        expires_at: null,
+        is_active: false,
+      });
+      setSuccess("Integração Calendly desconectada com sucesso.");
+    } catch {
+      setError("Não foi possível desconectar o Calendly");
+    } finally {
+      setProcessingCalendlyOAuth(false);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -264,6 +350,48 @@ export default function CustomerProfilePage() {
                   placeholder="https://calendly.com/seu-usuario"
                   className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                 />
+              </div>
+
+              <div className="mt-4 p-4 bg-white border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-900 font-medium mb-2">
+                  Conexão OAuth (recomendado para sincronização automática)
+                </p>
+                {loadingCalendlyOAuth ? (
+                  <p className="text-sm text-blue-700">Verificando status...</p>
+                ) : (
+                  <>
+                    <p className="text-sm text-blue-700 mb-3">
+                      Status:{" "}
+                      {calendlyOAuthStatus?.connected
+                        ? "Conectado"
+                        : "Não conectado"}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCalendlyConnect}
+                        disabled={processingCalendlyOAuth}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                      >
+                        {processingCalendlyOAuth
+                          ? "Processando..."
+                          : calendlyOAuthStatus?.connected
+                            ? "Reconectar Calendly"
+                            : "Conectar Calendly"}
+                      </button>
+                      {calendlyOAuthStatus?.connected && (
+                        <button
+                          type="button"
+                          onClick={handleCalendlyDisconnect}
+                          disabled={processingCalendlyOAuth}
+                          className="px-4 py-2 bg-white text-blue-700 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+                        >
+                          Desconectar
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}

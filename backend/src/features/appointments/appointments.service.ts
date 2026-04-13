@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import {
+  CalendlyScheduledDto,
   CreateAppointmentDto,
   GetAppointmentsQueryDto,
   UpdateAppointmentStatusDto,
@@ -19,6 +20,7 @@ import {
   ProductResponseDto,
 } from './entities/appointment.response';
 import {
+  CalendlySyncStatus,
   StatusAgendamento,
   UserRole,
   ProductType,
@@ -35,6 +37,7 @@ import {
   suggestNextAvailableSlots,
 } from 'src/shared/utils/date.utils';
 import { NotificationService } from 'src/features/notifications/notification.service';
+import { CalendlyIntegrationService } from './calendly-integration.service';
 
 /**
  * AppointmentsService
@@ -64,6 +67,7 @@ export class AppointmentsService {
   constructor(
     private prisma: PrismaService,
     private notificationService: NotificationService,
+    private calendlyIntegrationService: CalendlyIntegrationService,
   ) {}
 
   /**
@@ -363,7 +367,8 @@ export class AppointmentsService {
       this.notificationService
         .sendAppointmentCreatedEmail({
           specialistEmail: specialist.email,
-          specialistName: `${specialist.name} ${specialist.surname || ''}`.trim(),
+          specialistName:
+            `${specialist.name} ${specialist.surname || ''}`.trim(),
           clientName: `${client.name} ${client.surname || ''}`.trim(),
           appointmentDate: appointment.appointment_datetime || new Date(),
           productDetails,
@@ -702,7 +707,8 @@ export class AppointmentsService {
       // Evita conflito se já está em NEGOTIATION+ (não retrocede)
       if (process.status === 'SCHEDULING') {
         // Verificar se processo tem produto associado
-        const hasProduct = process.car_id || process.boat_id || process.aircraft_id;
+        const hasProduct =
+          process.car_id || process.boat_id || process.aircraft_id;
 
         if (hasProduct) {
           // Processo com produto: avançar para NEGOTIATION
@@ -831,7 +837,7 @@ export class AppointmentsService {
     if (!productType || !productId) {
       return null;
     }
-    
+
     if (productType === ProductType.CAR) {
       return this.prisma.car.findUnique({ where: { id: productId } });
     } else if (productType === ProductType.BOAT) {
@@ -864,6 +870,11 @@ export class AppointmentsService {
     entity.appointment_datetime = appointment.appointment_datetime;
     entity.status = appointment.status;
     entity.notes = appointment.notes;
+    entity.calendly_event_uri = appointment.calendly_event_uri;
+    entity.calendly_invitee_uri = appointment.calendly_invitee_uri;
+    entity.calendly_scheduled_at = appointment.calendly_scheduled_at;
+    entity.calendly_last_sync_at = appointment.calendly_last_sync_at;
+    entity.calendly_sync_status = appointment.calendly_sync_status;
     entity.created_at = appointment.created_at;
     entity.updated_at = appointment.updated_at;
 
@@ -1020,9 +1031,13 @@ export class AppointmentsService {
     );
 
     // Validar que quem está criando é o próprio cliente
-    this.logger.log(`[createPending] Validando permissão: userId=${userId} vs client_id=${dto.client_id}`);
+    this.logger.log(
+      `[createPending] Validando permissão: userId=${userId} vs client_id=${dto.client_id}`,
+    );
     if (dto.client_id !== userId) {
-      this.logger.error(`[createPending] ERRO: Cliente tentando criar agendamento para outro usuário`);
+      this.logger.error(
+        `[createPending] ERRO: Cliente tentando criar agendamento para outro usuário`,
+      );
       throw new ForbiddenException({
         success: false,
         error: {
@@ -1039,7 +1054,9 @@ export class AppointmentsService {
       where: { id: dto.client_id },
     });
     if (!client) {
-      this.logger.error(`[createPending] ERRO: Cliente ${dto.client_id} não encontrado`);
+      this.logger.error(
+        `[createPending] ERRO: Cliente ${dto.client_id} não encontrado`,
+      );
       throw new NotFoundException({
         success: false,
         error: { code: 404, message: 'Cliente não encontrado' },
@@ -1048,22 +1065,30 @@ export class AppointmentsService {
     this.logger.log(`[createPending] ✓ Cliente encontrado: ${client.name}`);
 
     // Validar especialista existe
-    this.logger.log(`[createPending] Buscando especialista ${dto.specialist_id}...`);
+    this.logger.log(
+      `[createPending] Buscando especialista ${dto.specialist_id}...`,
+    );
     const specialist = await this.prisma.user.findUnique({
       where: { id: dto.specialist_id },
     });
     if (!specialist) {
-      this.logger.error(`[createPending] ERRO: Especialista ${dto.specialist_id} não encontrado`);
+      this.logger.error(
+        `[createPending] ERRO: Especialista ${dto.specialist_id} não encontrado`,
+      );
       throw new NotFoundException({
         success: false,
         error: { code: 404, message: 'Especialista não encontrado' },
       });
     }
-    this.logger.log(`[createPending] ✓ Especialista encontrado: ${specialist.name}`);
+    this.logger.log(
+      `[createPending] ✓ Especialista encontrado: ${specialist.name}`,
+    );
 
     // Determinar se é consultoria (sem produto) ou fluxo padrão (com produto)
     const isConsultancy = !dto.product_type || !dto.product_id;
-    this.logger.log(`[createPending] Modo: ${isConsultancy ? 'CONSULTORIA' : 'COM PRODUTO'}`);
+    this.logger.log(
+      `[createPending] Modo: ${isConsultancy ? 'CONSULTORIA' : 'COM PRODUTO'}`,
+    );
 
     // Verificar se já existe agendamento PENDING ou SCHEDULED
     this.logger.log(`[createPending] Verificando agendamento duplicado...`);
@@ -1090,7 +1115,9 @@ export class AppointmentsService {
     });
 
     if (existing) {
-      this.logger.error(`[createPending] ERRO: Agendamento duplicado encontrado: ${existing.id}`);
+      this.logger.error(
+        `[createPending] ERRO: Agendamento duplicado encontrado: ${existing.id}`,
+      );
       throw new ConflictException({
         success: false,
         error: {
@@ -1105,18 +1132,21 @@ export class AppointmentsService {
         },
       });
     }
-    this.logger.log(`[createPending] ✓ Nenhum agendamento duplicado encontrado`);
+    this.logger.log(
+      `[createPending] ✓ Nenhum agendamento duplicado encontrado`,
+    );
 
     // Validar produto apenas se fornecido (não é consultoria)
     let product: any = null;
     if (!isConsultancy) {
-      this.logger.log(`[createPending] Buscando produto ${dto.product_type}/${dto.product_id}...`);
-      product = await this.getProductByType(
-        dto.product_type!,
-        dto.product_id!,
+      this.logger.log(
+        `[createPending] Buscando produto ${dto.product_type}/${dto.product_id}...`,
       );
+      product = await this.getProductByType(dto.product_type!, dto.product_id!);
       if (!product) {
-        this.logger.error(`[createPending] ERRO: Produto ${dto.product_type}/${dto.product_id} não encontrado`);
+        this.logger.error(
+          `[createPending] ERRO: Produto ${dto.product_type}/${dto.product_id} não encontrado`,
+        );
         throw new NotFoundException({
           success: false,
           error: { code: 404, message: 'Produto não encontrado' },
@@ -1124,7 +1154,9 @@ export class AppointmentsService {
       }
       this.logger.log(`[createPending] ✓ Produto encontrado`);
     } else {
-      this.logger.log(`[createPending] Consultoria - pulando validação de produto`);
+      this.logger.log(
+        `[createPending] Consultoria - pulando validação de produto`,
+      );
     }
 
     // Criar appointment em status PENDING e Process em transação
@@ -1134,106 +1166,104 @@ export class AppointmentsService {
     this.logger.log(
       `[createPending] Iniciando transação para criar appointment e process`,
     );
-    this.logger.log(
-      `[createPending] Dados do DTO: ${JSON.stringify(dto)}`,
-    );
+    this.logger.log(`[createPending] Dados do DTO: ${JSON.stringify(dto)}`);
 
     let appointment: any;
     let process: any;
 
     try {
       this.logger.log(`[createPending] Entrando na transação do Prisma...`);
-      [appointment, process] = await this.prisma.$transaction(
-        async (tx) => {
-          this.logger.log(`[createPending] Dentro da transação - iniciando`);
+      [appointment, process] = await this.prisma.$transaction(async (tx) => {
+        this.logger.log(`[createPending] Dentro da transação - iniciando`);
 
-          // Criar appointment
-          const appointmentData: any = {
-            client_id: dto.client_id,
-            specialist_id: dto.specialist_id,
-            appointment_datetime: dto.appointment_datetime || null,
-            status: StatusAgendamento.PENDING,
-            notes: dto.notes || (isConsultancy
+        // Criar appointment
+        const appointmentData: any = {
+          client_id: dto.client_id,
+          specialist_id: dto.specialist_id,
+          appointment_datetime: dto.appointment_datetime || null,
+          status: StatusAgendamento.PENDING,
+          notes:
+            dto.notes ||
+            (isConsultancy
               ? 'Consultoria: cliente acessou link do Calendly'
               : 'Cliente acessou link do Calendly'),
-            user_clicked_at: new Date(),
-            pending_expires_at: pendingExpiresAt,
-          };
+          user_clicked_at: new Date(),
+          pending_expires_at: pendingExpiresAt,
+        };
 
-          // Adicionar produto se não for consultoria
-          if (!isConsultancy) {
-            appointmentData.product_type = dto.product_type;
-            appointmentData.product_id = dto.product_id;
-          }
+        // Adicionar produto se não for consultoria
+        if (!isConsultancy) {
+          appointmentData.product_type = dto.product_type;
+          appointmentData.product_id = dto.product_id;
+        }
+
+        this.logger.log(
+          `[createPending] Criando appointment ${isConsultancy ? '(consultoria)' : `para produto ${dto.product_type}/${dto.product_id}`}`,
+        );
+        const createdAppointment = await tx.appointment.create({
+          data: appointmentData,
+          include: {
+            client: true,
+            specialist: true,
+          },
+        });
+        this.logger.log(
+          `[createPending] Appointment criado: ${createdAppointment.id}`,
+        );
+
+        // Criar Process em status SCHEDULING
+        const processData: any = {
+          client_id: dto.client_id,
+          specialist_id: dto.specialist_id,
+          appointment_id: createdAppointment.id,
+          status: 'SCHEDULING',
+          notes: isConsultancy
+            ? `Consultoria criada via agendamento PENDING (${new Date().toISOString()})`
+            : `Criado via agendamento PENDING (${new Date().toISOString()})`,
+        };
+
+        // Adicionar produto apenas se não for consultoria
+        if (!isConsultancy) {
+          const productField =
+            dto.product_type === ProductType.CAR
+              ? 'car_id'
+              : dto.product_type === ProductType.BOAT
+                ? 'boat_id'
+                : 'aircraft_id';
 
           this.logger.log(
-            `[createPending] Criando appointment ${isConsultancy ? '(consultoria)' : `para produto ${dto.product_type}/${dto.product_id}`}`,
+            `[createPending] Criando process com campo ${productField}=${dto.product_id}`,
           );
-          const createdAppointment = await tx.appointment.create({
-            data: appointmentData,
-            include: {
-              client: true,
-              specialist: true,
-            },
-          });
+          processData.product_type = dto.product_type;
+          processData[productField] = dto.product_id;
+        } else {
           this.logger.log(
-            `[createPending] Appointment criado: ${createdAppointment.id}`,
+            `[createPending] Criando process de consultoria (sem produto)`,
           );
+        }
 
-          // Criar Process em status SCHEDULING
-          const processData: any = {
-            client_id: dto.client_id,
-            specialist_id: dto.specialist_id,
-            appointment_id: createdAppointment.id,
+        const createdProcess = await tx.process.create({
+          data: processData,
+        });
+        this.logger.log(
+          `[createPending] Process criado: ${createdProcess.id} com status ${createdProcess.status}`,
+        );
+
+        // Criar histórico
+        await tx.processStatusHistory.create({
+          data: {
+            processId: createdProcess.id,
             status: 'SCHEDULING',
-            notes: isConsultancy
-              ? `Consultoria criada via agendamento PENDING (${new Date().toISOString()})`
-              : `Criado via agendamento PENDING (${new Date().toISOString()})`,
-          };
+            changed_by: dto.client_id,
+            changed_at: new Date(),
+          },
+        });
+        this.logger.log(
+          `[createPending] Histórico de status criado para process ${createdProcess.id}`,
+        );
 
-          // Adicionar produto apenas se não for consultoria
-          if (!isConsultancy) {
-            const productField =
-              dto.product_type === ProductType.CAR
-                ? 'car_id'
-                : dto.product_type === ProductType.BOAT
-                  ? 'boat_id'
-                  : 'aircraft_id';
-
-            this.logger.log(
-              `[createPending] Criando process com campo ${productField}=${dto.product_id}`,
-            );
-            processData.product_type = dto.product_type;
-            processData[productField] = dto.product_id;
-          } else {
-            this.logger.log(
-              `[createPending] Criando process de consultoria (sem produto)`,
-            );
-          }
-
-          const createdProcess = await tx.process.create({
-            data: processData,
-          });
-          this.logger.log(
-            `[createPending] Process criado: ${createdProcess.id} com status ${createdProcess.status}`,
-          );
-
-          // Criar histórico
-          await tx.processStatusHistory.create({
-            data: {
-              processId: createdProcess.id,
-              status: 'SCHEDULING',
-              changed_by: dto.client_id,
-              changed_at: new Date(),
-            },
-          });
-          this.logger.log(
-            `[createPending] Histórico de status criado para process ${createdProcess.id}`,
-          );
-
-          return [createdAppointment, createdProcess];
-        },
-      );
+        return [createdAppointment, createdProcess];
+      });
 
       this.logger.log(
         `[createPending] Transação concluída com sucesso! Appointment: ${appointment.id}, Process: ${process.id}`,
@@ -1241,18 +1271,12 @@ export class AppointmentsService {
 
       return this.mapToResponseEntity(appointment, client, specialist, product);
     } catch (error) {
-      this.logger.error(
-        `[createPending] ERRO CRÍTICO na transação:`,
-      );
+      this.logger.error(`[createPending] ERRO CRÍTICO na transação:`);
       this.logger.error(
         `[createPending] Tipo do erro: ${error?.constructor?.name}`,
       );
-      this.logger.error(
-        `[createPending] Mensagem: ${error?.message}`,
-      );
-      this.logger.error(
-        `[createPending] Stack: ${error?.stack}`,
-      );
+      this.logger.error(`[createPending] Mensagem: ${error?.message}`);
+      this.logger.error(`[createPending] Stack: ${error?.stack}`);
       this.logger.error(
         `[createPending] Erro completo: ${JSON.stringify(error, null, 2)}`,
       );
@@ -1608,5 +1632,179 @@ export class AppointmentsService {
       appointment.specialist,
       product,
     );
+  }
+
+  async registerCalendlyScheduled(
+    appointmentId: string,
+    userId: string,
+    dto: CalendlyScheduledDto,
+  ): Promise<{
+    appointment_id: string;
+    calendly_sync_status: CalendlySyncStatus;
+    appointment_datetime: Date | null;
+  }> {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException({
+        success: false,
+        error: {
+          code: 404,
+          message: 'Agendamento não encontrado',
+          details: { appointment_id: appointmentId },
+        },
+      });
+    }
+
+    if (appointment.client_id !== userId) {
+      throw new ForbiddenException({
+        success: false,
+        error: {
+          code: 403,
+          message:
+            'Apenas o cliente dono do agendamento pode registrar evento do Calendly',
+        },
+      });
+    }
+
+    if (
+      appointment.status !== StatusAgendamento.PENDING &&
+      appointment.status !== StatusAgendamento.SCHEDULED
+    ) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message:
+            'Somente agendamentos pendentes ou agendados aceitam sincronização Calendly',
+          details: { status: appointment.status },
+        },
+      });
+    }
+
+    if (
+      appointment.calendly_event_uri &&
+      appointment.calendly_event_uri === dto.event_uri
+    ) {
+      return {
+        appointment_id: appointment.id,
+        calendly_sync_status: appointment.calendly_sync_status,
+        appointment_datetime: appointment.appointment_datetime,
+      };
+    }
+
+    let scheduledStartTime = dto.scheduled_start_time
+      ? parseDate(dto.scheduled_start_time)
+      : null;
+
+    if (dto.scheduled_start_time && !scheduledStartTime) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message: 'scheduled_start_time inválido',
+        },
+      });
+    }
+
+    if (!scheduledStartTime) {
+      try {
+        scheduledStartTime =
+          await this.calendlyIntegrationService.resolveScheduledStartTime(
+            appointment.specialist_id,
+            dto.event_uri,
+            dto.invitee_uri,
+          );
+      } catch (error: any) {
+        this.logger.warn(
+          `[registerCalendlyScheduled] Falha ao buscar horário no Calendly API: ${error?.message}`,
+        );
+      }
+    }
+
+    const syncStatus =
+      scheduledStartTime || appointment.appointment_datetime
+        ? CalendlySyncStatus.SYNCED
+        : CalendlySyncStatus.PENDING;
+
+    const updated = await this.prisma.appointment.update({
+      where: { id: appointment.id },
+      data: {
+        calendly_event_uri: dto.event_uri,
+        calendly_invitee_uri: dto.invitee_uri,
+        calendly_scheduled_at: dto.client_observed_at
+          ? new Date(dto.client_observed_at)
+          : new Date(),
+        calendly_last_sync_at: new Date(),
+        calendly_sync_status: syncStatus,
+        appointment_datetime:
+          scheduledStartTime || appointment.appointment_datetime,
+      },
+    });
+
+    return {
+      appointment_id: updated.id,
+      calendly_sync_status: updated.calendly_sync_status,
+      appointment_datetime: updated.appointment_datetime,
+    };
+  }
+
+  async getCalendlySyncStatus(
+    appointmentId: string,
+    userId: string,
+    userRole: UserRole,
+  ): Promise<{
+    appointment_id: string;
+    status: StatusAgendamento;
+    calendly_sync_status: CalendlySyncStatus;
+    appointment_datetime: Date | null;
+    calendly_last_sync_at: Date | null;
+  }> {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      select: {
+        id: true,
+        status: true,
+        client_id: true,
+        specialist_id: true,
+        appointment_datetime: true,
+        calendly_sync_status: true,
+        calendly_last_sync_at: true,
+      },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException({
+        success: false,
+        error: {
+          code: 404,
+          message: 'Agendamento não encontrado',
+          details: { appointment_id: appointmentId },
+        },
+      });
+    }
+
+    const isParticipant =
+      appointment.client_id === userId || appointment.specialist_id === userId;
+
+    if (!isParticipant && userRole !== UserRole.ADMIN) {
+      throw new ForbiddenException({
+        success: false,
+        error: {
+          code: 403,
+          message: 'Não tem permissão para consultar este agendamento',
+        },
+      });
+    }
+
+    return {
+      appointment_id: appointment.id,
+      status: appointment.status,
+      calendly_sync_status: appointment.calendly_sync_status,
+      appointment_datetime: appointment.appointment_datetime,
+      calendly_last_sync_at: appointment.calendly_last_sync_at,
+    };
   }
 }

@@ -109,6 +109,7 @@ export class CarsService {
 
     // Separação dos filtros
     const where: any = {};
+    where.is_active = true;
 
     // Exact
     const exacts: ExactCarFilters = {
@@ -292,7 +293,14 @@ export class CarsService {
     await this.findOne(id);
 
     try {
-      await this.prismaService.car.delete({ where: { id } });
+      await this.prismaService.car.update({
+        where: { id },
+        data: {
+          is_active: false,
+          deactivated_at: new Date(),
+          deactivated_by_sync_job_id: null,
+        },
+      });
       return { ok: true };
     } catch (error) {
       throw new Error(`Erro ao deletar carro: ${error.message}`);

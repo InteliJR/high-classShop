@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Copy, ExternalLink, Video } from "lucide-react";
 import { useAuth } from "../../store/authStateManager";
 import {
+  getProcessById,
   getMeetingByProcess,
   markConversationDone,
   startMeeting,
@@ -50,6 +51,7 @@ export default function MeetingRoomPage() {
   const { user } = useAuth();
 
   const [meeting, setMeeting] = useState<MeetingSession | null>(null);
+  const [scheduledAt, setScheduledAt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
   const [isConversationDoneLoading, setIsConversationDoneLoading] =
@@ -67,8 +69,12 @@ export default function MeetingRoomPage() {
 
       try {
         setIsLoading(true);
-        const foundMeeting = await getMeetingByProcess(processId);
+        const [foundMeeting, processData] = await Promise.all([
+          getMeetingByProcess(processId),
+          getProcessById(processId),
+        ]);
         setMeeting(foundMeeting);
+        setScheduledAt(processData.appointment_datetime ?? null);
       } catch (error) {
         alert(
           getActionErrorMessage(error, "Erro ao carregar reunião do processo."),
@@ -141,6 +147,10 @@ export default function MeetingRoomPage() {
     );
   }
 
+  const scheduledDate = scheduledAt ? new Date(scheduledAt) : null;
+  const hasValidScheduledDate =
+    Boolean(scheduledDate) && !Number.isNaN(scheduledDate?.getTime() ?? NaN);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 py-6">
@@ -163,6 +173,30 @@ export default function MeetingRoomPage() {
               <p className="text-sm text-gray-600">Processo {processId}</p>
             </div>
           </div>
+
+          {hasValidScheduledDate && (
+            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm text-blue-900">
+                Reunião agendada para{" "}
+                <strong>
+                  {scheduledDate!.toLocaleDateString("pt-BR", {
+                    weekday: "long",
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                  })}
+                </strong>{" "}
+                às{" "}
+                <strong>
+                  {scheduledDate!.toLocaleTimeString("pt-BR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </strong>
+                .
+              </p>
+            </div>
+          )}
 
           {isLoading ? (
             <p className="text-sm text-gray-600">Carregando reunião...</p>

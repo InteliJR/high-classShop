@@ -105,6 +105,59 @@ export class ProcessesService {
     return `${product.marca || ''} ${product.modelo || ''}`.trim() || 'Produto';
   }
 
+  private notifyProcessStatusChange(params: {
+    processId: string;
+    previousStatus?: string;
+    currentStatus: string;
+    changedByName?: string;
+    reason?: string;
+    productDetails?: string;
+    client?: { email?: string | null; name?: string | null; surname?: string | null };
+    specialist?: {
+      email?: string | null;
+      name?: string | null;
+      surname?: string | null;
+    };
+  }): void {
+    const recipients = [
+      {
+        email: params.client?.email,
+        name: `${params.client?.name || ''} ${params.client?.surname || ''}`.trim(),
+      },
+      {
+        email: params.specialist?.email,
+        name: `${params.specialist?.name || ''} ${params.specialist?.surname || ''}`.trim(),
+      },
+    ].filter((recipient) => Boolean(recipient.email));
+
+    if (!recipients.length) {
+      return;
+    }
+
+    setImmediate(() => {
+      Promise.allSettled(
+        recipients.map((recipient) =>
+          this.notificationService.sendProcessStatusChangedEmail({
+            recipientEmail: recipient.email!,
+            recipientName: recipient.name || 'Usuário',
+            processId: params.processId,
+            previousStatus: params.previousStatus,
+            currentStatus: params.currentStatus,
+            changedByName: params.changedByName,
+            reason: params.reason,
+            productDetails: params.productDetails,
+          }),
+        ),
+      ).catch((err) => {
+        this.logger.error('Notification failed (non-critical)', {
+          method: 'notifyProcessStatusChange',
+          processId: params.processId,
+          error: err.message,
+        });
+      });
+    });
+  }
+
   /**
    * Cria um processo, normalmente no status de agendamento
    *
@@ -332,7 +385,9 @@ export class ProcessesService {
             boat: true,
             car: true,
             specialist: true,
-            appointment: { select: { status: true } },
+            appointment: {
+              select: { status: true, appointment_datetime: true },
+            },
           },
         }),
         this.prismaService.process.count({ where }),
@@ -361,6 +416,7 @@ export class ProcessesService {
         id: process.id,
         status: process.status,
         appointment_status: process.appointment?.status ?? null,
+        appointment_datetime: process.appointment?.appointment_datetime ?? null,
         product_type: process.product_type,
         product_id: this.getProductId(process),
         client: {
@@ -403,7 +459,9 @@ export class ProcessesService {
           boat: true,
           aircraft: true,
           specialist: true,
-          appointment: { select: { status: true } },
+          appointment: {
+            select: { status: true, appointment_datetime: true },
+          },
         },
       });
 
@@ -411,6 +469,7 @@ export class ProcessesService {
         id: process.id,
         status: process.status,
         appointment_status: process.appointment?.status ?? null,
+        appointment_datetime: process.appointment?.appointment_datetime ?? null,
         product_type: process.product_type,
         product_id: this.getProductId(process),
         client: {
@@ -466,7 +525,9 @@ export class ProcessesService {
           boat: true,
           aircraft: true,
           specialist: true,
-          appointment: { select: { status: true } },
+          appointment: {
+            select: { status: true, appointment_datetime: true },
+          },
         },
         orderBy: { created_at: 'desc' },
         skip,
@@ -485,6 +546,7 @@ export class ProcessesService {
         id: process.id,
         status: process.status,
         appointment_status: process.appointment?.status ?? null,
+        appointment_datetime: process.appointment?.appointment_datetime ?? null,
         product_type: process.product_type,
         product_id: this.getProductId(process),
         client: {
@@ -575,7 +637,9 @@ export class ProcessesService {
           boat: true,
           aircraft: true,
           specialist: true,
-          appointment: { select: { status: true } },
+          appointment: {
+            select: { status: true, appointment_datetime: true },
+          },
         },
         orderBy: { [sortBy]: order },
         skip,
@@ -590,6 +654,7 @@ export class ProcessesService {
         id: process.id,
         status: process.status,
         appointment_status: process.appointment?.status ?? null,
+        appointment_datetime: process.appointment?.appointment_datetime ?? null,
         product_type: process.product_type,
         product_id: this.getProductId(process),
         client: {
@@ -635,6 +700,17 @@ export class ProcessesService {
           // Verificar se o processo realmente existe
           const existingProcess = await tx.process.findUniqueOrThrow({
             where: { id: processId },
+            include: {
+              client: {
+                select: { email: true, name: true, surname: true },
+              },
+              specialist: {
+                select: { email: true, name: true, surname: true },
+              },
+              car: true,
+              boat: true,
+              aircraft: true,
+            },
           });
           //Verificar se ele já está com o status atualizado
           if (existingProcess.status === updateProcessDto.status) {
@@ -660,6 +736,17 @@ export class ProcessesService {
           const statusHistory = await tx.processStatusHistory.findMany({
             where: { processId },
           });
+
+          this.notifyProcessStatusChange({
+            processId,
+            previousStatus: existingProcess.status,
+            currentStatus: updateProcessDto.status,
+            reason: updateProcessDto.notes,
+            productDetails: this.getProductDetails(existingProcess),
+            client: existingProcess.client,
+            specialist: existingProcess.specialist,
+          });
+
           return [process, statusHistory];
         });
 
@@ -818,6 +905,18 @@ export class ProcessesService {
       });
     }
 
+    if (product.is_active === false) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message:
+            'Produto inativo no catálogo. Selecione um produto ativo para continuar.',
+          details: { product_type: productType, product_id: dto.product_id },
+        },
+      });
+    }
+
     // 6. Verificar que produto pertence ao especialista
     if (product.specialist_id !== process.specialist_id) {
       throw new ForbiddenException({
@@ -937,6 +1036,19 @@ export class ProcessesService {
     this.logger.log(
       `[assignProduct] Produto ${productType}/${dto.product_id} associado ao processo ${processId}${shouldAdvanceToNegotiation ? ' - Avançado para NEGOTIATION' : ''}`,
     );
+
+    if (process.status !== updatedProcess.status) {
+      this.notifyProcessStatusChange({
+        processId,
+        previousStatus: process.status,
+        currentStatus: updatedProcess.status,
+        changedByName: `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+        reason: 'Produto associado ao processo após confirmação da reunião',
+        productDetails: this.getProductDetails(updatedProcess),
+        client: process.client,
+        specialist: process.specialist,
+      });
+    }
 
     // 8. Retornar processo atualizado
     return {
@@ -1072,7 +1184,9 @@ export class ProcessesService {
           boat: true,
           aircraft: true,
           specialist: true,
-          appointment: { select: { status: true } },
+          appointment: {
+            select: { status: true, appointment_datetime: true },
+          },
           rejections: {
             orderBy: { rejected_at: 'desc' },
             take: 1,
@@ -1093,6 +1207,7 @@ export class ProcessesService {
       id: process.id,
       status: process.status,
       appointment_status: process.appointment?.status ?? null,
+      appointment_datetime: process.appointment?.appointment_datetime ?? null,
       product_type: process.product_type,
       product_id: this.getProductId(process),
       client: {
@@ -1141,6 +1256,17 @@ export class ProcessesService {
           // Verificar se o processo existe
           const existingProcess = await tx.process.findUniqueOrThrow({
             where: { id: processId },
+            include: {
+              client: {
+                select: { id: true, email: true, name: true, surname: true },
+              },
+              specialist: {
+                select: { id: true, email: true, name: true, surname: true },
+              },
+              car: true,
+              boat: true,
+              aircraft: true,
+            },
           });
 
           // Verificar se já está rejeitado
@@ -1182,6 +1308,24 @@ export class ProcessesService {
           // Buscar histórico atualizado
           const statusHistory = await tx.processStatusHistory.findMany({
             where: { processId },
+          });
+
+          const changedByName =
+            rejectedById === existingProcess.client?.id
+              ? `${existingProcess.client?.name || ''} ${existingProcess.client?.surname || ''}`.trim()
+              : rejectedById === existingProcess.specialist?.id
+                ? `${existingProcess.specialist?.name || ''} ${existingProcess.specialist?.surname || ''}`.trim()
+                : undefined;
+
+          this.notifyProcessStatusChange({
+            processId,
+            previousStatus: existingProcess.status,
+            currentStatus: 'REJECTED',
+            changedByName,
+            reason: rejectionReason,
+            productDetails: this.getProductDetails(existingProcess),
+            client: existingProcess.client,
+            specialist: existingProcess.specialist,
           });
 
           return [process, statusHistory];
