@@ -1,132 +1,128 @@
 # 📘 High-class Shop
 
-<!--
-Breve descrição do projeto, incluindo o objetivo, nome do cliente e o setor envolvido.
--->
-
-Exemplo: _Aplicação web para gestão de kprocessos internos da Empresa X, no setor de logística._
-
-Acesse a solução por meio deste [🔗 Link](https://www.nasa.gov/)
+Plataforma web para gestão do processo comercial de produtos de alto padrão (carros, barcos e aeronaves), com fluxo completo de agendamento, negociação, documentação e fechamento.
 
 ---
 
 ## 📄 Documentação
 
-A documentação completa do projeto pode ser acessada através do link abaixo:  
+A documentação funcional e técnica está disponível em:
 
 **[High-class Shop Docs](https://intelijr.github.io/high-classShop/)**
 
-> A documentação é mantida utilizando o [Docusaurus](https://docusaurus.io/). Para informações sobre como configurar e manter a documentação, consulte o [guia de configuração](./docs/README.md).
+> A documentação é mantida com Docusaurus. Veja o guia em `docs/README.md`.
 
 ---
 
 ## 🚀 Tecnologias Utilizadas
 
-* Frontend: React, TypeScript, Vite, TailwindCSS
+- **Frontend:** React, TypeScript, Vite, Tailwind CSS
+- **Backend:** NestJS, TypeScript, Prisma ORM
+- **Banco de Dados:** PostgreSQL
+- **Infra local:** Docker Compose
+- **Integrações:** Calendly (OAuth/Webhook), AWS (S3/SES), Google APIs (opcional)
 
-* Backend: Node.js, Nest.js, TypeScript, Prisma ORM
-
-* Banco de Dados: PostgreSQL
-
-* Ambiente de Desenvolvimento: Docker
-
-* Hospedagem: AWS (S3, CloudFront, Lightsail)
 ---
 
 ## 🛠️ Como Rodar o Projeto
 
-### Pré-requisitos 
+### Pré-requisitos
 
-* [Git](https://git-scm.com/downloads)
-* [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-* [Node.js](https://nodejs.org/en)
+- [Git](https://git-scm.com/downloads)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [Node.js 20+](https://nodejs.org/en)
 
-<!-- Passos para rodar o projeto.   -->
+### Opção A — via Docker Compose (recomendada)
+
 ```bash
-# 1. Clone o repositório
+# 1) Clone o repositório
 git clone https://github.com/InteliJR/high-classShop.git
-
-# 2. Acesse o diretório do projeto
 cd high-classShop
 
-# 3. Inicie todo o ambiente (Banco, Backend e Frontend) com Docker Compose.
-# O --build é recomendado na primeira vez para construir as imagens.
-docker-compose up --build -d
-
-# 4. Instale as dependências do Backend
-cd backend
-npm install
-
-# 5. Instale as dependências do Frontend
-cd ../frontend
-npm install
-
-# 6. Sincronize o Banco de Dados com as Migrations
-# Este comando lê as 'plantas baixas' do banco e cria as tabelas.
-cd ../backend
-npx prisma migrate dev
+# 2) Suba os serviços
+docker compose up --build -d
 ```
 
-🌐 Acesse o Frontend (site) em: http://localhost:5173
-
-⚙️ Acesse o Backend (API) em: http://localhost:3000
-
-🗂️ Para visualizar o banco de dados, na pasta backend, rode o comando: npx prisma studio
-
-## 📆 Comando úteis
+### Opção B — desenvolvimento local (backend/frontend separados)
 
 ```bash
-# Ligar o ambiente em segundo plano
-docker-compose up -d
+# 1) Banco via Docker
+docker compose up -d db
 
-# Desligar o ambiente
-docker-compose down
+# 2) Backend
+cd backend
+npm install
+cp .env.example .env
+# Ajuste DATABASE_URL e FRONTEND_URL conforme seu ambiente
+npx prisma migrate dev
+npm run start:dev
 
-# Ver os logs (mensagens) do backend em tempo real
-docker-compose logs -f backend
-
-# Ver os logs do frontend
-docker-compose logs -f frontend
+# 3) Frontend (novo terminal)
+cd ../frontend
+npm install
+npm run dev
 ```
+
+### Endpoints locais
+
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:3000/api`
+- Prisma Studio (opcional): `cd backend && npx prisma studio`
+
+### Variáveis críticas do backend
+
+Além do `DATABASE_URL`, o projeto depende de variáveis importantes para integrações e segurança. Consulte `backend/.env.example` e ajuste especialmente:
+
+- `FRONTEND_URL`, `BACKEND_URL`
+- `JWT_SECRET_ACCESS`, `JWT_SECRET_REFRESH`, `JWT_SECRET_REFERRAL`
+- `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_BUCKET_NAME`, `EMAIL_FROM`
+- `DOCUSIGN_INTEGRATION_KEY`, `DOCUSIGN_USER_ID`, `DOCUSIGN_ACCOUNT_ID`, `DOCUSIGN_PRIVATE_KEY`, `DOCUSIGN_ENV`, `DOCUSIGN_WEBHOOK_SECRET`
+- `GOOGLE_DRIVE_API_KEY`
+- `MEETING_PROVIDER`, `MEETING_DEMO_FALLBACK_ENABLED`, `JITSI_BASE_URL`
+- Calendly OAuth (quando habilitado): `CALENDLY_OAUTH_CLIENT_ID`, `CALENDLY_OAUTH_CLIENT_SECRET`, `CALENDLY_OAUTH_REDIRECT_URI`, `CALENDLY_TOKEN_ENCRYPTION_KEY`, `CALENDLY_WEBHOOK_CALLBACK_URL`, `CALENDLY_WEBHOOK_SIGNING_KEY`
 
 ---
 
+## 📌 Comandos Úteis
 
+```bash
+# Subir tudo
+docker compose up -d
+
+# Derrubar tudo
+docker compose down
+
+# Logs do backend
+docker compose logs -f backend
+
+# Logs do frontend
+docker compose logs -f frontend
+```
+
+---
 
 ## 🗂️ Estrutura de Diretórios
 
 ```bash
 .
-├── .github/                       # Configurações de CI/CD e templates de PR
-│
-├── backend/                       # Código backend (Node.js, Python, etc)
-│
-├── frontend/                      # Código frontend (React, Next.js, etc)
-│
-├── docs/                          # Documentação Docusaurus
-│   ├── docs/
-│   │   ├── visao-produto.md       # Documento elaborado pela área de Visão de Produto
-│   │   ├── design.md              # Documento elaborado pela área de Design
-│   │   ├── desenvolvimento.md     # Documento elaborado pela área de Desenvolvimento
-│
-├── .gitignore                     # Arquivos ignorados pelo Git
-└── README.md                      # Este documento
+├── .github/           # Templates e automações
+├── backend/           # API NestJS + Prisma
+├── frontend/          # App React + Vite
+├── docs/              # Documentação Docusaurus
+├── .contexto/         # Contexto técnico local (pasta oculta)
+└── docker-compose.yml # Orquestração local
 ```
 
 ---
 
 ## 👥 Time do Projeto
 
-Conheça quem participou do desenvolvimento deste projeto:
+Contribuidores principais no histórico do repositório:
 
-- **Nome da Pessoa 1**  
-  [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/usuario1)
-  [![LinkedIn](https://img.shields.io/badge/LinkedIn-blue?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/usuario1)
+- [Messias-Olivindo](https://github.com/Messias-Olivindo)
+- [anacajp](https://github.com/anacajp)
+- Davi Duarte
+- Tainá Cortez
+- Isabelly Maia
 
-- **Nome da Pessoa 2**  
-  [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/usuario2)
-  [![LinkedIn](https://img.shields.io/badge/LinkedIn-blue?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/usuario2)
-
-- **Nome da Pessoa 3**  
-  [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/usuario3)
-  [![LinkedIn](https://img.shields.io/badge/LinkedIn-blue?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/usuario3)
+> Para lista completa de contribuidores: `git shortlog -sn --all`.
