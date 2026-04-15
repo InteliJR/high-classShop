@@ -59,11 +59,14 @@ export class XlsxImportService {
     // 1. Extrair headers da primeira linha
     const headerRow = worksheet.getRow(1);
     const headers: string[] = [];
-    headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-      headers[colNumber - 1] = String(cell.value || '')
-        .trim()
-        .toLowerCase();
-    });
+    headerRow.eachCell(
+      { includeEmpty: true },
+      (cell: ExcelJS.Cell, colNumber: number) => {
+        headers[colNumber - 1] = String(cell.value || '')
+          .trim()
+          .toLowerCase();
+      },
+    );
 
     if (headers.length === 0 || headers.every((h) => !h)) {
       throw new BadRequestException(
@@ -462,7 +465,7 @@ export class XlsxImportService {
 
     // Estilizar header
     const headerRow = worksheet.getRow(1);
-    headerRow.eachCell((cell, colNumber) => {
+    headerRow.eachCell((cell: ExcelJS.Cell, colNumber: number) => {
       const colDef = columnDefinitions[colNumber - 1];
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = {
@@ -500,7 +503,7 @@ export class XlsxImportService {
 
     // Estilizar linha de exemplo
     const exRow = worksheet.getRow(2);
-    exRow.eachCell((cell) => {
+    exRow.eachCell((cell: ExcelJS.Cell) => {
       cell.font = { italic: true, color: { argb: 'FF9CA3AF' } };
     });
 
@@ -515,7 +518,7 @@ export class XlsxImportService {
 
     // Estilizar header da aba de instruções
     const instrHeader = instrSheet.getRow(1);
-    instrHeader.eachCell((cell) => {
+    instrHeader.eachCell((cell: ExcelJS.Cell) => {
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = {
         type: 'pattern',
