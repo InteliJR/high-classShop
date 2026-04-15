@@ -25,14 +25,14 @@
   ],
   "builds": [
     {
-      "src": "dist/main.js",
+      "src": "src/main.ts",
       "use": "@vercel/node"
     }
   ],
   "rewrites": [
     {
-      "source": "/(.*)",
-      "destination": "/dist/main.js"
+      "source": "/api/(.*)",
+      "destination": "/src/main.ts"
     }
   ]
 }
