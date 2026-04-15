@@ -11,26 +11,26 @@ import {
   createCar,
   updateCar,
   type RawCar,
-  importCarsXlsx,
-  getCarsXlsxTemplate,
+  importCarsCsv,
+  getCarsCsvTemplate,
 } from "../../services/cars.service";
 import {
   createBoat,
   updateBoat,
   type RawBoat,
-  importBoatsXlsx,
-  getBoatsXlsxTemplate,
+  importBoatsCsv,
+  getBoatsCsvTemplate,
 } from "../../services/boats.service";
 import {
   createAircraft,
   updateAircraft,
   type RawAircraft,
-  importAircraftsXlsx,
-  getAircraftsXlsxTemplate,
+  importAircraftsCsv,
+  getAircraftsCsvTemplate,
 } from "../../services/aircrafts.service";
 import {
   XlsxImporter,
-  type XlsxImportResponse,
+  type CsvImportResponse,
 } from "../../components/XlsxImporter";
 import { Modal } from "../../components/Modal";
 import type { SpecialityType, UserRole } from "../../types/types";
@@ -70,7 +70,7 @@ export default function ProductForm({
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [images, setImages] = useState<ImageData[]>([]);
-  const [isXlsxModalOpen, setIsXlsxModalOpen] = useState(false);
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
 
   // Validação de autorização: ADMIN pode criar qualquer tipo, SPECIALIST só do seu tipo
   const canCreateProductType = useCallback(
@@ -88,8 +88,8 @@ export default function ProductForm({
   const isAuthorized = canCreateProductType(productType);
 
   // Funções de import/template por tipo
-  const handleXlsxImport = useCallback(
-    async (file: File): Promise<XlsxImportResponse> => {
+  const handleCsvImport = useCallback(
+    async (file: File): Promise<CsvImportResponse> => {
       if (!canCreateProductType(productType)) {
         throw {
           message: `Você não tem permissão para criar ${productType === "CAR" ? "carros" : productType === "BOAT" ? "lanchas" : "aeronaves"}.`,
@@ -98,11 +98,11 @@ export default function ProductForm({
 
       switch (productType) {
         case "CAR":
-          return importCarsXlsx(file);
+          return importCarsCsv(file);
         case "BOAT":
-          return importBoatsXlsx(file);
+          return importBoatsCsv(file);
         case "AIRCRAFT":
-          return importAircraftsXlsx(file);
+          return importAircraftsCsv(file);
       }
     },
     [productType, canCreateProductType],
@@ -111,11 +111,11 @@ export default function ProductForm({
   const handleDownloadXlsxTemplate = useCallback(async (): Promise<void> => {
     switch (productType) {
       case "CAR":
-        return getCarsXlsxTemplate();
+        return getCarsCsvTemplate();
       case "BOAT":
-        return getBoatsXlsxTemplate();
+        return getBoatsCsvTemplate();
       case "AIRCRAFT":
-        return getAircraftsXlsxTemplate();
+        return getAircraftsCsvTemplate();
     }
   }, [productType]);
 
@@ -359,7 +359,7 @@ export default function ProductForm({
             </h3>
             <button
               type="button"
-              onClick={() => setIsXlsxModalOpen(true)}
+              onClick={() => setIsCsvModalOpen(true)}
               disabled={!isAuthorized || isSubmitting}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
@@ -367,25 +367,24 @@ export default function ProductForm({
             </button>
           </div>
           <p className="text-gray-500 text-sm mt-2">
-            Importe vários produtos de uma vez usando um arquivo XLSX com
-            imagens embutidas.
+            Importe vários produtos de uma vez usando um arquivo CSV.
           </p>
         </div>
       )}
 
       {/* Modal de importacao XLSX */}
       <Modal
-        isOpen={isXlsxModalOpen}
-        onClose={() => setIsXlsxModalOpen(false)}
-        title={`Importar ${productType === "CAR" ? "Carros" : productType === "BOAT" ? "Lanchas" : "Aeronaves"} via Planilha XLSX`}
+        isOpen={isCsvModalOpen}
+        onClose={() => setIsCsvModalOpen(false)}
+        title={`Importar ${productType === "CAR" ? "Carros" : productType === "BOAT" ? "Lanchas" : "Aeronaves"} via CSV`}
         size="lg"
       >
         <XlsxImporter
           productType={productType}
-          onImport={handleXlsxImport}
+          onImport={handleCsvImport}
           onDownloadTemplate={handleDownloadXlsxTemplate}
           disabled={!isAuthorized || isSubmitting}
-          onSuccess={() => setIsXlsxModalOpen(false)}
+          onSuccess={() => setIsCsvModalOpen(false)}
         />
       </Modal>
 

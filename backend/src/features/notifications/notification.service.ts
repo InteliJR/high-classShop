@@ -7,9 +7,12 @@ import {
   AppointmentConfirmedEmailDto,
   AppointmentCreatedEmailDto,
   AppointmentCancelledEmailDto,
+  MeetingStartedEmailDto,
+  MeetingReminderEmailDto,
   ProposalReceivedEmailDto,
   ProposalAcceptedEmailDto,
   ProposalRejectedEmailDto,
+  ProcessStatusChangedEmailDto,
   ContractSignedEmailDto,
   ContractGeneratedEmailDto,
   ContractSentEmailDto,
@@ -727,6 +730,162 @@ ${
     );
   }
 
+  async sendMeetingStartedEmail(data: MeetingStartedEmailDto): Promise<void> {
+    if (!this.notificationsEnabled) {
+      this.logger.debug(
+        'Notifications disabled - skipping sendMeetingStartedEmail',
+      );
+      return;
+    }
+
+    const subject = `🎥 Sua reunião foi iniciada - High-class Shop`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
+        <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
+          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+        </div>
+        <div style="padding: 40px 30px; background-color: #ffffff;">
+          <h2 style="color: #1e293b; margin-top: 0;">Reunião iniciada! 🎥</h2>
+          <p style="font-size: 16px; color: #334155;">Olá <strong>${data.clientName}</strong>,</p>
+          <p style="font-size: 16px; color: #334155;">
+            Seu especialista <strong>${data.specialistName}</strong> iniciou a reunião.
+          </p>
+          <div style="background-color: #ecfeff; padding: 20px; border-left: 4px solid #06b6d4; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #155e75;"><strong>Processo:</strong> ${data.processId}</p>
+          </div>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${data.platformMeetingUrl}"
+               style="display: inline-block; background-color: #0ea5e9; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
+                      font-weight: 600; font-size: 16px;">
+              Entrar na Reunião
+            </a>
+          </div>
+          <p style="font-size: 14px; color: #64748b;">Se o botão não funcionar, acesse a plataforma:</p>
+          <p style="font-size: 14px; color: #334155; word-break: break-all;">${data.platformMeetingUrl}</p>
+          ${
+            data.meetingLink
+              ? `<p style="font-size: 12px; color: #64748b; margin-top: 12px;">Link direto alternativo da sala:</p>
+                 <p style="font-size: 12px; color: #334155; word-break: break-all;">${data.meetingLink}</p>`
+              : ''
+          }
+        </div>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
+          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+High-class Shop - Reunião iniciada
+
+Olá ${data.clientName},
+
+Seu especialista ${data.specialistName} iniciou a reunião.
+
+Processo: ${data.processId}
+Acesse a reunião em: ${data.platformMeetingUrl}
+${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
+
+© 2026 High-class Shop
+    `.trim();
+
+    await this.sendEmailSafely(
+      'MEETING_STARTED_CLIENT',
+      data.clientEmail,
+      subject,
+      html,
+      text,
+    );
+  }
+
+  async sendMeetingReminderEmail(data: MeetingReminderEmailDto): Promise<void> {
+    if (!this.notificationsEnabled) {
+      this.logger.debug(
+        'Notifications disabled - skipping sendMeetingReminderEmail',
+      );
+      return;
+    }
+
+    const subject = `⏰ Sua reunião começa em 10 minutos - High-class Shop`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
+        <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
+          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+        </div>
+        <div style="padding: 40px 30px; background-color: #ffffff;">
+          <h2 style="color: #1e293b; margin-top: 0;">Falta pouco! ⏰</h2>
+          <p style="font-size: 16px; color: #334155;">Olá <strong>${data.recipientName}</strong>,</p>
+          <p style="font-size: 16px; color: #334155;">
+            Sua reunião com <strong>${data.counterpartName}</strong> começa em aproximadamente <strong>10 minutos</strong>.
+          </p>
+          <div style="background-color: #eff6ff; padding: 20px; border-left: 4px solid #3b82f6; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #1e40af;"><strong>📅 Data:</strong> ${new Date(
+              data.appointmentDate,
+            ).toLocaleDateString('pt-BR', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })}</p>
+            <p style="margin: 8px 0; color: #1e40af;"><strong>🕐 Horário:</strong> ${new Date(
+              data.appointmentDate,
+            ).toLocaleTimeString('pt-BR', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}</p>
+            <p style="margin: 8px 0; color: #1e40af;"><strong>Processo:</strong> ${data.processId}</p>
+          </div>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${this.frontendUrl}/processes/${data.processId}/meeting"
+               style="display: inline-block; background-color: #0ea5e9; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
+                      font-weight: 600; font-size: 16px;">
+              Abrir Sala de Reunião
+            </a>
+          </div>
+        </div>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
+          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+High-class Shop - Reunião em 10 minutos
+
+Olá ${data.recipientName},
+
+Sua reunião com ${data.counterpartName} começa em aproximadamente 10 minutos.
+
+Data: ${new Date(data.appointmentDate).toLocaleDateString('pt-BR')}
+Horário: ${new Date(data.appointmentDate).toLocaleTimeString('pt-BR')}
+Processo: ${data.processId}
+
+Acesse: ${this.frontendUrl}/processes/${data.processId}/meeting
+
+© 2026 High-class Shop
+    `.trim();
+
+    await this.sendEmailSafely(
+      'MEETING_REMINDER',
+      data.recipientEmail,
+      subject,
+      html,
+      text,
+    );
+  }
+
   // ==========================================================================
   // NOTIFICATION METHODS - PROPOSALS
   // ==========================================================================
@@ -883,6 +1042,96 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para continua
     await this.sendEmailSafely(
       'PROPOSAL_REJECTED',
       data.proposerEmail,
+      subject,
+      html,
+      text,
+    );
+  }
+
+  async sendProcessStatusChangedEmail(
+    data: ProcessStatusChangedEmailDto,
+  ): Promise<void> {
+    if (!this.notificationsEnabled) {
+      this.logger.debug(
+        'Notifications disabled - skipping sendProcessStatusChangedEmail',
+      );
+      return;
+    }
+
+    const statusLabelMap: Record<string, string> = {
+      SCHEDULING: 'Agendamento',
+      NEGOTIATION: 'Negociação',
+      DOCUMENTATION: 'Documentação',
+      PROCESSING_CONTRACT: 'Processando contrato',
+      COMPLETED: 'Concluído',
+      REJECTED: 'Rejeitado',
+    };
+
+    const currentStatusLabel =
+      statusLabelMap[data.currentStatus] ?? data.currentStatus;
+    const previousStatusLabel = data.previousStatus
+      ? statusLabelMap[data.previousStatus] ?? data.previousStatus
+      : undefined;
+
+    const subject = `🔄 Atualização no processo #${data.processId.slice(0, 8)} - High-class Shop`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
+        <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
+          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+        </div>
+        <div style="padding: 40px 30px; background-color: #ffffff;">
+          <h2 style="color: #1e293b; margin-top: 0;">Atualização de Processo 🔄</h2>
+          <p style="font-size: 16px; color: #334155;">Olá <strong>${data.recipientName}</strong>,</p>
+          <p style="font-size: 16px; color: #334155;">Houve uma atualização importante no seu processo.</p>
+          <div style="background-color: #eff6ff; padding: 20px; border-left: 4px solid #3b82f6; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #1e40af;"><strong>📌 Processo:</strong> ${data.processId}</p>
+            ${previousStatusLabel ? `<p style="margin: 8px 0; color: #1e40af;"><strong>↩️ Status anterior:</strong> ${previousStatusLabel}</p>` : ''}
+            <p style="margin: 8px 0; color: #1e40af;"><strong>✅ Novo status:</strong> ${currentStatusLabel}</p>
+            ${data.changedByName ? `<p style="margin: 8px 0; color: #1e40af;"><strong>👤 Atualizado por:</strong> ${data.changedByName}</p>` : ''}
+            ${data.productDetails ? `<p style="margin: 8px 0; color: #1e40af;"><strong>🚗 Produto:</strong> ${data.productDetails}</p>` : ''}
+            ${data.reason ? `<p style="margin: 8px 0; color: #1e40af;"><strong>📝 Detalhes:</strong> ${data.reason}</p>` : ''}
+          </div>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${this.frontendUrl}/processes/${data.processId}" 
+               style="display: inline-block; background-color: #3b82f6; color: #fff; 
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px; 
+                      font-weight: 600; font-size: 16px;">
+              Acompanhar Processo
+            </a>
+          </div>
+        </div>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
+          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+High-class Shop - Atualização de Processo
+
+Olá ${data.recipientName},
+
+Seu processo foi atualizado.
+Processo: ${data.processId}
+${previousStatusLabel ? `Status anterior: ${previousStatusLabel}` : ''}
+Novo status: ${currentStatusLabel}
+${data.changedByName ? `Atualizado por: ${data.changedByName}` : ''}
+${data.productDetails ? `Produto: ${data.productDetails}` : ''}
+${data.reason ? `Detalhes: ${data.reason}` : ''}
+
+Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
+
+© 2026 High-class Shop
+    `.trim();
+
+    await this.sendEmailSafely(
+      'PROCESS_STATUS_CHANGED',
+      data.recipientEmail,
       subject,
       html,
       text,

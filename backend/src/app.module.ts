@@ -24,6 +24,9 @@ import { HealthModule } from './health/health.module';
 import { SettingsModule } from './features/settings/settings.module';
 import { PlatformCompanyModule } from './features/platform-company/platform-company.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { DriveImportModule } from './features/drive-import/drive-import.module';
+import { MeetingsModule } from './features/meetings/meetings.module';
+import { ProductImportJobsModule } from './features/product-import-jobs/product-import-jobs.module';
 
 @Module({
   imports: [
@@ -48,7 +51,10 @@ import { PrismaModule } from './prisma/prisma.module';
     UsersModule,
     SettingsModule,
     PlatformCompanyModule,
-    PrismaModule
+    PrismaModule,
+    DriveImportModule,
+    MeetingsModule,
+    ProductImportJobsModule,
   ],
   providers: [
     {

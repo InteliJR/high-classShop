@@ -13,20 +13,23 @@ import {
 
 type ProductType = "CAR" | "BOAT" | "AIRCRAFT";
 
-export interface XlsxImportResponse {
+export interface CsvImportResponse {
   success: boolean;
   message: string;
   insertedCount: number;
   updatedCount: number;
   errorCount: number;
   warningCount: number;
-  errorRows: XlsxErrorRow[];
-  warningRows: XlsxErrorRow[];
+  deactivatedCount: number;
+  deactivatedIds: number[];
+  reactivatedCount: number;
+  errorRows: CsvErrorRow[];
+  warningRows: CsvErrorRow[];
   insertedIds?: number[];
   updatedIds?: number[];
 }
 
-export interface XlsxErrorRow {
+export interface CsvErrorRow {
   row: number;
   reason: string;
   fields?: Record<string, any>;
@@ -35,7 +38,7 @@ export interface XlsxErrorRow {
 
 interface XlsxImporterProps {
   productType: ProductType;
-  onImport: (file: File) => Promise<XlsxImportResponse>;
+  onImport: (file: File) => Promise<CsvImportResponse>;
   onDownloadTemplate: () => Promise<void>;
   disabled?: boolean;
   onSuccess?: () => void;
@@ -47,7 +50,7 @@ const PRODUCT_NAMES: Record<ProductType, string> = {
   AIRCRAFT: "Aeronaves",
 };
 
-// Colunas por tipo (sem 'imagens' — agora são embutidas na planilha)
+// Colunas por tipo (imagens por linha podem ser importadas via folder_url)
 const COLUMN_DEFINITIONS: Record<
   ProductType,
   { required: string[]; optional: string[] }
@@ -61,6 +64,7 @@ const COLUMN_DEFINITIONS: Record<
       "combustivel",
       "tipo_categoria",
       "descricao",
+      "folder_url",
     ],
   },
   BOAT: {
@@ -75,11 +79,18 @@ const COLUMN_DEFINITIONS: Record<
       "tipo_embarcacao",
       "descricao_completa",
       "acessorios",
+      "folder_url",
     ],
   },
   AIRCRAFT: {
     required: ["marca", "modelo", "valor", "estado", "ano"],
-    optional: ["categoria", "assentos", "tipo_aeronave", "descricao"],
+    optional: [
+      "categoria",
+      "assentos",
+      "tipo_aeronave",
+      "descricao",
+      "folder_url",
+    ],
   },
 };
 
@@ -95,7 +106,7 @@ export function XlsxImporter({
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
-  const [importResult, setImportResult] = useState<XlsxImportResponse | null>(
+  const [importResult, setImportResult] = useState<CsvImportResponse | null>(
     null,
   );
   const [fileError, setFileError] = useState<string | null>(null);
@@ -115,10 +126,8 @@ export function XlsxImporter({
       setFileError(null);
 
       // Validar extensão
-      if (!selectedFile.name.endsWith(".xlsx")) {
-        setFileError(
-          "Apenas arquivos .xlsx são aceitos. Salve sua planilha no formato Excel (.xlsx).",
-        );
+      if (!selectedFile.name.toLowerCase().endsWith(".csv")) {
+        setFileError("Apenas arquivos .csv são aceitos.");
         setFile(null);
         return;
       }
@@ -229,7 +238,7 @@ export function XlsxImporter({
               Importar {PRODUCT_NAMES[productType]}
             </h4>
             <p className="text-sm text-gray-500">
-              Importe varios produtos de uma vez via planilha
+              Importe varios produtos de uma vez via CSV
             </p>
           </div>
         </div>
@@ -308,14 +317,7 @@ export function XlsxImporter({
             <ul className="space-y-1.5 text-sm text-gray-600">
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
-                Formato aceito: <strong className="text-gray-900">.xlsx</strong>{" "}
-                (Excel)
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
-                <strong className="text-gray-900">Imagens</strong>: insira
-                diretamente na planilha (cole na linha do produto). A primeira
-                imagem de cada linha sera a principal.
+                Formato aceito: <strong className="text-gray-900">.csv</strong>
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
@@ -326,6 +328,11 @@ export function XlsxImporter({
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
                 <strong className="text-gray-900">ano</strong>: 4 digitos (ex:
                 2024)
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
+                <strong className="text-gray-900">folder_url</strong>: link da
+                pasta pública do Google Drive com imagens do produto (opcional)
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
@@ -355,7 +362,7 @@ export function XlsxImporter({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".xlsx"
+          accept=".csv,text/csv"
           onChange={handleFileSelect}
           disabled={disabled || isLoading}
           className="hidden"
@@ -382,10 +389,10 @@ export function XlsxImporter({
               <p className="text-sm font-medium text-gray-900">
                 {isDragging
                   ? "Solte o arquivo aqui"
-                  : "Arraste uma planilha XLSX ou clique para selecionar"}
+                  : "Arraste um arquivo CSV ou clique para selecionar"}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Apenas arquivos .xlsx (max {MAX_FILE_SIZE_MB} MB)
+                Apenas arquivos .csv (max {MAX_FILE_SIZE_MB} MB)
               </p>
             </div>
           </div>
@@ -453,7 +460,7 @@ export function XlsxImporter({
           ) : (
             <>
               <Upload className="w-4 h-4" />
-              Importar Planilha
+              Importar CSV
             </>
           )}
         </button>
@@ -519,6 +526,28 @@ export function XlsxImporter({
                     </span>
                   </div>
                 )}
+                {importResult.deactivatedCount > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-slate-500 rounded-full"></div>
+                    <span className="text-sm text-gray-700">
+                      <span className="font-semibold text-slate-700">
+                        {importResult.deactivatedCount}
+                      </span>{" "}
+                      inativados
+                    </span>
+                  </div>
+                )}
+                {importResult.reactivatedCount > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
+                    <span className="text-sm text-gray-700">
+                      <span className="font-semibold text-emerald-700">
+                        {importResult.reactivatedCount}
+                      </span>{" "}
+                      reativados
+                    </span>
+                  </div>
+                )}
                 {importResult.warningCount > 0 && (
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
@@ -541,6 +570,13 @@ export function XlsxImporter({
                 </div>
               </div>
 
+              {importResult.deactivatedCount > 0 && (
+                <p className="text-xs text-gray-500 mt-3">
+                  Produtos ausentes na planilha foram removidos do catálogo
+                  ativo (inativados), sem apagar histórico de processos.
+                </p>
+              )}
+
               {/* Lista de erros por linha */}
               {importResult.errorRows.length > 0 && (
                 <div className="mt-4">
@@ -561,7 +597,7 @@ export function XlsxImporter({
                       </thead>
                       <tbody className="bg-white">
                         {importResult.errorRows.map(
-                          (errorRow: XlsxErrorRow, index: number) => (
+                          (errorRow: CsvErrorRow, index: number) => (
                             <tr
                               key={index}
                               className="border-t border-red-100 hover:bg-red-50"
@@ -602,7 +638,7 @@ export function XlsxImporter({
                         </thead>
                         <tbody className="bg-white">
                           {importResult.warningRows.map(
-                            (warnRow: XlsxErrorRow, index: number) => (
+                            (warnRow: CsvErrorRow, index: number) => (
                               <tr
                                 key={index}
                                 className="border-t border-yellow-100 hover:bg-yellow-50"

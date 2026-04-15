@@ -1,11 +1,13 @@
-
 import { NestFactory, Reflector } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ClassSerializerInterceptor, Logger, ValidationPipe } from '@nestjs/common';
+import {
+  ClassSerializerInterceptor,
+  Logger,
+  ValidationPipe,
+} from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
-
   const logger = new Logger('Bootstrap');
 
   const app = await NestFactory.create(AppModule);
@@ -16,7 +18,15 @@ async function bootstrap() {
     credentials: true,
   });
   // Aumenta o limite de tamanho do payload JSON para aceitar imagens em base64
-  app.use(require('express').json({ limit: '50mb' }));
+  // e preserva rawBody para validação de assinatura de webhooks (Calendly)
+  app.use(
+    require('express').json({
+      limit: '50mb',
+      verify: (req: any, _res: any, buf: Buffer) => {
+        req.rawBody = buf.toString('utf8');
+      },
+    }),
+  );
   app.use(require('express').urlencoded({ limit: '50mb', extended: true }));
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
 
@@ -51,4 +61,3 @@ bootstrap().catch((error) => {
   logger.error('❌ Erro ao inicializar aplicação:', error);
   process.exit(1);
 });
-

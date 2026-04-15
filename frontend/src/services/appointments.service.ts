@@ -15,6 +15,11 @@ export interface Appointment {
   pending_expires_at?: string;
   confirmed_at?: string;
   confirmed_by_id?: string;
+  calendly_event_uri?: string | null;
+  calendly_invitee_uri?: string | null;
+  calendly_scheduled_at?: string | null;
+  calendly_last_sync_at?: string | null;
+  calendly_sync_status?: "PENDING" | "SYNCED" | "FAILED";
   client?: {
     id: string;
     name: string;
@@ -42,6 +47,29 @@ export interface ApiResponse<T> {
   data: T;
 }
 
+export interface RegisterCalendlyScheduledPayload {
+  event_uri: string;
+  invitee_uri: string;
+  client_event?: "calendly.event_scheduled";
+  client_observed_at?: string;
+  scheduled_start_time?: string;
+}
+
+export interface CalendlySyncStatus {
+  appointment_id: string;
+  status: "PENDING" | "SCHEDULED" | "COMPLETED" | "CANCELLED";
+  calendly_sync_status: "PENDING" | "SYNCED" | "FAILED";
+  appointment_datetime: string | null;
+  calendly_last_sync_at: string | null;
+}
+
+export interface CalendlyOAuthStatus {
+  connected: boolean;
+  calendly_user_uri: string | null;
+  expires_at: string | null;
+  is_active: boolean;
+}
+
 /**
  * Verifica se existe um agendamento entre cliente e especialista para um produto específico
  * @param clientId - ID do cliente
@@ -54,7 +82,7 @@ export async function checkExistingAppointment(
   clientId: string,
   specialistId: string,
   productType: "CAR" | "BOAT" | "AIRCRAFT",
-  productId: number
+  productId: number,
 ): Promise<Appointment | null> {
   try {
     const response = await api.get<ApiResponse<Appointment | null>>(
@@ -67,7 +95,7 @@ export async function checkExistingAppointment(
           product_type: productType,
           product_id: productId,
         },
-      }
+      },
     );
     return response.data.data;
   } catch (error) {
@@ -91,7 +119,7 @@ export async function createPendingAppointment(data: {
   const response = await api.post<ApiResponse<Appointment>>(
     "/appointments/pending",
     data,
-    { withCredentials: true }
+    { withCredentials: true },
   );
   return response.data.data;
 }
@@ -113,7 +141,7 @@ export async function createConsultancyAppointment(data: {
       ...data,
       // Não envia product_type e product_id para consultoria
     },
-    { withCredentials: true }
+    { withCredentials: true },
   );
   return response.data.data;
 }
@@ -126,7 +154,7 @@ export async function createConsultancyAppointment(data: {
  */
 export async function getPendingAppointments(
   page: number = 1,
-  limit: number = 20
+  limit: number = 20,
 ): Promise<{ data: Appointment[]; total: number }> {
   const response = await api.get<{
     success: boolean;
@@ -150,12 +178,12 @@ export async function getPendingAppointments(
  */
 export async function confirmPendingAppointment(
   appointmentId: string,
-  appointmentDatetime?: string
+  appointmentDatetime?: string,
 ): Promise<Appointment> {
   const response = await api.post<ApiResponse<Appointment>>(
     `/appointments/pending/${appointmentId}/confirm`,
     { appointment_datetime: appointmentDatetime },
-    { withCredentials: true }
+    { withCredentials: true },
   );
   return response.data.data;
 }
@@ -166,14 +194,72 @@ export async function confirmPendingAppointment(
  * @returns O agendamento cancelado
  */
 export async function cancelPendingAppointment(
-  appointmentId: string
+  appointmentId: string,
 ): Promise<Appointment> {
   const response = await api.post<ApiResponse<Appointment>>(
     `/appointments/pending/${appointmentId}/cancel`,
     {},
-    { withCredentials: true }
+    { withCredentials: true },
   );
   return response.data.data;
+}
+
+export async function registerCalendlyScheduledEvent(
+  appointmentId: string,
+  payload: RegisterCalendlyScheduledPayload,
+): Promise<{
+  appointment_id: string;
+  calendly_sync_status: "PENDING" | "SYNCED" | "FAILED";
+  appointment_datetime: string | null;
+}> {
+  const response = await api.post<
+    ApiResponse<{
+      appointment_id: string;
+      calendly_sync_status: "PENDING" | "SYNCED" | "FAILED";
+      appointment_datetime: string | null;
+    }>
+  >(`/appointments/pending/${appointmentId}/calendly-scheduled`, payload, {
+    withCredentials: true,
+  });
+
+  return response.data.data;
+}
+
+export async function getCalendlySyncStatus(
+  appointmentId: string,
+): Promise<CalendlySyncStatus> {
+  const response = await api.get<ApiResponse<CalendlySyncStatus>>(
+    `/appointments/${appointmentId}/calendly-sync-status`,
+    { withCredentials: true },
+  );
+
+  return response.data.data;
+}
+
+export async function getCalendlyAuthorizeUrl(): Promise<string> {
+  const response = await api.get<ApiResponse<{ authorize_url: string }>>(
+    "/appointments/calendly/oauth/authorize",
+    { withCredentials: true },
+  );
+
+  return response.data.data.authorize_url;
+}
+
+export async function getCalendlyOAuthStatus(): Promise<CalendlyOAuthStatus> {
+  const response = await api.get<ApiResponse<CalendlyOAuthStatus>>(
+    "/appointments/calendly/oauth/status",
+    { withCredentials: true },
+  );
+
+  return response.data.data;
+}
+
+export async function disconnectCalendlyOAuth(): Promise<void> {
+  await api.post(
+    "/appointments/calendly/oauth/disconnect",
+    {},
+    { withCredentials: true },
+  );
 }
 
 /**
@@ -184,7 +270,7 @@ export async function cancelPendingAppointment(
  */
 export async function getMyAppointments(
   page: number = 1,
-  limit: number = 20
+  limit: number = 20,
 ): Promise<Appointment[]> {
   try {
     const response = await api.get<ApiResponse<Appointment[]>>(
@@ -192,7 +278,7 @@ export async function getMyAppointments(
       {
         withCredentials: true,
         params: { page, limit },
-      }
+      },
     );
     return response.data.data;
   } catch (error) {

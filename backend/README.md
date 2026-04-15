@@ -1,117 +1,139 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# 🧠 Backend — High-class Shop
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API principal da plataforma, construída com NestJS + Prisma, responsável por autenticação, processos, agendamentos, integração com Calendly, reuniões e contratos.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## 🚀 Stack
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- Node.js 20+
+- NestJS 11
+- Prisma ORM
+- PostgreSQL
+- Axios, class-validator, class-transformer
 
-## Project setup
+---
+
+## ⚙️ Configuração
 
 ```bash
-$ npm install
+cd backend
+npm install
+cp .env.example .env
 ```
 
-## Compile and run the project
+### Variáveis importantes
+
+- `DATABASE_URL`
+- `DIRECT_URL` (necessária para operações de migration/Prisma em alguns ambientes)
+- `FRONTEND_URL`
+- `JWT_SECRET_ACCESS`, `JWT_SECRET_REFRESH`, `JWT_SECRET_REFERRAL`
+
+### Variáveis de infraestrutura e integrações
+
+- AWS/S3/SES:
+	- `AWS_REGION`
+	- `AWS_ACCESS_KEY_ID`
+	- `AWS_SECRET_ACCESS_KEY`
+	- `AWS_BUCKET_NAME`
+	- `EMAIL_FROM`
+
+- DocuSign:
+	- `DOCUSIGN_INTEGRATION_KEY`
+	- `DOCUSIGN_USER_ID`
+	- `DOCUSIGN_ACCOUNT_ID`
+	- `DOCUSIGN_PRIVATE_KEY`
+	- `DOCUSIGN_ENV`
+	- `DOCUSIGN_TEMPLATE_ID`
+	- `DOCUSIGN_WEBHOOK_SECRET`
+
+- Backend URL para callbacks:
+	- `BACKEND_URL`
+
+- Importação de imagens (Google Drive):
+	- `GOOGLE_DRIVE_API_KEY`
+
+- Reuniões:
+	- `MEETING_PROVIDER`
+	- `MEETING_DEMO_FALLBACK_ENABLED`
+	- `JITSI_BASE_URL`
+	- `GOOGLE_MEET_SERVICE_ACCOUNT_EMAIL`
+	- `GOOGLE_MEET_SERVICE_ACCOUNT_PRIVATE_KEY`
+	- `GOOGLE_MEET_CALENDAR_ID`
+	- `GOOGLE_MEET_TIMEZONE`
+
+### Variáveis de integração Calendly
+
+- `CALENDLY_OAUTH_CLIENT_ID`
+- `CALENDLY_OAUTH_CLIENT_SECRET`
+- `CALENDLY_OAUTH_REDIRECT_URI`
+- `CALENDLY_TOKEN_ENCRYPTION_KEY`
+- `CALENDLY_WEBHOOK_CALLBACK_URL` (recomendado)
+- `CALENDLY_WEBHOOK_SIGNING_KEY` (recomendado)
+
+> Observação: `CALENDLY_ACCESS_TOKEN` pode existir como fallback simples, mas o fluxo recomendado no projeto atual é OAuth por especialista.
+
+---
+
+## 🛠️ Execução
 
 ```bash
-# development
-$ npm run start
+# Desenvolvimento
+npm run start:dev
 
-# watch mode
-$ npm run start:dev
+# Build
+npm run build
 
-# production mode
-$ npm run start:prod
+# Produção (após build)
+npm run start:prod
 ```
 
-## Database Seed
+API local: `http://localhost:3000/api`
 
-Populate the database with mock data (luxury cars, boats, and aircrafts):
+---
+
+## 🗃️ Banco de Dados
 
 ```bash
-# Run seed script
-$ npm run seed
+# Aplicar migrations
+npx prisma migrate dev
 
-# Or using Prisma
-$ npx prisma db seed
+# Abrir Prisma Studio
+npx prisma studio
+
+# Seed
+npm run seed
 ```
 
-The seed will create:
-- 10 luxury cars (Porsche, Lamborghini, Ferrari, etc.)
-- 10 boats (Yachts, speedboats, sailboats)
-- 10 aircrafts (Executive jets from Embraer, Gulfstream, etc.)
+---
 
-Each product includes multiple images and detailed specifications. See [SEED_README.md](./SEED_README.md) for more details.
-
-## Run tests
+## ✅ Testes e qualidade
 
 ```bash
-# unit tests
-$ npm run test
+# Testes unitários
+npm run test
 
-# e2e tests
-$ npm run test:e2e
+# Testes e2e
+npm run test:e2e
 
-# test coverage
-$ npm run test:cov
+# Cobertura
+npm run test:cov
+
+# Lint
+npm run lint
 ```
 
-## Deployment
+---
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## 📁 Estrutura resumida
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+backend/
+├── prisma/              # Schema, migrations e scripts
+├── src/
+│   ├── auth/            # Autenticação/autorização
+│   ├── features/        # Módulos de domínio
+│   ├── prisma/          # Serviço Prisma
+│   └── main.ts          # Bootstrap da aplicação
+└── test/                # Testes e2e
 ```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).

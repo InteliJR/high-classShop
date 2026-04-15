@@ -17,29 +17,23 @@ export class RolesGuard implements CanActivate {
             context.getClass()
         ]);
 
-        this.logger.log(`[RolesGuard] Required roles: ${JSON.stringify(requiredRoles)}`);
-
         if (!requiredRoles) {
-            this.logger.log(`[RolesGuard] Nenhuma role requerida, permitindo acesso`);
             return true;
         }
 
         const request = context.switchToHttp().getRequest();
         const user : UserEntity = request.user;
 
-        this.logger.log(`[RolesGuard] Usuário encontrado: ${user?.id}`);
-        this.logger.log(`[RolesGuard] Role do usuário: ${user?.role}`);
-
         if (!user) {
-            this.logger.error(`[RolesGuard] ERRO: Usuário não encontrado no request`);
             throw new UnauthorizedException('Unauthorized');
         }
 
         const hasRole = requiredRoles.some((role) => user.role == role);
-        this.logger.log(`[RolesGuard] User tem role? ${hasRole} (verificou ${requiredRoles.length} roles)`);
         
         if (!hasRole) {
-            this.logger.error(`[RolesGuard] ERRO: Usuário ${user.id} com role ${user.role} não tem permissão. Roles requeridas: ${JSON.stringify(requiredRoles)}`);
+            this.logger.warn(
+              `[RolesGuard] Acesso negado para usuário ${user.id} (${user.role}). Roles requeridas: ${JSON.stringify(requiredRoles)}`,
+            );
             throw new UnauthorizedException('Unauthorized');
         }
 

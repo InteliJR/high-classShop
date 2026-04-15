@@ -17,7 +17,10 @@ import { IS_PUBLIC_KEY } from 'src/shared/decorators/public.decorator';
 export class AuthGuard implements CanActivate {
   private readonly logger = new Logger(AuthGuard.name);
   private lastNoTokenLogTime: number = 0;
-  private readonly LOG_THROTTLE_MS = 30000; // Log "Token não fornecido" apenas a cada 30 segundos
+  private readonly LOG_THROTTLE_MS = 5 * 60 * 1000;
+  private readonly verboseAuthLogs =
+    process.env.AUTH_LOG_VERBOSE === 'true' &&
+    process.env.NODE_ENV !== 'production';
 
   constructor(
     private readonly jwtService: JwtService,
@@ -40,9 +43,9 @@ export class AuthGuard implements CanActivate {
     const token = this.extractTokenFromHeader(request);
 
     if (!token) {
-      // Throttle dos logs para evitar spam - log apenas a cada 30 segundos
+      // Throttle dos logs para evitar spam
       const now = Date.now();
-      if (now - this.lastNoTokenLogTime > this.LOG_THROTTLE_MS) {
+      if (this.verboseAuthLogs && now - this.lastNoTokenLogTime > this.LOG_THROTTLE_MS) {
         this.logger.debug(
           `[AuthGuard] Token não fornecido em requisição protegida (${request.method} ${request.url})`,
         );
@@ -56,10 +59,6 @@ export class AuthGuard implements CanActivate {
         secret: jwtConstants.access,
       });
 
-      this.logger.debug(
-        `[AuthGuard] Token verificado. User ID: ${payload.sub}`,
-      );
-
       // Adicionar as informações do usuario que estão no banco de dados
       const user = await this.prismaService.user.findUnique({
         where: {
@@ -69,20 +68,17 @@ export class AuthGuard implements CanActivate {
       });
 
       if (!user) {
-        this.logger.error(
-          `[AuthGuard] ERRO: Usuário não encontrado no banco de dados (ID: ${payload.sub})`,
+        this.logger.warn(
+          `[AuthGuard] Usuário do token não encontrado no banco (ID: ${payload.sub})`,
         );
         throw new UnauthorizedException('Unauthorized');
       }
 
       request['user'] = UserEntity.fromPrisma(user);
-      this.logger.debug(
-        `[AuthGuard] Usuário autenticado: ${user.email} (${user.role})`,
-      );
     } catch (error) {
-      this.logger.error(
-        `[AuthGuard] ERRO ao verificar token: ${error?.message}`,
-      );
+      if (this.verboseAuthLogs) {
+        this.logger.warn(`[AuthGuard] Falha ao verificar token: ${error?.message}`);
+      }
       throw new UnauthorizedException('Unauthorized');
     }
 

@@ -45,6 +45,7 @@ export class CarsService {
     { name: 'combustivel', required: false, type: 'string' },
     { name: 'tipo_categoria', required: false, type: 'string' },
     { name: 'descricao', required: false, type: 'string' },
+    { name: 'folder_url', required: false, type: 'string' },
   ];
 
   constructor(
@@ -108,6 +109,7 @@ export class CarsService {
 
     // Separação dos filtros
     const where: any = {};
+    where.is_active = true;
 
     // Exact
     const exacts: ExactCarFilters = {
@@ -291,7 +293,14 @@ export class CarsService {
     await this.findOne(id);
 
     try {
-      await this.prismaService.car.delete({ where: { id } });
+      await this.prismaService.car.update({
+        where: { id },
+        data: {
+          is_active: false,
+          deactivated_at: new Date(),
+          deactivated_by_sync_job_id: null,
+        },
+      });
       return { ok: true };
     } catch (error) {
       throw new Error(`Erro ao deletar carro: ${error.message}`);
@@ -315,6 +324,8 @@ export class CarsService {
         'Tipo de combustível: Gasolina, Etanol, Flex, Diesel, Elétrico, Híbrido (opcional)',
       tipo_categoria: 'Categoria: Sedan, SUV, Hatch, Pickup, etc (opcional)',
       descricao: 'Descrição detalhada do veículo (texto, opcional)',
+      folder_url:
+        'Link da pasta pública do Google Drive com imagens deste produto (opcional)',
     };
 
     const example: Record<string, any> = {
@@ -329,12 +340,138 @@ export class CarsService {
       combustivel: 'Gasolina',
       tipo_categoria: 'SUV',
       descricao: 'Carro em excelente estado',
+      folder_url: 'https://drive.google.com/drive/folders/SEU_FOLDER_ID',
     };
 
     return this.xlsxImportService.generateTemplate(
       this.xlsxColumns,
       example,
       instructions,
+    );
+  }
+
+  async getCsvTemplate(): Promise<Buffer> {
+    const headers = this.xlsxColumns.map((column) => column.name).join(';');
+    const exampleValues = [
+      'BMW',
+      'X5',
+      '450000',
+      'São Paulo',
+      '2023',
+      'Preto',
+      '15000',
+      'Automático',
+      'Gasolina',
+      'SUV',
+      'Carro em excelente estado',
+      'https://drive.google.com/drive/folders/SEU_FOLDER_ID',
+    ].join(';');
+
+    return Buffer.from(`${headers}\n${exampleValues}\n`, 'utf-8');
+  }
+
+  /**
+   * Importa carros a partir de um arquivo CSV
+   */
+  async importFromCsv(
+    fileBuffer: Buffer,
+    user: UserEntity,
+  ): Promise<ImportResponseDto> {
+    const { rows } = this.xlsxImportService.parseCsv(fileBuffer);
+
+    const structureValidation = this.xlsxImportService.validateStructure(
+      rows,
+      this.xlsxColumns,
+    );
+
+    if (!structureValidation.valid) {
+      throw new BadRequestException({
+        message: 'Estrutura do CSV inválida',
+        errors: structureValidation.errors,
+        missingRequired: structureValidation.missingRequired,
+        unknownColumns: structureValidation.unknownColumns,
+      });
+    }
+
+    const insertedIds: number[] = [];
+    const updatedIds: number[] = [];
+    const errorRows: ImportErrorRow[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const rowNumber = i + 2;
+      const row = rows[i];
+
+      try {
+        const carData: any = {
+          marca: row.marca,
+          modelo: row.modelo,
+          valor: Number(row.valor),
+          estado: row.estado,
+          ano: Number(row.ano),
+          specialist_id: user.id,
+        };
+
+        if (row.cor) carData.cor = row.cor;
+        if (row.km) carData.km = Number(row.km);
+        if (row.cambio) carData.cambio = row.cambio;
+        if (row.combustivel) carData.combustivel = row.combustivel;
+        if (row.tipo_categoria) carData.tipo_categoria = row.tipo_categoria;
+        if (row.descricao) carData.descricao = row.descricao;
+
+        const dto = plainToInstance(CreateCarDto, carData);
+        const validationErrors = await validate(dto, { whitelist: true });
+
+        if (validationErrors.length > 0) {
+          const errorMessages = validationErrors.map((err) => {
+            const constraints = err.constraints
+              ? Object.values(err.constraints)
+              : [];
+            return `${err.property}: ${constraints.join(', ')}`;
+          });
+
+          errorRows.push({
+            row: rowNumber,
+            reason: errorMessages.join('; '),
+            fields: row,
+          });
+          continue;
+        }
+
+        const existingCar = await this.prismaService.car.findFirst({
+          where: {
+            marca: row.marca?.trim(),
+            modelo: row.modelo?.trim(),
+            specialist_id: user.id,
+          },
+        });
+
+        if (existingCar) {
+          const { specialist_id, ...updateFields } = carData;
+          await this.prismaService.car.update({
+            where: { id: existingCar.id },
+            data: updateFields,
+          });
+          updatedIds.push(existingCar.id);
+        } else {
+          const createdCar = await this.prismaService.car.create({
+            data: carData,
+          });
+          insertedIds.push(createdCar.id);
+        }
+      } catch (error) {
+        errorRows.push({
+          row: rowNumber,
+          reason: error.message || 'Erro desconhecido ao processar linha',
+          fields: row,
+        });
+      }
+    }
+
+    return this.xlsxImportService.createResponse(
+      insertedIds,
+      errorRows,
+      [],
+      updatedIds,
     );
   }
 

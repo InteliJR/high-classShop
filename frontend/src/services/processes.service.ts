@@ -9,6 +9,13 @@ export interface Process {
     | "DOCUMENTATION"
     | "COMPLETED"
     | "REJECTED";
+  appointment_status?:
+    | "PENDING"
+    | "SCHEDULED"
+    | "COMPLETED"
+    | "CANCELLED"
+    | null;
+  appointment_datetime?: string | null;
   product_type?: "CAR" | "BOAT" | "AIRCRAFT" | null;
   client_id: string;
   specialist_id: string;
@@ -37,6 +44,27 @@ export interface Process {
   };
   // Flag para identificar consultoria (sem produto ainda)
   isConsultancy?: boolean;
+}
+
+export interface MeetingSession {
+  id: string;
+  process_id: string;
+  meet_link: string;
+  started_at: string;
+  ended_at?: string | null;
+  is_active?: boolean;
+}
+
+export interface ConversationDoneResult {
+  meeting: MeetingSession;
+  alreadyEnded: boolean;
+  processTransition: {
+    advanced: boolean;
+    previous_status: Process["status"];
+    status: Process["status"];
+    requires_product_selection: boolean;
+    message: string;
+  };
 }
 
 export interface ApiResponse<T> {
@@ -293,5 +321,54 @@ export async function createAppointment(
   const response = await api.post<ApiResponse<any>>("/appointments", data, {
     withCredentials: true,
   });
+  return response.data.data;
+}
+
+export async function getMeetingByProcess(
+  processId: string,
+): Promise<MeetingSession | null> {
+  const response = await api.get<ApiResponse<MeetingSession | null>>(
+    `/meetings/process/${processId}`,
+    { withCredentials: true },
+  );
+
+  return response.data.data;
+}
+
+export async function startMeeting(processId: string): Promise<MeetingSession> {
+  const response = await api.post<ApiResponse<MeetingSession>>(
+    `/meetings/process/${processId}/start`,
+    {},
+    { withCredentials: true },
+  );
+
+  return response.data.data;
+}
+
+export async function endMeeting(processId: string): Promise<{
+  meeting: MeetingSession;
+  alreadyEnded: boolean;
+  message: string;
+}> {
+  const response = await api.post<
+    ApiResponse<{
+      meeting: MeetingSession;
+      alreadyEnded: boolean;
+      message: string;
+    }>
+  >(`/meetings/process/${processId}/end`, {}, { withCredentials: true });
+
+  return response.data.data;
+}
+
+export async function markConversationDone(
+  processId: string,
+): Promise<ConversationDoneResult> {
+  const response = await api.post<ApiResponse<ConversationDoneResult>>(
+    `/meetings/process/${processId}/conversation-done`,
+    {},
+    { withCredentials: true },
+  );
+
   return response.data.data;
 }

@@ -21,6 +21,7 @@ import {
   type NegotiationProcessInfo,
   type NegotiationMeta,
 } from "../../services/proposals.service";
+import { getProcessById } from "../../services/processes.service";
 
 /**
  * Página de Negociação
@@ -33,7 +34,7 @@ export default function NegotiationPage() {
 
   const [proposals, setProposals] = useState<NegotiationProposal[]>([]);
   const [processInfo, setProcessInfo] = useState<NegotiationProcessInfo | null>(
-    null
+    null,
   );
   const [meta, setMeta] = useState<NegotiationMeta | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -41,6 +42,12 @@ export default function NegotiationPage() {
   const [isSending, setIsSending] = useState(false);
   const [isAccepting, setIsAccepting] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
+
+  const getProcessesRouteByRole = (): string => {
+    return user?.role === "SPECIALIST"
+      ? "/specialist/processes"
+      : "/customer/processes";
+  };
 
   // Form state
   const [proposedValue, setProposedValue] = useState<string>("");
@@ -59,6 +66,20 @@ export default function NegotiationPage() {
       setIsLoading(true);
       setError(null);
 
+      const process = await getProcessById(processId);
+      const isAwaitingProduct = !process.product_type || !process.product_id;
+
+      if (isAwaitingProduct) {
+        navigate(getProcessesRouteByRole(), {
+          replace: true,
+          state: {
+            error:
+              "A negociação só fica disponível após o especialista associar um produto ao processo.",
+          },
+        });
+        return;
+      }
+
       const response = await getProcessProposals(processId);
 
       if (response.success) {
@@ -71,7 +92,7 @@ export default function NegotiationPage() {
     } catch (err) {
       console.error("[NegotiationPage] Erro ao carregar propostas:", err);
       setError(
-        err instanceof Error ? err.message : "Erro ao carregar propostas"
+        err instanceof Error ? err.message : "Erro ao carregar propostas",
       );
     } finally {
       setIsLoading(false);
@@ -89,7 +110,7 @@ export default function NegotiationPage() {
   // Carregar propostas ao montar
   useEffect(() => {
     loadProposals();
-  }, [processId]);
+  }, [processId, user?.role]);
 
   /**
    * Envia uma nova proposta
@@ -110,8 +131,8 @@ export default function NegotiationPage() {
     if (value < processInfo.minimum_value) {
       setFormError(
         `O valor mínimo permitido é ${formatCurrency(
-          processInfo.minimum_value
-        )}`
+          processInfo.minimum_value,
+        )}`,
       );
       return;
     }
@@ -136,7 +157,7 @@ export default function NegotiationPage() {
     } catch (err) {
       console.error("[NegotiationPage] Erro ao enviar proposta:", err);
       setFormError(
-        err instanceof Error ? err.message : "Erro ao enviar proposta"
+        err instanceof Error ? err.message : "Erro ao enviar proposta",
       );
     } finally {
       setIsSending(false);
@@ -170,7 +191,7 @@ export default function NegotiationPage() {
     } catch (err) {
       console.error("[NegotiationPage] Erro ao rejeitar proposta:", err);
       setError(
-        err instanceof Error ? err.message : "Erro ao rejeitar proposta"
+        err instanceof Error ? err.message : "Erro ao rejeitar proposta",
       );
     } finally {
       setIsRejecting(false);
@@ -327,8 +348,8 @@ export default function NegotiationPage() {
                   {processInfo.product_type === "CAR"
                     ? "Carro"
                     : processInfo.product_type === "BOAT"
-                    ? "Barco"
-                    : "Aeronave"}
+                      ? "Barco"
+                      : "Aeronave"}
                 </p>
               )}
             </div>
@@ -509,12 +530,12 @@ export default function NegotiationPage() {
               {processInfo.status === "PROCESSING_CONTRACT"
                 ? "A negociação foi concluída. O contrato está sendo processado."
                 : processInfo.status === "DOCUMENTATION"
-                ? "A negociação foi concluída. O processo está em fase de documentação."
-                : processInfo.status === "COMPLETED"
-                ? "Este processo foi concluído com sucesso."
-                : processInfo.status === "REJECTED"
-                ? "Este processo foi rejeitado."
-                : "A negociação não está mais disponível."}
+                  ? "A negociação foi concluída. O processo está em fase de documentação."
+                  : processInfo.status === "COMPLETED"
+                    ? "Este processo foi concluído com sucesso."
+                    : processInfo.status === "REJECTED"
+                      ? "Este processo foi rejeitado."
+                      : "A negociação não está mais disponível."}
             </p>
           </div>
         )}

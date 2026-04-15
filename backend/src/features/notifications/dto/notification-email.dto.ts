@@ -34,6 +34,23 @@ export interface AppointmentCancelledEmailDto {
   productDetails: string;
 }
 
+export interface MeetingStartedEmailDto {
+  clientEmail: string;
+  clientName: string;
+  specialistName: string;
+  processId: string;
+  platformMeetingUrl: string;
+  meetingLink?: string;
+}
+
+export interface MeetingReminderEmailDto {
+  recipientEmail: string;
+  recipientName: string;
+  counterpartName: string;
+  appointmentDate: Date;
+  processId: string;
+}
+
 // ============================================================================
 // PROPOSAL NOTIFICATIONS
 // ============================================================================
@@ -62,6 +79,17 @@ export interface ProposalRejectedEmailDto {
   recipientName: string;
   rejectedValue: number;
   processId: string;
+}
+
+export interface ProcessStatusChangedEmailDto {
+  recipientEmail: string;
+  recipientName: string;
+  processId: string;
+  previousStatus?: string;
+  currentStatus: string;
+  changedByName?: string;
+  productDetails?: string;
+  reason?: string;
 }
 
 // ============================================================================

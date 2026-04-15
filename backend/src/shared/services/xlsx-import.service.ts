@@ -34,6 +34,10 @@ export interface XlsxParseResult {
   imageMap: Map<number, EmbeddedImage[]>;
 }
 
+export interface CsvParseResult {
+  rows: ImportParsedRow[];
+}
+
 @Injectable()
 export class XlsxImportService {
   /**
@@ -148,6 +152,64 @@ export class XlsxImportService {
     }
 
     return { rows, imageMap };
+  }
+
+  /**
+   * Parseia um arquivo CSV e extrai apenas dados tabulares.
+   * Aceita delimitadores "," e ";" com suporte a valores entre aspas.
+   */
+  parseCsv(fileBuffer: Buffer): CsvParseResult {
+    const rawText = fileBuffer.toString('utf-8').replace(/^\uFEFF/, '');
+    const lines = rawText
+      .split(/\r\n|\n|\r/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    if (lines.length < 2) {
+      throw new BadRequestException(
+        'O CSV deve conter cabeçalho e pelo menos uma linha de dados.',
+      );
+    }
+
+    const delimiter = this.detectCsvDelimiter(lines[0]);
+    const rawHeaders = this.splitCsvLine(lines[0], delimiter);
+    const headers = rawHeaders.map((header) => header.trim().toLowerCase());
+
+    if (headers.length === 0 || headers.every((header) => !header)) {
+      throw new BadRequestException(
+        'O CSV deve conter um cabeçalho válido na primeira linha.',
+      );
+    }
+
+    const rows: ImportParsedRow[] = [];
+
+    for (let lineIndex = 1; lineIndex < lines.length; lineIndex++) {
+      const columns = this.splitCsvLine(lines[lineIndex], delimiter);
+      const parsedRow: ImportParsedRow = {};
+      let hasData = false;
+
+      headers.forEach((header, columnIndex) => {
+        if (!header) return;
+        const rawValue = columns[columnIndex] ?? '';
+        const value = rawValue.trim();
+        parsedRow[header] = value;
+        if (value !== '') {
+          hasData = true;
+        }
+      });
+
+      if (hasData) {
+        rows.push(parsedRow);
+      }
+    }
+
+    if (rows.length === 0) {
+      throw new BadRequestException(
+        'O CSV deve conter pelo menos uma linha de dados além do cabeçalho.',
+      );
+    }
+
+    return { rows };
   }
 
   /**
@@ -267,6 +329,45 @@ export class XlsxImportService {
     return result;
   }
 
+  private detectCsvDelimiter(headerLine: string): ',' | ';' {
+    const semicolonCount = (headerLine.match(/;/g) || []).length;
+    const commaCount = (headerLine.match(/,/g) || []).length;
+    return semicolonCount > commaCount ? ';' : ',';
+  }
+
+  private splitCsvLine(line: string, delimiter: ',' | ';'): string[] {
+    const values: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          current += '"';
+          i++;
+          continue;
+        }
+
+        inQuotes = !inQuotes;
+        continue;
+      }
+
+      if (char === delimiter && !inQuotes) {
+        values.push(current);
+        current = '';
+        continue;
+      }
+
+      current += char;
+    }
+
+    values.push(current);
+    return values;
+  }
+
   /**
    * Formata erros de validação para mensagens legíveis
    */
@@ -324,6 +425,9 @@ export class XlsxImportService {
       message,
       insertedCount,
       updatedCount,
+      deactivatedCount: 0,
+      deactivatedIds: [],
+      reactivatedCount: 0,
       errorCount,
       warningCount,
       errorRows,

@@ -77,8 +77,10 @@ export default function ProcessesPage() {
 
   // Modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showProductSelectorModal, setShowProductSelectorModal] = useState(false);
-  const [selectedProcessForProduct, setSelectedProcessForProduct] = useState<ProcessWithProduct | null>(null);
+  const [showProductSelectorModal, setShowProductSelectorModal] =
+    useState(false);
+  const [selectedProcessForProduct, setSelectedProcessForProduct] =
+    useState<ProcessWithProduct | null>(null);
 
   const itemsPerPage = 10;
 
@@ -472,7 +474,7 @@ export default function ProcessesPage() {
               <ProcessCard
                 key={process.id}
                 process={process}
-                product={process.product}
+                product={process.product ?? undefined}
                 isExpanded={expandedProcessId === process.id}
                 onToggleExpand={() => handleToggleExpand(process.id)}
                 onUploadDocuments={() => handleUploadDocuments(process.id)}

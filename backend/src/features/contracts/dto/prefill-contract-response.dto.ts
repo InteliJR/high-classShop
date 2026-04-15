@@ -21,7 +21,7 @@ export class PrefillContractResponseDto {
     cep?: string;
   };
 
-  // Dados do vendedor (especialista - pode ser editado)
+  // Dados do vendedor (preenchimento manual e independente do especialista)
   seller: {
     id: string;
     name: string;

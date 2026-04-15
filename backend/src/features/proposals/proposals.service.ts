@@ -69,13 +69,27 @@ export class ProposalsService {
     const process = await this.prisma.process.findUnique({
       where: { id: dto.process_id },
       include: {
-        client: { select: { id: true, email: true, name: true, surname: true, role: true } },
-        specialist: {
-          select: { id: true, email: true, name: true, surname: true, role: true },
+        client: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            surname: true,
+            role: true,
+          },
         },
-        car: { select: { id: true, valor: true } },
-        boat: { select: { id: true, valor: true } },
-        aircraft: { select: { id: true, valor: true } },
+        specialist: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            surname: true,
+            role: true,
+          },
+        },
+        car: { select: { id: true, valor: true, is_active: true } },
+        boat: { select: { id: true, valor: true, is_active: true } },
+        aircraft: { select: { id: true, valor: true, is_active: true } },
         proposals: {
           orderBy: { created_at: 'desc' },
           take: 1,
@@ -166,7 +180,8 @@ export class ProposalsService {
         success: false,
         error: {
           code: 400,
-          message: 'Processo não possui produto associado. O especialista deve selecionar um produto antes de iniciar a negociação.',
+          message:
+            'Processo não possui produto associado. O especialista deve selecionar um produto antes de iniciar a negociação.',
           details: {
             process_id: dto.process_id,
             tip: 'Se este é um processo de consultoria, o especialista precisa atribuir um produto através da opção "Selecionar Produto" na página de processos.',
@@ -290,7 +305,9 @@ export class ProposalsService {
     const proposerName = isClient
       ? `${process.client.name} ${process.client.surname || ''}`.trim()
       : `${process.specialist.name} ${process.specialist.surname || ''}`.trim();
-    const recipientEmail = isClient ? process.specialist.email! : process.client.email!;
+    const recipientEmail = isClient
+      ? process.specialist.email!
+      : process.client.email!;
 
     setImmediate(() => {
       this.notificationService
@@ -338,10 +355,14 @@ export class ProposalsService {
         specialist: {
           select: { id: true, name: true, surname: true, role: true },
         },
-        car: { select: { id: true, valor: true, marca: true, modelo: true } },
-        boat: { select: { id: true, valor: true, marca: true, modelo: true } },
+        car: {
+          select: { id: true, valor: true, marca: true, modelo: true, is_active: true },
+        },
+        boat: {
+          select: { id: true, valor: true, marca: true, modelo: true, is_active: true },
+        },
         aircraft: {
-          select: { id: true, valor: true, marca: true, modelo: true },
+          select: { id: true, valor: true, marca: true, modelo: true, is_active: true },
         },
         accepted_proposal: { select: { id: true } },
         proposals: {
@@ -386,6 +407,22 @@ export class ProposalsService {
 
     // 3. Calcular valores
     const product = process.car || process.boat || process.aircraft;
+
+    if (!product) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message:
+            'Negociação indisponível: o processo ainda está aguardando seleção de produto pelo especialista.',
+          details: {
+            process_id: processId,
+            tip: 'Acesse a tela de processos e associe um produto para habilitar a negociação.',
+          },
+        },
+      });
+    }
+
     const productValue = product ? Number(product.valor) : 0;
 
     // Get minimum value based on settings (async)
@@ -413,6 +450,10 @@ export class ProposalsService {
         id: process.id,
         status: process.status,
         product_type: process.product_type,
+        product_is_active:
+          product && typeof product === 'object' && 'is_active' in product
+            ? Boolean((product as any).is_active)
+            : undefined,
         product_value: productValue,
         minimum_value: minimumValue,
         client: {
@@ -454,13 +495,19 @@ export class ProposalsService {
     const proposal = await this.validateProposalAction(proposalId, userId);
 
     // Buscar dados adicionais para notificação (email do proposer)
-    const proposalWithEmails = await this.prisma.negotiationProposal.findUnique({
-      where: { id: proposalId },
-      include: {
-        proposed_by: { select: { id: true, email: true, name: true, surname: true } },
-        proposed_to: { select: { id: true, email: true, name: true, surname: true } },
+    const proposalWithEmails = await this.prisma.negotiationProposal.findUnique(
+      {
+        where: { id: proposalId },
+        include: {
+          proposed_by: {
+            select: { id: true, email: true, name: true, surname: true },
+          },
+          proposed_to: {
+            select: { id: true, email: true, name: true, surname: true },
+          },
+        },
       },
-    });
+    );
 
     // Atualizar proposta e processo em transação
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -526,6 +573,57 @@ export class ProposalsService {
       });
     }
 
+    const processForNotification = await this.prisma.process.findUnique({
+      where: { id: proposal.process_id },
+      include: {
+        client: {
+          select: { email: true, name: true, surname: true },
+        },
+        specialist: {
+          select: { email: true, name: true, surname: true },
+        },
+      },
+    });
+
+    if (processForNotification) {
+      setImmediate(() => {
+        const recipients = [
+          {
+            email: processForNotification.client.email,
+            name: `${processForNotification.client.name} ${processForNotification.client.surname || ''}`.trim(),
+          },
+          {
+            email: processForNotification.specialist.email,
+            name: `${processForNotification.specialist.name} ${processForNotification.specialist.surname || ''}`.trim(),
+          },
+        ].filter((recipient) => Boolean(recipient.email));
+
+        const changedByName = proposalWithEmails
+          ? `${proposalWithEmails.proposed_to.name} ${proposalWithEmails.proposed_to.surname || ''}`.trim()
+          : undefined;
+
+        Promise.allSettled(
+          recipients.map((recipient) =>
+            this.notificationService.sendProcessStatusChangedEmail({
+              recipientEmail: recipient.email!,
+              recipientName: recipient.name || 'Usuário',
+              processId: proposal.process_id,
+              previousStatus: ProcessStatus.NEGOTIATION,
+              currentStatus: ProcessStatus.DOCUMENTATION,
+              changedByName,
+              reason: 'Proposta aceita. Processo avançou para documentação.',
+            }),
+          ),
+        ).catch((err) => {
+          this.logger.error('Notification failed (non-critical)', {
+            method: 'accept-process-status-changed',
+            processId: proposal.process_id,
+            error: err.message,
+          });
+        });
+      });
+    }
+
     return this.mapToResponseEntity(updated);
   }
 
@@ -548,13 +646,19 @@ export class ProposalsService {
     const proposal = await this.validateProposalAction(proposalId, userId);
 
     // Buscar dados adicionais para notificação (email do proposer)
-    const proposalWithEmails = await this.prisma.negotiationProposal.findUnique({
-      where: { id: proposalId },
-      include: {
-        proposed_by: { select: { id: true, email: true, name: true, surname: true } },
-        proposed_to: { select: { id: true, email: true, name: true, surname: true } },
+    const proposalWithEmails = await this.prisma.negotiationProposal.findUnique(
+      {
+        where: { id: proposalId },
+        include: {
+          proposed_by: {
+            select: { id: true, email: true, name: true, surname: true },
+          },
+          proposed_to: {
+            select: { id: true, email: true, name: true, surname: true },
+          },
+        },
       },
-    });
+    );
 
     const updated = await this.prisma.negotiationProposal.update({
       where: { id: proposalId },
@@ -667,7 +771,15 @@ export class ProposalsService {
       where: { id: proposalId },
       include: {
         process: {
-          select: { status: true, client_id: true, specialist_id: true },
+          select: {
+            status: true,
+            client_id: true,
+            specialist_id: true,
+            product_type: true,
+            car_id: true,
+            boat_id: true,
+            aircraft_id: true,
+          },
         },
       },
     });
@@ -723,6 +835,26 @@ export class ProposalsService {
           message: 'Processo não está mais em negociação',
           details: {
             process_status: proposal.process.status,
+          },
+        },
+      });
+    }
+
+    const hasProduct =
+      !!proposal.process.product_type &&
+      (!!proposal.process.car_id ||
+        !!proposal.process.boat_id ||
+        !!proposal.process.aircraft_id);
+
+    if (!hasProduct) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message:
+            'Negociação indisponível: o processo ainda está aguardando seleção de produto pelo especialista.',
+          details: {
+            tip: 'A negociação será habilitada após o especialista associar um produto ao processo.',
           },
         },
       });

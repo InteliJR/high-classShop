@@ -8,6 +8,7 @@ import {
   type Company,
   type CompanySpecialist,
 } from "../../services/companies.service";
+import { updateSpecialist } from "../../services/specialists.service";
 import {
   getPlatformCompany,
   type PlatformCompany,
@@ -38,6 +39,11 @@ interface ExpandedCompanyState {
   error: string | null;
 }
 
+interface SpecialistEditState {
+  specialist: CompanySpecialist;
+  companyId: string;
+}
+
 export default function CompaniesPage() {
   // Guarda os dados da API para serem renderizados na tabela.
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -57,6 +63,21 @@ export default function CompaniesPage() {
   const [companyToEdit, setCompanyToEdit] = useState<Company | null>(null);
   // Guarda o objeto da empresa que está prestes a ser apagada, controlando também o modal de confirmação.
   const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null);
+  const [specialistToEdit, setSpecialistToEdit] =
+    useState<SpecialistEditState | null>(null);
+  const [isSavingSpecialist, setIsSavingSpecialist] = useState(false);
+  const [specialistFormError, setSpecialistFormError] = useState<string | null>(
+    null,
+  );
+
+  const [editName, setEditName] = useState("");
+  const [editSurname, setEditSurname] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editSpeciality, setEditSpeciality] = useState<
+    "CAR" | "BOAT" | "AIRCRAFT"
+  >("CAR");
+  const [editCommissionRate, setEditCommissionRate] = useState("");
+  const [editCalendlyUrl, setEditCalendlyUrl] = useState("");
 
   // Mapa de empresas expandidas: companyId -> estado dos especialistas
   const [expandedCompanies, setExpandedCompanies] = useState<
@@ -156,6 +177,97 @@ export default function CompaniesPage() {
     },
     [expandedCompanies, loadSpecialists],
   );
+
+  const openSpecialistEditModal = useCallback(
+    (specialist: CompanySpecialist, companyId: string) => {
+      setSpecialistFormError(null);
+      setSpecialistToEdit({ specialist, companyId });
+      setEditName(specialist.name);
+      setEditSurname(specialist.surname);
+      setEditEmail(specialist.email);
+      setEditSpeciality(
+        (specialist.speciality as "CAR" | "BOAT" | "AIRCRAFT") || "CAR",
+      );
+      setEditCommissionRate(
+        specialist.commission_rate != null
+          ? String(specialist.commission_rate)
+          : "",
+      );
+      setEditCalendlyUrl(specialist.calendly_url || "");
+    },
+    [],
+  );
+
+  const closeSpecialistEditModal = useCallback(() => {
+    setSpecialistToEdit(null);
+    setSpecialistFormError(null);
+  }, []);
+
+  const handleSaveSpecialist = useCallback(async () => {
+    if (!specialistToEdit) return;
+
+    if (!editName.trim() || !editSurname.trim() || !editEmail.trim()) {
+      setSpecialistFormError("Nome, sobrenome e e-mail são obrigatórios.");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(editEmail.trim())) {
+      setSpecialistFormError("Informe um e-mail válido.");
+      return;
+    }
+
+    const parsedCommission = editCommissionRate.trim()
+      ? Number(editCommissionRate)
+      : undefined;
+
+    if (
+      parsedCommission !== undefined &&
+      (Number.isNaN(parsedCommission) ||
+        parsedCommission < 0 ||
+        parsedCommission > 100)
+    ) {
+      setSpecialistFormError("Comissão deve estar entre 0 e 100.");
+      return;
+    }
+
+    setIsSavingSpecialist(true);
+    setSpecialistFormError(null);
+
+    try {
+      await updateSpecialist(specialistToEdit.specialist.id, {
+        name: editName.trim(),
+        surname: editSurname.trim(),
+        email: editEmail.trim(),
+        speciality: editSpeciality,
+        commission_rate: parsedCommission,
+        calendly_url: editCalendlyUrl.trim() || undefined,
+      });
+
+      const currentPage =
+        expandedCompanies[specialistToEdit.companyId]?.pagination
+          .current_page || 1;
+      await loadSpecialists(specialistToEdit.companyId, currentPage);
+      closeSpecialistEditModal();
+    } catch (err) {
+      setSpecialistFormError(
+        (err as Error).message || "Erro ao atualizar especialista.",
+      );
+    } finally {
+      setIsSavingSpecialist(false);
+    }
+  }, [
+    specialistToEdit,
+    editName,
+    editSurname,
+    editEmail,
+    editSpeciality,
+    editCommissionRate,
+    editCalendlyUrl,
+    expandedCompanies,
+    loadSpecialists,
+    closeSpecialistEditModal,
+  ]);
 
   // Função chamada quando o formulário de novo/edição de escritório é submetido com sucesso.
   const handleFormSuccess = () => {
@@ -363,12 +475,13 @@ export default function CompaniesPage() {
                       ) : (
                         <>
                           {/* Cabeçalho da sub-tabela */}
-                          <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_0.8fr] gap-4 px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_0.8fr_0.8fr] gap-4 px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                             <div>Nome</div>
                             <div>E-mail</div>
                             <div>Especialidade</div>
                             <div>% Comissão</div>
                             <div>Calendly</div>
+                            <div className="text-right">Ações</div>
                           </div>
 
                           {/* Linhas de especialistas */}
@@ -376,7 +489,7 @@ export default function CompaniesPage() {
                             {expandedState.specialists.map((spec) => (
                               <div
                                 key={spec.id}
-                                className="grid grid-cols-[2fr_1.5fr_1fr_1fr_0.8fr] gap-4 items-center px-3 py-3 bg-white rounded-lg border border-gray-100"
+                                className="grid grid-cols-[2fr_1.5fr_1fr_1fr_0.8fr_0.8fr] gap-4 items-center px-3 py-3 bg-white rounded-lg border border-gray-100"
                               >
                                 <div>
                                   <span className="text-sm font-medium text-gray-900">
@@ -436,6 +549,21 @@ export default function CompaniesPage() {
                                       E-mail
                                     </span>
                                   )}
+                                </div>
+                                <div className="flex justify-end">
+                                  <button
+                                    onClick={() =>
+                                      openSpecialistEditModal(spec, company.id)
+                                    }
+                                    className="p-1 rounded hover:bg-gray-100 transition-colors"
+                                    title="Editar especialista"
+                                  >
+                                    <img
+                                      src={EditIcon}
+                                      alt="Editar especialista"
+                                      className="h-4 w-4"
+                                    />
+                                  </button>
                                 </div>
                               </div>
                             ))}
@@ -529,6 +657,111 @@ export default function CompaniesPage() {
           <div className="flex justify-center gap-4">
             <Button onClick={() => setCompanyToDelete(null)}>Cancelar</Button>
             <Button onClick={handleConfirmDelete}>Confirmar Exclusão</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={!!specialistToEdit} onClose={closeSpecialistEditModal}>
+        <div className="space-y-4">
+          <h2 className="h2-style">Editar Especialista</h2>
+
+          <div>
+            <label className="block text-sm font-medium text-text-secondary">
+              Nome
+            </label>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text-secondary">
+              Sobrenome
+            </label>
+            <input
+              type="text"
+              value={editSurname}
+              onChange={(e) => setEditSurname(e.target.value)}
+              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text-secondary">
+              E-mail
+            </label>
+            <input
+              type="email"
+              value={editEmail}
+              onChange={(e) => setEditEmail(e.target.value)}
+              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text-secondary">
+              Especialidade
+            </label>
+            <select
+              value={editSpeciality}
+              onChange={(e) =>
+                setEditSpeciality(e.target.value as "CAR" | "BOAT" | "AIRCRAFT")
+              }
+              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm"
+            >
+              <option value="CAR">Carros</option>
+              <option value="BOAT">Lanchas</option>
+              <option value="AIRCRAFT">Aeronaves</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text-secondary">
+              Comissão (%)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              value={editCommissionRate}
+              onChange={(e) => setEditCommissionRate(e.target.value)}
+              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm"
+              placeholder="Ex: 12.5"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text-secondary">
+              Calendly URL
+            </label>
+            <input
+              type="url"
+              value={editCalendlyUrl}
+              onChange={(e) => setEditCalendlyUrl(e.target.value)}
+              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm"
+              placeholder="https://calendly.com/..."
+            />
+          </div>
+
+          {specialistFormError && (
+            <p className="text-sm text-red-500">{specialistFormError}</p>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" onClick={closeSpecialistEditModal}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSaveSpecialist}
+              disabled={isSavingSpecialist}
+            >
+              {isSavingSpecialist ? "Salvando..." : "Salvar"}
+            </Button>
           </div>
         </div>
       </Modal>
