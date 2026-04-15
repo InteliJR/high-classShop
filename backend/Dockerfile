@@ -1,24 +1,25 @@
-# Passo 1: Comece com uma imagem base oficial do Node.js
-FROM node:20-alpine
+FROM node:20-alpine AS builder
 
-# Passo 2: Defina o diretório de trabalho dentro do container
-WORKDIR /usr/src/app
+WORKDIR /app
 
-# Passo 3: Copie os arquivos de dependências
-# Isso otimiza o build, pois as dependências só são reinstaladas se o package.json mudar.
 COPY package*.json ./
+RUN npm ci
 
-# Passo 4: Instale as dependências do projeto
-RUN npm install
-
-# Passo 5: Copie o resto do código da sua aplicação
 COPY . .
+RUN npx prisma generate && npm run build
+RUN npm prune --omit=dev
 
-# Passo 6: Compile o código TypeScript para JavaScript
-RUN npm run build
+FROM node:20-alpine AS runner
 
-# Passo 7: Exponha a porta que a aplicação usa para o Docker
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/generated ./generated
+COPY --from=builder /app/package*.json ./
+
 EXPOSE 3000
 
-# Passo 8: Defina o comando para iniciar a aplicação quando o container rodar
-CMD [ "node", "dist/main" ]
+CMD ["node", "dist/main.js"]
