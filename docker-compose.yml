@@ -16,6 +16,8 @@ services:
     ports:
       - "3000:3000"
     environment:
+      NODE_ENV: production
+      PORT: 3000
       DATABASE_URL: "postgresql://user:password@db:5432/highclassdb?schema=public"
     depends_on:
       - db
@@ -23,7 +25,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "5173:5173"
+      - "5173:80"
     depends_on:
       - backend
 
