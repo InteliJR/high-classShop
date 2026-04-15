@@ -12,9 +12,23 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
 
+  const configuredFrontendUrl =
+    process.env.FRONTEND_URL || 'https://high-class-shop-theta.vercel.app';
+  const allowedOrigins = [configuredFrontendUrl, 'http://localhost:5173'];
+
   // Configuração de CORS
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+    origin: allowedOrigins,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+    ],
+    exposedHeaders: ['Set-Cookie'],
+    optionsSuccessStatus: 204,
     credentials: true,
   });
   // Aumenta o limite de tamanho do payload JSON para aceitar imagens em base64
