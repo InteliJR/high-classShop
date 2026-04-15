@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "buildCommand": "npm run build",
   "headers": [
     {
       "source": "/api/(.*)",
@@ -25,14 +26,14 @@
   ],
   "builds": [
     {
-      "src": "src/main.ts",
+      "src": "dist/main.js",
       "use": "@vercel/node"
     }
   ],
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/src/main.ts"
+      "destination": "/dist/main.js"
     }
   ]
 }
