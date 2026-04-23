@@ -27,7 +27,7 @@
     "@babel/helper-module-transforms" "^7.28.3"
     "@babel/helpers" "^7.28.4"
     "@babel/parser" "^7.28.4"
-    "@babel/template" "^7.27.2"
+    "@babel/template" "^7.27.2" 
     "@babel/traverse" "^7.28.4"
     "@babel/types" "^7.28.4"
     "@jridgewell/remapping" "^2.3.5"
