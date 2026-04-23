@@ -1,16 +1,9 @@
 {
   "version": 2,
   "buildCommand": "npx prisma generate && npm run build",
-  "builds": [
-    {
-      "src": "dist/serverless.js",
-      "use": "@vercel/node"
+  "functions": {
+    "api/[...path].js": {
+      "includeFiles": "dist/**"
     }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/dist/serverless.js"
-    }
-  ]
+  }
 }
