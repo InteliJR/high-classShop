@@ -5,7 +5,7 @@ import { Public } from '../shared/decorators/public.decorator';
 export class HealthController {
   /**
    * Health check endpoint
-   * Usado por plataformas de deploy (Render, Railway, etc) para verificar se o serviço está rodando
+   * Usado por plataformas de observabilidade/orquestração para verificar se o serviço está rodando
    *
    * @returns Status ok e timestamp
    * @example GET /api/health

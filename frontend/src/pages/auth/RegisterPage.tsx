@@ -7,14 +7,17 @@ import {
 import { AuthContext } from "../../contexts/AuthContext";
 import { useContext, useEffect, useState } from "react";
 import type { RegisterValues } from "../../types/types";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 type RegistrationMode = 'referral' | 'public';
 
 export default function RegisterPage() {
   const auth = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
+  const redirectPathFromState = (location.state as { from?: string } | null)
+    ?.from;
   const [registrationMode, setRegistrationMode] = useState<RegistrationMode>('public');
   const [consultantName, setConsultantName] = useState<string>("");
   const [consultantId, setConsultantId] = useState<string>("");
@@ -113,7 +116,9 @@ export default function RegisterPage() {
       await auth.register(registerData);
       
       alert("Cadastro realizado com sucesso! Faça login para continuar.");
-      navigate("/login");
+      navigate("/login", {
+        state: redirectPathFromState ? { from: redirectPathFromState } : undefined,
+      });
     } catch (error: any) {
       alert(error?.response?.data?.message || "Erro ao realizar cadastro. Verifique os dados e tente novamente.");
     }
@@ -175,7 +180,13 @@ export default function RegisterPage() {
             </h2>
             <p className="text-gray-600 text-sm">{tokenError}</p>
             <button
-              onClick={() => navigate("/login")}
+              onClick={() =>
+                navigate("/login", {
+                  state: redirectPathFromState
+                    ? { from: redirectPathFromState }
+                    : undefined,
+                })
+              }
               className="mt-4 px-6 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-black transition-all font-medium shadow-lg"
             >
               {isUserAlreadyExists ? 'Fazer Login' : 'Ir para Login'}
