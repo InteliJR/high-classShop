@@ -8,7 +8,7 @@ import {
 import { AuthContext } from "../../contexts/AuthContext";
 import { useContext, useEffect } from "react";
 import type { LoginValues } from "../../types/types";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { getRoleBasedRoute } from "../../utils/roleUtils";
 import { useAuth } from "../../store/authStateManager";
 
@@ -16,16 +16,19 @@ export default function Login() {
   // Criação do contexto no navegador
   const auth = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
   const user = useAuth((state) => state.user);
   const { loading } = auth;
+  const redirectPathFromState = (location.state as { from?: string } | null)
+    ?.from;
 
   // Se o usuário já está autenticado, redireciona para a página correta
   useEffect(() => {
     if (!loading && user) {
-      const redirectPath = getRoleBasedRoute(user.role);
+      const redirectPath = redirectPathFromState || getRoleBasedRoute(user.role);
       navigate(redirectPath, { replace: true });
     }
-  }, [loading, user, navigate]);
+  }, [loading, user, navigate, redirectPathFromState]);
 
   // Lógica de submissão do formulário
   // Funções para registrar o input e a submissão do formulário
@@ -42,10 +45,11 @@ export default function Login() {
 
       // Redirect based on user role
       if (result?.user?.role) {
-        const redirectPath = getRoleBasedRoute(result.user.role);
+        const redirectPath =
+          redirectPathFromState || getRoleBasedRoute(result.user.role);
         navigate(redirectPath);
       } else {
-        navigate("/catalog/cars");
+        navigate(redirectPathFromState || "/catalog/cars");
       }
       return;
     } catch (error) {
@@ -119,7 +123,18 @@ export default function Login() {
               className="text-sm bg-background-secondary p-2 w-full text-color-text-secondary rounded-md sm:text-2xl sm:rounded-lg hover:bg-gray-500"
               placeholder="Entrar"
             />
-            <Link to="/register" className="text-xs text-color-a sm:text-base hover:underline">
+            <Link
+              to="/register"
+              state={
+                redirectPathFromState
+                  ? {
+                      from: redirectPathFromState,
+                      message: "Crie sua conta para continuar o agendamento",
+                    }
+                  : undefined
+              }
+              className="text-xs text-color-a sm:text-base hover:underline"
+            >
               Cadastre-se
             </Link>
           </div>
