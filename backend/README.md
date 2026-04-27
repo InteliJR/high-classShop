@@ -92,6 +92,34 @@ API local: `http://localhost:3000/api`
 
 ---
 
+## 🚂 Deploy no Railway (Docker)
+
+O backend já está preparado para deploy via `Dockerfile` em ambiente Railway.
+
+### Passos rápidos
+
+1. Crie um serviço no Railway apontando para a pasta `backend` (ou para o repositório com root configurado em `backend`).
+2. Selecione deploy por Docker (o Railway detecta `backend/Dockerfile`).
+3. Configure as variáveis de ambiente obrigatórias:
+	- `NODE_ENV=production`
+	- `PORT` (o Railway injeta automaticamente)
+	- `DATABASE_URL`
+	- `DIRECT_URL` (recomendado para Prisma CLI/migrations)
+	- `FRONTEND_URL`
+	- `JWT_SECRET_ACCESS`, `JWT_SECRET_REFRESH`, `JWT_SECRET_REFERRAL`
+4. Faça o deploy.
+
+### Healthcheck
+
+- Endpoint recomendado para verificação de vida: `GET /api/health`
+
+### Observações importantes
+
+- O container inicia com `node dist/main.js`.
+- O build Docker usa valores placeholder de banco apenas para `prisma generate` durante a imagem; em runtime o Railway usa as variáveis reais.
+
+---
+
 ## 🗃️ Banco de Dados
 
 ```bash
