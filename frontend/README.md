@@ -28,6 +28,12 @@ Aplicação local: `http://localhost:5173`
 
 > Garanta que o backend esteja rodando em `http://localhost:3000` com prefixo `/api`.
 
+### Variáveis de ambiente
+
+- `VITE_API_BASE_URL` (ex.: `http://localhost:3000/api`)
+
+> Importante: use URL absoluta com protocolo (`http://` ou `https://`) para evitar montagem incorreta de rota no navegador.
+
 ---
 
 ## 📦 Scripts
@@ -67,3 +73,10 @@ frontend/src/
 
 - O frontend consome endpoints autenticados com cookies/tokens conforme fluxo do backend.
 - Fluxos críticos (agendamento/reunião) dependem de sincronização com a API para refletir estados corretos do processo.
+
+---
+
+## 📚 Documentação complementar
+
+- Arquitetura do backend (módulos, endpoints, payloads e integrações): `../architecture.md`
+- Guia de integração frontend com endpoints consumidos: `../frontend-integration-guide.md`
