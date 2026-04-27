@@ -12,6 +12,11 @@ A documentação funcional e técnica está disponível em:
 
 > A documentação é mantida com Docusaurus. Veja o guia em `docs/README.md`.
 
+Documentos técnicos versionados no repositório:
+
+- `architecture.md` (arquitetura completa do backend, módulos, endpoints, payloads/respostas e integrações)
+- `frontend-integration-guide.md` (integração frontend ↔ backend, endpoints consumidos e fluxo de autenticação)
+
 ---
 
 ## 🚀 Tecnologias Utilizadas

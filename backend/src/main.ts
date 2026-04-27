@@ -14,7 +14,7 @@ export async function createApp(): Promise<Express> {
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
 
   const configuredFrontendUrl =
-    process.env.FRONTEND_URL || 'https://high-class-shop-theta.vercel.app';
+    process.env.FRONTEND_URL || 'http://localhost:5173';
   const allowedOrigins = [configuredFrontendUrl, 'http://localhost:5173'];
 
   app.enableCors({
@@ -72,12 +72,8 @@ async function bootstrap() {
   });
 }
 
-// Só inicia um servidor HTTP tradicional fora da Vercel.
-// Em serverless, o entrypoint é src/serverless.ts.
-if (!process.env.VERCEL) {
-  bootstrap().catch((error) => {
-    const logger = new Logger('Bootstrap');
-    logger.error('❌ Erro ao inicializar aplicação:', error);
-    process.exit(1);
-  });
-}
+bootstrap().catch((error) => {
+  const logger = new Logger('Bootstrap');
+  logger.error('❌ Erro ao inicializar aplicação:', error);
+  process.exit(1);
+});

@@ -29,38 +29,45 @@ cp .env.example .env
 - `FRONTEND_URL`
 - `JWT_SECRET_ACCESS`, `JWT_SECRET_REFRESH`, `JWT_SECRET_REFERRAL`
 
+### Documentação técnica detalhada
+
+- Arquitetura do backend (módulos, responsabilidades, integrações, endpoints, payloads e respostas):
+  - `../architecture.md`
+- Mapa de integração do frontend com a API:
+  - `../frontend-integration-guide.md`
+
 ### Variáveis de infraestrutura e integrações
 
 - AWS/S3/SES:
-	- `AWS_REGION`
-	- `AWS_ACCESS_KEY_ID`
-	- `AWS_SECRET_ACCESS_KEY`
-	- `AWS_BUCKET_NAME`
-	- `EMAIL_FROM`
+  - `AWS_REGION`
+  - `AWS_ACCESS_KEY_ID`
+  - `AWS_SECRET_ACCESS_KEY`
+  - `AWS_BUCKET_NAME`
+  - `EMAIL_FROM`
 
 - DocuSign:
-	- `DOCUSIGN_INTEGRATION_KEY`
-	- `DOCUSIGN_USER_ID`
-	- `DOCUSIGN_ACCOUNT_ID`
-	- `DOCUSIGN_PRIVATE_KEY`
-	- `DOCUSIGN_ENV`
-	- `DOCUSIGN_TEMPLATE_ID`
-	- `DOCUSIGN_WEBHOOK_SECRET`
+  - `DOCUSIGN_INTEGRATION_KEY`
+  - `DOCUSIGN_USER_ID`
+  - `DOCUSIGN_ACCOUNT_ID`
+  - `DOCUSIGN_PRIVATE_KEY`
+  - `DOCUSIGN_ENV`
+  - `DOCUSIGN_TEMPLATE_ID`
+  - `DOCUSIGN_WEBHOOK_SECRET`
 
 - Backend URL para callbacks:
-	- `BACKEND_URL`
+  - `BACKEND_URL`
 
 - Importação de imagens (Google Drive):
-	- `GOOGLE_DRIVE_API_KEY`
+  - `GOOGLE_DRIVE_API_KEY`
 
 - Reuniões:
-	- `MEETING_PROVIDER`
-	- `MEETING_DEMO_FALLBACK_ENABLED`
-	- `JITSI_BASE_URL`
-	- `GOOGLE_MEET_SERVICE_ACCOUNT_EMAIL`
-	- `GOOGLE_MEET_SERVICE_ACCOUNT_PRIVATE_KEY`
-	- `GOOGLE_MEET_CALENDAR_ID`
-	- `GOOGLE_MEET_TIMEZONE`
+  - `MEETING_PROVIDER`
+  - `MEETING_DEMO_FALLBACK_ENABLED`
+  - `JITSI_BASE_URL`
+  - `GOOGLE_MEET_SERVICE_ACCOUNT_EMAIL`
+  - `GOOGLE_MEET_SERVICE_ACCOUNT_PRIVATE_KEY`
+  - `GOOGLE_MEET_CALENDAR_ID`
+  - `GOOGLE_MEET_TIMEZONE`
 
 ### Variáveis de integração Calendly
 
@@ -89,34 +96,6 @@ npm run start:prod
 ```
 
 API local: `http://localhost:3000/api`
-
----
-
-## 🚂 Deploy no Railway (Docker)
-
-O backend já está preparado para deploy via `Dockerfile` em ambiente Railway.
-
-### Passos rápidos
-
-1. Crie um serviço no Railway apontando para a pasta `backend` (ou para o repositório com root configurado em `backend`).
-2. Selecione deploy por Docker (o Railway detecta `backend/Dockerfile`).
-3. Configure as variáveis de ambiente obrigatórias:
-	- `NODE_ENV=production`
-	- `PORT` (o Railway injeta automaticamente)
-	- `DATABASE_URL`
-	- `DIRECT_URL` (recomendado para Prisma CLI/migrations)
-	- `FRONTEND_URL`
-	- `JWT_SECRET_ACCESS`, `JWT_SECRET_REFRESH`, `JWT_SECRET_REFERRAL`
-4. Faça o deploy.
-
-### Healthcheck
-
-- Endpoint recomendado para verificação de vida: `GET /api/health`
-
-### Observações importantes
-
-- O container inicia com `node dist/main.js`.
-- O build Docker usa valores placeholder de banco apenas para `prisma generate` durante a imagem; em runtime o Railway usa as variáveis reais.
 
 ---
 
