@@ -61,7 +61,7 @@ export default function CustomerHomePage() {
               <h2 className="text-2xl font-bold text-gray-900">Explorar o Catálogo</h2>
               <p className="text-gray-600">
                 Navegue por nossa coleção exclusiva de produtos de luxo.
-                Encontre o carro, embarcação ou aeronave perfeito para você.
+                Encontre carros, embarcações ou aeronaves perfeitos para você.
               </p>
             </div>
             

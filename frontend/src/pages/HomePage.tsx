@@ -12,9 +12,9 @@ export default function HomePage() {
         <img src={Logo} className="w-24 sm:w-32 h-auto" alt="High Class Shop Logo" />
         <nav className="hidden md:flex items-center gap-8">
           <a href="#about" className="hover:text-gray-300 transition-colors">Sobre nós</a>
-          <a href="/catalog/aircrafts" className="hover:text-gray-300 transition-colors">Aeronave</a>
-          <a href="/catalog/boats" className="hover:text-gray-300 transition-colors">Embarcação</a>
-          <a href="/catalog/cars" className="hover:text-gray-300 transition-colors">Carro</a>
+          <a href="/catalog/aircrafts" className="hover:text-gray-300 transition-colors">Aeronaves</a>
+          <a href="/catalog/boats" className="hover:text-gray-300 transition-colors">Embarcações</a>
+          <a href="/catalog/cars" className="hover:text-gray-300 transition-colors">Carros</a>
         </nav>
         <button 
           onClick={() => navigate("/login")}

@@ -24,9 +24,9 @@ export default function LandingPage() {
           <img src={Logo} className="w-24 sm:w-32 h-auto" alt="High Class Shop Logo" />
           
           <nav className="hidden md:flex items-center gap-8 text-sm font-light uppercase tracking-widest text-gray-200">
-            <a href="/catalog/aircrafts" className="hover:text-white transition-colors">Aeronave</a>
-            <a href="/catalog/boats" className="hover:text-white transition-colors">Embarcação</a>
-            <a href="/catalog/cars" className="hover:text-white transition-colors">Carro</a>
+            <a href="/catalog/aircrafts" className="hover:text-white transition-colors">Aeronaves</a>
+            <a href="/catalog/boats" className="hover:text-white transition-colors">Embarcações</a>
+            <a href="/catalog/cars" className="hover:text-white transition-colors">Carros</a>
           </nav>
 
           <button 
@@ -45,19 +45,19 @@ export default function LandingPage() {
       {/* SEÇÃO CLARA (Produtos) */}
       <main className="flex-1 bg-[#E5E5E5] py-20 px-6 sm:px-12">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12">
-          <Product 
-            title="Aeronave" 
-            image={aircraft1} 
+          <Product
+            title="Aeronaves"
+            image={aircraft1}
             categoryLink="/catalog/aircrafts"
           />
           <Product
-            title="Embarcação"
+            title="Embarcações"
             image={boat2}
             categoryLink="/catalog/boats"
           />
-          <Product 
-            title="Carro" 
-            image={car2} 
+          <Product
+            title="Carros"
+            image={car2}
             categoryLink="/catalog/cars"
           />
         </div>
