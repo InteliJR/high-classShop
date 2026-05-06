@@ -25,7 +25,7 @@ export default function LandingPage() {
           
           <nav className="hidden md:flex items-center gap-8 text-sm font-light uppercase tracking-widest text-gray-200">
             <a href="/catalog/aircrafts" className="hover:text-white transition-colors">Aeronave</a>
-            <a href="/catalog/boats" className="hover:text-white transition-colors">Barco</a>
+            <a href="/catalog/boats" className="hover:text-white transition-colors">Embarcação</a>
             <a href="/catalog/cars" className="hover:text-white transition-colors">Carro</a>
           </nav>
 
@@ -50,9 +50,9 @@ export default function LandingPage() {
             image={aircraft1} 
             categoryLink="/catalog/aircrafts"
           />
-          <Product 
-            title="Barco" 
-            image={boat2} 
+          <Product
+            title="Embarcação"
+            image={boat2}
             categoryLink="/catalog/boats"
           />
           <Product 

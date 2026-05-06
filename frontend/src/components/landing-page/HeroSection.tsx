@@ -51,7 +51,7 @@ export function HeroSection() {
             <span className="text-gray-300">Cada Detalhe</span>
           </h1>
           <p className="text-gray-300 text-base leading-relaxed max-w-md font-light">
-            Bem-vindo à referência em intermediação de luxo. Conectamos você aos veículos mais desejados do mundo com segurança, discrição e agilidade.
+            Bem-vindo à referência em intermediação de luxo. Conectamos você aos produtos mais desejados do mundo com segurança, discrição e agilidade.
           </p>
         </motion.div>
 

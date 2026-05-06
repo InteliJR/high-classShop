@@ -11,9 +11,9 @@ interface ProductProps {
 // Mapa de descrições baseado no título para substituir o Lorem Ipsum dinamicamente
 const descriptions: Record<string, string> = {
   "Aeronave": "Viaje sem limites. Jatos executivos que combinam performance superior, conforto absoluto e privacidade total para seus voos.",
-  "Barco": "Liberdade em alto mar. Iates e embarcações projetados com o mais alto rigor técnico para experiências náuticas inesquecíveis.",
-  "Carro": "Engenharia e paixão. Uma seleção exclusiva de supercarros e veículos de luxo para quem não aceita menos que a excelência.",
-  "Default": "Explore nossa coleção exclusiva de veículos de luxo selecionados rigorosamente para você."
+  "Embarcação": "Liberdade em alto mar. Iates e embarcações projetados com o mais alto rigor técnico para experiências náuticas inesquecíveis.",
+  "Carro": "Engenharia e paixão. Uma seleção exclusiva de supercarros e produtos de luxo para quem não aceita menos que a excelência.",
+  "Default": "Explore nossa coleção exclusiva de produtos de luxo selecionados rigorosamente para você."
 };
 
 export function Product({ image, title, categoryLink, index = 0 }: ProductProps) {

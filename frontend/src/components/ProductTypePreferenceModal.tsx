@@ -25,7 +25,7 @@ const options: {
   },
   {
     type: "BOAT",
-    label: "Barcos",
+    label: "Embarcações",
     description: "Lanchas e embarcações para lazer e alto padrão.",
     icon: <Ship size={24} className="text-primary" />,
   },

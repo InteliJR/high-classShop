@@ -776,7 +776,7 @@ export default function ProcessCard({
                     {process.product_type === "CAR"
                       ? "Carro"
                       : process.product_type === "BOAT"
-                        ? "Barco"
+                        ? "Embarcação"
                         : "Aeronave"}
                   </p>
                 </div>

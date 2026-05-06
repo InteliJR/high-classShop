@@ -32,7 +32,7 @@ const specialityConfig: Record<
   { label: string; icon: React.ReactNode }
 > = {
   CAR: { label: "Carros", icon: <Car size={28} /> },
-  BOAT: { label: "Barcos", icon: <Ship size={28} /> },
+  BOAT: { label: "Embarcações", icon: <Ship size={28} /> },
   AIRCRAFT: { label: "Aeronaves", icon: <Plane size={28} /> },
 };
 
@@ -249,7 +249,7 @@ export default function ConsultoriaPage() {
           Consultoria Especializada
         </h1>
         <p className="text-lg text-gray-600 max-w-3xl">
-          Nossos especialistas estão prontos para ajudá-lo a encontrar o veículo
+          Nossos especialistas estão prontos para ajudá-lo a encontrar o produto
           perfeito. Escolha um especialista na categoria de seu interesse para
           agendar uma consultoria.
         </p>
