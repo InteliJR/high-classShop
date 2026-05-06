@@ -31,7 +31,7 @@ export default function Header() {
   // Lista de itens do menu para visitantes
   const menuItems = [
     { label: "Aeronave", path: "/catalog/aircrafts" },
-    { label: "Barco", path: "/catalog/boats" },
+    { label: "Embarcação", path: "/catalog/boats" },
     { label: "Carro", path: "/catalog/cars" },
   ];
 

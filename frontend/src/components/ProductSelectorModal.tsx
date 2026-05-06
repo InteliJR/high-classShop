@@ -72,7 +72,7 @@ export default function ProductSelectorModal({
     { label: string; icon: React.ReactNode }
   > = {
     CAR: { label: "Carros", icon: <Car size={20} /> },
-    BOAT: { label: "Barcos", icon: <Ship size={20} /> },
+    BOAT: { label: "Embarcações", icon: <Ship size={20} /> },
     AIRCRAFT: { label: "Aeronaves", icon: <Plane size={20} /> },
   };
 

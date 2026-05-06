@@ -354,7 +354,7 @@ export default function NewSpecialistForm({
           required
         >
           <option value="CAR">Carros</option>
-          <option value="BOAT">Barcos</option>
+          <option value="BOAT">Embarcações</option>
           <option value="AIRCRAFT">Aeronaves</option>
         </select>
       </div>

@@ -104,7 +104,7 @@ export default function ProductDetails({ product }: ProductDetailsProps) {
       product.tipo_categoria ? (
         <div>
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Informações do Veículo
+            Informações do Produto
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {product.cor && <InfoCard label="Cor" value={product.cor} />}

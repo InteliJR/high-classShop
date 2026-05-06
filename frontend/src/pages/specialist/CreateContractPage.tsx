@@ -566,7 +566,7 @@ export default function CreateContractPage() {
   const getProductTypeLabel = (type?: string) => {
     switch (type) {
       case "CAR":
-        return "Veículo";
+        return "Produto";
       case "BOAT":
         return "Embarcação";
       case "AIRCRAFT":

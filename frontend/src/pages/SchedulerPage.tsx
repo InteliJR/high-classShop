@@ -120,7 +120,7 @@ const SchedulerPage = () => {
           categoria === "carros"
             ? "Carros"
             : categoria === "barcos"
-              ? "Barcos"
+              ? "Embarcações"
               : "Aeronaves"
         }
         itemName={productData.modelo || productData.marca}

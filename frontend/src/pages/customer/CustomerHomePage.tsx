@@ -60,8 +60,8 @@ export default function CustomerHomePage() {
             <div className="space-y-2">
               <h2 className="text-2xl font-bold text-gray-900">Explorar o Catálogo</h2>
               <p className="text-gray-600">
-                Navegue por nossa coleção exclusiva de veículos de luxo. 
-                Encontre o carro, barco ou aeronave perfeito para você.
+                Navegue por nossa coleção exclusiva de produtos de luxo.
+                Encontre o carro, embarcação ou aeronave perfeito para você.
               </p>
             </div>
             
@@ -73,7 +73,7 @@ export default function CustomerHomePage() {
               </div>
               <div className="flex flex-col items-center gap-2 text-gray-500">
                 <Ship size={24} />
-                <span className="text-xs">Barcos</span>
+                <span className="text-xs">Embarcações</span>
               </div>
               <div className="flex flex-col items-center gap-2 text-gray-500">
                 <Plane size={24} />
@@ -136,7 +136,7 @@ export default function CustomerHomePage() {
             className="flex items-center justify-center gap-3 p-4 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
           >
             <Ship size={24} className="text-primary" />
-            <span className="font-medium">Barcos</span>
+            <span className="font-medium">Embarcações</span>
           </button>
           <button
             onClick={() => navigate("/catalog/aircrafts")}

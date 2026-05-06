@@ -348,7 +348,7 @@ export default function NegotiationPage() {
                   {processInfo.product_type === "CAR"
                     ? "Carro"
                     : processInfo.product_type === "BOAT"
-                      ? "Barco"
+                      ? "Embarcação"
                       : "Aeronave"}
                 </p>
               )}

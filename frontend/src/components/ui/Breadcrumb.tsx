@@ -7,7 +7,7 @@ import { ChevronRight } from 'lucide-react';
 const categoryLabels: Record<string, string> = {
   carros: "Carros",
   avioes: "Aviões",
-  barcos: "Barcos",
+  barcos: "Embarcações",
 };
 
 // O componente agora aceita props opcionais. Mock.

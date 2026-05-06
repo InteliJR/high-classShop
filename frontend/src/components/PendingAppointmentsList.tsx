@@ -97,7 +97,7 @@ export default function PendingAppointmentsList({
   const getProductTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
       CAR: "Carro",
-      BOAT: "Barco",
+      BOAT: "Embarcação",
       AIRCRAFT: "Aeronave",
     };
     return labels[type] || type;

@@ -13,7 +13,7 @@ export default function HomePage() {
         <nav className="hidden md:flex items-center gap-8">
           <a href="#about" className="hover:text-gray-300 transition-colors">Sobre nós</a>
           <a href="/catalog/aircrafts" className="hover:text-gray-300 transition-colors">Aeronave</a>
-          <a href="/catalog/boats" className="hover:text-gray-300 transition-colors">Barco</a>
+          <a href="/catalog/boats" className="hover:text-gray-300 transition-colors">Embarcação</a>
           <a href="/catalog/cars" className="hover:text-gray-300 transition-colors">Carro</a>
         </nav>
         <button 
@@ -29,11 +29,11 @@ export default function HomePage() {
       <main className="flex-1 flex flex-col items-center justify-center px-6 sm:px-12 py-12 text-white text-center">
         <div className="max-w-4xl mx-auto space-y-8">
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold leading-tight">
-            Seu próximo veículo de luxo está aqui
+            Seu próximo produto de luxo está aqui
           </h1>
           <p className="text-lg sm:text-xl md:text-2xl text-gray-300 max-w-2xl mx-auto">
-            Explore nossa coleção exclusiva de carros, barcos e aeronaves. 
-            Encontre o veículo perfeito para você ou agende uma consultoria especializada.
+            Explore nossa coleção exclusiva de carros, embarcações e aeronaves.
+            Encontre o produto perfeito para você ou agende uma consultoria especializada.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8">
@@ -68,7 +68,7 @@ export default function HomePage() {
             className="bg-background-secondary/50 p-6 rounded-xl cursor-pointer hover:bg-background-secondary transition-all transform hover:scale-105 group"
           >
             <div className="text-4xl mb-4">🚤</div>
-            <h3 className="text-xl font-semibold mb-2">Barcos</h3>
+            <h3 className="text-xl font-semibold mb-2">Embarcações</h3>
             <p className="text-gray-400 text-sm">Descubra iates e embarcações exclusivas</p>
           </div>
           
