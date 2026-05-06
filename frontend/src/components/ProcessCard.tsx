@@ -774,10 +774,10 @@ export default function ProcessCard({
                   <p className="text-xs text-gray-600 font-medium">Categoria</p>
                   <p className="text-xs md:text-sm font-semibold text-gray-900 truncate">
                     {process.product_type === "CAR"
-                      ? "Carro"
+                      ? "Carros"
                       : process.product_type === "BOAT"
-                        ? "Embarcação"
-                        : "Aeronave"}
+                        ? "Embarcações"
+                        : "Aeronaves"}
                   </p>
                 </div>
                 <div>
