@@ -1483,6 +1483,31 @@ export class AppointmentsService {
       `[confirmPending] Agendamento ${appointmentId} confirmado. Process ${process.id} movido para NEGOTIATION`,
     );
 
+    // Fire-and-forget: notificar cliente sobre confirmação do agendamento
+    const confirmedProduct = await this.getProductByType(updated.product_type, updated.product_id);
+    const confirmedProductDetails = confirmedProduct
+      ? `${(confirmedProduct as any).marca || ''} ${(confirmedProduct as any).modelo || ''}`.trim()
+      : '';
+
+    setImmediate(() => {
+      this.notificationService
+        .sendAppointmentConfirmedEmail({
+          clientEmail: updated.client.email,
+          clientName: `${updated.client.name} ${updated.client.surname || ''}`.trim(),
+          specialistName: `${updated.specialist.name} ${updated.specialist.surname || ''}`.trim(),
+          appointmentDate: updated.appointment_datetime || new Date(),
+          productDetails: confirmedProductDetails,
+          processId: process.id,
+        })
+        .catch((err) => {
+          this.logger.error('Notification failed (non-critical)', {
+            method: 'confirmPending',
+            appointmentId: updated.id,
+            error: err.message,
+          });
+        });
+    });
+
     const product = await this.getProductByType(
       updated.product_type,
       updated.product_id,
@@ -1574,6 +1599,34 @@ export class AppointmentsService {
       });
 
       this.logger.log(`[cancelPending] Appointment ${appointmentId} deletado`);
+    });
+
+    // Fire-and-forget: notificar a outra parte sobre o cancelamento
+    const cancellerName = isSpecialist
+      ? `${appointment.specialist.name} ${appointment.specialist.surname || ''}`.trim()
+      : `${appointment.client.name} ${appointment.client.surname || ''}`.trim();
+    const recipientEmail = isSpecialist ? appointment.client.email : appointment.specialist.email;
+    const recipientName = isSpecialist
+      ? `${appointment.client.name} ${appointment.client.surname || ''}`.trim()
+      : `${appointment.specialist.name} ${appointment.specialist.surname || ''}`.trim();
+
+    setImmediate(() => {
+      this.notificationService
+        .sendAppointmentCancelledEmail({
+          recipientEmail,
+          recipientName,
+          cancellerName,
+          wasClient: isClient,
+          appointmentDate: appointment.appointment_datetime || new Date(),
+          productDetails: '',
+        })
+        .catch((err) => {
+          this.logger.error('Notification failed (non-critical)', {
+            method: 'cancelPending',
+            appointmentId,
+            error: err.message,
+          });
+        });
     });
 
     return {

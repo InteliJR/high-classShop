@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Save, Calendar, User, Lock } from "lucide-react";
+import api from "../services/api";
 import { useAuth } from "../store/authStateManager";
 import {
   getUserById,
@@ -22,7 +23,7 @@ import {
  * Tabs:
  * - Dados Pessoais: nome, sobrenome, cpf, rg
  *   - Para especialistas: campo destacado calendly_url
- * - Alterar Senha: desabilitada com mensagem "Em breve"
+ * - Alterar Senha: formulário para trocar senha via PATCH /auth/change-password
  */
 export default function CustomerProfilePage() {
   const navigate = useNavigate();
@@ -47,6 +48,16 @@ export default function CustomerProfilePage() {
     rg: "",
     calendly_url: "",
   });
+
+  // Password form state
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: "",
+    new_password: "",
+    confirm_password: "",
+  });
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
   // Carregar dados do usuário
   useEffect(() => {
@@ -187,6 +198,39 @@ export default function CustomerProfilePage() {
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(null);
+
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      setPasswordError("A nova senha e a confirmação não coincidem");
+      return;
+    }
+
+    setSavingPassword(true);
+    try {
+      await api.patch(
+        "/auth/change-password",
+        {
+          current_password: passwordForm.current_password,
+          new_password: passwordForm.new_password,
+        },
+        { withCredentials: true },
+      );
+      setPasswordSuccess("Senha alterada com sucesso!");
+      setPasswordForm({ current_password: "", new_password: "", confirm_password: "" });
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        setPasswordError("Senha atual incorreta");
+      } else {
+        setPasswordError("Erro ao alterar senha. Tente novamente.");
+      }
+    } finally {
+      setSavingPassword(false);
     }
   };
 
@@ -409,19 +453,78 @@ export default function CustomerProfilePage() {
           </div>
         </form>
       ) : (
-        /* Tab Alterar Senha - Desabilitada */
-        <div className="bg-gray-50 rounded-lg p-8 text-center">
-          <Lock size={48} className="mx-auto text-gray-400 mb-4" />
-          <h2 className="text-xl font-semibold text-gray-700 mb-2">
-            Alterar Senha
-          </h2>
-          <p className="text-gray-500">
-            Esta funcionalidade será adicionada em breve.
-          </p>
-          <div className="mt-4 inline-block px-4 py-2 bg-gray-200 text-gray-600 rounded-full text-sm">
-            Em desenvolvimento
+        <form onSubmit={handlePasswordSubmit} className="space-y-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold mb-4">Alterar Senha</h2>
+
+            {passwordError && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+                {passwordError}
+              </div>
+            )}
+            {passwordSuccess && (
+              <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">
+                {passwordSuccess}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Senha atual
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.current_password}
+                  onChange={(e) => setPasswordForm((p) => ({ ...p, current_password: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                  required
+                  minLength={6}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nova senha
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.new_password}
+                  onChange={(e) => setPasswordForm((p) => ({ ...p, new_password: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                  required
+                  minLength={6}
+                  placeholder="Mínimo 6 caracteres"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Confirmar nova senha
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.confirm_password}
+                  onChange={(e) => setPasswordForm((p) => ({ ...p, confirm_password: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                  required
+                  minLength={6}
+                />
+              </div>
+            </div>
           </div>
-        </div>
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={savingPassword}
+              className="flex items-center gap-2 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
+            >
+              <Lock size={18} />
+              {savingPassword ? "Salvando..." : "Alterar Senha"}
+            </button>
+          </div>
+        </form>
       )}
     </div>
   );

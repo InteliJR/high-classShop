@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { ApiResponseDto, LoginDto, UserRegisterDto } from './dto/auth';
+import { ApiResponseDto, ChangePasswordDto, LoginDto, UserRegisterDto } from './dto/auth';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { jwtConstants } from './constants';
@@ -245,6 +245,25 @@ export class AuthService {
       }
       throw new UnauthorizedException(error.name);
     }
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<{ message: string }> {
+    const user = await this.prismaService.user.findUniqueOrThrow({
+      where: { id: userId },
+    });
+
+    const passwordMatch = await bcrypt.compare(dto.current_password, user.password_hash);
+    if (!passwordMatch) {
+      throw new UnauthorizedException('Senha atual incorreta');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.new_password, 10);
+    await this.prismaService.user.update({
+      where: { id: userId },
+      data: { password_hash: hashedPassword },
+    });
+
+    return { message: 'Senha alterada com sucesso' };
   }
 
   // Logout - remover refresh token do banco

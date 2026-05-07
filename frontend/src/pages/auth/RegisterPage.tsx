@@ -340,13 +340,13 @@ export default function RegisterPage() {
                     className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 transition-all ${
                       errors.rg 
                         ? 'border-red-500 focus:ring-red-500' 
-                        : watch("rg") && watch("rg").replace(/\D/g, "").length === 10
+                        : watch("rg") && (() => { const d = watch("rg").replace(/\D/g, "").length; return d >= 7 && d <= 10; })()
                         ? 'border-green-500 focus:ring-green-500'
                         : 'border-gray-300 focus:ring-gray-900 focus:border-transparent'
                     }`}
-                    {...register("rg", { 
+                    {...register("rg", {
                       required: "RG é obrigatório",
-                      validate: (value) => value.replace(/\D/g, "").length === 10 || "RG deve ter 10 dígitos",
+                      validate: (value) => { const d = value.replace(/\D/g, "").length; return (d >= 7 && d <= 10) || "RG deve ter entre 7 e 10 dígitos"; },
                       onChange: (e) => {
                         e.target.value = formatRG(e.target.value);
                       }

@@ -8,6 +8,8 @@ import {
   ImportStructureValidation,
 } from '../dto/import-response.dto';
 import * as ExcelJS from 'exceljs';
+import * as iconv from 'iconv-lite';
+import * as chardet from 'chardet';
 
 /**
  * Definição de colunas para validação de estrutura do XLSX
@@ -162,7 +164,18 @@ export class XlsxImportService {
    * Aceita delimitadores "," e ";" com suporte a valores entre aspas.
    */
   parseCsv(fileBuffer: Buffer): CsvParseResult {
-    const rawText = fileBuffer.toString('utf-8').replace(/^\uFEFF/, '');
+    // Detectar encoding e converter para UTF-8 se necess\u00E1rio
+    const detectedEncoding = chardet.detect(fileBuffer);
+    let decodedText: string;
+
+    if (detectedEncoding && !detectedEncoding.toLowerCase().startsWith('utf')) {
+      decodedText = iconv.decode(fileBuffer, detectedEncoding);
+    } else {
+      decodedText = fileBuffer.toString('utf-8');
+    }
+
+    // Remover BOM UTF-8 se presente
+    const rawText = decodedText.replace(/^\uFEFF/, '');
     const lines = rawText
       .split(/\r\n|\n|\r/)
       .map((line) => line.trim())
