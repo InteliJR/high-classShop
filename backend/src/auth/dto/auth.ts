@@ -53,8 +53,8 @@ export class UserRegisterDto {
   cpf: string;
 
   @IsString()
-  @Length(10, 10)
-  @Matches(/^\d{10}$/, { message: 'RG must be 10 digits' })
+  @Length(7, 10, { message: 'RG deve ter entre 7 e 10 dígitos' })
+  @Matches(/^\d{7,10}$/, { message: 'RG deve conter apenas números (7-10 dígitos)' })
   rg: string;
 
   @IsString()
@@ -76,6 +76,16 @@ export class UserRegisterDto {
   @IsOptional()
   @IsUUID()
   consultant_id?: string;
+}
+
+export class ChangePasswordDto {
+  @IsString()
+  @MinLength(6)
+  current_password: string;
+
+  @IsString()
+  @MinLength(6)
+  new_password: string;
 }
 
 export class LoginDto {

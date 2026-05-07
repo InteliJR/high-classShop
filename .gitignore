@@ -135,5 +135,4 @@ Dockerfile.prod
 Contratodevenda.json
 
 # Contexto
-.contexto/
-contexto/
+ai/

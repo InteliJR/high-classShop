@@ -17,6 +17,10 @@ Documentos técnicos versionados no repositório:
 - `architecture.md` (arquitetura completa do backend, módulos, endpoints, payloads/respostas e integrações)
 - `frontend-integration-guide.md` (integração frontend ↔ backend, endpoints consumidos e fluxo de autenticação)
 
+**Contexto para IA e devs:** [`ai/contexts/`](ai/contexts/) — stack, endpoints, schema, integrações, variáveis de ambiente e bugs conhecidos.
+
+**Planos de implementação:** [`ai/plan/`](ai/plan/) — planos detalhados por sprint/data.
+
 ---
 
 ## 🚀 Tecnologias Utilizadas
@@ -114,7 +118,7 @@ docker compose logs -f frontend
 ├── backend/           # API NestJS + Prisma
 ├── frontend/          # App React + Vite
 ├── docs/              # Documentação Docusaurus
-├── .contexto/         # Contexto técnico local (pasta oculta)
+├── ai/                # Contexto para IA/devs + planos de implementação
 └── docker-compose.yml # Orquestração local
 ```
 

@@ -8,6 +8,7 @@ import {
   type GroupedSpecialists,
 } from "../../services/specialists.service";
 import {
+  cancelPendingAppointment,
   createConsultancyAppointment,
   getCalendlySyncStatus,
   registerCalendlyScheduledEvent,
@@ -230,6 +231,22 @@ export default function ConsultoriaPage() {
     }
   };
 
+  const handleCalendlyModalClose = async () => {
+    setIsCalendlyModalOpen(false);
+
+    if (syncState === "waiting_event" && pendingAppointmentId) {
+      try {
+        await cancelPendingAppointment(pendingAppointmentId);
+      } catch (err) {
+        console.error("Erro ao cancelar agendamento ao fechar modal", err);
+      } finally {
+        setPendingAppointmentId(null);
+        setSyncState("idle");
+        setSyncMessage("");
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -331,7 +348,7 @@ export default function ConsultoriaPage() {
         <PopupModal
           url={calendlyModalUrl}
           open={isCalendlyModalOpen}
-          onModalClose={() => setIsCalendlyModalOpen(false)}
+          onModalClose={handleCalendlyModalClose}
           rootElement={document.getElementById("root") ?? document.body}
           prefill={{
             name: user ? `${user.name} ${user.surname}`.trim() : undefined,

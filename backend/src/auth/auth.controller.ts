@@ -2,11 +2,14 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   UseGuards,
   Res,
   Req,
   Request,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import * as auth from './dto/auth';
@@ -109,6 +112,16 @@ export class AuthController {
   @Get('me')
   async getUser(@Request() req: auth.RequestWithUser) {
     return req.user;
+  }
+
+  @Patch('change-password')
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @Request() req: auth.RequestWithUser,
+    @Body() body: auth.ChangePasswordDto,
+  ) {
+    const result = await this.authService.changePassword(req.user.id, body);
+    return { success: true, ...result };
   }
 
   @Post('logout')
