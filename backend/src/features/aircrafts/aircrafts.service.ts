@@ -440,7 +440,9 @@ export class AircraftsService {
       'https://drive.google.com/drive/folders/SEU_FOLDER_ID',
     ].join(';');
 
-    return Buffer.from(`${headers}\n${exampleValues}\n`, 'utf-8');
+    const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
+    const content = Buffer.from(`${headers}\n${exampleValues}\n`, 'utf-8');
+    return Buffer.concat([BOM, content]);
   }
 
   /**

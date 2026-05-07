@@ -137,6 +137,8 @@ export class DriveImportService {
           `Falha ao importar ${file.name}: ${error?.message || 'erro desconhecido'}`,
         );
       }
+
+      await this.sleepBetweenDownloads();
     }
 
     return {
@@ -322,6 +324,8 @@ export class DriveImportService {
           product_key: productKey,
         });
       }
+
+      await this.sleepBetweenDownloads();
     }
 
     const uploaded = results.filter((r) => r.status === 'uploaded').length;
@@ -660,34 +664,80 @@ export class DriveImportService {
 
   private async downloadDriveFile(
     fileId: string,
-    apiKey: string,
+    _apiKey: string,
   ): Promise<{
     buffer: Buffer;
     contentType: string;
   }> {
-    const response = await axios.get(
-      `https://www.googleapis.com/drive/v3/files/${fileId}`,
-      {
-        params: {
-          alt: 'media',
-          key: apiKey,
-        },
-        responseType: 'arraybuffer',
-        timeout: 60000,
-        maxContentLength: 15 * 1024 * 1024,
-        maxBodyLength: 15 * 1024 * 1024,
-      },
-    );
+    // Usa URL pública do Drive — não consome quota de API key
+    // A API key só é usada para listagem; downloads vão pela URL pública
+    const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
 
-    const contentType =
-      typeof response.headers['content-type'] === 'string'
-        ? response.headers['content-type']
-        : 'application/octet-stream';
+    const MAX_RETRIES = 3;
+    const RETRY_DELAYS = [500, 1500, 4000]; // ms — backoff exponencial
 
-    return {
-      buffer: Buffer.from(response.data),
-      contentType,
-    };
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, RETRY_DELAYS[attempt - 1]),
+        );
+      }
+
+      try {
+        const response = await axios.get(downloadUrl, {
+          responseType: 'arraybuffer',
+          timeout: 60000,
+          maxContentLength: 15 * 1024 * 1024,
+          maxBodyLength: 15 * 1024 * 1024,
+          headers: { 'User-Agent': 'high-class-shop-drive-importer/1.0' },
+        });
+
+        const contentType =
+          typeof response.headers['content-type'] === 'string'
+            ? response.headers['content-type'].split(';')[0].trim()
+            : 'application/octet-stream';
+
+        return {
+          buffer: Buffer.from(response.data),
+          contentType,
+        };
+      } catch (error: any) {
+        lastError = error;
+        const status = error?.response?.status;
+
+        // Erros que valem retry: rate limit (429), server error (5xx), bad gateway (502)
+        const isRetryable =
+          status === 429 ||
+          status === 500 ||
+          status === 502 ||
+          status === 503 ||
+          status === 504;
+
+        // 403 = arquivo não público; 404 = não existe — não adianta retry
+        if (!isRetryable && status !== undefined) {
+          const errorBody = error?.response?.data
+            ? Buffer.from(error.response.data).toString('utf-8').slice(0, 300)
+            : '';
+          throw new Error(
+            `Google Drive retornou ${status} para arquivo ${fileId}. ` +
+              (errorBody || 'Verifique se a pasta está compartilhada como "Qualquer pessoa com o link".'),
+          );
+        }
+
+        this.logger.warn(
+          `[downloadDriveFile] Tentativa ${attempt + 1}/${MAX_RETRIES} falhou para ${fileId}: status=${status ?? 'network error'}`,
+        );
+      }
+    }
+
+    throw lastError ?? new Error(`Falha ao baixar arquivo ${fileId} do Google Drive após ${MAX_RETRIES} tentativas`);
+  }
+
+  private async sleepBetweenDownloads(): Promise<void> {
+    // 250ms entre downloads — mantém bem abaixo de 100 req/100s da API key
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
   private async createImageRecord(params: {

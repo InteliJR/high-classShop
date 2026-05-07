@@ -128,9 +128,9 @@ export default function DocuSignPreviewModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={!isLoading ? onCancel : undefined}>
       {/* Container principal */}
-      <div className="relative w-full h-full max-w-7xl max-h-[95vh] mx-4 my-4 bg-white rounded-xl overflow-hidden shadow-2xl flex flex-col">
+      <div className="relative w-full h-full max-w-7xl max-h-[95vh] mx-4 my-4 bg-white rounded-xl overflow-hidden shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50">
           <div className="flex items-center gap-4">

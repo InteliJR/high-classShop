@@ -442,38 +442,6 @@ export class MeetingsService {
       );
     }
 
-    if (!process.appointment) {
-      throw new BadRequestException(
-        'Este processo não possui agendamento confirmado',
-      );
-    }
-
-    if (
-      process.appointment.status !== StatusAgendamento.SCHEDULED &&
-      process.appointment.status !== StatusAgendamento.COMPLETED
-    ) {
-      throw new BadRequestException(
-        'O agendamento ainda não foi confirmado pelo especialista',
-      );
-    }
-
-    if (!process.appointment.appointment_datetime) {
-      throw new BadRequestException(
-        'Horário da reunião não encontrado. Verifique o agendamento no Calendly antes de iniciar a reunião.',
-      );
-    }
-
-    const nowTime = Date.now();
-    const appointmentTime = process.appointment.appointment_datetime.getTime();
-    const thirtyMinutesBefore = appointmentTime - 30 * 60 * 1000;
-
-    if (nowTime < thirtyMinutesBefore) {
-      const availableAt = new Date(thirtyMinutesBefore).toISOString();
-      throw new BadRequestException(
-        `A reunião só pode ser iniciada nos 30 minutos anteriores ao horário agendado. Disponível a partir de ${availableAt}.`,
-      );
-    }
-
     if (process.meeting_session) {
       return this.buildMeetingResponse(process.meeting_session);
     }

@@ -125,8 +125,8 @@ export default function ProductsPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-text-primary">Gestão de Produtos</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">Gestão de Produtos</h1>
         <button
           onClick={() => navigate("/specialist/products/new")}
           className="px-4 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-800 transition"
