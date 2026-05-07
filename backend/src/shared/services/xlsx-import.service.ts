@@ -9,7 +9,6 @@ import {
 } from '../dto/import-response.dto';
 import * as ExcelJS from 'exceljs';
 import * as iconv from 'iconv-lite';
-import * as chardet from 'chardet';
 
 /**
  * Definição de colunas para validação de estrutura do XLSX
@@ -164,18 +163,19 @@ export class XlsxImportService {
    * Aceita delimitadores "," e ";" com suporte a valores entre aspas.
    */
   parseCsv(fileBuffer: Buffer): CsvParseResult {
-    // Detectar encoding e converter para UTF-8 se necess\u00E1rio
-    const detectedEncoding = chardet.detect(fileBuffer);
-    let decodedText: string;
+    // Remover BOM UTF-8 se presente (0xEF 0xBB 0xBF)
+    const withoutBom =
+      fileBuffer[0] === 0xef && fileBuffer[1] === 0xbb && fileBuffer[2] === 0xbf
+        ? fileBuffer.slice(3)
+        : fileBuffer;
 
-    if (detectedEncoding && !detectedEncoding.toLowerCase().startsWith('utf')) {
-      decodedText = iconv.decode(fileBuffer, detectedEncoding);
-    } else {
-      decodedText = fileBuffer.toString('utf-8');
-    }
-
-    // Remover BOM UTF-8 se presente
-    const rawText = decodedText.replace(/^\uFEFF/, '');
+    // Tentar UTF-8 primeiro; se houver char de substitui\u00E7\u00E3o (U+FFFD),
+    // o arquivo n\u00E3o \u00E9 UTF-8 v\u00E1lido \u2014 decodificar como windows-1252
+    // (superset de ISO-8859-1, padr\u00E3o do Excel no Windows)
+    const utf8Attempt = withoutBom.toString('utf-8');
+    const rawText = utf8Attempt.includes('\uFFFD')
+      ? iconv.decode(withoutBom, 'windows-1252')
+      : utf8Attempt;
     const lines = rawText
       .split(/\r\n|\n|\r/)
       .map((line) => line.trim())

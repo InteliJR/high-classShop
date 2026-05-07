@@ -108,7 +108,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Cards de Estatísticas */}
-      <div className="grid grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
         {/* Card 1: Processos Ativos - DADOS REAIS */}
         <div className="bg-gray-300 rounded-lg p-6">
           <p className="text-gray-700 font-semibold mb-2">Processos Ativos</p>
@@ -183,9 +183,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Gráficos */}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Gráfico de Vendas */}
-        <div className="col-span-2 bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+        <div className="md:col-span-2 bg-white rounded-lg p-6 shadow-sm border border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Vendas</h2>
           <div className="flex gap-4 mb-4">
             <div className="flex items-center gap-2">

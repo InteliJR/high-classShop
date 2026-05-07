@@ -174,7 +174,7 @@ export default function MeetingRoomPage() {
             </div>
           </div>
 
-          {hasValidScheduledDate && (
+          {hasValidScheduledDate ? (
             <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-sm text-blue-900">
                 Reunião agendada para{" "}
@@ -196,6 +196,16 @@ export default function MeetingRoomPage() {
                 .
               </p>
             </div>
+          ) : (
+            !meeting && (
+              <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-sm text-amber-900">
+                  {isSpecialist
+                    ? "Nenhum horário confirmado. Você pode iniciar a reunião a qualquer momento — o cliente receberá um e-mail com o link assim que você iniciar."
+                    : "Nenhum horário confirmado. Quando o especialista iniciar a reunião, você receberá um e-mail com o link de acesso."}
+                </p>
+              </div>
+            )
           )}
 
           {isLoading ? (

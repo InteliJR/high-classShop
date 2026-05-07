@@ -318,7 +318,7 @@ export default function CompaniesPage() {
   return (
     <div className="text-text-main w-full">
       {/* --- CABEÇALHO DA PÁGINA --- */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="h1-style">Gestão de Escritórios</h1>
         <Button type="button" onClick={() => setIsNewCompanyModalOpen(true)}>
           + Novo Escritório
@@ -326,14 +326,14 @@ export default function CompaniesPage() {
       </div>
 
       {/* --- TABELA DE ESCRITÓRIOS --- */}
-      <div className="p-6 rounded-lg shadow bg-brand-container bg-bg-container">
+      <div className="p-6 rounded-lg shadow bg-brand-container bg-bg-container overflow-x-auto">
         <h2 className="h2-style">Escritórios</h2>
         <p className="text-base mb-8 mt-2">
           Lista completa de empresas parceiras
         </p>
 
         {/* Cabeçalho da Lista */}
-        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 px-4 py-2 text-base font-normal text-left text-text-secondary">
+        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 px-4 py-2 text-base font-normal text-left text-text-secondary min-w-[700px]">
           <div>Empresa</div>
           <div>% Plataforma</div>
           <div>% Escritório</div>
@@ -360,7 +360,7 @@ export default function CompaniesPage() {
                   className="rounded-lg shadow-sm bg-white overflow-hidden"
                 >
                   {/* Linha principal da empresa */}
-                  <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6">
+                  <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6 min-w-[700px]">
                     <div className="flex items-center gap-3">
                       {/* Botão expand/collapse */}
                       <button

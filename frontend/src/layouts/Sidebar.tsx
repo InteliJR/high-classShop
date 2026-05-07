@@ -128,19 +128,26 @@ export default function Sidebar() {
   }
 
   return (
-    <aside
-      className={`
-        ${
-          isMobile
-            ? isSidebarCollapsed
-              ? "translate-x-0 opacity-100"
-              : "-translate-x-full opacity-0"
-            : "translate-x-0 opacity-100"
-        }
-        ${isMobile ? "w-2/5 fixed h-full" : "w-64 min-h-screen"}
-        top-0 left-0 transition-normal ease-out duration-300 z-50 fixed bg-black text-white
-      `}
-    >
+    <>
+      {isMobile && isSidebarCollapsed && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50"
+          onClick={() => setSidebarCollapsed(false)}
+        />
+      )}
+      <aside
+        className={`
+          ${
+            isMobile
+              ? isSidebarCollapsed
+                ? "translate-x-0 opacity-100"
+                : "-translate-x-full opacity-0"
+              : "translate-x-0 opacity-100"
+          }
+          ${isMobile ? "w-2/5 fixed h-full" : "w-64 min-h-screen"}
+          top-0 left-0 transition-normal ease-out duration-300 z-50 fixed bg-black text-white
+        `}
+      >
       {/* Botão para esconder a sidebar */}
       {isMobile && (
         <div className="flex flex-col">
@@ -163,6 +170,7 @@ export default function Sidebar() {
           <Link
             key={link.to}
             to={link.to}
+            onClick={() => { if (isMobile) setSidebarCollapsed(false); }}
             className={`w-full flex gap-3 items-center p-3 rounded-md transition-colors ${
               location.pathname === link.to
                 ? ""
@@ -175,5 +183,6 @@ export default function Sidebar() {
         ))}
       </nav>
     </aside>
+    </>
   );
 }

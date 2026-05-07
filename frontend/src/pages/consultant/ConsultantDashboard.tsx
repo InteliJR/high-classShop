@@ -92,7 +92,7 @@ export default function ConsultantDashboard() {
   return (
     <div className="text-text-main w-full">
       {/* --- CABEÇALHO DA PÁGINA --- */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="h1-style">Meus Clientes</h1>
         <Button type="button" onClick={() => setIsInviteModalOpen(true)}>
           + Convidar Cliente
