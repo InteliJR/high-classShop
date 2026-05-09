@@ -623,7 +623,7 @@ export default function ProductPage() {
                 ) : (
                   <>
                     <ExternalLink size={20} />
-                    Agendar no Popup da Plataforma
+                    Agendar reunião com o especialista
                   </>
                 )}
               </button>
