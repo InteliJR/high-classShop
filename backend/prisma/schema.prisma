@@ -478,6 +478,8 @@ model User {
   product_import_jobs      ProductImportJob[]
   calendly_connection      CalendlyConnection?
   calendly_oauth_states    CalendlyOauthState[]
+  advisorRelation          CustomerAdvisor?      @relation("CustomerAdvisors")
+  advisorOf                CustomerAdvisor[]     @relation("AdvisorOf")
 }
 
 model CalendlyConnection {
@@ -1258,6 +1260,23 @@ model ProductImportJobItem {
   @@index([job_id])
   @@index([status])
   @@index([row_number])
+}
+
+// ─── CustomerAdvisor ─────────────────────────────────────────────────────────
+// Cliente pode convidar um assessor pessoal via e-mail.
+// token: JWT assinado para o link de aceite. accepted_at: null até o assessor aceitar.
+
+model CustomerAdvisor {
+  id          String    @id @default(uuid()) @db.Uuid
+  customer_id String    @unique @db.Uuid
+  advisor_id  String?   @db.Uuid
+  email       String
+  token       String    @unique
+  accepted_at DateTime?
+  created_at  DateTime  @default(now())
+
+  customer User  @relation("CustomerAdvisors", fields: [customer_id], references: [id], onDelete: Cascade)
+  advisor  User? @relation("AdvisorOf", fields: [advisor_id], references: [id], onDelete: SetNull)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

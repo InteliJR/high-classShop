@@ -1,4 +1,4 @@
-import { useEffect, useState, useContext } from "react";
+import { useEffect, useState, useContext, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Car, Ship, Plane, Calendar, UserCircle2, Loader2 } from "lucide-react";
 import { PopupModal, useCalendlyEventListener } from "react-calendly";
@@ -58,6 +58,7 @@ export default function ConsultoriaPage() {
     "idle" | "waiting_event" | "syncing" | "done" | "error"
   >("idle");
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
+  const schedulingActuallyConfirmed = useRef(false);
 
   const typeFromUrl = searchParams.get("type") as PreferredProductType | null;
   const selectedType: PreferredProductType | null =
@@ -173,6 +174,7 @@ export default function ConsultoriaPage() {
           client_observed_at: new Date().toISOString(),
         });
 
+        schedulingActuallyConfirmed.current = true;
         setIsCalendlyModalOpen(false);
         await pollCalendlySyncStatus(pendingAppointmentId);
       } catch (error) {
@@ -213,6 +215,7 @@ export default function ConsultoriaPage() {
         ? rawCalendlyUrl
         : `https://${rawCalendlyUrl}`;
 
+      schedulingActuallyConfirmed.current = false;
       setPendingAppointmentId(pendingAppointment.id);
       setCalendlyModalUrl(formattedUrl);
       setSyncState("waiting_event");
@@ -234,7 +237,7 @@ export default function ConsultoriaPage() {
   const handleCalendlyModalClose = async () => {
     setIsCalendlyModalOpen(false);
 
-    if (syncState === "waiting_event" && pendingAppointmentId) {
+    if (!schedulingActuallyConfirmed.current && pendingAppointmentId) {
       try {
         await cancelPendingAppointment(pendingAppointmentId);
       } catch (err) {

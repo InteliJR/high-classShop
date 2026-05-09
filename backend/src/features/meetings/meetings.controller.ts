@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
@@ -46,6 +47,7 @@ export class MeetingsController {
   async startMeeting(
     @Param('processId', new ParseUUIDPipe()) processId: string,
     @Req() req: any,
+    @Body() body: { isAdvanced?: boolean },
   ): Promise<ApiResponseDto<any>> {
     const userId = req.user?.sub || req.user?.id;
 
@@ -56,11 +58,14 @@ export class MeetingsController {
     const meeting = await this.meetingsService.startMeetingForProcess(
       processId,
       userId,
+      body?.isAdvanced,
     );
 
     return {
       sucess: true,
-      message: 'Reunião iniciada com sucesso',
+      message: body?.isAdvanced
+        ? 'Reunião adiantada com sucesso'
+        : 'Reunião iniciada com sucesso',
       data: meeting,
     };
   }

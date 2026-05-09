@@ -8,6 +8,7 @@ import {
   AppointmentCreatedEmailDto,
   AppointmentCancelledEmailDto,
   MeetingStartedEmailDto,
+  MeetingAdvancedEmailDto,
   MeetingReminderEmailDto,
   ProposalReceivedEmailDto,
   ProposalAcceptedEmailDto,
@@ -17,6 +18,7 @@ import {
   ContractGeneratedEmailDto,
   ContractSentEmailDto,
   ContractStatusChangedEmailDto,
+  AdvisorInviteEmailDto,
 } from './dto/notification-email.dto';
 
 // ============================================================================
@@ -259,7 +261,7 @@ export class NotificationService {
       return;
     }
 
-    const subject = `🎉 Seu agendamento foi confirmado - High-class Shop`;
+    const subject = `Confirmação de Agendamento | High-Class Shop`;
 
     const html = `
       <!DOCTYPE html>
@@ -267,17 +269,17 @@ export class NotificationService {
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
-          <h2 style="color: #1e293b; margin-top: 0;">Agendamento Confirmado! ✅</h2>
+          <h2 style="color: #1e293b; margin-top: 0;">Agendamento Confirmado</h2>
           <p style="font-size: 16px; color: #334155;">Olá <strong>${data.clientName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
             Temos uma ótima notícia! O especialista <strong>${data.specialistName}</strong> 
             confirmou sua reunião.
           </p>
-          <div style="background-color: #f0f9ff; padding: 20px; border-left: 4px solid #3b82f6; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #1e40af;"><strong>📅 Data:</strong> ${new Date(
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;"><strong>Data:</strong> ${new Date(
               data.appointmentDate,
             ).toLocaleDateString('pt-BR', {
               weekday: 'long',
@@ -285,28 +287,28 @@ export class NotificationService {
               month: 'long',
               day: 'numeric',
             })}</p>
-            <p style="margin: 8px 0; color: #1e40af;"><strong>🕐 Horário:</strong> ${new Date(
+            <p style="margin: 8px 0; color: #334155;"><strong>Horário:</strong> ${new Date(
               data.appointmentDate,
             ).toLocaleTimeString('pt-BR', {
               hour: '2-digit',
               minute: '2-digit',
             })}</p>
-            <p style="margin: 8px 0; color: #1e40af;"><strong>🚗 Produto:</strong> ${data.productDetails}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${data.productDetails}</p>
           </div>
           <p style="font-size: 16px; color: #334155;">
             Agora você pode iniciar a negociação! Acesse o processo e envie sua primeira proposta.
           </p>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${this.frontendUrl}/processes/${data.processId}" 
-               style="display: inline-block; background-color: #3b82f6; color: #fff; 
-                      padding: 14px 32px; text-decoration: none; border-radius: 6px; 
+            <a href="${this.frontendUrl}/processes/${data.processId}"
+               style="display: inline-block; background-color: #1e293b; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
               Ver Processo
             </a>
           </div>
         </div>
-        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
-          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
@@ -355,7 +357,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para ver detalhes e inici
       (data.proposedValue / data.originalValue) *
       100
     ).toFixed(1);
-    const subject = `💰 Nova proposta recebida - High-class Shop`;
+    const subject = `Nova Proposta Recebida | High-Class Shop`;
 
     const html = `
       <!DOCTYPE html>
@@ -363,32 +365,32 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para ver detalhes e inici
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
-          <h2 style="color: #1e293b; margin-top: 0;">Nova Proposta Recebida! 💰</h2>
+          <h2 style="color: #1e293b; margin-top: 0;">Nova Proposta Recebida</h2>
           <p style="font-size: 16px; color: #334155;">Olá <strong>${data.recipientName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
             <strong>${data.proposerName}</strong> enviou uma nova proposta de valor.
           </p>
-          <div style="background-color: #f0fdf4; padding: 20px; border-left: 4px solid #22c55e; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #166534;"><strong>💵 Valor Proposto:</strong> R$ ${data.proposedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-            <p style="margin: 8px 0; color: #166534;"><strong>📊 Valor Original:</strong> R$ ${data.originalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-            <p style="margin: 8px 0; color: #166534;"><strong>📈 Percentual:</strong> ${percentageOfOriginal}% do valor original</p>
-            ${data.message ? `<p style="margin: 12px 0 8px 0; color: #166534;"><strong>📝 Mensagem:</strong></p><p style="margin: 0; padding: 12px; background-color: #dcfce7; border-radius: 4px; color: #14532d;">${data.message}</p>` : ''}
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;"><strong>Valor Proposto:</strong> R$ ${data.proposedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Valor Original:</strong> R$ ${data.originalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Percentual:</strong> ${percentageOfOriginal}% do valor original</p>
+            ${data.message ? `<p style="margin: 12px 0 8px 0; color: #334155;"><strong>Mensagem:</strong></p><p style="margin: 0; padding: 12px; background-color: #f1f5f9; border-radius: 4px; color: #334155;">${data.message}</p>` : ''}
           </div>
           <p style="font-size: 16px; color: #334155;">Você pode aceitar, rejeitar ou enviar uma contraproposta.</p>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${this.frontendUrl}/processes/${data.processId}/negotiation" 
-               style="display: inline-block; background-color: #22c55e; color: #fff; 
-                      padding: 14px 32px; text-decoration: none; border-radius: 6px; 
+            <a href="${this.frontendUrl}/processes/${data.processId}/negotiation"
+               style="display: inline-block; background-color: #1e293b; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
               Responder Proposta
             </a>
           </div>
         </div>
-        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
-          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
@@ -434,7 +436,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para responde
       return;
     }
 
-    const subject = `🎊 Contrato assinado com sucesso - High-class Shop`;
+    const subject = `Contrato Assinado com Sucesso | High-Class Shop`;
 
     // Send to both parties - use Promise.allSettled to ensure one failure doesn't block the other
     await Promise.allSettled([
@@ -459,29 +461,29 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para responde
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
-          <h2 style="color: #1e293b; margin-top: 0;">🎊 Contrato Assinado!</h2>
+          <h2 style="color: #1e293b; margin-top: 0;">Contrato Assinado</h2>
           <p style="font-size: 16px; color: #334155;">Olá <strong>${recipientName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
             Parabéns! O contrato foi assinado por todas as partes e a transação está concluída.
           </p>
-          <div style="background-color: #f0fdf4; padding: 20px; border-left: 4px solid #22c55e; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #166534;"><strong>🚗 Veículo:</strong> ${data.vehicleModel}</p>
-            <p style="margin: 8px 0; color: #166534;"><strong>💰 Valor Final:</strong> R$ ${data.finalPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-            <p style="margin: 8px 0; color: #166534;"><strong>🤝 ${isBuyer ? 'Vendedor' : 'Comprador'}:</strong> ${otherPartyName}</p>
-            <p style="margin: 8px 0; color: #166534;"><strong>📄 Contrato ID:</strong> ${data.contractId}</p>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;"><strong>Veículo:</strong> ${data.vehicleModel}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Valor Final:</strong> R$ ${data.finalPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>${isBuyer ? 'Vendedor' : 'Comprador'}:</strong> ${otherPartyName}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Contrato ID:</strong> ${data.contractId}</p>
           </div>
           ${
             data.signedPdfUrl
               ? `
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${data.signedPdfUrl}" 
-               style="display: inline-block; background-color: #3b82f6; color: #fff; 
-                      padding: 14px 32px; text-decoration: none; border-radius: 6px; 
+            <a href="${data.signedPdfUrl}"
+               style="display: inline-block; background-color: #1e293b; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
-              📥 Baixar Contrato Assinado
+              Baixar Contrato Assinado
             </a>
           </div>
           `
@@ -495,8 +497,8 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para responde
             }
           </p>
         </div>
-        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
-          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
@@ -552,7 +554,7 @@ ${
       return;
     }
 
-    const subject = `🔔 Novo agendamento criado - High-class Shop`;
+    const subject = `Novo Agendamento Criado | High-Class Shop`;
 
     const html = `
       <!DOCTYPE html>
@@ -560,16 +562,16 @@ ${
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
-          <h2 style="color: #1e293b; margin-top: 0;">Novo Agendamento! 🔔</h2>
+          <h2 style="color: #1e293b; margin-top: 0;">Novo Agendamento</h2>
           <p style="font-size: 16px; color: #334155;">Olá <strong>${data.specialistName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
             O cliente <strong>${data.clientName}</strong> criou um novo agendamento com você.
           </p>
-          <div style="background-color: #fef3c7; padding: 20px; border-left: 4px solid #f59e0b; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #92400e;"><strong>📅 Data:</strong> ${new Date(
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;"><strong>Data:</strong> ${new Date(
               data.appointmentDate,
             ).toLocaleDateString('pt-BR', {
               weekday: 'long',
@@ -577,29 +579,29 @@ ${
               month: 'long',
               day: 'numeric',
             })}</p>
-            <p style="margin: 8px 0; color: #92400e;"><strong>🕐 Horário:</strong> ${new Date(
+            <p style="margin: 8px 0; color: #334155;"><strong>Horário:</strong> ${new Date(
               data.appointmentDate,
             ).toLocaleTimeString('pt-BR', {
               hour: '2-digit',
               minute: '2-digit',
             })}</p>
-            <p style="margin: 8px 0; color: #92400e;"><strong>👤 Cliente:</strong> ${data.clientName}</p>
-            <p style="margin: 8px 0; color: #92400e;"><strong>🚗 Produto:</strong> ${data.productDetails}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Cliente:</strong> ${data.clientName}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${data.productDetails}</p>
           </div>
           <p style="font-size: 16px; color: #334155;">
             Acesse o processo para confirmar ou ajustar o horário do agendamento.
           </p>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${this.frontendUrl}/processes/${data.processId}" 
-               style="display: inline-block; background-color: #f59e0b; color: #fff; 
-                      padding: 14px 32px; text-decoration: none; border-radius: 6px; 
+            <a href="${this.frontendUrl}/processes/${data.processId}"
+               style="display: inline-block; background-color: #1e293b; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
               Confirmar Agendamento
             </a>
           </div>
         </div>
-        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
-          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
@@ -645,7 +647,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para confirmar.
       return;
     }
 
-    const subject = `❌ Agendamento cancelado - High-class Shop`;
+    const subject = `Agendamento Cancelado | High-Class Shop`;
 
     const html = `
       <!DOCTYPE html>
@@ -653,16 +655,16 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para confirmar.
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
-          <h2 style="color: #1e293b; margin-top: 0;">Agendamento Cancelado ❌</h2>
+          <h2 style="color: #1e293b; margin-top: 0;">Agendamento Cancelado</h2>
           <p style="font-size: 16px; color: #334155;">Olá <strong>${data.recipientName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
             Informamos que <strong>${data.cancellerName}</strong> cancelou o agendamento.
           </p>
-          <div style="background-color: #fef2f2; padding: 20px; border-left: 4px solid #ef4444; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #991b1b;"><strong>📅 Data Original:</strong> ${new Date(
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;"><strong>Data Original:</strong> ${new Date(
               data.appointmentDate,
             ).toLocaleDateString('pt-BR', {
               weekday: 'long',
@@ -670,14 +672,14 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para confirmar.
               month: 'long',
               day: 'numeric',
             })}</p>
-            <p style="margin: 8px 0; color: #991b1b;"><strong>🕐 Horário:</strong> ${new Date(
+            <p style="margin: 8px 0; color: #334155;"><strong>Horário:</strong> ${new Date(
               data.appointmentDate,
             ).toLocaleTimeString('pt-BR', {
               hour: '2-digit',
               minute: '2-digit',
             })}</p>
-            <p style="margin: 8px 0; color: #991b1b;"><strong>🚗 Produto:</strong> ${data.productDetails}</p>
-            <p style="margin: 8px 0; color: #991b1b;"><strong>Cancelado por:</strong> ${data.wasClient ? 'Cliente' : 'Especialista'}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${data.productDetails}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Cancelado por:</strong> ${data.wasClient ? 'Cliente' : 'Especialista'}</p>
           </div>
           ${
             data.wasClient
@@ -693,8 +695,8 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para confirmar.
           `
           }
         </div>
-        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
-          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
@@ -738,7 +740,7 @@ ${
       return;
     }
 
-    const subject = `🎥 Sua reunião foi iniciada - High-class Shop`;
+    const subject = `Reunião Iniciada | High-Class Shop`;
 
     const html = `
       <!DOCTYPE html>
@@ -746,20 +748,20 @@ ${
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
-          <h2 style="color: #1e293b; margin-top: 0;">Reunião iniciada! 🎥</h2>
+          <h2 style="color: #1e293b; margin-top: 0;">Reunião Iniciada</h2>
           <p style="font-size: 16px; color: #334155;">Olá <strong>${data.clientName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
             Seu especialista <strong>${data.specialistName}</strong> iniciou a reunião.
           </p>
-          <div style="background-color: #ecfeff; padding: 20px; border-left: 4px solid #06b6d4; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #155e75;"><strong>Processo:</strong> ${data.processId}</p>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;"><strong>Processo:</strong> ${data.processId}</p>
           </div>
           <div style="text-align: center; margin: 30px 0;">
             <a href="${data.platformMeetingUrl}"
-               style="display: inline-block; background-color: #0ea5e9; color: #fff;
+               style="display: inline-block; background-color: #1e293b; color: #fff;
                       padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
               Entrar na Reunião
@@ -774,8 +776,8 @@ ${
               : ''
           }
         </div>
-        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
-          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
@@ -804,6 +806,81 @@ ${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
     );
   }
 
+  async sendMeetingAdvancedEmail(data: MeetingAdvancedEmailDto): Promise<void> {
+    if (!this.notificationsEnabled) {
+      this.logger.debug(
+        'Notifications disabled - skipping sendMeetingAdvancedEmail',
+      );
+      return;
+    }
+
+    const subject = `Reunião Adiantada — Acesse Agora | High-Class Shop`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
+        <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+        </div>
+        <div style="padding: 40px 30px; background-color: #ffffff;">
+          <h2 style="color: #1e293b; margin-top: 0;">Reunião Adiantada</h2>
+          <p style="font-size: 16px; color: #334155;">Prezado(a) <strong>${data.clientName}</strong>,</p>
+          <p style="font-size: 16px; color: #334155;">
+            Informamos que o especialista <strong>${data.specialistName}</strong> adiantou sua reunião.
+            Sua reunião foi adiantada e começará em breve. Acesse a sala pelo link abaixo.
+          </p>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;"><strong>Processo:</strong> ${data.processId}</p>
+          </div>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${data.platformMeetingUrl}"
+               style="display: inline-block; background-color: #1e293b; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
+                      font-weight: 600; font-size: 16px;">
+              Entrar na Reunião
+            </a>
+          </div>
+          <p style="font-size: 14px; color: #64748b;">Se o botão não funcionar, acesse a plataforma:</p>
+          <p style="font-size: 14px; color: #334155; word-break: break-all;">${data.platformMeetingUrl}</p>
+          ${
+            data.meetingLink
+              ? `<p style="font-size: 12px; color: #64748b; margin-top: 12px;">Link direto alternativo da sala:</p>
+                 <p style="font-size: 12px; color: #334155; word-break: break-all;">${data.meetingLink}</p>`
+              : ''
+          }
+        </div>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+High-class Shop - Reuniao Adiantada
+
+Prezado(a) ${data.clientName},
+
+O especialista ${data.specialistName} adiantou sua reuniao. Sua reuniao foi adiantada e comecara em breve.
+
+Processo: ${data.processId}
+Acesse a reuniao em: ${data.platformMeetingUrl}
+${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
+
+© 2026 High-class Shop
+    `.trim();
+
+    await this.sendEmailSafely(
+      'MEETING_ADVANCED_CLIENT',
+      data.clientEmail,
+      subject,
+      html,
+      text,
+    );
+  }
+
   async sendMeetingReminderEmail(data: MeetingReminderEmailDto): Promise<void> {
     if (!this.notificationsEnabled) {
       this.logger.debug(
@@ -812,7 +889,21 @@ ${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
       return;
     }
 
-    const subject = `⏰ Sua reunião começa em 10 minutos - High-class Shop`;
+    const timeLabel = data.isStartingNow
+      ? 'está começando agora'
+      : 'começa em aproximadamente 15 minutos';
+    const subject = data.isStartingNow
+      ? `Lembrete de Reunião — sua reunião está começando | High-Class Shop`
+      : `Lembrete de Reunião — sua reunião começa em 15 minutos | High-Class Shop`;
+
+    const formattedDate = new Date(data.appointmentDate).toLocaleDateString(
+      'pt-BR',
+      { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' },
+    );
+    const formattedTime = new Date(data.appointmentDate).toLocaleTimeString(
+      'pt-BR',
+      { hour: '2-digit', minute: '2-digit' },
+    );
 
     const html = `
       <!DOCTYPE html>
@@ -820,61 +911,49 @@ ${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
-          <h2 style="color: #1e293b; margin-top: 0;">Falta pouco! ⏰</h2>
-          <p style="font-size: 16px; color: #334155;">Olá <strong>${data.recipientName}</strong>,</p>
+          <h2 style="color: #1e293b; margin-top: 0; font-size: 20px;">Lembrete de Reunião</h2>
+          <p style="font-size: 16px; color: #334155;">Prezado(a) <strong>${data.recipientName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
-            Sua reunião com <strong>${data.counterpartName}</strong> começa em aproximadamente <strong>10 minutos</strong>.
+            Informamos que sua reunião com <strong>${data.counterpartName}</strong> ${timeLabel}.
           </p>
-          <div style="background-color: #eff6ff; padding: 20px; border-left: 4px solid #3b82f6; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #1e40af;"><strong>📅 Data:</strong> ${new Date(
-              data.appointmentDate,
-            ).toLocaleDateString('pt-BR', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}</p>
-            <p style="margin: 8px 0; color: #1e40af;"><strong>🕐 Horário:</strong> ${new Date(
-              data.appointmentDate,
-            ).toLocaleTimeString('pt-BR', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}</p>
-            <p style="margin: 8px 0; color: #1e40af;"><strong>Processo:</strong> ${data.processId}</p>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;"><strong>Data:</strong> ${formattedDate}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Horário:</strong> ${formattedTime}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Processo:</strong> ${data.processId}</p>
           </div>
           <div style="text-align: center; margin: 30px 0;">
             <a href="${this.frontendUrl}/processes/${data.processId}/meeting"
-               style="display: inline-block; background-color: #0ea5e9; color: #fff;
+               style="display: inline-block; background-color: #1e293b; color: #fff;
                       padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
-              Abrir Sala de Reunião
+              Acessar Sala de Reunião
             </a>
           </div>
         </div>
-        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
-          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - Reunião em 10 minutos
+High-Class Shop — Lembrete de Reunião
 
-Olá ${data.recipientName},
+Prezado(a) ${data.recipientName},
 
-Sua reunião com ${data.counterpartName} começa em aproximadamente 10 minutos.
+Sua reunião com ${data.counterpartName} ${timeLabel}.
 
-Data: ${new Date(data.appointmentDate).toLocaleDateString('pt-BR')}
-Horário: ${new Date(data.appointmentDate).toLocaleTimeString('pt-BR')}
+Data: ${formattedDate}
+Horário: ${formattedTime}
 Processo: ${data.processId}
 
 Acesse: ${this.frontendUrl}/processes/${data.processId}/meeting
 
-© 2026 High-class Shop
+High-Class Shop
     `.trim();
 
     await this.sendEmailSafely(
@@ -904,7 +983,7 @@ Acesse: ${this.frontendUrl}/processes/${data.processId}/meeting
       return;
     }
 
-    const subject = `🎉 Sua proposta foi aceita - High-class Shop`;
+    const subject = `Proposta Aceita | High-Class Shop`;
 
     const html = `
       <!DOCTYPE html>
@@ -912,31 +991,31 @@ Acesse: ${this.frontendUrl}/processes/${data.processId}/meeting
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
-          <h2 style="color: #1e293b; margin-top: 0;">Proposta Aceita! 🎉</h2>
+          <h2 style="color: #1e293b; margin-top: 0;">Proposta Aceita</h2>
           <p style="font-size: 16px; color: #334155;">Olá <strong>${data.proposerName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
             Excelente notícia! <strong>${data.recipientName}</strong> aceitou sua proposta!
           </p>
-          <div style="background-color: #f0fdf4; padding: 20px; border-left: 4px solid #22c55e; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #166534;"><strong>💰 Valor Aceito:</strong> R$ ${data.acceptedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;"><strong>Valor Aceito:</strong> R$ ${data.acceptedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
           </div>
           <p style="font-size: 16px; color: #334155;">
             O próximo passo é a geração e assinatura do contrato. Em breve você receberá os documentos via DocuSign.
           </p>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${this.frontendUrl}/processes/${data.processId}" 
-               style="display: inline-block; background-color: #22c55e; color: #fff; 
-                      padding: 14px 32px; text-decoration: none; border-radius: 6px; 
+            <a href="${this.frontendUrl}/processes/${data.processId}"
+               style="display: inline-block; background-color: #1e293b; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
               Ver Processo
             </a>
           </div>
         </div>
-        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
-          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
@@ -981,7 +1060,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
       return;
     }
 
-    const subject = `↩️ Proposta não aceita - High-class Shop`;
+    const subject = `Proposta Não Aceita | High-Class Shop`;
 
     const html = `
       <!DOCTYPE html>
@@ -989,18 +1068,18 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
-          <h2 style="color: #1e293b; margin-top: 0;">Proposta Não Aceita ↩️</h2>
+          <h2 style="color: #1e293b; margin-top: 0;">Proposta Não Aceita</h2>
           <p style="font-size: 16px; color: #334155;">Olá <strong>${data.proposerName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
             Informamos que <strong>${data.recipientName}</strong> não aceitou a proposta de 
             R$ ${data.rejectedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.
           </p>
-          <div style="background-color: #fef3c7; padding: 20px; border-left: 4px solid #f59e0b; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #92400e;">
-              💡 <strong>Dica:</strong> A negociação continua aberta! Você pode enviar uma nova proposta 
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;">
+              <strong>Dica:</strong> A negociação continua aberta! Você pode enviar uma nova proposta
               ajustando o valor ou aguardar uma contraproposta.
             </p>
           </div>
@@ -1008,16 +1087,16 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
             Não desista! Muitas negociações bem-sucedidas passam por várias rodadas de propostas.
           </p>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${this.frontendUrl}/processes/${data.processId}/negotiation" 
-               style="display: inline-block; background-color: #f59e0b; color: #fff; 
-                      padding: 14px 32px; text-decoration: none; border-radius: 6px; 
+            <a href="${this.frontendUrl}/processes/${data.processId}/negotiation"
+               style="display: inline-block; background-color: #1e293b; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
               Enviar Nova Proposta
             </a>
           </div>
         </div>
-        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
-          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
@@ -1073,7 +1152,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para continua
       ? statusLabelMap[data.previousStatus] ?? data.previousStatus
       : undefined;
 
-    const subject = `🔄 Atualização no processo #${data.processId.slice(0, 8)} - High-class Shop`;
+    const subject = `Atualização no Processo #${data.processId.slice(0, 8)} | High-Class Shop`;
 
     const html = `
       <!DOCTYPE html>
@@ -1081,31 +1160,31 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para continua
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
-          <h2 style="color: #1e293b; margin-top: 0;">Atualização de Processo 🔄</h2>
+          <h2 style="color: #1e293b; margin-top: 0;">Atualização de Processo</h2>
           <p style="font-size: 16px; color: #334155;">Olá <strong>${data.recipientName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">Houve uma atualização importante no seu processo.</p>
-          <div style="background-color: #eff6ff; padding: 20px; border-left: 4px solid #3b82f6; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #1e40af;"><strong>📌 Processo:</strong> ${data.processId}</p>
-            ${previousStatusLabel ? `<p style="margin: 8px 0; color: #1e40af;"><strong>↩️ Status anterior:</strong> ${previousStatusLabel}</p>` : ''}
-            <p style="margin: 8px 0; color: #1e40af;"><strong>✅ Novo status:</strong> ${currentStatusLabel}</p>
-            ${data.changedByName ? `<p style="margin: 8px 0; color: #1e40af;"><strong>👤 Atualizado por:</strong> ${data.changedByName}</p>` : ''}
-            ${data.productDetails ? `<p style="margin: 8px 0; color: #1e40af;"><strong>🚗 Produto:</strong> ${data.productDetails}</p>` : ''}
-            ${data.reason ? `<p style="margin: 8px 0; color: #1e40af;"><strong>📝 Detalhes:</strong> ${data.reason}</p>` : ''}
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;"><strong>Processo:</strong> ${data.processId}</p>
+            ${previousStatusLabel ? `<p style="margin: 8px 0; color: #334155;"><strong>Status anterior:</strong> ${previousStatusLabel}</p>` : ''}
+            <p style="margin: 8px 0; color: #334155;"><strong>Novo status:</strong> ${currentStatusLabel}</p>
+            ${data.changedByName ? `<p style="margin: 8px 0; color: #334155;"><strong>Atualizado por:</strong> ${data.changedByName}</p>` : ''}
+            ${data.productDetails ? `<p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${data.productDetails}</p>` : ''}
+            ${data.reason ? `<p style="margin: 8px 0; color: #334155;"><strong>Detalhes:</strong> ${data.reason}</p>` : ''}
           </div>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${this.frontendUrl}/processes/${data.processId}" 
-               style="display: inline-block; background-color: #3b82f6; color: #fff; 
-                      padding: 14px 32px; text-decoration: none; border-radius: 6px; 
+            <a href="${this.frontendUrl}/processes/${data.processId}"
+               style="display: inline-block; background-color: #1e293b; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
               Acompanhar Processo
             </a>
           </div>
         </div>
-        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
-          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
@@ -1167,7 +1246,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
       return;
     }
 
-    const subject = `📄 Contrato gerado - High-class Shop`;
+    const subject = `Contrato Gerado | High-Class Shop`;
 
     // Send to both parties
     await Promise.allSettled([
@@ -1192,33 +1271,33 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
-          <h2 style="color: #1e293b; margin-top: 0;">Contrato Gerado! 📄</h2>
+          <h2 style="color: #1e293b; margin-top: 0;">Contrato Gerado</h2>
           <p style="font-size: 16px; color: #334155;">Olá <strong>${recipientName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
             O contrato de compra e venda foi gerado com sucesso!
           </p>
-          <div style="background-color: #eff6ff; padding: 20px; border-left: 4px solid #3b82f6; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #1e40af;"><strong>🚗 Veículo:</strong> ${data.vehicleDetails}</p>
-            <p style="margin: 8px 0; color: #1e40af;"><strong>🤝 ${isBuyer ? 'Vendedor' : 'Comprador'}:</strong> ${otherPartyName}</p>
-            <p style="margin: 8px 0; color: #1e40af;"><strong>📄 Contrato ID:</strong> ${data.contractId}</p>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;"><strong>Veículo:</strong> ${data.vehicleDetails}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>${isBuyer ? 'Vendedor' : 'Comprador'}:</strong> ${otherPartyName}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Contrato ID:</strong> ${data.contractId}</p>
           </div>
           <p style="font-size: 16px; color: #334155;">
             Em breve você receberá um email do DocuSign com o link para assinatura eletrônica do contrato.
           </p>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${this.frontendUrl}/processes/${data.processId}" 
-               style="display: inline-block; background-color: #3b82f6; color: #fff; 
-                      padding: 14px 32px; text-decoration: none; border-radius: 6px; 
+            <a href="${this.frontendUrl}/processes/${data.processId}"
+               style="display: inline-block; background-color: #1e293b; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
               Ver Processo
             </a>
           </div>
         </div>
-        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
-          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
@@ -1263,7 +1342,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
       return;
     }
 
-    const subject = `✍️ Contrato pronto para assinatura - High-class Shop`;
+    const subject = `Contrato Pronto para Assinatura | High-Class Shop`;
 
     // Send to both parties
     await Promise.allSettled([
@@ -1288,35 +1367,35 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
-          <h2 style="color: #1e293b; margin-top: 0;">Contrato Pronto para Assinatura! ✍️</h2>
+          <h2 style="color: #1e293b; margin-top: 0;">Contrato Pronto para Assinatura</h2>
           <p style="font-size: 16px; color: #334155;">Olá <strong>${recipientName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
             O contrato está pronto e aguardando sua assinatura eletrônica via DocuSign.
           </p>
-          <div style="background-color: #f0f9ff; padding: 20px; border-left: 4px solid #3b82f6; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #1e40af;"><strong>🤝 ${isBuyer ? 'Vendedor' : 'Comprador'}:</strong> ${otherPartyName}</p>
-            <p style="margin: 8px 0; color: #1e40af;"><strong>📄 Contrato ID:</strong> ${data.contractId}</p>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;"><strong>${isBuyer ? 'Vendedor' : 'Comprador'}:</strong> ${otherPartyName}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Contrato ID:</strong> ${data.contractId}</p>
           </div>
           <p style="font-size: 16px; color: #334155;">
             Clique no botão abaixo para acessar o DocuSign e assinar o contrato:
           </p>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${data.docusignLink}" 
-               style="display: inline-block; background-color: #3b82f6; color: #fff; 
-                      padding: 14px 32px; text-decoration: none; border-radius: 6px; 
+            <a href="${data.docusignLink}"
+               style="display: inline-block; background-color: #1e293b; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
-              ✍️ Assinar no DocuSign
+              Assinar no DocuSign
             </a>
           </div>
           <p style="font-size: 14px; color: #64748b; text-align: center;">
             Você também receberá um email diretamente do DocuSign com o mesmo link.
           </p>
         </div>
-        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
-          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
@@ -1363,7 +1442,7 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
       return;
     }
 
-    const subject = `⚠️ Contrato recusado - High-class Shop`;
+    const subject = `Contrato Recusado | High-Class Shop`;
 
     // Send to both parties
     await Promise.allSettled([
@@ -1386,7 +1465,7 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
       return;
     }
 
-    const subject = `🚫 Contrato anulado - High-class Shop`;
+    const subject = `Contrato Anulado | High-Class Shop`;
 
     // Send to both parties
     await Promise.allSettled([
@@ -1409,7 +1488,7 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
       return;
     }
 
-    const subject = `⏰ Contrato expirado - High-class Shop`;
+    const subject = `Contrato Expirado | High-Class Shop`;
 
     // Send to both parties
     await Promise.allSettled([
@@ -1472,21 +1551,21 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 28px;">High-class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
-          <h2 style="color: #1e293b; margin-top: 0;">${config.title} ${config.icon}</h2>
+          <h2 style="color: #1e293b; margin-top: 0;">${config.title}</h2>
           <p style="font-size: 16px; color: #334155;">Olá <strong>${recipientName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">${config.message}</p>
-          <div style="background-color: ${config.bgColor}; padding: 20px; border-left: 4px solid ${config.color}; margin: 25px 0;">
-            <p style="margin: 8px 0; color: ${config.textColor};"><strong>🚗 Veículo:</strong> ${data.vehicleDetails}</p>
-            <p style="margin: 8px 0; color: ${config.textColor};"><strong>🤝 ${isSpecialist ? 'Cliente' : 'Especialista'}:</strong> ${otherPartyName}</p>
-            <p style="margin: 8px 0; color: ${config.textColor};"><strong>📄 Contrato ID:</strong> ${data.contractId}</p>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;"><strong>Veículo:</strong> ${data.vehicleDetails}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>${isSpecialist ? 'Cliente' : 'Especialista'}:</strong> ${otherPartyName}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Contrato ID:</strong> ${data.contractId}</p>
           </div>
           <p style="font-size: 16px; color: #334155;">${config.action}</p>
         </div>
-        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 14px; color: #64748b;">
-          <p style="margin: 5px 0;">© 2026 High-class Shop. Todos os direitos reservados.</p>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
@@ -1511,6 +1590,80 @@ ${config.action}
     await this.sendEmailSafely(
       `CONTRACT_${status.toUpperCase()}_${role.toUpperCase()}`,
       recipientEmail,
+      subject,
+      html,
+      text,
+    );
+  }
+
+  async sendAdvisorInviteEmail(data: AdvisorInviteEmailDto): Promise<void> {
+    const subject = `Convite para ser Assessor — ${data.customerName} | High-Class Shop`;
+
+    const html = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f8fafc;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8fafc;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;max-width:600px;width:100%;">
+        <tr>
+          <td style="background-color:#1e293b;padding:32px 40px;">
+            <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:600;">High-Class Shop</h1>
+            <p style="margin:8px 0 0;color:#94a3b8;font-size:14px;">Marketplace de Bens de Luxo</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:40px;">
+            <h2 style="margin:0 0 16px;color:#1e293b;font-size:20px;font-weight:600;">Convite para Assessor</h2>
+            <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6;">
+              <strong>${data.customerName}</strong> convidou você para ser assessor pessoal na plataforma High-Class Shop.
+            </p>
+            <p style="margin:0 0 24px;color:#475569;font-size:15px;line-height:1.6;">
+              Como assessor, você terá acesso ao acompanhamento dos processos de negociação do cliente.
+            </p>
+            <div style="background-color:#f8fafc;border-left:4px solid #1e293b;border-radius:4px;padding:16px 20px;margin-bottom:24px;">
+              <p style="margin:0;color:#475569;font-size:14px;">
+                Para aceitar, você precisa ter uma conta na plataforma. Caso não tenha, registre-se primeiro com este mesmo e-mail.
+              </p>
+            </div>
+            <a href="${data.acceptUrl}" style="display:inline-block;padding:14px 32px;background-color:#1e293b;color:#ffffff;text-decoration:none;border-radius:6px;font-size:15px;font-weight:600;">
+              Aceitar Convite
+            </a>
+            <p style="margin:24px 0 0;color:#94a3b8;font-size:12px;">
+              Este link expira em 7 dias. Se você não esperava este e-mail, ignore-o.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background-color:#f8fafc;padding:24px 40px;border-top:1px solid #e2e8f0;">
+            <p style="margin:0;color:#94a3b8;font-size:12px;text-align:center;">
+              High-Class Shop &mdash; Marketplace de Bens de Luxo
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`.trim();
+
+    const text = `
+Convite para Assessor — High-Class Shop
+
+${data.customerName} convidou você para ser assessor pessoal na plataforma.
+
+Acesse o link abaixo para aceitar (necessário ter conta na plataforma):
+${data.acceptUrl}
+
+Link válido por 7 dias.
+
+High-Class Shop — Marketplace de Bens de Luxo
+    `.trim();
+
+    await this.sendEmailSafely(
+      'ADVISOR_INVITE',
+      data.advisorEmail,
       subject,
       html,
       text,

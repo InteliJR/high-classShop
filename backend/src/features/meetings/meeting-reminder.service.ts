@@ -8,7 +8,7 @@ export class MeetingReminderService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MeetingReminderService.name);
   private intervalRef?: NodeJS.Timeout;
   private readonly scanIntervalMs = 60 * 1000;
-  private readonly alreadyNotified = new Map<string, number>();
+  private readonly alreadyNotified = new Map<string, number>(); // key: `${appointmentId}_${type}`
 
   constructor(
     private readonly prismaService: PrismaService,
@@ -43,15 +43,20 @@ export class MeetingReminderService implements OnModuleInit, OnModuleDestroy {
     const nowTime = now.getTime();
     this.pruneNotificationCache(nowTime);
 
-    const windowStart = new Date(nowTime + 9 * 60 * 1000);
-    const windowEnd = new Date(nowTime + 11 * 60 * 1000);
+    // Janela 1: 13-17 min antes → lembrete "em 15 minutos"
+    const window15Start = new Date(nowTime + 13 * 60 * 1000);
+    const window15End = new Date(nowTime + 17 * 60 * 1000);
+
+    // Janela 2: -2 a +2 min → lembrete "começando agora"
+    const windowNowStart = new Date(nowTime - 2 * 60 * 1000);
+    const windowNowEnd = new Date(nowTime + 2 * 60 * 1000);
 
     const appointments = await this.prismaService.appointment.findMany({
       where: {
         status: StatusAgendamento.SCHEDULED,
         appointment_datetime: {
-          gte: windowStart,
-          lte: windowEnd,
+          gte: windowNowStart,
+          lte: window15End,
         },
         process: {
           is: {
@@ -77,37 +82,69 @@ export class MeetingReminderService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
 
-      if (this.alreadyNotified.has(appointment.id)) {
-        continue;
-      }
-
+      const apptTime = appointment.appointment_datetime.getTime();
       const clientName = `${appointment.client.name} ${appointment.client.surname || ''}`.trim();
       const specialistName = `${appointment.specialist.name} ${appointment.specialist.surname || ''}`.trim();
 
-      this.alreadyNotified.set(appointment.id, nowTime);
+      const is15min =
+        apptTime >= window15Start.getTime() && apptTime <= window15End.getTime();
+      const isNow =
+        apptTime >= windowNowStart.getTime() && apptTime <= windowNowEnd.getTime();
 
-      Promise.allSettled([
-        this.notificationService.sendMeetingReminderEmail({
-          recipientEmail: appointment.client.email,
-          recipientName: clientName || 'Cliente',
-          counterpartName: specialistName || 'Especialista',
-          appointmentDate: appointment.appointment_datetime,
-          processId: appointment.process.id,
-        }),
-        this.notificationService.sendMeetingReminderEmail({
-          recipientEmail: appointment.specialist.email,
-          recipientName: specialistName || 'Especialista',
-          counterpartName: clientName || 'Cliente',
-          appointmentDate: appointment.appointment_datetime,
-          processId: appointment.process.id,
-        }),
-      ]).catch((error) => {
-        this.logger.error('Falha ao enviar lembrete de reunião (não crítico)', {
-          appointmentId: appointment.id,
-          processId: appointment.process?.id,
-          error: error instanceof Error ? error.message : String(error),
+      const key15 = `${appointment.id}_15min`;
+      const keyNow = `${appointment.id}_now`;
+
+      if (is15min && !this.alreadyNotified.has(key15)) {
+        this.alreadyNotified.set(key15, nowTime);
+        Promise.allSettled([
+          this.notificationService.sendMeetingReminderEmail({
+            recipientEmail: appointment.client.email,
+            recipientName: clientName || 'Cliente',
+            counterpartName: specialistName || 'Especialista',
+            appointmentDate: appointment.appointment_datetime,
+            processId: appointment.process.id,
+          }),
+          this.notificationService.sendMeetingReminderEmail({
+            recipientEmail: appointment.specialist.email,
+            recipientName: specialistName || 'Especialista',
+            counterpartName: clientName || 'Cliente',
+            appointmentDate: appointment.appointment_datetime,
+            processId: appointment.process.id,
+          }),
+        ]).catch((error) => {
+          this.logger.error('Falha ao enviar lembrete 15min (não crítico)', {
+            appointmentId: appointment.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
         });
-      });
+      }
+
+      if (isNow && !this.alreadyNotified.has(keyNow)) {
+        this.alreadyNotified.set(keyNow, nowTime);
+        Promise.allSettled([
+          this.notificationService.sendMeetingReminderEmail({
+            recipientEmail: appointment.client.email,
+            recipientName: clientName || 'Cliente',
+            counterpartName: specialistName || 'Especialista',
+            appointmentDate: appointment.appointment_datetime,
+            processId: appointment.process.id,
+            isStartingNow: true,
+          }),
+          this.notificationService.sendMeetingReminderEmail({
+            recipientEmail: appointment.specialist.email,
+            recipientName: specialistName || 'Especialista',
+            counterpartName: clientName || 'Cliente',
+            appointmentDate: appointment.appointment_datetime,
+            processId: appointment.process.id,
+            isStartingNow: true,
+          }),
+        ]).catch((error) => {
+          this.logger.error('Falha ao enviar lembrete no horário (não crítico)', {
+            appointmentId: appointment.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      }
     }
   }
 }

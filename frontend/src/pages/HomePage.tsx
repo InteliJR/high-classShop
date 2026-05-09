@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import Logo from "../assets/logo_brokerage.png";
-import { UserCircle2 } from "lucide-react";
+import { UserCircle2, Car, Ship, Plane } from "lucide-react";
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -58,7 +58,7 @@ export default function HomePage() {
             onClick={() => navigate("/catalog/cars")}
             className="bg-background-secondary/50 p-6 rounded-xl cursor-pointer hover:bg-background-secondary transition-all transform hover:scale-105 group"
           >
-            <div className="text-4xl mb-4">🚗</div>
+            <div className="mb-4"><Car size={40} className="text-white" /></div>
             <h3 className="text-xl font-semibold mb-2">Carros</h3>
             <p className="text-gray-400 text-sm">Explore nossa seleção de carros de luxo</p>
           </div>
@@ -67,7 +67,7 @@ export default function HomePage() {
             onClick={() => navigate("/catalog/boats")}
             className="bg-background-secondary/50 p-6 rounded-xl cursor-pointer hover:bg-background-secondary transition-all transform hover:scale-105 group"
           >
-            <div className="text-4xl mb-4">🚤</div>
+            <div className="mb-4"><Ship size={40} className="text-white" /></div>
             <h3 className="text-xl font-semibold mb-2">Embarcações</h3>
             <p className="text-gray-400 text-sm">Descubra iates e embarcações exclusivas</p>
           </div>
@@ -76,7 +76,7 @@ export default function HomePage() {
             onClick={() => navigate("/catalog/aircrafts")}
             className="bg-background-secondary/50 p-6 rounded-xl cursor-pointer hover:bg-background-secondary transition-all transform hover:scale-105 group"
           >
-            <div className="text-4xl mb-4">✈️</div>
+            <div className="mb-4"><Plane size={40} className="text-white" /></div>
             <h3 className="text-xl font-semibold mb-2">Aeronaves</h3>
             <p className="text-gray-400 text-sm">Conheça aeronaves executivas premium</p>
           </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Save, Calendar, User, Lock } from "lucide-react";
+import { ArrowLeft, Save, Calendar, User, Lock, UserCheck, Trash2, Send } from "lucide-react";
 import api from "../services/api";
 import { useAuth } from "../store/authStateManager";
 import {
@@ -14,6 +14,12 @@ import {
   getCalendlyOAuthStatus,
   type CalendlyOAuthStatus,
 } from "../services/appointments.service";
+import {
+  getMyAdvisor,
+  inviteAdvisor,
+  removeAdvisor,
+  type AdvisorRecord,
+} from "../services/advisor.service";
 
 /**
  * CustomerProfilePage
@@ -28,7 +34,7 @@ import {
 export default function CustomerProfilePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"personal" | "password">(
+  const [activeTab, setActiveTab] = useState<"personal" | "password" | "advisor">(
     "personal",
   );
   const [loading, setLoading] = useState(false);
@@ -58,6 +64,15 @@ export default function CustomerProfilePage() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+
+  // Advisor state (CUSTOMER only)
+  const [advisorRecord, setAdvisorRecord] = useState<AdvisorRecord | null>(null);
+  const [loadingAdvisor, setLoadingAdvisor] = useState(false);
+  const [advisorEmail, setAdvisorEmail] = useState("");
+  const [advisorError, setAdvisorError] = useState<string | null>(null);
+  const [advisorSuccess, setAdvisorSuccess] = useState<string | null>(null);
+  const [savingAdvisor, setSavingAdvisor] = useState(false);
+  const [removingAdvisor, setRemovingAdvisor] = useState(false);
 
   // Carregar dados do usuário
   useEffect(() => {
@@ -102,6 +117,48 @@ export default function CustomerProfilePage() {
 
     loadCalendlyStatus();
   }, [user?.id, user?.role]);
+
+  useEffect(() => {
+    if (user?.role !== "CUSTOMER") return;
+    setLoadingAdvisor(true);
+    getMyAdvisor()
+      .then(setAdvisorRecord)
+      .catch(() => setAdvisorRecord(null))
+      .finally(() => setLoadingAdvisor(false));
+  }, [user?.role]);
+
+  const handleInviteAdvisor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingAdvisor(true);
+    setAdvisorError(null);
+    setAdvisorSuccess(null);
+    try {
+      const record = await inviteAdvisor(advisorEmail);
+      setAdvisorRecord(record as any);
+      setAdvisorSuccess("Convite enviado com sucesso para " + advisorEmail);
+      setAdvisorEmail("");
+    } catch (err: any) {
+      setAdvisorError(err.friendlyMessage || err.response?.data?.message || "Erro ao enviar convite");
+    } finally {
+      setSavingAdvisor(false);
+    }
+  };
+
+  const handleRemoveAdvisor = async () => {
+    if (!window.confirm("Remover assessor atual? Esta ação não pode ser desfeita.")) return;
+    setRemovingAdvisor(true);
+    setAdvisorError(null);
+    setAdvisorSuccess(null);
+    try {
+      await removeAdvisor();
+      setAdvisorRecord(null);
+      setAdvisorSuccess("Assessor removido com sucesso.");
+    } catch (err: any) {
+      setAdvisorError(err.friendlyMessage || "Erro ao remover assessor");
+    } finally {
+      setRemovingAdvisor(false);
+    }
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -279,6 +336,19 @@ export default function CustomerProfilePage() {
           <Lock size={18} />
           Alterar Senha
         </button>
+        {user?.role === "CUSTOMER" && (
+          <button
+            onClick={() => setActiveTab("advisor")}
+            className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
+              activeTab === "advisor"
+                ? "border-black text-black font-medium"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <UserCheck size={18} />
+            Meu Assessor
+          </button>
+        )}
       </div>
 
       {/* Mensagens de erro/sucesso */}
@@ -294,6 +364,94 @@ export default function CustomerProfilePage() {
       )}
 
       {/* Tab Content */}
+      {activeTab === "advisor" && user?.role === "CUSTOMER" && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold mb-1">Meu Assessor Pessoal</h2>
+            <p className="text-sm text-gray-500 mb-6">
+              Convide uma pessoa de confiança para acompanhar seus processos de negociação.
+            </p>
+
+            {advisorError && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{advisorError}</div>
+            )}
+            {advisorSuccess && (
+              <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">{advisorSuccess}</div>
+            )}
+
+            {loadingAdvisor ? (
+              <div className="flex items-center gap-2 text-gray-500 text-sm">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500" />
+                Carregando...
+              </div>
+            ) : advisorRecord?.accepted_at ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <UserCheck size={20} className="text-green-600 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-green-900">Assessor ativo</p>
+                    <p className="text-sm text-green-700">
+                      {advisorRecord.advisor
+                        ? `${advisorRecord.advisor.name} ${advisorRecord.advisor.surname} — ${advisorRecord.advisor.email}`
+                        : advisorRecord.email}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveAdvisor}
+                  disabled={removingAdvisor}
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50 disabled:opacity-50"
+                >
+                  <Trash2 size={16} />
+                  {removingAdvisor ? "Removendo..." : "Remover assessor"}
+                </button>
+              </div>
+            ) : advisorRecord && !advisorRecord.accepted_at ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <UserCheck size={20} className="text-amber-600 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-900">Convite pendente</p>
+                    <p className="text-sm text-amber-700">
+                      Aguardando aceite de <strong>{advisorRecord.email}</strong>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveAdvisor}
+                  disabled={removingAdvisor}
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50 disabled:opacity-50"
+                >
+                  <Trash2 size={16} />
+                  {removingAdvisor ? "Cancelando..." : "Cancelar convite"}
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleInviteAdvisor} className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="email"
+                  value={advisorEmail}
+                  onChange={(e) => setAdvisorEmail(e.target.value)}
+                  placeholder="E-mail do assessor"
+                  required
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-sm"
+                />
+                <button
+                  type="submit"
+                  disabled={savingAdvisor}
+                  className="flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 text-sm font-medium"
+                >
+                  <Send size={16} />
+                  {savingAdvisor ? "Enviando..." : "Convidar"}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
       {activeTab === "personal" ? (
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Dados Pessoais */}
