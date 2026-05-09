@@ -303,7 +303,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
               </div>
 
               <div className="bg-blue-50 p-3 rounded text-sm text-blue-800">
-                💡 Use o zoom para enquadrar a imagem. A imagem será cortada em
+                Use o zoom para enquadrar a imagem. A imagem será cortada em
                 proporção 4:3 (400x300px).
               </div>
             </div>

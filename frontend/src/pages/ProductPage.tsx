@@ -16,6 +16,7 @@ import {
   registerCalendlyScheduledEvent,
   type Appointment,
 } from "../services/appointments.service";
+import { getProcessesByClient } from "../services/processes.service";
 import ProductDetails from "../components/product/ProductDetails";
 import Loading from "../components/ui/Loading";
 import { useAuth } from "../store/authStateManager";
@@ -305,6 +306,24 @@ export default function ProductPage() {
     setCalendlySyncState("idle");
     setCalendlySyncMessage("");
     try {
+      const clientProcesses = await getProcessesByClient(user.id, 1, 100);
+      const activeProcess = clientProcesses.find(
+        (p) =>
+          String(p.product_id) === String(product.id) &&
+          p.product_type === productType?.toUpperCase() &&
+          p.status !== "COMPLETED" &&
+          p.status !== "REJECTED",
+      );
+      if (activeProcess) {
+        const confirmed = window.confirm(
+          "Você já possui um processo de negociação ativo para este produto.\n\nDeseja abrir um novo processo independente? Isso não cancelará o processo existente.",
+        );
+        if (!confirmed) {
+          setIsCreatingPending(false);
+          return;
+        }
+      }
+
       const pendingAppointment = await createPendingAppointment({
         client_id: user.id,
         specialist_id: specialist.id,
@@ -504,7 +523,7 @@ export default function ProductPage() {
             <div className="space-y-4">
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                 <p className="text-sm text-amber-800">
-                  <strong>🔐 Atenção:</strong> Para agendar uma reunião com o
+                  <strong>Atenção:</strong> Para agendar uma reunião com o
                   especialista, você precisa criar uma conta ou fazer login.
                 </p>
               </div>
@@ -590,7 +609,7 @@ export default function ProductPage() {
             <div className="space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm text-blue-800">
-                  <strong>💡 Dica:</strong> Clique no botão abaixo para agendar
+                  <strong>Dica:</strong> Clique no botão abaixo para agendar
                   uma reunião no popup. Assim que concluir, a plataforma tenta
                   sincronizar automaticamente seu agendamento.
                 </p>

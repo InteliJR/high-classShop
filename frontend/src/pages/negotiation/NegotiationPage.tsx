@@ -602,7 +602,7 @@ export default function NegotiationPage() {
             {/* Minimum value hint */}
             {processInfo && (
               <p className="mt-2 text-xs text-gray-500 text-center md:text-left">
-                💡 O valor mínimo aceito é{" "}
+                O valor mínimo aceito é{" "}
                 {formatCurrency(processInfo.minimum_value)}
               </p>
             )}

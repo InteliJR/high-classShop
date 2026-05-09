@@ -20,10 +20,12 @@ export default function Header() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Mostrar busca em admin (exceto dashboard) e em produtos do especialista (exceto formulários)
+  // Mostrar busca em admin/companies, admin/consultants, admin/specialists e specialist/products
   const showSearch =
     (location.pathname.startsWith("/admin") &&
-      !location.pathname.includes("/dashboard")) ||
+      !location.pathname.includes("/dashboard") &&
+      !location.pathname.includes("/settings") &&
+      !location.pathname.includes("/my-company")) ||
     (location.pathname.startsWith("/specialist/products") &&
       !location.pathname.includes("/new") &&
       !location.pathname.match(/\/specialist\/products\/\d+$/));

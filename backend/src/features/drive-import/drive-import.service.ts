@@ -99,28 +99,15 @@ export class DriveImportService {
       };
     }
 
-    const existingFileNames = await this.getExistingImageFileNamesByProduct(
-      params.product_type,
-      params.product_id,
-    );
-    let hasPrimary = await this.hasPrimaryImage(
-      params.product_type,
-      params.product_id,
-    );
+    // Substituir imagens existentes: apagar do S3 e do banco antes de importar
+    await this.deleteAllProductImages(params.product_type, params.product_id);
 
+    let hasPrimary: boolean = false;
     let uploaded = 0;
     let skipped = 0;
     let failed = 0;
 
     for (const file of files) {
-      const normalizedName = this.normalizeFileName(file.name);
-
-      if (existingFileNames.has(normalizedName)) {
-        skipped += 1;
-        warnings.push(`Arquivo duplicado ignorado: ${file.name}`);
-        continue;
-      }
-
       try {
         const downloaded = await this.downloadDriveFile(file.id, apiKey);
         const objectKey = this.buildS3ObjectKey(
@@ -135,7 +122,7 @@ export class DriveImportService {
           downloaded.contentType,
         );
 
-        const isPrimary = !hasPrimary;
+        const isPrimary: boolean = !hasPrimary;
         await this.createImageRecord({
           productType: params.product_type,
           productId: params.product_id,
@@ -144,7 +131,6 @@ export class DriveImportService {
         });
 
         hasPrimary = hasPrimary || isPrimary;
-        existingFileNames.add(normalizedName);
         uploaded += 1;
       } catch (error) {
         failed += 1;
@@ -616,6 +602,42 @@ export class DriveImportService {
       select: { id: true },
     });
     return Boolean(record);
+  }
+
+  private async deleteAllProductImages(
+    type: ProductType,
+    productId: number,
+  ): Promise<void> {
+    let keys: string[] = [];
+
+    if (type === ProductType.CAR) {
+      const records = await this.prisma.car_image.findMany({
+        where: { car_id: productId },
+        select: { image_url: true },
+      });
+      keys = records.map((r) => r.image_url);
+      await this.prisma.car_image.deleteMany({ where: { car_id: productId } });
+    } else if (type === ProductType.BOAT) {
+      const records = await this.prisma.boat_image.findMany({
+        where: { boat_id: productId },
+        select: { image_url: true },
+      });
+      keys = records.map((r) => r.image_url);
+      await this.prisma.boat_image.deleteMany({ where: { boat_id: productId } });
+    } else {
+      const records = await this.prisma.aircraft_image.findMany({
+        where: { aircraft_id: productId },
+        select: { image_url: true },
+      });
+      keys = records.map((r) => r.image_url);
+      await this.prisma.aircraft_image.deleteMany({
+        where: { aircraft_id: productId },
+      });
+    }
+
+    if (keys.length > 0) {
+      await this.s3Service.deleteObjects(keys);
+    }
   }
 
   private parseProductFromFileName(fileName: string): {

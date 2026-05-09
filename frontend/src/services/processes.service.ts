@@ -335,10 +335,13 @@ export async function getMeetingByProcess(
   return response.data.data;
 }
 
-export async function startMeeting(processId: string): Promise<MeetingSession> {
+export async function startMeeting(
+  processId: string,
+  options?: { isAdvanced?: boolean },
+): Promise<MeetingSession> {
   const response = await api.post<ApiResponse<MeetingSession>>(
     `/meetings/process/${processId}/start`,
-    {},
+    { isAdvanced: options?.isAdvanced ?? false },
     { withCredentials: true },
   );
 

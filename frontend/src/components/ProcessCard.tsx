@@ -112,13 +112,10 @@ export default function ProcessCard({
   const hasValidScheduledMeetingDate =
     Boolean(scheduledMeetingDate) &&
     !Number.isNaN(scheduledMeetingDate?.getTime() ?? NaN);
-  const canEnterMeetingWindow =
-    !hasValidScheduledMeetingDate ||
-    Date.now() >= (scheduledMeetingDate as Date).getTime() - 30 * 60 * 1000;
+  // Especialista pode iniciar a qualquer momento (backend sem restrição de janela)
+  // Cliente só vê botão se reunião já foi iniciada pelo especialista
   const canStartOrJoinMeeting =
-    isAppointmentConfirmed &&
-    process.status === "SCHEDULING" &&
-    canEnterMeetingWindow;
+    isAppointmentConfirmed && process.status === "SCHEDULING";
 
   const formattedAppointmentDate = hasValidScheduledMeetingDate
     ? (scheduledMeetingDate as Date).toLocaleDateString("pt-BR", {
@@ -134,10 +131,6 @@ export default function ProcessCard({
         hour: "2-digit",
         minute: "2-digit",
       })
-    : null;
-
-  const meetingWindowAvailableAt = hasValidScheduledMeetingDate
-    ? new Date((scheduledMeetingDate as Date).getTime() - 30 * 60 * 1000)
     : null;
 
   // Load completion reason and active contract on mount and when process changes
@@ -539,37 +532,6 @@ export default function ProcessCard({
           </div>
         )}
 
-        {isAppointmentConfirmed &&
-          process.status === "SCHEDULING" &&
-          !canEnterMeetingWindow && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm font-medium text-blue-900">Reunião confirmada</p>
-              {formattedAppointmentDate && formattedAppointmentTime && (
-                <p className="text-xs text-blue-800 mt-1">
-                  Horário agendado: <strong>{formattedAppointmentDate}</strong> às{" "}
-                  <strong>{formattedAppointmentTime}</strong>.
-                </p>
-              )}
-              {meetingWindowAvailableAt && (
-                <p className="text-xs text-blue-700 mt-2">
-                  A sala será liberada 30 minutos antes, a partir de{" "}
-                  <strong>
-                    {meetingWindowAvailableAt.toLocaleDateString("pt-BR", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                    })}{" "}
-                    às{" "}
-                    {meetingWindowAvailableAt.toLocaleTimeString("pt-BR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </strong>
-                  .
-                </p>
-              )}
-            </div>
-          )}
 
         {/* Mobile: botões logo abaixo do status, antes do stepper */}
         {process.status === "NEGOTIATION" && !isConsultancy && !isExpanded && (

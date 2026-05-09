@@ -420,7 +420,11 @@ export class MeetingsService {
       : null;
   }
 
-  async startMeetingForProcess(processId: string, userId: string) {
+  async startMeetingForProcess(
+    processId: string,
+    userId: string,
+    isAdvanced?: boolean,
+  ) {
     const { process, isSpecialist } = await this.getAuthorizedProcess(
       processId,
       userId,
@@ -463,23 +467,25 @@ export class MeetingsService {
       );
 
       setImmediate(() => {
-        this.notificationService
-          .sendMeetingStartedEmail({
-            clientEmail: process.client.email,
-            clientName:
-              `${process.client.name} ${process.client.surname || ''}`.trim(),
-            specialistName:
-              `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+        const emailData = {
+          clientEmail: process.client.email,
+          clientName:
+            `${process.client.name} ${process.client.surname || ''}`.trim(),
+          specialistName:
+            `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+          processId: process.id,
+          platformMeetingUrl: `${this.frontendUrl}/processes/${process.id}/meeting`,
+          meetingLink: jitsiLink,
+        };
+        const emailMethod = isAdvanced
+          ? this.notificationService.sendMeetingAdvancedEmail(emailData)
+          : this.notificationService.sendMeetingStartedEmail(emailData);
+        emailMethod.catch((err) => {
+          this.logger.error('Falha ao enviar e-mail de reunião iniciada', {
             processId: process.id,
-            platformMeetingUrl: `${this.frontendUrl}/processes/${process.id}/meeting`,
-            meetingLink: jitsiLink,
-          })
-          .catch((err) => {
-            this.logger.error('Falha ao enviar e-mail de reunião iniciada', {
-              processId: process.id,
-              error: err.message,
-            });
+            error: err.message,
           });
+        });
       });
 
       return {
@@ -524,23 +530,25 @@ export class MeetingsService {
         );
 
         setImmediate(() => {
-          this.notificationService
-            .sendMeetingStartedEmail({
-              clientEmail: process.client.email,
-              clientName:
-                `${process.client.name} ${process.client.surname || ''}`.trim(),
-              specialistName:
-                `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+          const emailData = {
+            clientEmail: process.client.email,
+            clientName:
+              `${process.client.name} ${process.client.surname || ''}`.trim(),
+            specialistName:
+              `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+            processId: process.id,
+            platformMeetingUrl: `${this.frontendUrl}/processes/${process.id}/meeting`,
+            meetingLink: demoLink,
+          };
+          const emailMethod = isAdvanced
+            ? this.notificationService.sendMeetingAdvancedEmail(emailData)
+            : this.notificationService.sendMeetingStartedEmail(emailData);
+          emailMethod.catch((err) => {
+            this.logger.error('Falha ao enviar e-mail de reunião iniciada', {
               processId: process.id,
-              platformMeetingUrl: `${this.frontendUrl}/processes/${process.id}/meeting`,
-              meetingLink: demoLink,
-            })
-            .catch((err) => {
-              this.logger.error('Falha ao enviar e-mail de reunião iniciada', {
-                processId: process.id,
-                error: err.message,
-              });
+              error: err.message,
             });
+          });
         });
 
         return {
@@ -606,21 +614,23 @@ export class MeetingsService {
     });
 
     setImmediate(() => {
-      this.notificationService
-        .sendMeetingStartedEmail({
-          clientEmail: process.client.email,
-          clientName,
-          specialistName,
+      const emailData = {
+        clientEmail: process.client.email,
+        clientName,
+        specialistName,
+        processId: process.id,
+        platformMeetingUrl: `${this.frontendUrl}/processes/${process.id}/meeting`,
+        meetingLink: meetLink,
+      };
+      const emailMethod = isAdvanced
+        ? this.notificationService.sendMeetingAdvancedEmail(emailData)
+        : this.notificationService.sendMeetingStartedEmail(emailData);
+      emailMethod.catch((err) => {
+        this.logger.error('Falha ao enviar e-mail de reunião iniciada', {
           processId: process.id,
-          platformMeetingUrl: `${this.frontendUrl}/processes/${process.id}/meeting`,
-          meetingLink: meetLink,
-        })
-        .catch((err) => {
-          this.logger.error('Falha ao enviar e-mail de reunião iniciada', {
-            processId: process.id,
-            error: err.message,
-          });
+          error: err.message,
         });
+      });
     });
 
     return this.buildMeetingResponse(meeting);

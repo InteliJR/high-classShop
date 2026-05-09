@@ -1,6 +1,8 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -222,6 +224,41 @@ export class S3Service {
    * @param contentType MIME type da imagem (ex: image/png, image/jpeg)
    * @returns A 'key' do objeto salvo.
    */
+  async deleteObject(key: string): Promise<void> {
+    try {
+      await this.s3Client.send(
+        new DeleteObjectCommand({ Bucket: this.bucketName, Key: key }),
+      );
+    } catch (error) {
+      console.error(`Failed to delete S3 object: ${key}`, error);
+    }
+  }
+
+  async deleteObjects(keys: string[]): Promise<void> {
+    if (keys.length === 0) return;
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < keys.length; i += 1000) {
+      chunks.push(keys.slice(i, i + 1000));
+    }
+
+    for (const chunk of chunks) {
+      try {
+        await this.s3Client.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucketName,
+            Delete: {
+              Objects: chunk.map((Key) => ({ Key })),
+              Quiet: true,
+            },
+          }),
+        );
+      } catch (error) {
+        console.error('Failed to batch delete S3 objects', error);
+      }
+    }
+  }
+
   async uploadBuffer(
     buffer: Buffer,
     key: string,

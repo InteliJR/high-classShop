@@ -43,12 +43,22 @@ export interface MeetingStartedEmailDto {
   meetingLink?: string;
 }
 
+export interface MeetingAdvancedEmailDto {
+  clientEmail: string;
+  clientName: string;
+  specialistName: string;
+  processId: string;
+  platformMeetingUrl: string;
+  meetingLink?: string;
+}
+
 export interface MeetingReminderEmailDto {
   recipientEmail: string;
   recipientName: string;
   counterpartName: string;
   appointmentDate: Date;
   processId: string;
+  isStartingNow?: boolean;
 }
 
 // ============================================================================
@@ -134,4 +144,14 @@ export interface ContractStatusChangedEmailDto {
   declinedBy?: string;
   contractId: string;
   vehicleDetails: string;
+}
+
+// ============================================================================
+// ADVISOR NOTIFICATIONS
+// ============================================================================
+
+export interface AdvisorInviteEmailDto {
+  advisorEmail: string;
+  customerName: string;
+  acceptUrl: string;
 }

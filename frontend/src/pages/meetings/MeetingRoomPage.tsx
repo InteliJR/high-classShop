@@ -54,6 +54,8 @@ export default function MeetingRoomPage() {
   const [scheduledAt, setScheduledAt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
+  const [isAdvancing, setIsAdvancing] = useState(false);
+  const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false);
   const [isConversationDoneLoading, setIsConversationDoneLoading] =
     useState(false);
   const [copied, setCopied] = useState(false);
@@ -98,6 +100,21 @@ export default function MeetingRoomPage() {
       alert(getActionErrorMessage(error, "Erro ao iniciar reunião."));
     } finally {
       setIsStarting(false);
+    }
+  };
+
+  const handleAdvanceMeeting = async () => {
+    if (!processId || !isSpecialist || isAdvancing) return;
+
+    setShowAdvanceConfirm(false);
+    try {
+      setIsAdvancing(true);
+      const startedMeeting = await startMeeting(processId, { isAdvanced: true });
+      setMeeting(startedMeeting);
+    } catch (error) {
+      alert(getActionErrorMessage(error, "Erro ao antecipar reunião."));
+    } finally {
+      setIsAdvancing(false);
     }
   };
 
@@ -153,6 +170,34 @@ export default function MeetingRoomPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {showAdvanceConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-lg max-w-md w-full p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">
+              Antecipar Reunião
+            </h2>
+            <p className="text-sm text-gray-700 mb-6">
+              Deseja antecipar a reunião? O cliente receberá um e-mail
+              informando que a reunião começará agora.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowAdvanceConfirm(false)}
+                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleAdvanceMeeting}
+                disabled={isAdvancing}
+                className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
+              >
+                {isAdvancing ? "Aguarde..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="max-w-4xl mx-auto px-4 py-6">
         <button
           onClick={() => navigate(-1)}
@@ -218,13 +263,24 @@ export default function MeetingRoomPage() {
                     A reunião ainda não foi iniciada. Inicie agora para liberar
                     o acesso do cliente na plataforma e enviar a notificação.
                   </p>
-                  <button
-                    onClick={handleStartMeeting}
-                    disabled={isStarting}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-700 text-white rounded-lg hover:bg-cyan-800 disabled:opacity-50"
-                  >
-                    {isStarting ? "Iniciando..." : "Iniciar reunião"}
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleStartMeeting}
+                      disabled={isStarting || isAdvancing}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-700 text-white rounded-lg hover:bg-cyan-800 disabled:opacity-50"
+                    >
+                      {isStarting ? "Iniciando..." : "Iniciar reunião"}
+                    </button>
+                    {hasValidScheduledDate && (
+                      <button
+                        onClick={() => setShowAdvanceConfirm(true)}
+                        disabled={isStarting || isAdvancing}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
+                      >
+                        {isAdvancing ? "Aguarde..." : "Antecipar Reunião"}
+                      </button>
+                    )}
+                  </div>
                 </>
               ) : (
                 <p className="text-sm text-slate-800">
