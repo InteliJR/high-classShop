@@ -69,9 +69,24 @@ export class DriveImportService {
 
     const folderId = this.extractFolderId(params.folder_url);
     const maxFiles = params.max_files ?? 500;
-    const files = await this.listPublicFolderImages(folderId, apiKey, maxFiles);
 
+    let files: DriveFile[];
     const warnings: string[] = [];
+
+    try {
+      files = await this.listPublicFolderImages(folderId, apiKey, maxFiles);
+    } catch (listError: any) {
+      return {
+        folder_id: folderId,
+        found: 0,
+        uploaded: 0,
+        skipped: 0,
+        failed: 0,
+        warnings: [
+          `Erro ao listar imagens na pasta (${folderId}): ${listError?.message || 'erro desconhecido'}. Verifique se a pasta está compartilhada como "Qualquer pessoa com o link".`,
+        ],
+      };
+    }
 
     if (files.length === 0) {
       return {

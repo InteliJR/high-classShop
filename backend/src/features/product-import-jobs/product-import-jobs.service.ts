@@ -373,18 +373,24 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
           const folderUrl = item.folder_url?.trim();
 
           if (folderUrl) {
-            const folderImportResult =
-              await this.driveImportService.importImagesForProductFromFolder({
-                folder_url: folderUrl,
-                product_type: job.product_type,
-                product_id: upsertResult.productId,
-              });
+            try {
+              const folderImportResult =
+                await this.driveImportService.importImagesForProductFromFolder({
+                  folder_url: folderUrl,
+                  product_type: job.product_type,
+                  product_id: upsertResult.productId,
+                });
 
-            if (
-              folderImportResult.failed > 0 ||
-              folderImportResult.skipped > 0
-            ) {
-              warnings.push(...folderImportResult.warnings);
+              if (
+                folderImportResult.failed > 0 ||
+                folderImportResult.warnings.length > 0
+              ) {
+                warnings.push(...folderImportResult.warnings);
+              }
+            } catch (driveError: any) {
+              warnings.push(
+                `Aviso: falha ao importar imagens da pasta — ${driveError?.message || 'erro desconhecido'}`,
+              );
             }
           }
 
