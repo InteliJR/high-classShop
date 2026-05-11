@@ -1,15 +1,15 @@
 import { useNavigate } from "react-router-dom";
-import Logo from "../assets/logo_brokerage.png";
+import Logo from "../../assets/logo_brokerage.png";
 import { UserCircle2 } from "lucide-react";
 
 // Componentes da Landing Page
-import { HeroSection } from "../components/landing-page/HeroSection";
-import { Product } from "../components/landing-page/Product";
+import { HeroSection } from "../../components/landing-page/HeroSection";
+import { Product } from "../../components/landing-page/Product";
 
 // Imagens para os cards
-import car2 from '../assets/landing-page/car_2.png';
-import boat2 from '../assets/landing-page/boat_2.png';
-import aircraft1 from '../assets/landing-page/aircraft_1.png'; // Reutilizando a imagem ou use uma aircraft_2 se tiver
+import car2 from '../../assets/landing-page/car_2.png';
+import boat2 from '../../assets/landing-page/boat_2.png';
+import aircraft1 from '../../assets/landing-page/aircraft_1.png'; // Reutilizando a imagem ou use uma aircraft_2 se tiver
 
 export default function LandingPage() {
   const navigate = useNavigate();

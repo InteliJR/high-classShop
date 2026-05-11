@@ -2,8 +2,7 @@
   import Header from "./Header";
   import Sidebar from "./Sidebar";
   import { AppContext, AppProvider } from "../contexts/AppContext";
-  import { SearchProvider } from "../contexts/SearchContext";
-  import { useIsMobile } from "../hooks/use-is-mobile";
+import { useIsMobile } from "../hooks/use-is-mobile";
   import { AuthContext } from "../contexts/AuthContext";
 
   interface MainLayoutProps {
@@ -21,7 +20,6 @@
 
     return (
       <AppProvider>
-        <SearchProvider>
           <div className="flex flex-col min-h-screen">
             <Header />
 
@@ -50,7 +48,6 @@
               </main>
             </div>
           </div>
-        </SearchProvider>
       </AppProvider>
     );
   }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { X, CheckCircle, AlertCircle, Mail } from "lucide-react";
-import { useCreateAppointment } from "../hooks/useCreateAppointment";
+import { useCreateAppointment } from "../../hooks/useCreateAppointment";
 
 interface ConfirmAppointmentModalProps {
   isOpen: boolean;

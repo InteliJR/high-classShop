@@ -10,7 +10,7 @@ import { useIsMobile } from "../hooks/use-is-mobile";
 import { useAuth } from "../store/authStateManager";
 import { AppContext } from "../contexts/AppContext";
 import { useNavigate, useLocation } from "react-router-dom";
-import UserDropdown from "../components/UserDropdown";
+import UserDropdown from "../components/ui/UserDropdown";
 
 export default function Header() {
   const { isSidebarCollapsed, setSidebarCollapsed, searchTerm, setSearchTerm } =

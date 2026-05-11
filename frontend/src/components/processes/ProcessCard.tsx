@@ -13,11 +13,11 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Process } from "../services/processes.service";
-import type { Product, SpecialityType } from "../types/types";
+import type { Process } from "../../services/processes.service";
+import type { Product, SpecialityType } from "../../types/types";
 import React from "react";
 import UpdateProcessStatusModal from "./UpdateProcessStatusModal";
-import { getContextualStatusMessage } from "../utils/processStatusMessages";
+import { getContextualStatusMessage } from "../../utils/processStatusMessages";
 import {
   getProcessCompletionReason,
   getProcessWithActiveContract,
@@ -27,7 +27,7 @@ import {
   markConversationDone,
   startMeeting,
   type MeetingSession,
-} from "../services/processes.service";
+} from "../../services/processes.service";
 
 function getActionErrorMessage(error: unknown, fallback: string): string {
   if (typeof error === "object" && error !== null) {

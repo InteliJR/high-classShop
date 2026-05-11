@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useContext } from "react";
 import { UserCircle2, Settings, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../store/authStateManager";
-import { AuthContext } from "../contexts/AuthContext";
+import { useAuth } from "../../store/authStateManager";
+import { AuthContext } from "../../contexts/AuthContext";
 
 /**
  * UserDropdown Component

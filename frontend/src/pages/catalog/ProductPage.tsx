@@ -2,26 +2,26 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Mail, CheckCircle, ExternalLink } from "lucide-react";
 import { PopupModal, useCalendlyEventListener } from "react-calendly";
-import { getCarById, type RawCar } from "../services/cars.service";
-import { getBoatById, type RawBoat } from "../services/boats.service";
+import { getCarById, type RawCar } from "../../services/cars.service";
+import { getBoatById, type RawBoat } from "../../services/boats.service";
 import {
   getAircraftById,
   type RawAircraft,
-} from "../services/aircrafts.service";
-import { getUserById } from "../services/users.service";
+} from "../../services/aircrafts.service";
+import { getUserById } from "../../services/users.service";
 import {
   checkExistingAppointment,
   createPendingAppointment,
   getCalendlySyncStatus,
   registerCalendlyScheduledEvent,
   type Appointment,
-} from "../services/appointments.service";
-import { getProcessesByClient } from "../services/processes.service";
-import ProductDetails from "../components/product/ProductDetails";
-import Loading from "../components/ui/Loading";
-import { useAuth } from "../store/authStateManager";
-import { useCheckAppointment } from "../hooks/useCheckAppointment";
-import type { Product } from "../types/types";
+} from "../../services/appointments.service";
+import { getProcessesByClient } from "../../services/processes.service";
+import ProductDetails from "../../components/product/ProductDetails";
+import Loading from "../../components/ui/Loading";
+import { useAuth } from "../../store/authStateManager";
+import { useCheckAppointment } from "../../hooks/useCheckAppointment";
+import type { Product } from "../../types/types";
 
 interface Specialist {
   id: string;

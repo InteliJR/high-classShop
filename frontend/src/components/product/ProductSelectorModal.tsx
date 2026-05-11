@@ -9,15 +9,15 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { getCars } from "../services/cars.service";
-import { getBoats } from "../services/boats.service";
-import { getAircrafts } from "../services/aircrafts.service";
+import { getCars } from "../../services/cars.service";
+import { getBoats } from "../../services/boats.service";
+import { getAircrafts } from "../../services/aircrafts.service";
 import {
   assignProductToProcess,
   type Process,
-} from "../services/processes.service";
-import type { SpecialityType } from "../types/types";
-import Button from "./ui/button";
+} from "../../services/processes.service";
+import type { SpecialityType } from "../../types/types";
+import Button from "../ui/button";
 
 interface ProductSelectorModalProps {
   isOpen: boolean;

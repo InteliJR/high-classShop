@@ -5,7 +5,7 @@ import {
   confirmPendingAppointment,
   cancelPendingAppointment,
   type Appointment,
-} from "../services/appointments.service";
+} from "../../services/appointments.service";
 
 interface PendingAppointmentsListProps {
   specialistId: string;

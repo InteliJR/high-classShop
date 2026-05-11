@@ -75,25 +75,10 @@ export class SettingsService {
   async update(key: string, value: string): Promise<SettingResponse> {
     this.logger.log(`[update] Atualizando configuração ${key} para ${value}`);
 
-    // Verificar se existe
-    const existing = await this.prisma.settings.findUnique({
+    const updated = await this.prisma.settings.upsert({
       where: { key },
-    });
-
-    if (!existing) {
-      throw new NotFoundException({
-        success: false,
-        error: {
-          code: 404,
-          message: 'Configuração não encontrada',
-          details: { key },
-        },
-      });
-    }
-
-    const updated = await this.prisma.settings.update({
-      where: { key },
-      data: { value },
+      update: { value },
+      create: { key, value, description: null },
     });
 
     return {

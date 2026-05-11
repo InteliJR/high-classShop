@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import ProductForm from "./ProductForm";
+import ProductForm from "../../components/specialist/ProductForm";
 import { getCarById, type RawCar } from "../../services/cars.service";
 import { getBoatById, type RawBoat } from "../../services/boats.service";
 import { getAircraftById, type RawAircraft } from "../../services/aircrafts.service";

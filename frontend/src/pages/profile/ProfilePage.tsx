@@ -1,25 +1,25 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Save, Calendar, User, Lock, UserCheck, Trash2, Send } from "lucide-react";
-import api from "../services/api";
-import { useAuth } from "../store/authStateManager";
+import api from "../../services/api";
+import { useAuth } from "../../store/authStateManager";
 import {
   getUserById,
   updateUser,
   type UpdateUserData,
-} from "../services/users.service";
+} from "../../services/users.service";
 import {
   disconnectCalendlyOAuth,
   getCalendlyAuthorizeUrl,
   getCalendlyOAuthStatus,
   type CalendlyOAuthStatus,
-} from "../services/appointments.service";
+} from "../../services/appointments.service";
 import {
   getMyAdvisor,
   inviteAdvisor,
   removeAdvisor,
   type AdvisorRecord,
-} from "../services/advisor.service";
+} from "../../services/advisor.service";
 
 /**
  * CustomerProfilePage

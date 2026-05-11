@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { X, AlertTriangle } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
-import type { Process } from "../services/processes.service";
+import type { Process } from "../../services/processes.service";
 import {
   updateProcessStatus,
   rejectProcess,
-} from "../services/processes.service";
+} from "../../services/processes.service";
 
 interface UpdateProcessStatusModalProps {
   isOpen: boolean;

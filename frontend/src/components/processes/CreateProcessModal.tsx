@@ -4,10 +4,10 @@ import { X } from "lucide-react";
 import {
   fetchClients,
   fetchAvailableProducts,
-} from "../services/select-options.service";
-import { createProcess } from "../services/processes.service";
-import { useAuth } from "../store/authStateManager";
-import InfiniteScrollSelect from "./InfiniteScrollSelect";
+} from "../../services/select-options.service";
+import { createProcess } from "../../services/processes.service";
+import { useAuth } from "../../store/authStateManager";
+import InfiniteScrollSelect from "../ui/InfiniteScrollSelect";
 
 interface CreateProcessFormData {
   client_id: string;

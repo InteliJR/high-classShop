@@ -38,10 +38,12 @@ Domínios de negócio da plataforma.
 - `appointments`: agenda, pendências e sincronização com Calendly.
 - `companies`, `consultants`, `specialists`, `users`: gestão de atores.
 - `consultant`: carteira do assessor e convite de clientes.
+- `customer-advisors`: convite de assessor pessoal por cliente, aceite via link e painel do assessor.
 - `processes`: fluxo comercial (SCHEDULING → NEGOTIATION → ...).
 - `proposals`: propostas e contrapropostas.
 - `contracts`: pré-preenchimento, geração, preview e envio de contrato.
-- `meetings`: sessão de reunião e transição de processo.
+- `meetings`: sessão de reunião, antecipação e transição de processo.
+- `notifications`: templates de e-mail transacional via AWS SES.
 - `dashboard`, `settings`, `platform-company`, `drive-import`, `product-import-jobs`.
 
 ### `backend/src/providers`
@@ -70,6 +72,7 @@ Schema, migrations e scripts de manutenção/seed.
 - `CarsModule`, `BoatsModule`, `AircraftsModule`: catálogo por categoria.
 - `CompaniesModule`, `ConsultantsModule`, `SpecialistsModule`, `UsersModule`: gestão administrativa.
 - `ConsultantModule`: gestão de clientes do assessor (invite/link).
+- `CustomerAdvisorsModule`: convite/aceite de assessor pessoal por cliente; painel de clientes assessorados.
 - `ProcessesModule`: orquestra processo comercial e estados.
 - `AppointmentsModule`: agendamentos e ciclo de sincronização com Calendly.
 - `ProposalsModule`: negociação financeira.
@@ -1016,11 +1019,17 @@ Controller: `backend/src/features/meetings/meetings.controller.ts`
 ## 5.1 AWS S3
 - Entrada: criação/edição de produtos, importação de imagens.
 - Fluxo: imagem (base64/url/buffer) → upload S3 → persistência de URL em tabela de imagens.
+- Deleção: `deleteObject(key)` (single, best-effort) e `deleteObjects(keys[])` (batch, chunks de 1000). Usados em reimport via Drive para substituição total de imagens.
+- Compatível com Cloudflare R2 via `AWS_ENDPOINT` + `forcePathStyle: true`.
 - Serviço: `backend/src/aws/s3.service.ts`.
 
 ## 5.2 AWS SES
-- Entrada: convite de clientes e notificações transacionais.
-- Fluxo: evento de domínio (ex.: invitation, proposal update) → template de e-mail → envio SES.
+- Entrada: eventos de domínio (agendamento, reunião, proposta, contrato, assessor).
+- Fluxo: evento → `NotificationService` → template HTML → `SesService.sendEmail()` → SES.
+- Todos fire-and-forget via `setImmediate()` — nunca bloqueiam transações.
+- Circuit breaker: 5 falhas → corta 60s. 3 retries com backoff exponencial (1s/2s/4s). Timeout 5s.
+- Estilo: sem emojis, header `#1e293b`, subjects "Ação — contexto | High-Class Shop", footer "High-Class Shop — Marketplace de Bens de Luxo".
+- Templates ativos: `sendAppointmentCreatedEmail`, `sendAppointmentConfirmedEmail`, `sendAppointmentCancelledEmail`, `sendMeetingStartedEmail`, `sendMeetingAdvancedEmail`, `sendMeetingReminderEmail`, `sendProposalReceivedEmail`, `sendProposalAcceptedEmail`, `sendProposalRejectedEmail`, `sendProcessStatusChangedEmail`, `sendContractGeneratedEmail`, `sendContractSentEmail`, `sendContractSignedEmail`, `sendContractStatusChangedEmail`, `sendAdvisorInviteEmail`.
 - Serviços: `backend/src/aws/ses.service.ts`, `backend/src/features/notifications/notification.service.ts`.
 
 ## 5.3 Calendly (OAuth + webhook)
@@ -1051,6 +1060,8 @@ Controller: `backend/src/features/meetings/meetings.controller.ts`
 2. Há inconsistência de rota de aeronaves no frontend em alguns pontos (`/aircraft` vs `/aircrafts`).
 3. O backend usa respostas com formatos diferentes em alguns módulos (`success` e `sucess`), o que exige normalização.
 4. Existe acoplamento operacional forte em variáveis de ambiente para integrações (JWT, AWS, DocuSign, Calendly, Google), devendo ser gerenciadas por ambiente.
+5. O modelo `CustomerAdvisor` usa `customer_id @unique` — cada cliente tem no máximo um assessor/convite ativo. Convite re-enviado usa `upsert` para substituir o token anterior.
+6. O banco Supabase de produção tem drift em relação ao histórico de migrations (colunas adicionadas fora do fluxo Prisma). Usar `prisma db push` para mudanças aditivas em produção.
 
 ---
 

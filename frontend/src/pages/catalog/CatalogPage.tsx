@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getCars } from "../services/cars.service.ts";
-import { getBoats } from "../services/boats.service.ts";
-import { getAircrafts } from "../services/aircrafts.service.ts";
+import { getCars } from "../../services/cars.service.ts";
+import { getBoats } from "../../services/boats.service.ts";
+import { getAircrafts } from "../../services/aircrafts.service.ts";
 import type {
   FiltersAircraftsMeta,
   FiltersBoatsMeta,
@@ -10,7 +10,7 @@ import type {
   FiltersMeta,
   PaginationMeta,
   Product,
-} from "../types/types.ts";
+} from "../../types/types.ts";
 import {
   ChevronLeft,
   ChevronRight,
@@ -18,10 +18,10 @@ import {
   ChevronsRight,
   FunnelIcon,
 } from "lucide-react";
-import Button from "../components/ui/button.tsx";
-import Modal from "../components/ui/Modal.tsx";
-import ProductCard from "../components/ProductCard.tsx";
-import Loading from "../components/ui/Loading.tsx";
+import Button from "../../components/ui/button.tsx";
+import Modal from "../../components/ui/Modal.tsx";
+import ProductCard from "../../components/product/ProductCard";
+import Loading from "../../components/ui/Loading.tsx";
 
 // Mapeamento dos títulos de acordo com a rota passada
 const titles: { [key: string]: string } = {
