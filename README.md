@@ -41,7 +41,7 @@ Documentos técnicos versionados no repositório:
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 - [Node.js 20+](https://nodejs.org/en)
 
-### Opção A — via Docker Compose (recomendada)
+### Opção A — via Docker Compose (não recomendada)
 
 ```bash
 # 1) Clone o repositório
@@ -70,6 +70,22 @@ npm run start:dev
 cd ../frontend
 npm install
 npm run dev
+```
+
+### Opção c - desenvolvimento local - RECOMENDADO (backend e frontend juntos com o banco de dados hosteado)
+
+```bash
+# 1) Baixar dependências
+cd backend
+npm install
+cd ../frontend
+npm install
+cd../
+
+# 2) Executar frontend e backend juntos
+npm install
+npm run dev
+
 ```
 
 ### Endpoints locais
