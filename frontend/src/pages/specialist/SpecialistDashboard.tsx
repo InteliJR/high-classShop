@@ -19,34 +19,25 @@ import {
   type SpecialistDashboardStats,
 } from "../../services/dashboard.service";
 
-// Gráficos MOCKADOS (mantidos fixos, independentes do backend)
-const MOCK_SALES_BY_MONTH = [
-  { month: "Jan", vendidos: 4, naoVendidos: 2 },
-  { month: "Fev", vendidos: 3, naoVendidos: 1 },
-  { month: "Mar", vendidos: 2, naoVendidos: 3 },
-  { month: "Abr", vendidos: 5, naoVendidos: 2 },
-  { month: "Mai", vendidos: 1, naoVendidos: 4 },
-  { month: "Jun", vendidos: 3, naoVendidos: 2 },
-  { month: "Jul", vendidos: 4, naoVendidos: 1 },
-  { month: "Ago", vendidos: 2, naoVendidos: 2 },
-  { month: "Set", vendidos: 3, naoVendidos: 3 },
-  { month: "Out", vendidos: 4, naoVendidos: 2 },
-  { month: "Nov", vendidos: 5, naoVendidos: 1 },
-  { month: "Dez", vendidos: 6, naoVendidos: 2 },
-];
-
-const MOCK_PROCESSES_BY_STATUS = [
-  { name: "Concluído", value: 4, color: "#22C55E" },
-  { name: "Negociação", value: 3, color: "#3B82F6" },
-  { name: "Agendamento", value: 2, color: "#F59E0B" },
-  { name: "Documentação", value: 1, color: "#A855F7" },
-];
+const STATUS_COLORS: Record<string, string> = {
+  Concluído: "#22C55E",
+  Negociação: "#3B82F6",
+  Agendamento: "#F59E0B",
+  Documentação: "#A855F7",
+  Cancelado: "#EF4444",
+  Rejeitado: "#EF4444",
+};
 
 export default function SpecialistDashboard() {
   const user = useAuth((state) => state.user);
   const navigate = useNavigate();
   const [stats, setStats] = useState<SpecialistDashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const salesByMonth = stats?.salesByMonth ?? [];
+  const processesByStatus = (stats?.processesByStatus ?? []).map((item) => ({
+    ...item,
+    color: STATUS_COLORS[item.name] ?? "#9CA3AF",
+  }));
 
   useEffect(() => {
     // Se o usuário não tem especialidade definida, redireciona para o catálogo
@@ -184,7 +175,7 @@ export default function SpecialistDashboard() {
             </div>
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={MOCK_SALES_BY_MONTH}>
+            <LineChart data={salesByMonth}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis />
@@ -211,47 +202,53 @@ export default function SpecialistDashboard() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             Processos por Status
           </h2>
-          <>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={MOCK_PROCESSES_BY_STATUS}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
-                  {MOCK_PROCESSES_BY_STATUS.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+          {processesByStatus.length === 0 ? (
+            <p className="text-sm text-gray-500">
+              Sem dados suficientes para exibir os status dos processos.
+            </p>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={processesByStatus}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {processesByStatus.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
 
-            {/* Legenda do gráfico */}
-            <div className="mt-4 space-y-2">
-              {MOCK_PROCESSES_BY_STATUS.map((item, index) => (
-                <div
-                  key={index}
-                  className="flex justify-between items-center text-sm"
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-2 h-2 rounded-full"
-                      style={{ backgroundColor: item.color }}
-                    ></div>
-                    <span className="text-gray-700">{item.name}</span>
+              {/* Legenda do gráfico */}
+              <div className="mt-4 space-y-2">
+                {processesByStatus.map((item, index) => (
+                  <div
+                    key={index}
+                    className="flex justify-between items-center text-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: item.color }}
+                      ></div>
+                      <span className="text-gray-700">{item.name}</span>
+                    </div>
+                    <span className="text-gray-900 font-semibold">
+                      {item.value}
+                    </span>
                   </div>
-                  <span className="text-gray-900 font-semibold">
-                    {item.value}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

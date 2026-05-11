@@ -27,14 +27,20 @@ export class DashboardService {
     });
 
     // Taxa de conversão = (processos completados / total de processos) * 100
-    const conversionRate = totalProcesses > 0
-      ? Math.round((completedProcesses / totalProcesses) * 100)
-      : 0;
+    const conversionRate =
+      totalProcesses > 0
+        ? Math.round((completedProcesses / totalProcesses) * 100)
+        : 0;
+
+    const salesByMonth = await this.buildMonthlySalesData({});
+    const consultantsPerformance = await this.getConsultantsPerformance();
 
     return {
       activeProcesses,
       conversionRate,
       activeCompanies,
+      salesByMonth,
+      consultantsPerformance,
     };
   }
 
@@ -84,48 +90,15 @@ export class DashboardService {
     const totalProcesses = await this.prisma.process.count({
       where: { specialist_id: specialistId },
     });
-    const conversionRate = totalProcesses > 0
-      ? Math.round((completedSales / totalProcesses) * 100)
-      : 0;
+    const conversionRate =
+      totalProcesses > 0
+        ? Math.round((completedSales / totalProcesses) * 100)
+        : 0;
 
     // 5. Dados para gráfico de vendas por mês (últimos 12 meses)
-    const currentDate = new Date();
-    const monthsData = [];
-
-    for (let i = 11; i >= 0; i--) {
-      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
-      const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - i + 1, 1);
-
-      const completed = await this.prisma.process.count({
-        where: {
-          specialist_id: specialistId,
-          status: 'COMPLETED',
-          updated_at: {
-            gte: date,
-            lt: nextMonth,
-          },
-        },
-      });
-
-      const notCompleted = await this.prisma.process.count({
-        where: {
-          specialist_id: specialistId,
-          status: {
-            not: 'COMPLETED',
-          },
-          created_at: {
-            gte: date,
-            lt: nextMonth,
-          },
-        },
-      });
-
-      monthsData.push({
-        month: date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
-        vendidos: completed,
-        naoVendidos: notCompleted,
-      });
-    }
+    const monthsData = await this.buildMonthlySalesData({
+      specialist_id: specialistId,
+    });
 
     // 6. Dados para gráfico de pizza - processos por status
     const processesByStatus = await this.prisma.process.groupBy({
@@ -163,5 +136,96 @@ export class DashboardService {
     };
     return statusMap[status] || status;
   }
-}
 
+  private async buildMonthlySalesData(baseWhere: Record<string, any>) {
+    const currentDate = new Date();
+    const monthsData = [];
+
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth() - i,
+        1,
+      );
+      const nextMonth = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth() - i + 1,
+        1,
+      );
+
+      const completed = await this.prisma.process.count({
+        where: {
+          ...baseWhere,
+          status: 'COMPLETED',
+          updated_at: {
+            gte: date,
+            lt: nextMonth,
+          },
+        },
+      });
+
+      const notCompleted = await this.prisma.process.count({
+        where: {
+          ...baseWhere,
+          status: {
+            not: 'COMPLETED',
+          },
+          created_at: {
+            gte: date,
+            lt: nextMonth,
+          },
+        },
+      });
+
+      monthsData.push({
+        month: date
+          .toLocaleDateString('pt-BR', { month: 'short' })
+          .replace('.', ''),
+        vendidos: completed,
+        naoVendidos: notCompleted,
+      });
+    }
+
+    return monthsData;
+  }
+
+  private async getConsultantsPerformance() {
+    const consultants = await this.prisma.user.findMany({
+      where: { role: 'CONSULTANT' },
+      select: { id: true, name: true, surname: true },
+    });
+
+    const performance = await Promise.all(
+      consultants.map(async (consultant) => {
+        const completedSales = await this.prisma.process.count({
+          where: {
+            status: 'COMPLETED',
+            client: { consultant_id: consultant.id },
+          },
+        });
+
+        return {
+          name: `${consultant.name} ${consultant.surname}`,
+          value: completedSales,
+        };
+      }),
+    );
+
+    const totalCompleted = performance.reduce(
+      (sum, item) => sum + item.value,
+      0,
+    );
+
+    return performance
+      .filter((item) => item.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5)
+      .map((item) => ({
+        name: item.name,
+        value: item.value,
+        percentage: totalCompleted
+          ? Math.round((item.value / totalCompleted) * 100)
+          : 0,
+      }));
+  }
+}

@@ -59,38 +59,8 @@ export default function DashboardPage() {
     }
     fetchSpecialists();
   }, []);
-  // Mock data para gráfico de vendas
-  const vendidosData = [
-    { month: "Jan", vendidos: 400, naoVendidos: 240 },
-    { month: "Fev", vendidos: 300, naoVendidos: 221 },
-    { month: "Mar", vendidos: 200, naoVendidos: 229 },
-    { month: "Abr", vendidos: 278, naoVendidos: 200 },
-    { month: "Mai", vendidos: 189, naoVendidos: 220 },
-    { month: "Jun", vendidos: 239, naoVendidos: 229 },
-    { month: "Jul", vendidos: 349, naoVendidos: 200 },
-    { month: "Ago", vendidos: 430, naoVendidos: 210 },
-    { month: "Set", vendidos: 490, naoVendidos: 229 },
-    { month: "Out", vendidos: 490, naoVendidos: 200 },
-    { month: "Nov", vendidos: 590, naoVendidos: 200 },
-    { month: "Dez", vendidos: 690, naoVendidos: 229 },
-  ];
-
-  // Mock data para gráfico de desempenho por consultor
-  const desempenhoData = [
-    { name: "User Name", value: 1200000, percentage: "+8.2%" },
-    { name: "User Name", value: 800000, percentage: "+7%" },
-    { name: "User Name", value: 645000, percentage: "+23%" },
-    { name: "User Name", value: 590000, percentage: "+15%" },
-    { name: "User Name", value: 534200, percentage: "+17%" },
-  ];
-
-  const pieData = [
-    { name: "User Name", value: 1200000 },
-    { name: "User Name", value: 800000 },
-    { name: "User Name", value: 645000 },
-    { name: "User Name", value: 590000 },
-    { name: "User Name", value: 534200 },
-  ];
+  const salesByMonth = stats?.salesByMonth ?? [];
+  const consultantsPerformance = stats?.consultantsPerformance ?? [];
 
   const COLORS = ["#3B82F6", "#1E40AF", "#1E3A8A", "#0C2340", "#051E3E"];
 
@@ -198,7 +168,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={vendidosData}>
+            <LineChart data={salesByMonth}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis />
@@ -215,52 +185,62 @@ export default function DashboardPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             Desempenho de Vendas por Consultor
           </h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={pieData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={100}
-                paddingAngle={2}
-                dataKey="value"
-              >
-                {pieData.map((_, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={COLORS[index % COLORS.length]}
-                  />
-                ))}
-              </Pie>
-            </PieChart>
-          </ResponsiveContainer>
+          {consultantsPerformance.length === 0 ? (
+            <p className="text-sm text-gray-500">
+              Sem dados suficientes para exibir o desempenho por consultor.
+            </p>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={consultantsPerformance}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {consultantsPerformance.map((_, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={COLORS[index % COLORS.length]}
+                      />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
 
-          {/* Legenda do gráfico */}
-          <div className="mt-4 space-y-2">
-            {desempenhoData.map((item, index) => (
-              <div
-                key={index}
-                className="flex justify-between items-center text-sm"
-              >
-                <div className="flex items-center gap-2">
+              {/* Legenda do gráfico */}
+              <div className="mt-4 space-y-2">
+                {consultantsPerformance.map((item, index) => (
                   <div
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                  ></div>
-                  <span className="text-gray-700">{item.name}</span>
-                </div>
-                <div className="flex gap-4">
-                  <span className="text-gray-900 font-semibold">
-                    ${(item.value / 1000).toFixed(1)}K
-                  </span>
-                  <span className="text-green-600 font-semibold">
-                    {item.percentage}
-                  </span>
-                </div>
+                    key={item.name}
+                    className="flex justify-between items-center text-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-2 h-2 rounded-full"
+                        style={{
+                          backgroundColor: COLORS[index % COLORS.length],
+                        }}
+                      ></div>
+                      <span className="text-gray-700">{item.name}</span>
+                    </div>
+                    <div className="flex gap-4">
+                      <span className="text-gray-900 font-semibold">
+                        {item.value} vendas
+                      </span>
+                      <span className="text-green-600 font-semibold">
+                        {item.percentage}%
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       </div>
     </div>
