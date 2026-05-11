@@ -1,6 +1,6 @@
 import { createBrowserRouter } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
-import Catalog from "../pages/Catalog";
+import Catalog from "../pages/catalog/CatalogPage";
 import Login from "../pages/auth/LoginPage";
 import RegisterPage from "../pages/auth/RegisterPage";
 import ProtectedRoute from "./ProtectedRoute";
@@ -19,11 +19,11 @@ import ContractPreviewCallback from "../pages/specialist/ContractPreviewCallback
 import ProcessesPage from "../pages/specialist/ProcessesPage";
 import CustomerHomePage from "../pages/customer/CustomerHomePage";
 import ConsultoriaPage from "../pages/customer/ConsultoriaPage";
-import ProfilePage from "../pages/ProfilePage";
-import ProductPage from "../pages/ProductPage";
+import ProfilePage from "../pages/profile/ProfilePage";
+import ProductPage from "../pages/catalog/ProductPage";
 import CustomerProcessesPage from "../pages/customer/CustomerProcessesPage";
 import NegotiationPage from "../pages/negotiation/NegotiationPage";
-import LandingPage from "../pages/LandingPage";
+import LandingPage from "../pages/landing-page/LandingPage";
 import MeetingRoomPage from "../pages/meetings/MeetingRoomPage";
 import AdvisorAcceptPage from "../pages/advisor/AdvisorAcceptPage";
 import AdvisorDashboardPage from "../pages/advisor/AdvisorDashboardPage";

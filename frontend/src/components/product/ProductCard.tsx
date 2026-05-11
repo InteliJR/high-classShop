@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Product } from "../types/types";
+import type { Product } from "../../types/types";
 
 function formatValue(valor: number) {
   return valor.toLocaleString("pt-br", { style: "currency", currency: "BRL" });

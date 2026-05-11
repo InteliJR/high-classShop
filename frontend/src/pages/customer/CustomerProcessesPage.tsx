@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight, FileText, AlertCircle } from "lucide-react";
 import { useAuth } from "../../store/authStateManager";
 import Loading from "../../components/ui/Loading";
-import ProcessCard from "../../components/ProcessCard";
+import ProcessCard from "../../components/processes/ProcessCard";
 import api from "../../services/api";
 
 interface ProcessClient {

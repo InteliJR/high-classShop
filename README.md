@@ -41,7 +41,7 @@ Documentos técnicos versionados no repositório:
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 - [Node.js 20+](https://nodejs.org/en)
 
-### Opção A — via Docker Compose (recomendada)
+### Opção A — via Docker Compose (não recomendada)
 
 ```bash
 # 1) Clone o repositório
@@ -72,6 +72,22 @@ npm install
 npm run dev
 ```
 
+### Opção c - desenvolvimento local - RECOMENDADO (backend e frontend juntos com o banco de dados hosteado)
+
+```bash
+# 1) Baixar dependências
+cd backend
+npm install
+cd ../frontend
+npm install
+cd../
+
+# 2) Executar frontend e backend juntos
+npm install
+npm run dev
+
+```
+
 ### Endpoints locais
 
 - Frontend: `http://localhost:5173`
@@ -83,7 +99,7 @@ npm run dev
 Além do `DATABASE_URL`, o projeto depende de variáveis importantes para integrações e segurança. Consulte `backend/.env.example` e ajuste especialmente:
 
 - `FRONTEND_URL`, `BACKEND_URL`
-- `JWT_SECRET_ACCESS`, `JWT_SECRET_REFRESH`, `JWT_SECRET_REFERRAL`
+- `JWT_SECRET_ACCESS`, `JWT_SECRET_REFRESH`, `JWT_SECRET_REFERRAL`, `JWT_SECRET_ADVISOR`
 - `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_BUCKET_NAME`, `EMAIL_FROM`
 - `DOCUSIGN_INTEGRATION_KEY`, `DOCUSIGN_USER_ID`, `DOCUSIGN_ACCOUNT_ID`, `DOCUSIGN_PRIVATE_KEY`, `DOCUSIGN_ENV`, `DOCUSIGN_WEBHOOK_SECRET`
 - `GOOGLE_DRIVE_API_KEY`

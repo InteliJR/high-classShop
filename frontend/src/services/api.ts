@@ -49,7 +49,9 @@ api.interceptors.response.use(
     const status = err.response?.status;
     const serverMessage: string | undefined =
       err.response?.data?.message ||
-      err.response?.data?.error ||
+      (typeof err.response?.data?.error === 'string'
+        ? err.response?.data?.error
+        : err.response?.data?.error?.message) ||
       err.response?.data?.details?.hint;
 
     const isAuthEndpoint =
@@ -68,7 +70,7 @@ api.interceptors.response.use(
       } else if (status === 403) {
         err.friendlyMessage = "Você não tem permissão para realizar esta ação.";
       } else if (status === 404) {
-        err.friendlyMessage = "O recurso solicitado não foi encontrado.";
+        err.friendlyMessage = serverMessage || "O recurso solicitado não foi encontrado.";
       } else if (status === 409) {
         err.friendlyMessage =
           serverMessage && !isAuthEndpoint

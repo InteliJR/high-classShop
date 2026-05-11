@@ -8,9 +8,9 @@ import {
   Search,
   X,
 } from "lucide-react";
-import ProcessCard from "../../components/ProcessCard.tsx";
-import CreateProcessModal from "../../components/CreateProcessModal.tsx";
-import ProductSelectorModal from "../../components/ProductSelectorModal.tsx";
+import ProcessCard from "../../components/processes/ProcessCard";
+import CreateProcessModal from "../../components/processes/CreateProcessModal";
+import ProductSelectorModal from "../../components/product/ProductSelectorModal";
 import {
   getProcessesBySpecialist,
   type ProcessFilters,

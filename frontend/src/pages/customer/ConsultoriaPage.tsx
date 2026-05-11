@@ -17,7 +17,7 @@ import { AuthContext } from "../../contexts/AuthContext";
 import Button from "../../components/ui/button";
 import ProductTypePreferenceModal, {
   type PreferredProductType,
-} from "../../components/ProductTypePreferenceModal";
+} from "../../components/product/ProductTypePreferenceModal";
 
 type SpecialityType = "CAR" | "BOAT" | "AIRCRAFT";
 

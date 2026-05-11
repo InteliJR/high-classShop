@@ -42,7 +42,7 @@ export default function SettingsPage() {
         }
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Erro ao carregar configurações",
+          (err as any)?.friendlyMessage || (err instanceof Error ? err.message : "Erro ao carregar configurações"),
         );
       } finally {
         setIsLoading(false);
@@ -65,7 +65,7 @@ export default function SettingsPage() {
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Erro ao salvar configuração",
+        (err as any)?.friendlyMessage || (err instanceof Error ? err.message : "Erro ao salvar configuração"),
       );
     } finally {
       setIsSaving(null);
@@ -92,7 +92,7 @@ export default function SettingsPage() {
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Erro ao salvar configuração",
+        (err as any)?.friendlyMessage || (err instanceof Error ? err.message : "Erro ao salvar configuração"),
       );
     } finally {
       setIsSaving(null);

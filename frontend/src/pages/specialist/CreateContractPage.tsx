@@ -17,7 +17,7 @@ import {
   applyCepMask,
   formatBRL,
 } from "../../services/contracts.service";
-import DocuSignPreviewModal from "../../components/DocuSignPreviewModal";
+import DocuSignPreviewModal from "../../components/contracts/DocuSignPreviewModal";
 
 interface ContractFormData {
   // Vendedor

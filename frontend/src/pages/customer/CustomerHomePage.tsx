@@ -4,7 +4,7 @@ import { useAuth } from "../../store/authStateManager";
 import { Search, BookOpen, Car, Ship, Plane } from "lucide-react";
 import ProductTypePreferenceModal, {
   type PreferredProductType,
-} from "../../components/ProductTypePreferenceModal";
+} from "../../components/product/ProductTypePreferenceModal";
 
 export default function CustomerHomePage() {
   const navigate = useNavigate();

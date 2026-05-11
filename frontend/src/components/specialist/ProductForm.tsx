@@ -6,7 +6,7 @@ import CommonProductFields from "./CommonProductFields";
 import CarFields from "./CarFields";
 import BoatFields from "./BoatFields";
 import AircraftFields from "./AircraftFields";
-import { ImageUploader, type ImageData } from "../../components/ImageUploader";
+import { ImageUploader, type ImageData } from "../../components/shared/ImageUploader";
 import {
   createCar,
   updateCar,
@@ -31,8 +31,8 @@ import {
 import {
   XlsxImporter,
   type CsvImportResponse,
-} from "../../components/XlsxImporter";
-import { Modal } from "../../components/Modal";
+} from "../../components/shared/XlsxImporter";
+import { Modal } from "../../components/shared/Modal";
 import type { SpecialityType, UserRole } from "../../types/types";
 
 type ProductType = "CAR" | "BOAT" | "AIRCRAFT";
