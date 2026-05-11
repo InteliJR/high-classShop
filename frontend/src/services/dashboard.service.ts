@@ -20,6 +20,7 @@ export interface StatusData {
 }
 
 export interface ConsultantPerformanceData {
+  [key: string]: string | number;
   name: string;
   value: number;
   percentage: number;
