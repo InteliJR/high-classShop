@@ -371,8 +371,8 @@ export default function CreateContractPage() {
     buyer_email: formData.buyer_email,
     buyer_cpf: formData.buyer_cpf,
     buyer_rg: formData.buyer_rg || undefined,
-    buyer_address: formData.buyer_address,
-    buyer_cep: formData.buyer_cep,
+    buyer_address: formData.buyer_address || undefined,
+    buyer_cep: formData.buyer_cep || undefined,
     vehicle_model: formData.vehicle_model,
     vehicle_year: formData.vehicle_year,
     vehicle_registration_id: formData.vehicle_registration_id,
@@ -913,70 +913,92 @@ export default function CreateContractPage() {
                 Comprador
               </h3>
               <span className="text-xs text-gray-400 bg-gray-100 rounded px-2 py-0.5">
-                Preenchido automaticamente
+                Preenchido automaticamente — edite se necessário
               </span>
             </div>
 
-            <input type="hidden" {...register("buyer_name", { required: "Nome é obrigatório" })} />
-            <input type="hidden" {...register("buyer_email", { required: "E-mail é obrigatório" })} />
-            <input type="hidden" {...register("buyer_cpf", { required: "CPF é obrigatório" })} />
-            <input type="hidden" {...register("buyer_rg")} />
-            <input type="hidden" {...register("buyer_cep", { required: "CEP é obrigatório" })} />
-            <input type="hidden" {...register("buyer_address", { required: "Endereço é obrigatório" })} />
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  Nome Completo
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome Completo *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("buyer_name") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("buyer_name", { required: "Nome é obrigatório" })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
+                {errors.buyer_name && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.buyer_name.message}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  E-mail
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  E-mail *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("buyer_email") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="email"
+                  {...register("buyer_email", { required: "E-mail é obrigatório" })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
+                {errors.buyer_email && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.buyer_email.message}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  CPF
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CPF *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("buyer_cpf") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("buyer_cpf", { required: "CPF é obrigatório" })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
+                {errors.buyer_cpf && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.buyer_cpf.message}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   RG
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("buyer_rg") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("buyer_rg")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   CEP
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("buyer_cep") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("buyer_cep")}
+                  placeholder="00000-000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-500 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Endereço Completo
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("buyer_address") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("buyer_address")}
+                  placeholder="Rua, número, bairro, cidade — UF"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
               </div>
             </div>
           </section>
