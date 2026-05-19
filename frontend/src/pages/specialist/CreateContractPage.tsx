@@ -712,76 +712,140 @@ export default function CreateContractPage() {
                 Vendedor
               </h3>
               <span className="text-xs text-gray-400 bg-gray-100 rounded px-2 py-0.5">
-                Preenchido automaticamente
+                Preenchido automaticamente — edite se necessário
               </span>
             </div>
 
-            {/* hidden inputs keep form state for read-only prefill fields */}
-            <input type="hidden" {...register("seller_name", { required: "Nome é obrigatório" })} />
-            <input type="hidden" {...register("seller_email", { required: "E-mail é obrigatório" })} />
-            <input type="hidden" {...register("seller_cpf", { required: "CPF é obrigatório" })} />
-            <input type="hidden" {...register("seller_rg")} />
-            <input type="hidden" {...register("seller_cep", { required: "CEP é obrigatório" })} />
-            <input type="hidden" {...register("seller_address", { required: "Endereço é obrigatório" })} />
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  Nome Completo
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome Completo *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("seller_name") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("seller_name", {
+                    required: "Nome é obrigatório",
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
+                {errors.seller_name && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.seller_name.message}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  E-mail
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  E-mail *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("seller_email") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="email"
+                  {...register("seller_email", {
+                    required: "E-mail é obrigatório",
+                    pattern: {
+                      value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                      message: "E-mail inválido",
+                    },
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
+                {errors.seller_email && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.seller_email.message}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  CPF
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CPF *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("seller_cpf") || <span className="text-gray-400">—</span>}
-                </div>
+                <Controller
+                  name="seller_cpf"
+                  control={control}
+                  rules={{ required: "CPF é obrigatório" }}
+                  render={({ field }) => (
+                    <input
+                      type="text"
+                      {...field}
+                      onChange={(e) =>
+                        field.onChange(applyCpfMask(e.target.value))
+                      }
+                      maxLength={14}
+                      placeholder="000.000.000-00"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                    />
+                  )}
+                />
+                {errors.seller_cpf && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.seller_cpf.message}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   RG
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("seller_rg") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("seller_rg")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  CEP
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CEP *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("seller_cep") || <span className="text-gray-400">—</span>}
-                </div>
+                <Controller
+                  name="seller_cep"
+                  control={control}
+                  rules={{ required: "CEP é obrigatório" }}
+                  render={({ field }) => (
+                    <input
+                      type="text"
+                      {...field}
+                      onChange={(e) =>
+                        field.onChange(applyCepMask(e.target.value))
+                      }
+                      maxLength={9}
+                      placeholder="00000-000"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                    />
+                  )}
+                />
+                {errors.seller_cep && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.seller_cep.message}
+                  </p>
+                )}
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  Endereço Completo
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Endereço Completo *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("seller_address") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("seller_address", {
+                    required: "Endereço é obrigatório",
+                  })}
+                  placeholder="Rua, número, complemento, bairro, cidade - UF"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
+                {errors.seller_address && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.seller_address.message}
+                  </p>
+                )}
               </div>
 
               <div className="md:col-span-2 border-t pt-4 mt-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
-                  Dados bancários do vendedor — preencha abaixo
+                  Dados bancários do vendedor
                 </p>
               </div>
 
@@ -931,60 +995,100 @@ export default function CreateContractPage() {
                 {getProductTypeLabel(prefillData?.product_type)}
               </h3>
               <span className="text-xs text-gray-400 bg-gray-100 rounded px-2 py-0.5">
-                Preenchido automaticamente
+                Preenchido automaticamente — edite se necessário
               </span>
             </div>
 
-            <input type="hidden" {...register("vehicle_model", { required: "Modelo é obrigatório" })} />
-            <input type="hidden" {...register("vehicle_year", { required: "Ano é obrigatório" })} />
-            <input type="hidden" {...register("vehicle_registration_id", { required: "Identificação é obrigatória" })} />
-            <input type="hidden" {...register("vehicle_serial_number", { required: "Número serial é obrigatório" })} />
-            <input type="hidden" {...register("vehicle_technical_info")} />
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  Marca e Modelo
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Marca e Modelo *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("vehicle_model") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("vehicle_model", {
+                    required: "Modelo é obrigatório",
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
+                {errors.vehicle_model && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.vehicle_model.message}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  Ano
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ano *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("vehicle_year") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("vehicle_year", {
+                    required: "Ano é obrigatório",
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
+                {errors.vehicle_year && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.vehicle_year.message}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  {getRegistrationLabel(prefillData?.product_type)}
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {getRegistrationLabel(prefillData?.product_type)} *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("vehicle_registration_id") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("vehicle_registration_id", {
+                    required: "Identificação é obrigatória",
+                  })}
+                  placeholder={
+                    prefillData?.product_type === "CAR"
+                      ? "ABC-1234"
+                      : prefillData?.product_type === "AIRCRAFT"
+                        ? "PT-ABC"
+                        : "Número de inscrição"
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
+                {errors.vehicle_registration_id && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.vehicle_registration_id.message}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  {getSerialLabel(prefillData?.product_type)}
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {getSerialLabel(prefillData?.product_type)} *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("vehicle_serial_number") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("vehicle_serial_number", {
+                    required: "Número serial é obrigatório",
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
+                {errors.vehicle_serial_number && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.vehicle_serial_number.message}
+                  </p>
+                )}
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-500 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Informações Técnicas
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[58px] whitespace-pre-wrap">
-                  {watch("vehicle_technical_info") || <span className="text-gray-400">—</span>}
-                </div>
+                <textarea
+                  {...register("vehicle_technical_info")}
+                  rows={2}
+                  placeholder="Motor, cor, quilometragem, acessórios, etc."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent resize-none bg-white"
+                />
               </div>
             </div>
           </section>
@@ -1592,6 +1696,24 @@ export default function CreateContractPage() {
 
           {/* Submit Buttons */}
           <div className="flex flex-col gap-3 pt-2 pb-8">
+            {/* Resumo de erros de validação (campos obrigatórios faltando) */}
+            {Object.keys(errors).length > 0 && (
+              <div className="flex items-start gap-2 p-4 rounded-lg bg-red-50 border border-red-200">
+                <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                <div className="text-sm text-red-700">
+                  <p className="font-semibold mb-1">
+                    Corrija os campos abaixo antes de pré-visualizar:
+                  </p>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    {Object.entries(errors).map(([key, err]) => (
+                      <li key={key}>
+                        {(err as { message?: string })?.message || key}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
             {/* Mensagem de erro/sucesso próximo aos botões */}
             {submitStatus.type && (
               <div
