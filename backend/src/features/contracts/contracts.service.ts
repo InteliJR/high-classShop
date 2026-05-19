@@ -852,8 +852,8 @@ export class ContractsService {
       buyer_name: dto.buyer_name,
       buyer_cpf: formatCpf(dto.buyer_cpf),
       buyer_rg: dto.buyer_rg ? formatRg(dto.buyer_rg) : '',
-      buyer_address: dto.buyer_address || '',
-      buyer_cep: formatCep(dto.buyer_cep || ''),
+      buyer_address: dto.buyer_address,
+      buyer_cep: formatCep(dto.buyer_cep),
 
       // Veículo
       vehicle_model: dto.vehicle_model,
