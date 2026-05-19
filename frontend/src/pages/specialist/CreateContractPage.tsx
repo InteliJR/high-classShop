@@ -371,8 +371,8 @@ export default function CreateContractPage() {
     buyer_email: formData.buyer_email,
     buyer_cpf: formData.buyer_cpf,
     buyer_rg: formData.buyer_rg || undefined,
-    buyer_address: formData.buyer_address || undefined,
-    buyer_cep: formData.buyer_cep || undefined,
+    buyer_address: formData.buyer_address,
+    buyer_cep: formData.buyer_cep,
     vehicle_model: formData.vehicle_model,
     vehicle_year: formData.vehicle_year,
     vehicle_registration_id: formData.vehicle_registration_id,
@@ -979,26 +979,36 @@ export default function CreateContractPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  CEP
+                  CEP *
                 </label>
                 <input
                   type="text"
-                  {...register("buyer_cep")}
+                  {...register("buyer_cep", { required: "CEP é obrigatório" })}
                   placeholder="00000-000"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
                 />
+                {errors.buyer_cep && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.buyer_cep.message}
+                  </p>
+                )}
               </div>
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Endereço Completo
+                  Endereço Completo *
                 </label>
                 <input
                   type="text"
-                  {...register("buyer_address")}
+                  {...register("buyer_address", { required: "Endereço é obrigatório" })}
                   placeholder="Rua, número, bairro, cidade — UF"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
                 />
+                {errors.buyer_address && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.buyer_address.message}
+                  </p>
+                )}
               </div>
             </div>
           </section>

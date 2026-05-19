@@ -98,12 +98,12 @@ export class PreviewContractDto {
   buyer_rg?: string;
 
   @IsString({ message: 'buyer_address deve ser uma string' })
-  @IsOptional()
-  buyer_address?: string;
+  @IsNotEmpty({ message: 'buyer_address é obrigatório' })
+  buyer_address: string;
 
   @IsString({ message: 'buyer_cep deve ser uma string' })
-  @IsOptional()
-  buyer_cep?: string;
+  @IsNotEmpty({ message: 'buyer_cep é obrigatório' })
+  buyer_cep: string;
 
   // === VEÍCULO/PRODUTO ===
 
