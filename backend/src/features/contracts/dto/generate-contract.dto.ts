@@ -86,12 +86,12 @@ export class GenerateContractDto {
   buyer_rg?: string;
 
   @IsString({ message: 'buyer_address deve ser uma string' })
-  @IsNotEmpty({ message: 'buyer_address é obrigatório' })
-  buyer_address: string;
+  @IsOptional()
+  buyer_address?: string;
 
   @IsString({ message: 'buyer_cep deve ser uma string' })
-  @IsNotEmpty({ message: 'buyer_cep é obrigatório' })
-  buyer_cep: string;
+  @IsOptional()
+  buyer_cep?: string;
 
   // === VEÍCULO/PRODUTO ===
 

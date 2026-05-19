@@ -103,8 +103,8 @@ export interface GenerateContractData {
   buyer_email: string;
   buyer_cpf: string;
   buyer_rg?: string;
-  buyer_address: string;
-  buyer_cep: string;
+  buyer_address?: string;
+  buyer_cep?: string;
 
   // Veículo
   vehicle_model: string;
@@ -229,7 +229,7 @@ export async function generateContract(
     seller_cep: stripFormatting(data.seller_cep),
     buyer_cpf: stripFormatting(data.buyer_cpf),
     buyer_rg: data.buyer_rg ? stripFormatting(data.buyer_rg) : undefined,
-    buyer_cep: stripFormatting(data.buyer_cep),
+    buyer_cep: data.buyer_cep ? stripFormatting(data.buyer_cep) : undefined,
     platform_cnpj: stripFormatting(data.platform_cnpj),
     office_cnpj: stripFormatting(data.office_cnpj),
     specialist_document: data.specialist_document
@@ -300,7 +300,7 @@ export async function previewContract(
     seller_cep: stripFormatting(data.seller_cep),
     buyer_cpf: stripFormatting(data.buyer_cpf),
     buyer_rg: data.buyer_rg ? stripFormatting(data.buyer_rg) : undefined,
-    buyer_cep: stripFormatting(data.buyer_cep),
+    buyer_cep: data.buyer_cep ? stripFormatting(data.buyer_cep) : undefined,
     platform_cnpj: stripFormatting(data.platform_cnpj),
     office_cnpj: stripFormatting(data.office_cnpj),
     specialist_document: data.specialist_document
@@ -346,7 +346,7 @@ export async function sendContractAfterPreview(
     seller_cep: stripFormatting(data.seller_cep),
     buyer_cpf: stripFormatting(data.buyer_cpf),
     buyer_rg: data.buyer_rg ? stripFormatting(data.buyer_rg) : undefined,
-    buyer_cep: stripFormatting(data.buyer_cep),
+    buyer_cep: data.buyer_cep ? stripFormatting(data.buyer_cep) : undefined,
     platform_cnpj: stripFormatting(data.platform_cnpj),
     office_cnpj: stripFormatting(data.office_cnpj),
     specialist_document: data.specialist_document
