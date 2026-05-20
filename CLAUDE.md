@@ -6,19 +6,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Run everything (recommended)
 ```bash
+npm run install:all  # install root + frontend + backend deps (first time)
 npm run dev          # starts backend + frontend concurrently
 ```
 
 ### Backend only
 ```bash
 cd backend
-npm run start:dev    # watch mode
-npm run build        # production build (nest build + tsc-alias)
-npm run lint         # eslint --fix
-npm test             # jest unit tests (files: *.spec.ts)
-npm run test:e2e     # jest --config ./test/jest-e2e.json
-npm run test:cov     # coverage report
-npm run seed         # run prisma/seed.ts
+npm run start:dev          # watch mode
+npm run start:debug        # watch mode + node --inspect
+npm run build              # production build (nest build + tsc-alias)
+npm run lint               # eslint --fix
+npm run format             # prettier on src + test
+npm test                   # jest unit tests (files: *.spec.ts)
+npm test -- <pattern>      # run a single test file (e.g. `npm test -- contracts.service`)
+npx jest -t "<test name>"  # run a single test by name
+npm run test:e2e           # jest --config ./test/jest-e2e.json
+npm run test:cov           # coverage report
+npm run seed               # run prisma/seed.ts
 ```
 
 ### Frontend only
@@ -67,7 +72,12 @@ Feature modules live in `backend/src/features/` — one folder per domain:
 - **Sales flow**: `processes/` → `appointments/` → `proposals/` → `contracts/` → `meetings/`
 - **Support**: `dashboard/`, `settings/`, `platform-company/`, `notifications/`, `product-import-jobs/`
 
-External integrations encapsulated in `backend/src/providers/docusign/` and `backend/src/aws/` (S3 + SES).
+External integrations:
+- `backend/src/providers/docusign/` — assinatura digital. Env vars: `DOCUSIGN_INTEGRATION_KEY`, `DOCUSIGN_USER_ID`, `DOCUSIGN_ACCOUNT_ID`, `DOCUSIGN_PRIVATE_KEY`, `DOCUSIGN_ENV`, `DOCUSIGN_WEBHOOK_SECRET`, `DOCUSIGN_TEMPLATE_ID`. Setup local exige PEM + JWT — Messias-Olivindo é a referência.
+- `backend/src/aws/` — S3 (imagens de produto) + SES (e-mails). Compatível com Cloudflare R2 via `AWS_ENDPOINT` + `forcePathStyle: true`.
+- `backend/src/features/appointments/` (Calendly) — OAuth 2.0 + webhook. Tokens armazenados criptografados em `CalendlyConnection`. Env vars: `CALENDLY_OAUTH_CLIENT_ID`, `CALENDLY_OAUTH_CLIENT_SECRET`, `CALENDLY_OAUTH_REDIRECT_URI`, `CALENDLY_TOKEN_ENCRYPTION_KEY`, `CALENDLY_WEBHOOK_CALLBACK_URL`, `CALENDLY_WEBHOOK_SIGNING_KEY`.
+- `backend/src/features/meetings/` — videoconferência. Provedor selecionável via `MEETING_PROVIDER`; suporta Google Meet (atual) e Jitsi. Env: `JITSI_BASE_URL`, `MEETING_DEMO_FALLBACK_ENABLED`.
+- `backend/src/features/drive-import/` — Google Drive (import de imagens em lote). Env: `GOOGLE_DRIVE_API_KEY`.
 
 #### Process state machine
 ```
@@ -125,6 +135,15 @@ Frontend env var: `VITE_API_BASE_URL` (defaults to `http://localhost:3000/api/`)
 ## Documentation
 
 - Full endpoint reference + payloads: `architecture.md`
+- Frontend ↔ Backend integration guide: `frontend-integration-guide.md`
 - AI/dev context (stack, schema, integrations, env vars): `ai/contexts/`
 - Bug history + fix log: `ai/contexts/known-issues.md`
-- Implementation plans: `ai/plan/`
+- Architecture decisions (ADRs): `ai/decisoes/`
+- Domain glossary: `ai/instrucoes/glossario.md`
+- Technical deep dives (SPIKEs, comparativos): `ai/notas-tecnicas/`
+- Implementation plans + planejamento (input do cliente): `ai/_private/plan/`, `ai/_private/planejamento/` — **conteúdo privado, não versionado**. Acesso via Drive/Discord do squad.
+
+## CI / PR workflow
+
+- `.github/workflows/restrict_prs.yml` — guarda restrições de merge.
+- `.github/workflows/deploy_docusaurus.yml` — deploy automático da documentação em `docs/` para `intelijr.github.io/high-classShop`.
