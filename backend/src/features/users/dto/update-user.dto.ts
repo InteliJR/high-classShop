@@ -13,12 +13,12 @@ import {
  * - name: nome do usuário
  * - surname: sobrenome
  * - cpf: CPF (11 dígitos) - único no sistema
- * - rg: RG (até 10 dígitos) - único no sistema
+ * - rg: RG (de 9 a 10 dígitos) - único no sistema
  * - calendly_url: link do Calendly (apenas para especialistas)
  *
  * Validações:
  * - CPF: exatamente 11 dígitos numéricos
- * - RG: até 10 dígitos numéricos
+ * - RG: de 9 a 10 dígitos numéricos
  * - calendly_url: URL válida do Calendly
  */
 export class UpdateUserDto {
@@ -43,7 +43,7 @@ export class UpdateUserDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^\d{1,10}$/, { message: 'RG deve conter até 10 dígitos numéricos' })
+  @Matches(/^\d{9,10}$/, { message: 'RG deve conter entre 9 e 10 dígitos numéricos' })
   rg?: string;
 
   @IsOptional()
