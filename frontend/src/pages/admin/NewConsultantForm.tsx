@@ -82,11 +82,11 @@ export default function NewConsultantForm({
   };
 
   /**
-   * Valida o formato do RG (apenas números, 9 dígitos)
+   * Valida o formato do RG (apenas números, 9 a 10 dígitos)
    */
   const validateRG = (rg: string): boolean => {
     const cleanRG = rg.replace(/\D/g, '');
-    return cleanRG.length === 9;
+    return cleanRG.length >= 9 && cleanRG.length <= 10;
   };
 
   /**
@@ -130,7 +130,7 @@ export default function NewConsultantForm({
     }
 
     if (!validateRG(rg)) {
-      setError("RG deve conter exatamente 9 dígitos numéricos.");
+      setError("RG deve conter entre 9 e 10 dígitos numéricos.");
       return;
     }
 
@@ -275,13 +275,14 @@ export default function NewConsultantForm({
           id="rg"
           type="text"
           value={rg}
-          onChange={(e) => setRg(e.target.value)}
-          placeholder="123456789"
-          maxLength={9}
+          onChange={(e) => setRg(e.target.value.replace(/\D/g, '').slice(0, 10))}
+          placeholder="1234567890"
+          maxLength={10}
+          inputMode="numeric"
           className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
           required
         />
-        <p className="text-xs text-gray-500 mt-1">Digite 9 dígitos numéricos</p>
+        <p className="text-xs text-gray-500 mt-1">Digite de 9 a 10 dígitos numéricos</p>
       </div>
 
       <div>

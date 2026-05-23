@@ -134,5 +134,6 @@ Dockerfile.prod
 # Templates
 Contratodevenda.json
 
-# Contexto
-ai/
+# Contexto AI
+# A estrutura `ai/` é versionada; conteúdo sensível é protegido
+# por `ai/.gitignore` interno (regra: _private/* + !_private/README.md).

@@ -1,0 +1,5 @@
+marca;modelo;valor;estado;ano;cor;km;cambio;combustivel;tipo_categoria;descricao;folder_url
+BMW;X5;450000;SÃ£o Paulo;2023;Preto;15000;AutomÃ¡tico;Gasolina;SUV;Carro em excelente estado;https://drive.google.com/drive/folders/SEU_FOLDER_ID
+Porsche;911;2000000;São Paulo;2025;azul;100;Automático;Gasolina;Coupé;Carro zero muito bonito e pronto para rodar;https://drive.google.com/drive/folders/1o0Kn7JHqbBZpfq9M06gdltlxfwcmFxls?usp=drive_link
+BMW;320i;400000;Rio de Janeiro;2026;Branca;0;Automático;Gasolina;Sedã;Muito confortável e bonito;https://drive.google.com/drive/folders/1oi6kx9FAlK0SgkONiuTZZevLq-YhIFzA?usp=drive_link
+Ferrari;Enzo;5000000;Minas Gerais;2026;Vermelha;3289749;Manul;Etanol;Hatch;BBB;https://drive.google.com/drive/folders/18ft8sZJVxpO-cBBFjBKl_VNVBVIsWGQX?usp=drive_link

@@ -1,0 +1,10 @@
+# Conteúdo sensível — não versionar
+# Inclui: contrato, relatórios do cliente, áreas pessoais de cada dev
+_private/*
+!_private/README.md
+
+# Arquivos temporários
+*.tmp
+*.bak
+*~
+.DS_Store
