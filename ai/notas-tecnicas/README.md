@@ -53,4 +53,4 @@ Estrutura sugerida:
 
 | Arquivo | Tema | Status |
 |---------|------|--------|
-| _(em breve)_ `2026-05-jitsi-estudo.md` | Custos do Jitsi (self-hosted, JaaS enterprise) + impacto na plataforma (TASK 1.12) | Em andamento |
+| [`2026-05-jitsi-estudo.md`](2026-05-jitsi-estudo.md) | Custos do Jitsi (self-hosted, JaaS) + impacto na plataforma (TASK 1.12) | Finalizado |
