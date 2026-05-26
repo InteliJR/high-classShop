@@ -7,6 +7,8 @@ import {
   Param,
   Body,
   Query,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
@@ -38,14 +40,14 @@ export class CompaniesController {
     return this.companiesService.create(body);
   }
 
-  // Rota para buscar especialistas de um escritório (lazy loading com paginação).
-  @Get(':id/specialists')
-  findSpecialists(
+  // Rota para buscar consultores de um escritório (lazy loading com paginação).
+  @Get(':id/consultants')
+  findConsultants(
     @Param('id') id: string,
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
   ) {
-    return this.companiesService.findSpecialistsByCompany(
+    return this.companiesService.findConsultantsByCompany(
       id,
       page ? Number(page) : 1,
       perPage ? Number(perPage) : 5,
@@ -62,6 +64,16 @@ export class CompaniesController {
   @Put(':id')
   update(@Param('id') id: string, @Body() body: UpdateCompanyDto) {
     return this.companiesService.update(id, body);
+  }
+
+  // Rota para gerar link de convite de consultor para um escritório.
+  @Post(':id/invite-consultant')
+  @HttpCode(HttpStatus.OK)
+  inviteConsultant(
+    @Param('id') id: string,
+    @Body('email') email: string,
+  ) {
+    return this.companiesService.inviteConsultant(id, email);
   }
 
   // Rota para apagar um escritório.

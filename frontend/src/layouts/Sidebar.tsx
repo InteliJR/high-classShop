@@ -65,11 +65,38 @@ export default function Sidebar() {
         );
         break;
       case "CONSULTANT":
-        links.push({
-          to: "/consultant/dashboard",
-          label: "Dashboard",
-          icon: <LayoutDashboard size={20} />,
-        });
+        links.push(
+          {
+            to: "/consultant/dashboard",
+            label: "Dashboard",
+            icon: <LayoutDashboard size={20} />,
+          },
+          {
+            to: "/consultant/clients",
+            label: "Meus Clientes",
+            icon: <Users size={20} />,
+          },
+          {
+            to: "/consultant/processes",
+            label: "Processos",
+            icon: <FilePen size={20} />,
+          },
+          {
+            to: "/catalog/cars",
+            label: "Carros",
+            icon: <Car size={20} />,
+          },
+          {
+            to: "/catalog/boats",
+            label: "Embarcações",
+            icon: <Ship size={20} />,
+          },
+          {
+            to: "/catalog/aircrafts",
+            label: "Aviões",
+            icon: <Plane size={20} />,
+          },
+        );
         break;
       case "SPECIALIST":
         links.push(

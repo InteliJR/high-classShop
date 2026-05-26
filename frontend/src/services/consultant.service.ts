@@ -79,3 +79,85 @@ export async function removeClient(clientId: string): Promise<void> {
   });
 }
 
+export type CreateConsultantProcessData = {
+  client_id: string;
+  specialist_id: string;
+  product_type: 'CAR' | 'BOAT' | 'AIRCRAFT';
+  product_id?: number;
+};
+
+/**
+ * Create a process on behalf of a client
+ */
+export async function createConsultantProcess(data: CreateConsultantProcessData): Promise<unknown> {
+  const response = await api.post<ApiResponse<unknown>>('/consultant/processes', data, {
+    withCredentials: true,
+  });
+  return response.data.data;
+}
+
+/**
+ * Get all processes for a specific client
+ */
+export async function getClientProcesses(clientId: string): Promise<unknown[]> {
+  const response = await api.get<ApiResponse<unknown[]>>(
+    `/consultant/clients/${clientId}/processes`,
+    { withCredentials: true },
+  );
+  return response.data.data;
+}
+
+export type ConsultantProcess = {
+  id: string;
+  status: string;
+  product_type: string | null;
+  created_at: string;
+  client_id: string;
+  client: { id: string; name: string; surname: string } | null;
+  specialist: { id: string; name: string; surname: string; speciality: string } | null;
+};
+
+/**
+ * Get all processes across all clients of the consultant, with optional filters
+ */
+export async function getAllConsultantProcesses(
+  filters: { status?: string; clientId?: string } = {},
+): Promise<ConsultantProcess[]> {
+  const params: Record<string, string> = {};
+  if (filters.status) params.status = filters.status;
+  if (filters.clientId) params.clientId = filters.clientId;
+
+  const response = await api.get<ApiResponse<ConsultantProcess[]>>(
+    '/consultant/processes',
+    { withCredentials: true, params },
+  );
+  return response.data.data;
+}
+
+/**
+ * Validate a consultant invite token
+ */
+export async function validateConsultantInvite(token: string): Promise<{
+  companyId: string;
+  companyName: string;
+  email: string;
+}> {
+  const response = await api.post('/auth/validate-consultant-invite', { token });
+  return response.data.data;
+}
+
+/**
+ * Register a new consultant via invite token
+ */
+export async function registerConsultant(data: {
+  invite_token: string;
+  name: string;
+  surname: string;
+  cpf: string;
+  rg: string;
+  password: string;
+}): Promise<unknown> {
+  const response = await api.post('/auth/register-consultant', data);
+  return response.data;
+}
+
