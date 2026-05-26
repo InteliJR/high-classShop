@@ -14,23 +14,21 @@ export type Company = {
   bank?: string | null;
   agency?: string | null;
   checking_account?: string | null;
-  specialists_count?: number;
+  consultants_count?: number;
 };
 
-export type CompanySpecialist = {
+export type CompanyConsultant = {
   id: string;
   name: string;
   surname: string;
   email: string;
   role: string;
-  speciality: string | null;
-  commission_rate: number | null;
-  calendly_url: string | null;
   created_at: string;
+  clients_count: number;
 };
 
-export type CompanySpecialistsResponse = {
-  data: CompanySpecialist[];
+export type CompanyConsultantsResponse = {
+  data: CompanyConsultant[];
   pagination: PaginationMeta;
 };
 
@@ -108,17 +106,30 @@ export async function deleteCompany(id: string): Promise<void> {
   }
 }
 
-// Busca especialistas de uma empresa com paginação (lazy loading).
-export async function getCompanySpecialists(
+// Busca consultores de uma empresa com paginação (lazy loading).
+export async function getCompanyConsultants(
   companyId: string,
   page: number = 1,
   perPage: number = 5,
-): Promise<CompanySpecialistsResponse> {
+): Promise<CompanyConsultantsResponse> {
   try {
-    const { data } = await api.get<CompanySpecialistsResponse>(
-      `/companies/${companyId}/specialists`,
+    const { data } = await api.get<CompanyConsultantsResponse>(
+      `/companies/${companyId}/consultants`,
       { params: { page, perPage } },
     );
+    return data;
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
+
+// Convida um consultor para se cadastrar vinculado a uma empresa.
+export async function inviteConsultant(
+  companyId: string,
+  email: string,
+): Promise<{ inviteLink: string; email: string }> {
+  try {
+    const { data } = await api.post(`/companies/${companyId}/invite-consultant`, { email });
     return data;
   } catch (error) {
     throw new Error(getErrorMessage(error));

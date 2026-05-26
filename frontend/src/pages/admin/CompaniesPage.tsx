@@ -1,14 +1,14 @@
-// Página de gestão de escritórios, com listagem, criação, exclusão e visualização de especialistas.
+// Página de gestão de escritórios, com listagem, criação, exclusão e visualização de consultores.
 
 import { useEffect, useState, useContext, useCallback } from "react";
 import {
   getCompanies,
   deleteCompany,
-  getCompanySpecialists,
+  getCompanyConsultants,
+  inviteConsultant,
   type Company,
-  type CompanySpecialist,
+  type CompanyConsultant,
 } from "../../services/companies.service";
-import { updateSpecialist } from "../../services/specialists.service";
 import {
   getPlatformCompany,
   type PlatformCompany,
@@ -24,65 +24,46 @@ import {
   ChevronDown,
   ChevronUp,
   Users,
-  Calendar,
-  Mail,
   Loader2,
   ChevronLeft,
   ChevronRight,
+  Link,
+  Copy,
+  Check,
 } from "lucide-react";
 
-// Estado de um painel de especialistas expandido por empresa
+// Estado de um painel de consultores expandido por empresa
 interface ExpandedCompanyState {
-  specialists: CompanySpecialist[];
+  consultants: CompanyConsultant[];
   pagination: PaginationMeta;
   loading: boolean;
   error: string | null;
 }
 
-interface SpecialistEditState {
-  specialist: CompanySpecialist;
+interface InviteState {
   companyId: string;
+  companyName: string;
+  email: string;
+  isLoading: boolean;
+  inviteLink: string | null;
+  error: string | null;
+  copied: boolean;
 }
 
 export default function CompaniesPage() {
-  // Guarda os dados da API para serem renderizados na tabela.
   const [companies, setCompanies] = useState<Company[]>([]);
-  // Controla a exibição de mensagens de 'loading' enquanto os dados são buscados.
   const [isLoading, setIsLoading] = useState(true);
-  // Armazena mensagens de erro para exibir ao utilizador se a API falhar.
   const [error, setError] = useState<string | null>(null);
-
-  // Dados da plataforma (taxa de comissão da plataforma)
-  const [platformData, setPlatformData] = useState<PlatformCompany | null>(
-    null,
-  );
-
-  // Controla a visibilidade do modal de criação de um novo escritório.
+  const [platformData, setPlatformData] = useState<PlatformCompany | null>(null);
   const [isNewCompanyModalOpen, setIsNewCompanyModalOpen] = useState(false);
-  // Guarda a empresa que está sendo editada, ou null se estiver criando uma nova.
   const [companyToEdit, setCompanyToEdit] = useState<Company | null>(null);
-  // Guarda o objeto da empresa que está prestes a ser apagada, controlando também o modal de confirmação.
   const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null);
-  const [specialistToEdit, setSpecialistToEdit] =
-    useState<SpecialistEditState | null>(null);
-  const [isSavingSpecialist, setIsSavingSpecialist] = useState(false);
-  const [specialistFormError, setSpecialistFormError] = useState<string | null>(
-    null,
-  );
 
-  const [editName, setEditName] = useState("");
-  const [editSurname, setEditSurname] = useState("");
-  const [editEmail, setEditEmail] = useState("");
-  const [editSpeciality, setEditSpeciality] = useState<
-    "CAR" | "BOAT" | "AIRCRAFT"
-  >("CAR");
-  const [editCommissionRate, setEditCommissionRate] = useState("");
-  const [editCalendlyUrl, setEditCalendlyUrl] = useState("");
+  // Mapa de empresas expandidas: companyId -> estado dos consultores
+  const [expandedCompanies, setExpandedCompanies] = useState<Record<string, ExpandedCompanyState>>({});
 
-  // Mapa de empresas expandidas: companyId -> estado dos especialistas
-  const [expandedCompanies, setExpandedCompanies] = useState<
-    Record<string, ExpandedCompanyState>
-  >({});
+  // Estado do modal de convite de consultor
+  const [inviteState, setInviteState] = useState<InviteState | null>(null);
 
   // Usa o contexto de busca global
   const { searchTerm } = useContext(AppContext);
@@ -114,8 +95,8 @@ export default function CompaniesPage() {
     }
   }, []);
 
-  // Busca especialistas de uma empresa (lazy loading)
-  const loadSpecialists = useCallback(
+  // Busca consultores de uma empresa (lazy loading)
+  const loadConsultants = useCallback(
     async (companyId: string, page: number = 1) => {
       setExpandedCompanies((prev) => ({
         ...prev,
@@ -123,7 +104,7 @@ export default function CompaniesPage() {
           ...prev[companyId],
           loading: true,
           error: null,
-          specialists: prev[companyId]?.specialists ?? [],
+          consultants: prev[companyId]?.consultants ?? [],
           pagination: prev[companyId]?.pagination ?? {
             current_page: 1,
             per_page: 5,
@@ -136,23 +117,23 @@ export default function CompaniesPage() {
       }));
 
       try {
-        const result = await getCompanySpecialists(companyId, page, 5);
+        const result = await getCompanyConsultants(companyId, page, 5);
         setExpandedCompanies((prev) => ({
           ...prev,
           [companyId]: {
-            specialists: result.data,
+            consultants: result.data,
             pagination: result.pagination,
             loading: false,
             error: null,
           },
         }));
-      } catch (err) {
+      } catch {
         setExpandedCompanies((prev) => ({
           ...prev,
           [companyId]: {
             ...prev[companyId],
             loading: false,
-            error: "Erro ao carregar especialistas.",
+            error: "Erro ao carregar consultores.",
           },
         }));
       }
@@ -164,110 +145,53 @@ export default function CompaniesPage() {
   const toggleExpand = useCallback(
     (companyId: string) => {
       if (expandedCompanies[companyId]) {
-        // Já está expandido — colapsar (remover do mapa)
         setExpandedCompanies((prev) => {
           const next = { ...prev };
           delete next[companyId];
           return next;
         });
       } else {
-        // Expandir — buscar especialistas
-        loadSpecialists(companyId, 1);
+        loadConsultants(companyId, 1);
       }
     },
-    [expandedCompanies, loadSpecialists],
+    [expandedCompanies, loadConsultants],
   );
 
-  const openSpecialistEditModal = useCallback(
-    (specialist: CompanySpecialist, companyId: string) => {
-      setSpecialistFormError(null);
-      setSpecialistToEdit({ specialist, companyId });
-      setEditName(specialist.name);
-      setEditSurname(specialist.surname);
-      setEditEmail(specialist.email);
-      setEditSpeciality(
-        (specialist.speciality as "CAR" | "BOAT" | "AIRCRAFT") || "CAR",
-      );
-      setEditCommissionRate(
-        specialist.commission_rate != null
-          ? String(specialist.commission_rate)
-          : "",
-      );
-      setEditCalendlyUrl(specialist.calendly_url || "");
-    },
-    [],
-  );
-
-  const closeSpecialistEditModal = useCallback(() => {
-    setSpecialistToEdit(null);
-    setSpecialistFormError(null);
+  const openInviteModal = useCallback((company: Company) => {
+    setInviteState({
+      companyId: company.id,
+      companyName: company.name,
+      email: "",
+      isLoading: false,
+      inviteLink: null,
+      error: null,
+      copied: false,
+    });
   }, []);
 
-  const handleSaveSpecialist = useCallback(async () => {
-    if (!specialistToEdit) return;
-
-    if (!editName.trim() || !editSurname.trim() || !editEmail.trim()) {
-      setSpecialistFormError("Nome, sobrenome e e-mail são obrigatórios.");
-      return;
-    }
-
+  const handleSendInvite = useCallback(async () => {
+    if (!inviteState) return;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(editEmail.trim())) {
-      setSpecialistFormError("Informe um e-mail válido.");
+    if (!emailRegex.test(inviteState.email.trim())) {
+      setInviteState((prev) => prev ? { ...prev, error: "Informe um e-mail válido." } : null);
       return;
     }
-
-    const parsedCommission = editCommissionRate.trim()
-      ? Number(editCommissionRate)
-      : undefined;
-
-    if (
-      parsedCommission !== undefined &&
-      (Number.isNaN(parsedCommission) ||
-        parsedCommission < 0 ||
-        parsedCommission > 100)
-    ) {
-      setSpecialistFormError("Comissão deve estar entre 0 e 100.");
-      return;
-    }
-
-    setIsSavingSpecialist(true);
-    setSpecialistFormError(null);
-
+    setInviteState((prev) => prev ? { ...prev, isLoading: true, error: null } : null);
     try {
-      await updateSpecialist(specialistToEdit.specialist.id, {
-        name: editName.trim(),
-        surname: editSurname.trim(),
-        email: editEmail.trim(),
-        speciality: editSpeciality,
-        commission_rate: parsedCommission,
-        calendly_url: editCalendlyUrl.trim() || undefined,
-      });
-
-      const currentPage =
-        expandedCompanies[specialistToEdit.companyId]?.pagination
-          .current_page || 1;
-      await loadSpecialists(specialistToEdit.companyId, currentPage);
-      closeSpecialistEditModal();
+      const result = await inviteConsultant(inviteState.companyId, inviteState.email.trim());
+      setInviteState((prev) => prev ? { ...prev, isLoading: false, inviteLink: result.inviteLink } : null);
     } catch (err) {
-      setSpecialistFormError(
-        (err as Error).message || "Erro ao atualizar especialista.",
-      );
-    } finally {
-      setIsSavingSpecialist(false);
+      setInviteState((prev) => prev ? { ...prev, isLoading: false, error: (err as Error).message || "Erro ao gerar convite." } : null);
     }
-  }, [
-    specialistToEdit,
-    editName,
-    editSurname,
-    editEmail,
-    editSpeciality,
-    editCommissionRate,
-    editCalendlyUrl,
-    expandedCompanies,
-    loadSpecialists,
-    closeSpecialistEditModal,
-  ]);
+  }, [inviteState]);
+
+  const handleCopyLink = useCallback(() => {
+    if (!inviteState?.inviteLink) return;
+    navigator.clipboard.writeText(inviteState.inviteLink).then(() => {
+      setInviteState((prev) => prev ? { ...prev, copied: true } : null);
+      setTimeout(() => setInviteState((prev) => prev ? { ...prev, copied: false } : null), 2000);
+    });
+  }, [inviteState]);
 
   // Função chamada quando o formulário de novo/edição de escritório é submetido com sucesso.
   const handleFormSuccess = () => {
@@ -337,7 +261,7 @@ export default function CompaniesPage() {
           <div>Empresa</div>
           <div>% Plataforma</div>
           <div>% Escritório</div>
-          <div>Especialistas</div>
+          <div>Consultores</div>
           <div className="text-right">Ações</div>
         </div>
 
@@ -368,8 +292,8 @@ export default function CompaniesPage() {
                         className="p-1 rounded hover:bg-gray-100 transition-colors"
                         title={
                           isExpanded
-                            ? "Recolher especialistas"
-                            : "Ver especialistas"
+                            ? "Recolher consultores"
+                            : "Ver consultores"
                         }
                       >
                         {isExpanded ? (
@@ -421,7 +345,7 @@ export default function CompaniesPage() {
                       )}
                     </div>
 
-                    {/* Especialistas count */}
+                    {/* Consultores count */}
                     <div>
                       <button
                         onClick={() => toggleExpand(company.id)}
@@ -429,7 +353,7 @@ export default function CompaniesPage() {
                       >
                         <Users className="w-4 h-4" />
                         <span className="font-medium">
-                          {company.specialists_count ?? 0}
+                          {company.consultants_count ?? 0}
                         </span>
                       </button>
                     </div>
@@ -453,138 +377,92 @@ export default function CompaniesPage() {
                     </div>
                   </div>
 
-                  {/* Painel expandido: especialistas */}
+                  {/* Painel expandido: consultores */}
                   {isExpanded && (
                     <div className="border-t border-gray-100 bg-gray-50 px-6 py-4">
+                      {/* Header do painel: título + botão convidar */}
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Consultores
+                        </p>
+                        <button
+                          onClick={() => openInviteModal(company)}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium bg-black text-white px-3 py-1.5 rounded hover:bg-gray-800 transition-colors"
+                        >
+                          <Link className="w-3.5 h-3.5" />
+                          Convidar Consultor
+                        </button>
+                      </div>
+
                       {expandedState.loading &&
-                      expandedState.specialists.length === 0 ? (
+                      expandedState.consultants.length === 0 ? (
                         <div className="flex items-center justify-center py-6 gap-2 text-gray-500">
                           <Loader2 className="w-5 h-5 animate-spin" />
-                          <span className="text-sm">
-                            Carregando especialistas...
-                          </span>
+                          <span className="text-sm">Carregando consultores...</span>
                         </div>
                       ) : expandedState.error ? (
                         <p className="text-sm text-red-500 py-4 text-center">
                           {expandedState.error}
                         </p>
-                      ) : expandedState.specialists.length === 0 ? (
+                      ) : expandedState.consultants.length === 0 ? (
                         <p className="text-sm text-gray-500 py-4 text-center">
-                          Nenhum especialista associado a este escritório.
+                          Nenhum consultor associado a este escritório.
                         </p>
                       ) : (
                         <>
                           {/* Cabeçalho da sub-tabela */}
-                          <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_0.8fr_0.8fr] gap-4 px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <div className="grid grid-cols-[2fr_2fr_1fr_1fr] gap-4 px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                             <div>Nome</div>
                             <div>E-mail</div>
-                            <div>Especialidade</div>
-                            <div>% Comissão</div>
-                            <div>Calendly</div>
-                            <div className="text-right">Ações</div>
+                            <div>Clientes</div>
+                            <div>Cadastro</div>
                           </div>
 
-                          {/* Linhas de especialistas */}
+                          {/* Linhas de consultores */}
                           <div className="flex flex-col gap-2">
-                            {expandedState.specialists.map((spec) => (
+                            {expandedState.consultants.map((consultant) => (
                               <div
-                                key={spec.id}
-                                className="grid grid-cols-[2fr_1.5fr_1fr_1fr_0.8fr_0.8fr] gap-4 items-center px-3 py-3 bg-white rounded-lg border border-gray-100"
+                                key={consultant.id}
+                                className="grid grid-cols-[2fr_2fr_1fr_1fr] gap-4 items-center px-3 py-3 bg-white rounded-lg border border-gray-100"
                               >
                                 <div>
                                   <span className="text-sm font-medium text-gray-900">
-                                    {spec.name} {spec.surname}
+                                    {consultant.name} {consultant.surname}
                                   </span>
-                                  <span className="block text-xs text-gray-400 capitalize">
-                                    {spec.role === "SPECIALIST"
-                                      ? "Especialista"
-                                      : spec.role === "CONSULTANT"
-                                        ? "Consultor"
-                                        : spec.role}
+                                  <span className="block text-xs text-gray-400">
+                                    Consultor
                                   </span>
                                 </div>
                                 <div className="text-sm text-gray-600 truncate">
-                                  {spec.email}
+                                  {consultant.email}
                                 </div>
                                 <div>
-                                  {spec.speciality ? (
-                                    <span className="text-xs font-medium text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">
-                                      {spec.speciality === "CAR"
-                                        ? "Carros"
-                                        : spec.speciality === "BOAT"
-                                          ? "Lanchas"
-                                          : spec.speciality === "AIRCRAFT"
-                                            ? "Aeronaves"
-                                            : spec.speciality}
-                                    </span>
-                                  ) : (
-                                    <span className="text-xs text-gray-400">
-                                      —
-                                    </span>
-                                  )}
+                                  <span className="text-sm text-gray-700 font-medium">
+                                    {consultant.clients_count ?? 0}
+                                  </span>
                                 </div>
-                                <div>
-                                  {spec.commission_rate != null ? (
-                                    <span className="text-sm font-medium text-emerald-700">
-                                      {spec.commission_rate}%
-                                    </span>
-                                  ) : (
-                                    <span className="text-xs text-gray-400">
-                                      —
-                                    </span>
-                                  )}
-                                </div>
-                                <div>
-                                  {spec.calendly_url?.trim() ? (
-                                    <span
-                                      className="inline-flex items-center gap-1 text-xs text-green-700"
-                                      title={spec.calendly_url}
-                                    >
-                                      <Calendar className="w-3.5 h-3.5" />
-                                      Ativo
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 text-xs text-gray-400">
-                                      <Mail className="w-3.5 h-3.5" />
-                                      E-mail
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex justify-end">
-                                  <button
-                                    onClick={() =>
-                                      openSpecialistEditModal(spec, company.id)
-                                    }
-                                    className="p-1 rounded hover:bg-gray-100 transition-colors"
-                                    title="Editar especialista"
-                                  >
-                                    <img
-                                      src={EditIcon}
-                                      alt="Editar especialista"
-                                      className="h-4 w-4"
-                                    />
-                                  </button>
+                                <div className="text-xs text-gray-400">
+                                  {consultant.created_at
+                                    ? new Date(consultant.created_at).toLocaleDateString("pt-BR")
+                                    : "—"}
                                 </div>
                               </div>
                             ))}
                           </div>
 
-                          {/* Paginação dos especialistas */}
+                          {/* Paginação dos consultores */}
                           {expandedState.pagination.total_pages > 1 && (
                             <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-200">
                               <span className="text-xs text-gray-500">
-                                Página {expandedState.pagination.current_page}{" "}
-                                de {expandedState.pagination.total_pages} (
+                                Página {expandedState.pagination.current_page} de{" "}
+                                {expandedState.pagination.total_pages} (
                                 {expandedState.pagination.total}{" "}
-                                {expandedState.pagination.total === 1
-                                  ? "membro"
-                                  : "membros"}
-                                )
+                                {expandedState.pagination.total === 1 ? "consultor" : "consultores"})
                               </span>
                               <div className="flex items-center gap-2">
                                 <button
                                   onClick={() =>
-                                    loadSpecialists(
+                                    loadConsultants(
                                       company.id,
                                       expandedState.pagination.current_page - 1,
                                     )
@@ -599,7 +477,7 @@ export default function CompaniesPage() {
                                 </button>
                                 <button
                                   onClick={() =>
-                                    loadSpecialists(
+                                    loadConsultants(
                                       company.id,
                                       expandedState.pagination.current_page + 1,
                                     )
@@ -661,109 +539,81 @@ export default function CompaniesPage() {
         </div>
       </Modal>
 
-      <Modal isOpen={!!specialistToEdit} onClose={closeSpecialistEditModal}>
-        <div className="space-y-4">
-          <h2 className="h2-style">Editar Especialista</h2>
+      {/* Modal de convite de consultor */}
+      <Modal isOpen={!!inviteState} onClose={() => setInviteState(null)}>
+        {inviteState && (
+          <div className="space-y-4">
+            <h2 className="h2-style">Convidar Consultor</h2>
+            <p className="text-sm text-gray-500">
+              Escritório: <strong>{inviteState.companyName}</strong>
+            </p>
 
-          <div>
-            <label className="block text-sm font-medium text-text-secondary">
-              Nome
-            </label>
-            <input
-              type="text"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm"
-            />
+            {inviteState.inviteLink ? (
+              <div className="space-y-3">
+                <p className="text-sm text-green-700 font-medium">
+                  Link de convite gerado! Envie para o consultor:
+                </p>
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+                  <span className="text-xs text-gray-700 truncate flex-1 font-mono">
+                    {inviteState.inviteLink}
+                  </span>
+                  <button
+                    onClick={handleCopyLink}
+                    className="shrink-0 p-1 rounded hover:bg-gray-200 transition-colors"
+                    title="Copiar link"
+                  >
+                    {inviteState.copied
+                      ? <Check className="w-4 h-4 text-green-600" />
+                      : <Copy className="w-4 h-4 text-gray-500" />}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400">
+                  O link expira em 7 dias. Um e-mail também foi enviado automaticamente.
+                </p>
+                <div className="flex justify-end pt-2">
+                  <Button type="button" onClick={() => setInviteState(null)}>
+                    Fechar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    E-mail do consultor
+                  </label>
+                  <input
+                    type="email"
+                    value={inviteState.email}
+                    onChange={(e) =>
+                      setInviteState((prev) => prev ? { ...prev, email: e.target.value } : null)
+                    }
+                    placeholder="consultor@exemplo.com"
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md"
+                    autoFocus
+                  />
+                </div>
+
+                {inviteState.error && (
+                  <p className="text-sm text-red-500">{inviteState.error}</p>
+                )}
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <Button type="button" onClick={() => setInviteState(null)}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleSendInvite}
+                    disabled={inviteState.isLoading}
+                  >
+                    {inviteState.isLoading ? "Gerando..." : "Gerar Convite"}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-text-secondary">
-              Sobrenome
-            </label>
-            <input
-              type="text"
-              value={editSurname}
-              onChange={(e) => setEditSurname(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-text-secondary">
-              E-mail
-            </label>
-            <input
-              type="email"
-              value={editEmail}
-              onChange={(e) => setEditEmail(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-text-secondary">
-              Especialidade
-            </label>
-            <select
-              value={editSpeciality}
-              onChange={(e) =>
-                setEditSpeciality(e.target.value as "CAR" | "BOAT" | "AIRCRAFT")
-              }
-              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm"
-            >
-              <option value="CAR">Carros</option>
-              <option value="BOAT">Lanchas</option>
-              <option value="AIRCRAFT">Aeronaves</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-text-secondary">
-              Comissão (%)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              value={editCommissionRate}
-              onChange={(e) => setEditCommissionRate(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm"
-              placeholder="Ex: 12.5"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-text-secondary">
-              Calendly URL
-            </label>
-            <input
-              type="url"
-              value={editCalendlyUrl}
-              onChange={(e) => setEditCalendlyUrl(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm"
-              placeholder="https://calendly.com/..."
-            />
-          </div>
-
-          {specialistFormError && (
-            <p className="text-sm text-red-500">{specialistFormError}</p>
-          )}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" onClick={closeSpecialistEditModal}>
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              onClick={handleSaveSpecialist}
-              disabled={isSavingSpecialist}
-            >
-              {isSavingSpecialist ? "Salvando..." : "Salvar"}
-            </Button>
-          </div>
-        </div>
+        )}
       </Modal>
     </div>
   );

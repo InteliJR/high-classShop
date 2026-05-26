@@ -6,7 +6,6 @@ import {
   Matches,
   IsEnum,
   IsOptional,
-  IsUUID,
   IsNumber,
   Min,
   Max,
@@ -52,10 +51,6 @@ export class CreateSpecialistDto {
   })
   @IsNotEmpty({ message: 'Especialidade é obrigatória' })
   speciality: SpecialityEnum;
-
-  @IsUUID('4', { message: 'company_id deve ser um UUID válido' })
-  @IsOptional()
-  company_id?: string;
 
   @IsNumber({}, { message: 'Taxa de comissão deve ser um número' })
   @IsOptional()

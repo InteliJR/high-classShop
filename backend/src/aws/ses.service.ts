@@ -248,19 +248,77 @@ High-class Shop - Convite para Cadastro
 
 Olá,
 
-${consultantName} enviou um convite para você se cadastrar na High-class Shop, 
+${consultantName} enviou um convite para você se cadastrar na High-class Shop,
 a plataforma premium para aquisição de veículos, embarcações e aeronaves de luxo.
 
 Acesse o link abaixo para criar sua conta:
 ${registrationUrl}
 
-🔒 LINK SEGURO: Este convite é válido por 7 dias e foi gerado especificamente 
-para você. Ao se cadastrar, você será automaticamente vinculado ao assessor 
+🔒 LINK SEGURO: Este convite é válido por 7 dias e foi gerado especificamente
+para você. Ao se cadastrar, você será automaticamente vinculado ao assessor
 ${consultantName}.
 
 ---
 © 2025 High-class Shop. Todos os direitos reservados.
 Se você não solicitou este convite, por favor ignore este e-mail.
     `.trim();
+    }
+
+    /**
+     * Send a consultant invite email from admin/company
+     */
+    async sendConsultantInviteEmail(
+        recipientEmail: string,
+        inviteLink: string,
+        companyName: string,
+    ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+        try {
+            const emailParams = {
+                Source: this.fromEmail,
+                Destination: { ToAddresses: [recipientEmail] },
+                Message: {
+                    Subject: {
+                        Data: `Convite para ser Consultor — ${companyName} | High-class Shop`,
+                        Charset: 'UTF-8',
+                    },
+                    Body: {
+                        Html: {
+                            Data: `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px}
+.header{background-color:#1a1a1a;color:#fff;padding:20px;text-align:center}
+.content{background-color:#f9f9f9;padding:30px;border-radius:5px;margin-top:20px}
+.button{display:inline-block;background-color:#007bff;color:#fff!important;padding:12px 30px;text-decoration:none;border-radius:5px;margin:20px 0;font-weight:bold}
+.footer{text-align:center;margin-top:30px;font-size:12px;color:#666}
+</style></head><body>
+<div class="header"><h1>High-class Shop</h1></div>
+<div class="content">
+<h2>Você foi convidado como Consultor</h2>
+<p>Olá,</p>
+<p>Você recebeu um convite para se cadastrar como <strong>Consultor</strong> na plataforma <strong>High-class Shop</strong>, vinculado ao escritório <strong>${companyName}</strong>.</p>
+<p>Clique no botão abaixo para criar sua conta:</p>
+<center><a href="${inviteLink}" class="button">Criar Minha Conta</a></center>
+<p style="font-size:12px;color:#666;margin-top:20px">Ou copie este link:<br><a href="${inviteLink}" style="word-break:break-all">${inviteLink}</a></p>
+<p style="font-size:12px;color:#999">Este convite é válido por 7 dias.</p>
+</div>
+<div class="footer"><p>© 2025 High-class Shop. Todos os direitos reservados.</p></div>
+</body></html>`,
+                            Charset: 'UTF-8',
+                        },
+                        Text: {
+                            Data: `High-class Shop — Convite de Consultor\n\nVocê foi convidado como Consultor no escritório ${companyName}.\n\nAcesse: ${inviteLink}\n\nLink válido por 7 dias.`,
+                            Charset: 'UTF-8',
+                        },
+                    },
+                },
+            };
+
+            const command = new SendEmailCommand(emailParams);
+            const response = await this.sesClient.send(command);
+            this.logger.log(`Consultant invite email sent to ${recipientEmail}`);
+            return { success: true, messageId: response.MessageId };
+        } catch (error) {
+            this.logger.error(`Failed to send consultant invite email to ${recipientEmail}`, error);
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+        }
     }
 }

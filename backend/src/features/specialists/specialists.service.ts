@@ -64,7 +64,6 @@ export class SpecialistsService {
           password_hash: hashedPassword,
           speciality: data.speciality,
           role: 'SPECIALIST',
-          company_id: data.company_id || null,
           commission_rate: data.commission_rate ?? null,
           bank: data.bank || null,
           agency: data.agency || null,

@@ -5,6 +5,9 @@ import Login from "../pages/auth/LoginPage";
 import RegisterPage from "../pages/auth/RegisterPage";
 import ProtectedRoute from "./ProtectedRoute";
 import ConsultantDashboard from "../pages/consultant/ConsultantDashboard";
+import ConsultantClientsPage from "../pages/consultant/ConsultantClientsPage";
+import ConsultantProcessesPage from "../pages/consultant/ConsultantProcessesPage";
+import RegisterConsultantPage from "../pages/auth/RegisterConsultantPage";
 import DashboardPage from "../pages/admin/DashboardPage";
 import CompaniesPage from "../pages/admin/CompaniesPage";
 import SpecialistsPage from "../pages/admin/SpecialistsPage";
@@ -46,6 +49,10 @@ export default function RouterApp() {
     {
       path: "/register",
       element: <RegisterPage />,
+    },
+    {
+      path: "/register-consultant",
+      element: <RegisterConsultantPage />,
     },
     // Customer routes
     {
@@ -106,6 +113,26 @@ export default function RouterApp() {
         <MainLayout>
           <ProtectedRoute allowedRoles={["CONSULTANT"]}>
             <ConsultantDashboard />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/consultant/clients",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["CONSULTANT"]}>
+            <ConsultantClientsPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/consultant/processes",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["CONSULTANT"]}>
+            <ConsultantProcessesPage />
           </ProtectedRoute>
         </MainLayout>
       ),
@@ -239,7 +266,7 @@ export default function RouterApp() {
       path: "/processes/:processId/negotiation",
       element: (
         <MainLayout>
-          <ProtectedRoute allowedRoles={["CUSTOMER", "SPECIALIST"]}>
+          <ProtectedRoute allowedRoles={["CUSTOMER", "SPECIALIST", "CONSULTANT"]}>
             <NegotiationPage />
           </ProtectedRoute>
         </MainLayout>

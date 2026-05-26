@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   HttpCode,
   HttpStatus,
   Request,
@@ -14,6 +15,7 @@ import {
 import { ConsultantService } from './consultant.service';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SendInvitationDto } from './dto/send-invitation.dto';
+import { CreateConsultantProcessDto } from './dto/create-consultant-process.dto';
 import { ApiResponseDto } from 'src/shared/dto/api-response.dto';
 import { ClientEntity } from './entity/client.entity';
 import * as auth from 'src/auth/dto/auth';
@@ -72,6 +74,50 @@ export class ConsultantController {
         messageId: result.messageId,
       },
     };
+  }
+
+  /**
+   * POST /api/consultant/processes
+   * Create a process on behalf of a client
+   */
+  @Post('processes')
+  @HttpCode(HttpStatus.CREATED)
+  async createProcess(
+    @Request() req: auth.RequestWithUser,
+    @Body() dto: CreateConsultantProcessDto,
+  ): Promise<ApiResponseDto<any, any>> {
+    const process = await this.consultantService.createProcessForClient(req.user.id, dto);
+    return { sucess: true, message: 'Processo criado com sucesso', data: process };
+  }
+
+  /**
+   * GET /api/consultant/processes
+   * Get all processes across all clients of the authenticated consultant
+   */
+  @Get('processes')
+  async getAllProcesses(
+    @Request() req: auth.RequestWithUser,
+    @Query('status') status?: string,
+    @Query('clientId') clientId?: string,
+  ): Promise<ApiResponseDto<any, any>> {
+    const processes = await this.consultantService.getAllProcesses(req.user.id, {
+      status,
+      clientId,
+    });
+    return { sucess: true, message: 'Processos listados com sucesso', data: processes };
+  }
+
+  /**
+   * GET /api/consultant/clients/:id/processes
+   * Get all processes for a client belonging to the authenticated consultant
+   */
+  @Get('clients/:id/processes')
+  async getClientProcesses(
+    @Request() req: auth.RequestWithUser,
+    @Param('id') clientId: string,
+  ): Promise<ApiResponseDto<any, any>> {
+    const processes = await this.consultantService.getClientProcesses(req.user.id, clientId);
+    return { sucess: true, message: 'Processos listados com sucesso', data: processes };
   }
 
   /**
