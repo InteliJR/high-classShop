@@ -13,12 +13,19 @@ export async function createApp(): Promise<Express> {
   const server = express();
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
 
-  const configuredFrontendUrl =
-    process.env.FRONTEND_URL || 'http://localhost:5173';
-  const allowedOrigins = [configuredFrontendUrl, 'http://localhost:5173'];
+  const configuredFrontendUrl = (
+    process.env.FRONTEND_URL || 'http://localhost:5173'
+  ).replace(/\/$/, '');
+  const allowedOrigins = new Set([configuredFrontendUrl, 'http://localhost:5173']);
 
   app.enableCors({
-    origin: allowedOrigins,
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin not allowed — ${origin}`));
+      }
+    },
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',

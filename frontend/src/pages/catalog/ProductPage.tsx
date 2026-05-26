@@ -19,6 +19,8 @@ import {
 import { getProcessesByClient } from "../../services/processes.service";
 import ProductDetails from "../../components/product/ProductDetails";
 import Loading from "../../components/ui/Loading";
+import Modal from "../../components/ui/Modal";
+import StartProcessForClientModal from "../consultant/StartProcessForClientModal";
 import { useAuth } from "../../store/authStateManager";
 import { useCheckAppointment } from "../../hooks/useCheckAppointment";
 import type { Product } from "../../types/types";
@@ -71,6 +73,7 @@ export default function ProductPage() {
     "idle" | "waiting_event" | "syncing" | "done" | "error"
   >("idle");
   const [calendlySyncMessage, setCalendlySyncMessage] = useState<string>("");
+  const [isStartProcessModalOpen, setIsStartProcessModalOpen] = useState(false);
 
   // Hook para verificar agendamentos existentes
   // APENAS dispara verificação após specialist ser carregado com sucesso
@@ -79,7 +82,7 @@ export default function ProductPage() {
     isLoading: isCheckingAppointment,
     error: checkAppointmentError,
   } = useCheckAppointment(
-    user?.id && specialist?.id ? user.id : undefined, // Só passa se ambos existem
+    user?.role === "CUSTOMER" && user?.id && specialist?.id ? user.id : undefined,
     specialist?.id,
     (productType?.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT") || undefined,
     product?.id,
@@ -556,6 +559,29 @@ export default function ProductPage() {
                 </button>
               </p>
             </div>
+          ) : user.role === "CONSULTANT" ? (
+            /* Consultor - não agenda em nome próprio; inicia processo para um cliente */
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800">
+                  <strong>Modo Consultor:</strong> Você não pode agendar uma reunião em seu próprio nome. Selecione qual cliente terá o processo criado para este produto.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setIsStartProcessModalOpen(true)}
+                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                Iniciar processo para cliente
+              </button>
+            </div>
+          ) : user.role !== "CUSTOMER" ? (
+            /* SPECIALIST / ADMIN — apenas clientes podem agendar */
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <p className="text-sm text-gray-700">
+                Apenas clientes podem agendar reuniões a partir do catálogo.
+              </p>
+            </div>
           ) : isCheckingAppointment ? (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-800">
@@ -687,6 +713,30 @@ export default function ProductPage() {
             email: user?.email,
           }}
         />
+      )}
+
+      {/* Modal do Consultor: iniciar processo para cliente */}
+      {specialist && product && productType && id && (
+        <Modal
+          isOpen={isStartProcessModalOpen}
+          onClose={() => setIsStartProcessModalOpen(false)}
+        >
+          <StartProcessForClientModal
+            productType={
+              (productType.toUpperCase() === "CARS"
+                ? "CAR"
+                : productType.toUpperCase() === "BOATS"
+                  ? "BOAT"
+                  : productType.toUpperCase() === "AIRCRAFTS"
+                    ? "AIRCRAFT"
+                    : (productType.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT"))
+            }
+            productId={Number(id)}
+            specialistId={specialist.id}
+            productLabel={`${product.marca} ${product.modelo}`.trim()}
+            onClose={() => setIsStartProcessModalOpen(false)}
+          />
+        </Modal>
       )}
     </div>
   );

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { ApiResponseDto, ChangePasswordDto, LoginDto, UserRegisterDto } from './dto/auth';
+import { ApiResponseDto, ChangePasswordDto, LoginDto, RegisterConsultantDto, UserRegisterDto } from './dto/auth';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { jwtConstants } from './constants';
@@ -264,6 +264,61 @@ export class AuthService {
     });
 
     return { message: 'Senha alterada com sucesso' };
+  }
+
+  async validateConsultantInviteToken(token: string) {
+    try {
+      const payload = this.jwtService.verify(token, { secret: jwtConstants.referral });
+
+      if (payload.type !== 'CONSULTANT_INVITE') {
+        throw new UnauthorizedException('Token inválido');
+      }
+
+      const company = await this.prismaService.company.findUnique({
+        where: { id: payload.companyId },
+        select: { id: true, name: true },
+      });
+
+      if (!company) {
+        throw new BadRequestException('Escritório não encontrado');
+      }
+
+      const existingUser = await this.prismaService.user.findUnique({
+        where: { email: payload.email },
+      });
+
+      if (existingUser) {
+        throw new BadRequestException('Já existe uma conta cadastrada com este email. Faça login para acessar sua conta.');
+      }
+
+      return { companyId: payload.companyId, companyName: company.name, email: payload.email };
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new UnauthorizedException('Token de convite inválido ou expirado');
+    }
+  }
+
+  async registerConsultant(dto: RegisterConsultantDto) {
+    const { invite_token, password, ...rest } = dto;
+
+    const { companyId, email } = await this.validateConsultantInviteToken(invite_token);
+
+    const existingByCpf = await this.prismaService.user.findUnique({ where: { cpf: rest.cpf } });
+    if (existingByCpf) throw new UnauthorizedException('Já existe uma conta cadastrada com este CPF');
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = await this.prismaService.user.create({
+      data: {
+        ...rest,
+        email,
+        password_hash: passwordHash,
+        role: UserRole.CONSULTANT,
+        company_id: companyId,
+      },
+    });
+
+    return { user: UserEntity.fromPrisma(user) };
   }
 
   // Logout - remover refresh token do banco

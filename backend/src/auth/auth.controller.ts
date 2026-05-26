@@ -48,6 +48,24 @@ export class AuthController {
   }
 
   @Public()
+  @Post('validate-consultant-invite')
+  async validateConsultantInvite(@Body() body: { token: string }) {
+    const payload = await this.authService.validateConsultantInviteToken(body.token);
+    return { success: true, message: 'Token válido', data: payload };
+  }
+
+  @Public()
+  @Post('register-consultant')
+  async registerConsultant(@Body() body: auth.RegisterConsultantDto) {
+    const { user } = await this.authService.registerConsultant(body);
+    return {
+      sucess: true,
+      message: 'Conta criada com sucesso',
+      data: { user },
+    };
+  }
+
+  @Public()
   @UseGuards(RateLimitGuard)
   @RateLimit({ windowMs: 900, max: 5 }) // 5 attempts per 15 minutes
   @Post('login')

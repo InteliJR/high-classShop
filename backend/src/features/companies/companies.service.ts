@@ -4,17 +4,23 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { Prisma } from '@prisma/client';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
+import { SesService } from 'src/aws/ses.service';
 
 @Injectable()
 export class CompaniesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+    private sesService: SesService,
+  ) {}
 
-  // Busca todas as empresas com contagem de especialistas.
+  // Busca todas as empresas com contagem de consultores.
   async findAll() {
     const companies = await this.prisma.company.findMany({
       include: {
@@ -24,12 +30,22 @@ export class CompaniesService {
       },
       orderBy: { name: 'asc' },
     });
-    return companies.map((c) => ({
-      ...c,
-      commission_rate: c.commission_rate ? Number(c.commission_rate) : null,
-      specialists_count: c._count.users,
-      _count: undefined,
-    }));
+
+    const companiesWithConsultantCount = await Promise.all(
+      companies.map(async (c) => {
+        const consultants_count = await this.prisma.user.count({
+          where: { company_id: c.id, role: 'CONSULTANT' },
+        });
+        return {
+          ...c,
+          commission_rate: c.commission_rate ? Number(c.commission_rate) : null,
+          consultants_count,
+          _count: undefined,
+        };
+      }),
+    );
+
+    return companiesWithConsultantCount;
   }
 
   // Cria uma nova empresa na base de dados.
@@ -132,37 +148,60 @@ export class CompaniesService {
     return { ok: true };
   }
 
-  // Busca especialistas associados a uma empresa, com paginação.
-  async findSpecialistsByCompany(
+  // Gera link de convite para que um consultor se cadastre vinculado à empresa.
+  async inviteConsultant(companyId: string, email: string) {
+    const company = await this.findOne(companyId);
+
+    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      throw new ConflictException('Já existe uma conta cadastrada com este email');
+    }
+
+    const token = this.jwtService.sign(
+      { type: 'CONSULTANT_INVITE', companyId, email },
+      { expiresIn: '7d' },
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const inviteLink = `${frontendUrl}/register-consultant?invite=${token}`;
+
+    setImmediate(() => {
+      this.sesService
+        .sendConsultantInviteEmail(email, inviteLink, company.name)
+        .catch(() => {});
+    });
+
+    return { inviteLink, email };
+  }
+
+  // Busca consultores associados a uma empresa, com paginação.
+  async findConsultantsByCompany(
     companyId: string,
     page: number = 1,
     perPage: number = 5,
   ) {
-    // Verificar se empresa existe
     await this.findOne(companyId);
 
     const skip = (page - 1) * perPage;
 
-    const [specialists, count] = await Promise.all([
+    const [consultants, count] = await Promise.all([
       this.prisma.user.findMany({
-        where: { company_id: companyId },
+        where: { company_id: companyId, role: 'CONSULTANT' },
         select: {
           id: true,
           name: true,
           surname: true,
           email: true,
           role: true,
-          speciality: true,
-          commission_rate: true,
-          calendly_url: true,
           created_at: true,
+          _count: { select: { clients: true } },
         },
         skip,
         take: perPage,
         orderBy: { name: 'asc' },
       }),
       this.prisma.user.count({
-        where: { company_id: companyId },
+        where: { company_id: companyId, role: 'CONSULTANT' },
       }),
     ]);
 
@@ -178,9 +217,10 @@ export class CompaniesService {
     };
 
     return {
-      data: specialists.map((s) => ({
-        ...s,
-        commission_rate: s.commission_rate ? Number(s.commission_rate) : null,
+      data: consultants.map((c) => ({
+        ...c,
+        clients_count: c._count.clients,
+        _count: undefined,
       })),
       pagination,
     };

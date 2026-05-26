@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SendInvitationDto } from './dto/send-invitation.dto';
+import { CreateConsultantProcessDto } from './dto/create-consultant-process.dto';
 import { SesService } from 'src/aws/ses.service';
 
 @Injectable()
@@ -182,6 +183,99 @@ export class ConsultantService {
     });
 
     return updatedClient;
+  }
+
+  /**
+   * Create a process on behalf of a client
+   */
+  async createProcessForClient(consultantId: string, dto: CreateConsultantProcessDto) {
+    const client = await this.prismaService.user.findFirst({
+      where: { id: dto.client_id, consultant_id: consultantId, role: 'CUSTOMER' },
+    });
+
+    if (!client) {
+      throw new ForbiddenException('Cliente não encontrado ou não pertence a este consultor');
+    }
+
+    const specialist = await this.prismaService.user.findFirst({
+      where: { id: dto.specialist_id, role: 'SPECIALIST' },
+    });
+
+    if (!specialist) {
+      throw new NotFoundException('Especialista não encontrado');
+    }
+
+    const productFieldMap = { CAR: 'car_id', BOAT: 'boat_id', AIRCRAFT: 'aircraft_id' } as const;
+    const productField = dto.product_id ? productFieldMap[dto.product_type] : undefined;
+
+    const process = await this.prismaService.process.create({
+      data: {
+        client_id: dto.client_id,
+        specialist_id: dto.specialist_id,
+        product_type: dto.product_type,
+        ...(productField && dto.product_id ? { [productField]: dto.product_id } : {}),
+        status: 'SCHEDULING',
+      },
+    });
+
+    return process;
+  }
+
+  /**
+   * Get all processes for a client, validating consultant ownership
+   */
+  async getClientProcesses(consultantId: string, clientId: string) {
+    const client = await this.prismaService.user.findFirst({
+      where: { id: clientId, consultant_id: consultantId, role: 'CUSTOMER' },
+    });
+
+    if (!client) {
+      throw new ForbiddenException('Cliente não encontrado ou não pertence a este consultor');
+    }
+
+    return this.prismaService.process.findMany({
+      where: { client_id: clientId },
+      include: {
+        specialist: { select: { id: true, name: true, surname: true, speciality: true } },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+  }
+
+  /**
+   * Get all processes across all clients of the consultant, with optional filters
+   */
+  async getAllProcesses(
+    consultantId: string,
+    filters: { status?: string; clientId?: string } = {},
+  ) {
+    const clients = await this.prismaService.user.findMany({
+      where: { consultant_id: consultantId, role: 'CUSTOMER' },
+      select: { id: true, name: true, surname: true },
+    });
+
+    const clientIds = clients.map((c) => c.id);
+    const clientMap = new Map(clients.map((c) => [c.id, c]));
+
+    const where: any = { client_id: { in: clientIds } };
+    if (filters.status) where.status = filters.status;
+    if (filters.clientId) {
+      if (!clientIds.includes(filters.clientId)) return [];
+      where.client_id = filters.clientId;
+    }
+
+    const processes = await this.prismaService.process.findMany({
+      where,
+      include: {
+        specialist: { select: { id: true, name: true, surname: true, speciality: true } },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    return processes.map((p) => ({
+      ...p,
+      client: clientMap.get(p.client_id) ?? null,
+    }));
   }
 
   /**
