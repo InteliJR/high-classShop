@@ -1,10 +1,10 @@
-// Formulário para criar um novo especialista dentro do modal
+// Formulário de convite de especialista (modal admin).
 
-import React, { useState, useEffect } from "react";
+import { useState } from "react";
 import Button from "../../components/ui/button";
+import { Copy, Check } from "lucide-react";
 import {
-  createSpecialist,
-  updateSpecialist,
+  inviteSpecialist,
   type Specialist,
 } from "../../services/specialists.service";
 
@@ -17,213 +17,139 @@ export default function NewSpecialistForm({
   onSuccess,
   specialistToEdit,
 }: NewSpecialistFormProps) {
-  const [name, setName] = useState("");
-  const [surname, setSurname] = useState("");
   const [email, setEmail] = useState("");
-  const [cpf, setCpf] = useState("");
-  const [rg, setRg] = useState("");
-  const [password_hash, setPasswordHash] = useState("");
   const [speciality, setSpeciality] = useState<"CAR" | "BOAT" | "AIRCRAFT">("CAR");
-  const [commissionRate, setCommissionRate] = useState("");
-  const [bank, setBank] = useState("");
-  const [agency, setAgency] = useState("");
-  const [checkingAccount, setCheckingAccount] = useState("");
-  const [calendlyUrl, setCalendlyUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if (specialistToEdit) {
-      setName(specialistToEdit.name);
-      setSurname(specialistToEdit.surname);
-      setEmail(specialistToEdit.email);
-      setCpf(specialistToEdit.cpf);
-      setRg(specialistToEdit.rg);
-      setPasswordHash(specialistToEdit.password_hash);
-      setSpeciality(specialistToEdit.speciality);
-      setCommissionRate(
-        specialistToEdit.commission_rate != null
-          ? String(specialistToEdit.commission_rate)
-          : "",
-      );
-      setBank(specialistToEdit.bank || "");
-      setAgency(specialistToEdit.agency || "");
-      setCheckingAccount(specialistToEdit.checking_account || "");
-      setCalendlyUrl(specialistToEdit.calendly_url || "");
-    } else {
-      setName("");
-      setSurname("");
-      setEmail("");
-      setCpf("");
-      setRg("");
-      setPasswordHash("");
-      setSpeciality("CAR");
-      setCommissionRate("");
-      setBank("");
-      setAgency("");
-      setCheckingAccount("");
-      setCalendlyUrl("");
-    }
-  }, [specialistToEdit]);
-
-  const validateCPF = (cpf: string) => cpf.replace(/\D/g, "").length === 11;
-  const validateRG = (rg: string) => rg.replace(/\D/g, "").length === 9;
-  const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  // Caminho de edição não é mais suportado por esta entrada (o especialista
+  // gerencia seu próprio perfil após o cadastro via convite).
+  if (specialistToEdit) {
+    return (
+      <div className="space-y-6 text-center">
+        <h2 className="h2-style">Editar Especialista</h2>
+        <p className="text-text-secondary">
+          A edição de especialistas será feita pelo próprio especialista nas
+          configurações de perfil.
+        </p>
+        <div className="flex justify-center pt-2">
+          <Button type="button" onClick={onSuccess}>
+            OK
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-
-    if (!name || !surname || !email || !cpf || !rg || !password_hash) {
-      setError("Todos os campos são obrigatórios.");
-      return;
-    }
-    if (!validateEmail(email)) { setError("Email inválido."); return; }
-    if (!validateCPF(cpf)) { setError("CPF deve conter exatamente 11 dígitos numéricos."); return; }
-    if (!validateRG(rg)) { setError("RG deve conter exatamente 9 dígitos numéricos."); return; }
-    if (password_hash.length < 6) { setError("A senha deve ter no mínimo 6 caracteres."); return; }
-
-    setIsSubmitting(true);
     setError(null);
 
-    try {
-      const cleanCPF = cpf.replace(/\D/g, "");
-      const cleanRG = rg.replace(/\D/g, "");
-      const payload = {
-        name,
-        surname,
-        email,
-        cpf: cleanCPF,
-        rg: cleanRG,
-        password_hash,
-        speciality,
-        commission_rate: commissionRate ? parseFloat(commissionRate) : undefined,
-        bank: bank || undefined,
-        agency: agency || undefined,
-        checking_account: checkingAccount || undefined,
-        calendly_url: calendlyUrl || undefined,
-      };
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setError("Informe um e-mail válido.");
+      return;
+    }
 
-      if (specialistToEdit) {
-        await updateSpecialist(specialistToEdit.id, payload);
-      } else {
-        await createSpecialist(payload);
-      }
-      onSuccess();
+    setIsSubmitting(true);
+    try {
+      const result = await inviteSpecialist(email.trim(), speciality);
+      setInviteLink(result.inviteLink);
     } catch (err) {
       setError(
-        (err as Error).message || "Falha ao salvar o especialista. Tente novamente.",
+        (err as Error).message || "Erro ao gerar convite. Tente novamente.",
       );
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleCopyLink = () => {
+    if (!inviteLink) return;
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  if (inviteLink) {
+    return (
+      <div className="space-y-4">
+        <h2 className="h2-style">Convidar Especialista</h2>
+        <p className="text-sm text-green-700 font-medium">
+          Link de convite gerado! Envie para o especialista:
+        </p>
+        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+          <span className="text-xs text-gray-700 truncate flex-1 font-mono">
+            {inviteLink}
+          </span>
+          <button
+            onClick={handleCopyLink}
+            className="shrink-0 p-1 rounded hover:bg-gray-200 transition-colors"
+            title="Copiar link"
+            type="button"
+          >
+            {copied ? (
+              <Check className="w-4 h-4 text-green-600" />
+            ) : (
+              <Copy className="w-4 h-4 text-gray-500" />
+            )}
+          </button>
+        </div>
+        <p className="text-xs text-gray-400">
+          O link expira em 7 dias. Um e-mail também foi enviado automaticamente.
+        </p>
+        <div className="flex justify-end pt-2">
+          <Button type="button" onClick={onSuccess}>
+            Fechar
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <h2 className="h2-style">
-        {specialistToEdit ? "Editar Especialista" : "Novo Especialista"}
-      </h2>
+      <h2 className="h2-style">Convidar Especialista</h2>
+      <p className="text-sm text-gray-500">
+        O especialista receberá um link para concluir o cadastro (nome, CPF,
+        RG, senha e dados bancários).
+      </p>
 
       <div>
-        <label htmlFor="name" className="block text-sm font-medium text-text-secondary">
-          Nome
-        </label>
-        <input
-          id="name"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
-          required
-        />
-      </div>
-
-      <div>
-        <label htmlFor="surname" className="block text-sm font-medium text-text-secondary">
-          Sobrenome
-        </label>
-        <input
-          id="surname"
-          type="text"
-          value={surname}
-          onChange={(e) => setSurname(e.target.value)}
-          className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
-          required
-        />
-      </div>
-
-      <div>
-        <label htmlFor="email" className="block text-sm font-medium text-text-secondary">
-          Email
+        <label
+          htmlFor="email"
+          className="block text-sm font-medium text-text-secondary"
+        >
+          E-mail do especialista
         </label>
         <input
           id="email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          placeholder="especialista@exemplo.com"
           className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
           required
+          autoFocus
         />
       </div>
 
       <div>
-        <label htmlFor="cpf" className="block text-sm font-medium text-text-secondary">
-          CPF (apenas números)
-        </label>
-        <input
-          id="cpf"
-          type="text"
-          value={cpf}
-          onChange={(e) => setCpf(e.target.value)}
-          placeholder="12345678901"
-          maxLength={14}
-          className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
-          required
-        />
-        <p className="text-xs text-gray-500 mt-1">Digite 11 dígitos numéricos</p>
-      </div>
-
-      <div>
-        <label htmlFor="rg" className="block text-sm font-medium text-text-secondary">
-          RG (apenas números)
-        </label>
-        <input
-          id="rg"
-          type="text"
-          value={rg}
-          onChange={(e) => setRg(e.target.value)}
-          placeholder="123456789"
-          maxLength={9}
-          className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
-          required
-        />
-        <p className="text-xs text-gray-500 mt-1">Digite 9 dígitos numéricos</p>
-      </div>
-
-      <div>
-        <label htmlFor="password_hash" className="block text-sm font-medium text-text-secondary">
-          Senha
-        </label>
-        <input
-          id="password_hash"
-          type="password"
-          value={password_hash}
-          onChange={(e) => setPasswordHash(e.target.value)}
-          minLength={6}
-          className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
-          required
-        />
-        <p className="text-xs text-gray-500 mt-1">Mínimo de 6 caracteres</p>
-      </div>
-
-      <div>
-        <label htmlFor="speciality" className="block text-sm font-medium text-text-secondary">
+        <label
+          htmlFor="speciality"
+          className="block text-sm font-medium text-text-secondary"
+        >
           Especialidade
         </label>
         <select
           id="speciality"
           value={speciality}
-          onChange={(e) => setSpeciality(e.target.value as "CAR" | "BOAT" | "AIRCRAFT")}
+          onChange={(e) =>
+            setSpeciality(e.target.value as "CAR" | "BOAT" | "AIRCRAFT")
+          }
           className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
           required
         >
@@ -233,115 +159,11 @@ export default function NewSpecialistForm({
         </select>
       </div>
 
-      <div>
-        <label htmlFor="commission_rate" className="block text-sm font-medium text-text-secondary">
-          Taxa de Comissão (%)
-        </label>
-        <input
-          id="commission_rate"
-          type="number"
-          step="0.01"
-          min="0"
-          max="100"
-          value={commissionRate}
-          onChange={(e) => setCommissionRate(e.target.value)}
-          placeholder="Ex: 10.00"
-          className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
-        />
-        <p className="text-xs text-gray-500 mt-1">
-          Opcional. Se vazio, usará a taxa padrão da plataforma.
-        </p>
-      </div>
-
-      <div className="border-t border-gray-200 pt-4 mt-4">
-        <h3 className="text-sm font-semibold text-text-secondary mb-3">
-          Calendário de Agendamentos
-        </h3>
-        <div>
-          <label htmlFor="calendly_url" className="block text-sm font-medium text-text-secondary">
-            Link do Calendly
-          </label>
-          <input
-            id="calendly_url"
-            type="url"
-            value={calendlyUrl}
-            onChange={(e) => setCalendlyUrl(e.target.value)}
-            placeholder="https://calendly.com/seu-usuario/reuniao"
-            className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Pode ser configurado depois pelo próprio especialista no perfil.
-          </p>
-        </div>
-      </div>
-
-      <div className="border-t border-gray-200 pt-4 mt-4">
-        <h3 className="text-sm font-semibold text-text-secondary mb-3">
-          Dados Bancários (para recebimento de comissão)
-        </h3>
-
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="bank" className="block text-sm font-medium text-text-secondary">
-              Banco
-            </label>
-            <input
-              id="bank"
-              type="text"
-              value={bank}
-              onChange={(e) => setBank(e.target.value)}
-              placeholder="Ex: Banco do Brasil, Itaú, etc."
-              className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="agency" className="block text-sm font-medium text-text-secondary">
-                Agência
-              </label>
-              <input
-                id="agency"
-                type="text"
-                value={agency}
-                onChange={(e) => setAgency(e.target.value)}
-                placeholder="Ex: 1234"
-                maxLength={10}
-                className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="checking_account" className="block text-sm font-medium text-text-secondary">
-                Conta Corrente
-              </label>
-              <input
-                id="checking_account"
-                type="text"
-                value={checkingAccount}
-                onChange={(e) => setCheckingAccount(e.target.value)}
-                placeholder="Ex: 12345-6"
-                maxLength={20}
-                className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
-              />
-            </div>
-          </div>
-
-          <p className="text-xs text-gray-500">
-            Os dados bancários serão usados para recebimento da comissão nos contratos.
-          </p>
-        </div>
-      </div>
-
       {error && <p className="text-red-500 text-sm">{error}</p>}
 
       <div className="flex justify-end pt-4">
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting
-            ? "Salvando..."
-            : specialistToEdit
-              ? "Atualizar Especialista"
-              : "Salvar Especialista"}
+          {isSubmitting ? "Gerando..." : "Gerar convite"}
         </Button>
       </div>
     </form>

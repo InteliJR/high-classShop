@@ -66,6 +66,22 @@ export class AuthController {
   }
 
   @Public()
+  @Post('validate-specialist-invite')
+  @HttpCode(HttpStatus.OK)
+  async validateSpecialistInvite(@Body() body: { token: string }) {
+    const result = await this.authService.validateSpecialistInviteToken(body.token);
+    return { sucess: true, message: 'Convite válido', data: result };
+  }
+
+  @Public()
+  @Post('register-specialist')
+  @HttpCode(HttpStatus.CREATED)
+  async registerSpecialist(@Body() dto: auth.RegisterSpecialistDto) {
+    const result = await this.authService.registerSpecialist(dto);
+    return { sucess: true, message: 'Conta de especialista criada com sucesso', data: result };
+  }
+
+  @Public()
   @UseGuards(RateLimitGuard)
   @RateLimit({ windowMs: 900, max: 5 }) // 5 attempts per 15 minutes
   @Post('login')
