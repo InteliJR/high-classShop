@@ -321,4 +321,67 @@ body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;mar
             return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
         }
     }
+
+    /**
+     * Send a specialist invite email from admin
+     */
+    async sendSpecialistInviteEmail(
+        recipientEmail: string,
+        inviteLink: string,
+        speciality: 'CAR' | 'BOAT' | 'AIRCRAFT',
+    ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+        try {
+            const specialityLabels: Record<string, string> = {
+                CAR: 'Carros',
+                BOAT: 'Embarcações',
+                AIRCRAFT: 'Aeronaves',
+            };
+            const specialityLabel = specialityLabels[speciality] ?? speciality;
+
+            const htmlBody = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px}
+.header{background-color:#1a1a1a;color:#fff;padding:20px;text-align:center}
+.content{background-color:#f9f9f9;padding:30px;border-radius:5px;margin-top:20px}
+.button{display:inline-block;background-color:#1a1a1a;color:#fff!important;padding:12px 30px;text-decoration:none;border-radius:5px;margin:20px 0;font-weight:bold}
+.footer{text-align:center;margin-top:30px;font-size:12px;color:#666}
+</style></head><body>
+<div class="header"><h1>High-class Shop</h1></div>
+<div class="content">
+<h2>Você foi convidado(a) para ser Especialista!</h2>
+<p>Olá,</p>
+<p>Você recebeu um convite para se tornar um <strong>Especialista em ${specialityLabel}</strong> na plataforma <strong>High Class Shop</strong>.</p>
+<p>Clique no botão abaixo para completar seu cadastro:</p>
+<center><a href="${inviteLink}" class="button">Criar minha conta de Especialista</a></center>
+<p style="font-size:12px;color:#666;margin-top:20px">Ou copie este link:<br><a href="${inviteLink}" style="word-break:break-all">${inviteLink}</a></p>
+<p style="font-size:12px;color:#999">Este convite é válido por 7 dias.</p>
+<p style="font-size:12px;color:#999">Se você não esperava esse convite, ignore esta mensagem.</p>
+</div>
+<div class="footer"><p>© 2025 High-class Shop. Todos os direitos reservados.</p></div>
+</body></html>`;
+            const textBody = `High-class Shop — Convite de Especialista\n\nVocê recebeu um convite para se tornar Especialista em ${specialityLabel} na High Class Shop.\n\nAcesse: ${inviteLink}\n\nO link expira em 7 dias.`;
+
+            const emailParams = {
+                Source: this.fromEmail,
+                Destination: { ToAddresses: [recipientEmail] },
+                Message: {
+                    Subject: {
+                        Data: `Convite para se tornar Especialista na High Class Shop`,
+                        Charset: 'UTF-8',
+                    },
+                    Body: {
+                        Html: { Data: htmlBody, Charset: 'UTF-8' },
+                        Text: { Data: textBody, Charset: 'UTF-8' },
+                    },
+                },
+            };
+
+            const command = new SendEmailCommand(emailParams);
+            const response = await this.sesClient.send(command);
+            this.logger.log(`Specialist invite email sent to ${recipientEmail}`);
+            return { success: true, messageId: response.MessageId };
+        } catch (error) {
+            this.logger.error(`Failed to send specialist invite email to ${recipientEmail}`, error);
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+        }
+    }
 }

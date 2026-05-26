@@ -29,6 +29,17 @@ export default function NewCompanyForm({
   const [bank, setBank] = useState("");
   const [agency, setAgency] = useState("");
   const [checkingAccount, setCheckingAccount] = useState("");
+  // Identidade visual (whitelabel) — até 4 cores em hexadecimal
+  const DEFAULT_COLOR_IDENTITY = ["#000000", "#FFFFFF", "#888888", "#CCCCCC"];
+  const COLOR_LABELS = [
+    "Cor primária",
+    "Cor secundária",
+    "Cor de destaque",
+    "Cor neutra",
+  ];
+  const [colorIdentity, setColorIdentity] = useState<string[]>(
+    DEFAULT_COLOR_IDENTITY,
+  );
   // Controla se o formulário está a ser enviado, para desativar o botão e evitar cliques duplos.
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Guarda qualquer mensagem de erro que ocorra durante a validação ou o envio.
@@ -47,6 +58,17 @@ export default function NewCompanyForm({
       setBank(companyToEdit.bank || "");
       setAgency(companyToEdit.agency || "");
       setCheckingAccount(companyToEdit.checking_account || "");
+      const existing = companyToEdit.color_identity;
+      if (existing && existing.length > 0) {
+        // Garante array com 4 slots, completando com defaults se faltar.
+        const filled = [...existing];
+        while (filled.length < 4) {
+          filled.push(DEFAULT_COLOR_IDENTITY[filled.length]);
+        }
+        setColorIdentity(filled.slice(0, 4));
+      } else {
+        setColorIdentity(DEFAULT_COLOR_IDENTITY);
+      }
     } else {
       setName("");
       setCnpj("");
@@ -55,8 +77,19 @@ export default function NewCompanyForm({
       setBank("");
       setAgency("");
       setCheckingAccount("");
+      setColorIdentity(DEFAULT_COLOR_IDENTITY);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyToEdit]);
+
+  // Atualiza apenas uma cor do array no índice informado, mantendo as outras.
+  const handleColorChange = (index: number, value: string) => {
+    setColorIdentity((prev) => {
+      const next = [...prev];
+      next[index] = value.toUpperCase();
+      return next;
+    });
+  };
 
   /**
    * Converte um arquivo File para base64 string.
@@ -103,6 +136,15 @@ export default function NewCompanyForm({
       return;
     }
 
+    // Valida que todas as cores estão em formato hexadecimal válido.
+    const hexRegex = /^#[0-9a-fA-F]{6}$/;
+    if (!colorIdentity.every((c) => hexRegex.test(c))) {
+      setError(
+        "Todas as cores devem estar no formato hexadecimal válido (ex: #FF5733)",
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
@@ -123,6 +165,7 @@ export default function NewCompanyForm({
           bank: bank || undefined,
           agency: agency || undefined,
           checking_account: checkingAccount || undefined,
+          color_identity: colorIdentity,
         });
       } else {
         // Modo de criação - converte logo para base64 se existir
@@ -139,6 +182,7 @@ export default function NewCompanyForm({
           bank: bank || undefined,
           agency: agency || undefined,
           checking_account: checkingAccount || undefined,
+          color_identity: colorIdentity,
         });
       }
       onSuccess();
@@ -283,6 +327,50 @@ export default function NewCompanyForm({
               className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
             />
           </div>
+        </div>
+      </div>
+
+      {/* --- IDENTIDADE VISUAL (WHITELABEL) --- */}
+      <div className="border-t pt-4 mt-4">
+        <p className="text-sm font-medium text-text-secondary mb-1">
+          Identidade Visual (Whitelabel)
+        </p>
+        <p className="text-xs text-gray-500 mb-4">
+          As cores serão usadas para personalizar a visualização da plataforma
+          para clientes deste escritório.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {colorIdentity.map((color, index) => {
+            const inputId = `color_identity_${index}`;
+            return (
+              <div key={inputId}>
+                <label
+                  htmlFor={inputId}
+                  className="block text-sm font-medium text-text-secondary"
+                >
+                  {COLOR_LABELS[index]}
+                </label>
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    id={inputId}
+                    type="color"
+                    value={color}
+                    onChange={(e) => handleColorChange(index, e.target.value)}
+                    className="h-10 w-12 border border-brand-border rounded-md cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={color}
+                    onChange={(e) => handleColorChange(index, e.target.value)}
+                    maxLength={7}
+                    placeholder="#RRGGBB"
+                    className="flex-1 px-3 py-2 border border-brand-border rounded-md shadow-sm uppercase focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

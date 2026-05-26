@@ -13,12 +13,12 @@ export default function Modal({ isOpen, onClose, children }: ModalProps) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/85 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4 overflow-y-auto"
       onClick={onClose}
     >
       {/* A caixa branca do modal. */}
       <div
-        className="bg-white p-8 rounded-lg shadow-xl w-full max-w-2xl"
+        className="bg-white p-6 sm:p-8 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto my-auto"
         // Impede que um clique DENTRO do modal feche a janela.
         onClick={(e) => e.stopPropagation()}
       >

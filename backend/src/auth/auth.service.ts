@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { ApiResponseDto, ChangePasswordDto, LoginDto, RegisterConsultantDto, UserRegisterDto } from './dto/auth';
+import { ApiResponseDto, ChangePasswordDto, LoginDto, RegisterConsultantDto, RegisterSpecialistDto, UserRegisterDto } from './dto/auth';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { jwtConstants } from './constants';
@@ -315,6 +315,55 @@ export class AuthService {
         password_hash: passwordHash,
         role: UserRole.CONSULTANT,
         company_id: companyId,
+      },
+    });
+
+    return { user: UserEntity.fromPrisma(user) };
+  }
+
+  async validateSpecialistInviteToken(token: string) {
+    try {
+      const payload = this.jwtService.verify(token, { secret: jwtConstants.referral });
+
+      if (payload.type !== 'SPECIALIST_INVITE') {
+        throw new UnauthorizedException('Token inválido');
+      }
+
+      const existingUser = await this.prismaService.user.findUnique({
+        where: { email: payload.email },
+      });
+
+      if (existingUser) {
+        throw new BadRequestException('Já existe uma conta cadastrada com este email. Faça login para acessar sua conta.');
+      }
+
+      return {
+        email: payload.email,
+        speciality: payload.speciality as 'CAR' | 'BOAT' | 'AIRCRAFT',
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new UnauthorizedException('Token de convite inválido ou expirado');
+    }
+  }
+
+  async registerSpecialist(dto: RegisterSpecialistDto) {
+    const { invite_token, password, ...rest } = dto;
+
+    const { email, speciality } = await this.validateSpecialistInviteToken(invite_token);
+
+    const existingByCpf = await this.prismaService.user.findUnique({ where: { cpf: rest.cpf } });
+    if (existingByCpf) throw new UnauthorizedException('Já existe uma conta cadastrada com este CPF');
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = await this.prismaService.user.create({
+      data: {
+        ...rest,
+        email,
+        password_hash: passwordHash,
+        role: UserRole.SPECIALIST,
+        speciality,
       },
     });
 

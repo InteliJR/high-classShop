@@ -4,15 +4,44 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSpecialistDto } from './dto/create-specialist.dto';
 import { UpdateSpecialistDto } from './dto/update-specialist.dto';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { SesService } from 'src/aws/ses.service';
+import { jwtConstants } from 'src/auth/constants';
 
 @Injectable()
 export class SpecialistsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+    private sesService: SesService,
+  ) {}
+
+  // Gera link de convite para que um especialista se cadastre via self-registration.
+  async inviteSpecialist(email: string, speciality: 'CAR' | 'BOAT' | 'AIRCRAFT') {
+    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      throw new BadRequestException('Já existe um usuário com este email');
+    }
+
+    const token = this.jwtService.sign(
+      { type: 'SPECIALIST_INVITE', email, speciality },
+      { expiresIn: '7d', secret: jwtConstants.referral },
+    );
+
+    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+    const inviteLink = `${frontendUrl}/register-specialist?invite=${token}`;
+
+    setImmediate(() => {
+      this.sesService.sendSpecialistInviteEmail(email, inviteLink, speciality).catch(() => {});
+    });
+
+    return { inviteLink, email };
+  }
 
   // Busca todos os especialistas.
   async findAll() {
