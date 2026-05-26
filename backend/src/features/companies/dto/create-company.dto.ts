@@ -8,6 +8,8 @@ import {
   Min,
   Max,
   MaxLength,
+  IsArray,
+  ArrayMaxSize,
 } from 'class-validator';
 
 export class CreateCompanyDto {
@@ -53,4 +55,16 @@ export class CreateCompanyDto {
     message: 'checking_account deve ter no máximo 20 caracteres',
   })
   checking_account?: string;
+
+  // === IDENTIDADE VISUAL (WHITELABEL) ===
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(4)
+  @IsString({ each: true })
+  @Matches(/^#[0-9a-fA-F]{6}$/, {
+    each: true,
+    message: 'Cada cor deve ser um hexadecimal válido (ex: #FF5733)',
+  })
+  color_identity?: string[];
 }

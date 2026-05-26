@@ -1,14 +1,25 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { validateConsultantInvite, registerConsultant } from "../../services/consultant.service";
+import {
+  validateSpecialistInvite,
+  registerSpecialist,
+} from "../../services/specialists.service";
 import Button from "../../components/ui/button";
 
-export default function RegisterConsultantPage() {
+type SpecialityType = "CAR" | "BOAT" | "AIRCRAFT";
+
+const SPECIALITY_LABEL: Record<SpecialityType, string> = {
+  CAR: "Carros",
+  BOAT: "Embarcações",
+  AIRCRAFT: "Aeronaves",
+};
+
+export default function RegisterSpecialistPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get("invite") ?? "";
 
-  const [companyName, setCompanyName] = useState("");
+  const [speciality, setSpeciality] = useState<SpecialityType | null>(null);
   const [email, setEmail] = useState("");
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(true);
@@ -29,14 +40,16 @@ export default function RegisterConsultantPage() {
       setIsValidating(false);
       return;
     }
-    validateConsultantInvite(token)
+    validateSpecialistInvite(token)
       .then((data) => {
-        setCompanyName(data.companyName);
+        setSpeciality(data.speciality);
         setEmail(data.email);
         setIsValidating(false);
       })
       .catch(() => {
-        setTokenError("Link de convite inválido ou expirado. Solicite um novo convite ao administrador.");
+        setTokenError(
+          "Link de convite inválido ou expirado. Solicite um novo convite ao administrador.",
+        );
         setIsValidating(false);
       });
   }, [token]);
@@ -67,7 +80,7 @@ export default function RegisterConsultantPage() {
 
     setIsSubmitting(true);
     try {
-      await registerConsultant({
+      await registerSpecialist({
         invite_token: token,
         name: name.trim(),
         surname: surname.trim(),
@@ -107,11 +120,22 @@ export default function RegisterConsultantPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="max-w-md w-full bg-white rounded-lg shadow p-8 text-center">
-          <h1 className="text-xl font-bold text-green-600 mb-2">Conta criada com sucesso!</h1>
+          <h1 className="text-xl font-bold text-green-600 mb-2">
+            Conta criada com sucesso!
+          </h1>
           <p className="text-gray-600 mb-6">
-            Sua conta de consultor no escritório <strong>{companyName}</strong> foi criada.
+            Sua conta de especialista em{" "}
+            <strong>{speciality ? SPECIALITY_LABEL[speciality] : ""}</strong> foi criada.
           </p>
-          <Button onClick={() => navigate("/login")}>Fazer Login</Button>
+          <Button
+            onClick={() =>
+              navigate("/login", {
+                state: { message: "Conta criada com sucesso! Faça login para continuar." },
+              })
+            }
+          >
+            Fazer Login
+          </Button>
         </div>
       </div>
     );
@@ -120,14 +144,19 @@ export default function RegisterConsultantPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
       <div className="max-w-md w-full bg-white rounded-lg shadow p-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Criar conta de Consultor</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">
+          Criar conta de Especialista
+        </h1>
         <p className="text-sm text-gray-500 mb-6">
-          Escritório: <strong>{companyName}</strong>
+          Especialidade:{" "}
+          <strong>{speciality ? SPECIALITY_LABEL[speciality] : ""}</strong>
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">E-mail (do convite)</label>
+            <label className="block text-sm font-medium text-gray-700">
+              E-mail (do convite)
+            </label>
             <input
               type="email"
               value={email}

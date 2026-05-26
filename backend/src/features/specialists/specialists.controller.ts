@@ -6,10 +6,15 @@ import {
   Delete,
   Param,
   Body,
+  HttpCode,
+  HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { SpecialistsService } from './specialists.service';
 import { CreateSpecialistDto } from './dto/create-specialist.dto';
 import { UpdateSpecialistDto } from './dto/update-specialist.dto';
+import { Roles } from 'src/shared/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 
 /**
  * Define a rota base para este controlador.
@@ -40,6 +45,20 @@ export class SpecialistsController {
   @Post()
   create(@Body() body: CreateSpecialistDto) {
     return this.specialistsService.create(body);
+  }
+
+  // Rota para convidar um especialista (admin gera link de auto-cadastro).
+  @Post('invite')
+  @Roles(UserRole.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async inviteSpecialist(
+    @Body() body: { email: string; speciality: 'CAR' | 'BOAT' | 'AIRCRAFT' },
+  ) {
+    if (!body.email || !body.speciality) {
+      throw new BadRequestException('Email e especialidade são obrigatórios');
+    }
+    const result = await this.specialistsService.inviteSpecialist(body.email, body.speciality);
+    return { sucess: true, message: 'Convite enviado com sucesso', data: result };
   }
 
   // Rota para buscar um único especialista pelo seu ID.

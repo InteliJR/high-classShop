@@ -8,6 +8,7 @@ import ConsultantDashboard from "../pages/consultant/ConsultantDashboard";
 import ConsultantClientsPage from "../pages/consultant/ConsultantClientsPage";
 import ConsultantProcessesPage from "../pages/consultant/ConsultantProcessesPage";
 import RegisterConsultantPage from "../pages/auth/RegisterConsultantPage";
+import RegisterSpecialistPage from "../pages/auth/RegisterSpecialistPage";
 import DashboardPage from "../pages/admin/DashboardPage";
 import CompaniesPage from "../pages/admin/CompaniesPage";
 import SpecialistsPage from "../pages/admin/SpecialistsPage";
@@ -53,6 +54,10 @@ export default function RouterApp() {
     {
       path: "/register-consultant",
       element: <RegisterConsultantPage />,
+    },
+    {
+      path: "/register-specialist",
+      element: <RegisterSpecialistPage />,
     },
     // Customer routes
     {

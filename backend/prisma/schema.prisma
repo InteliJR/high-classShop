@@ -566,6 +566,10 @@ model Company {
   agency           String? @db.VarChar(10)
   checking_account String? @db.VarChar(20)
 
+  // Identidade visual da empresa (preparação para whitelabel)
+  // Array de até 4 cores em hexadecimal: [primary, secondary, accent, neutral]
+  color_identity String[] @default([])
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 

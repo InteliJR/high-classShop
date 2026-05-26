@@ -156,6 +156,7 @@ export async function registerConsultant(data: {
   cpf: string;
   rg: string;
   password: string;
+  civil_state?: string;
 }): Promise<unknown> {
   const response = await api.post('/auth/register-consultant', data);
   return response.data;

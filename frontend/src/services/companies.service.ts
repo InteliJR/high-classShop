@@ -14,6 +14,7 @@ export type Company = {
   bank?: string | null;
   agency?: string | null;
   checking_account?: string | null;
+  color_identity?: string[];
   consultants_count?: number;
 };
 
@@ -41,6 +42,7 @@ type CreateCompanyDto = {
   bank?: string;
   agency?: string;
   checking_account?: string;
+  color_identity?: string[];
 };
 
 // Função auxiliar para extrair mensagem de erro
