@@ -162,7 +162,7 @@ export class NotificationService {
 
       // LAYER 1: Circuit Breaker Check
       if (this.isCircuitOpen()) {
-        this.logger.warn(`⚠️ Circuit breaker OPEN - email blocked`, {
+        this.logger.warn(`Circuit breaker OPEN - email blocked`, {
           correlationId,
           type,
           recipient: recipientEmail,
@@ -206,7 +206,7 @@ export class NotificationService {
 
           // SUCCESS - Reset circuit breaker and log
           this.failureCount = 0;
-          this.logger.log(`✓ Email sent successfully`, {
+          this.logger.log(` Email sent successfully`, {
             correlationId,
             type,
             recipient: recipientEmail,
@@ -222,7 +222,7 @@ export class NotificationService {
           // Log retry (except on last attempt)
           if (attempt < this.MAX_RETRIES) {
             const nextDelay = this.RETRY_DELAYS[attempt - 1];
-            this.logger.warn(`⚠️ Email retry ${attempt}/${this.MAX_RETRIES}`, {
+            this.logger.warn(` Email retry ${attempt}/${this.MAX_RETRIES}`, {
               correlationId,
               type,
               recipient: recipientEmail,
@@ -239,7 +239,7 @@ export class NotificationService {
       this.failureCount++;
       this.lastFailureTime = Date.now();
 
-      this.logger.error(`❌ Email failed after ${this.MAX_RETRIES} attempts`, {
+      this.logger.error(` Email failed after ${this.MAX_RETRIES} attempts`, {
         correlationId,
         type,
         recipient: recipientEmail,
@@ -249,7 +249,7 @@ export class NotificationService {
       });
     } catch (error) {
       // Catch unexpected errors (should never happen)
-      this.logger.error(`❌ Unexpected error in sendEmailSafely`, {
+      this.logger.error(` Unexpected error in sendEmailSafely`, {
         correlationId,
         type,
         error: error instanceof Error ? error.message : String(error),
@@ -292,13 +292,13 @@ export class NotificationService {
           <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
-          <h2 style="color: #1e293b; margin-top: 0;">Cadastro concluÃ­do</h2>
-          <p style="font-size: 16px; color: #334155;">OlÃ¡ <strong>${fullName}</strong>,</p>
+          <h2 style="color: #1e293b; margin-top: 0;">Cadastro concluído</h2>
+          <p style="font-size: 16px; color: #334155;">Olá <strong>${fullName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
-            Seu cadastro na High-Class Shop foi concluÃ­do com sucesso.
+            Seu cadastro na High-Class Shop foi concluído com sucesso.
           </p>
           <p style="font-size: 16px; color: #334155;">
-            Acesse a plataforma para continuar sua experiÃªncia.
+            Acesse a plataforma para continuar sua experiência.
           </p>
           <div style="text-align: center; margin: 30px 0;">
             <a href="${destinationUrl}"
@@ -317,11 +317,11 @@ export class NotificationService {
     `;
 
     const text = `
-High-Class Shop - Cadastro concluÃ­do
+High-Class Shop - Cadastro concluído
 
-OlÃ¡ ${fullName},
+Olá ${fullName},
 
-Seu cadastro na High-Class Shop foi concluÃ­do com sucesso.
+Seu cadastro na High-Class Shop foi concluído com sucesso.
 
 Acesse a plataforma:
 ${destinationUrl}

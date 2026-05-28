@@ -66,7 +66,7 @@ export class AuthService {
   async validateReferralToken(token: string) {
     try {
       const payload = this.jwtService.verify(token, {
-        secret: jwtConstants.referral,
+        secret: this.getJwtSecret('JWT_SECRET_REFERRAL'),
       });
 
       // Buscar o consultor para retornar o nome completo
@@ -103,9 +103,12 @@ export class AuthService {
 
   async login(data: LoginDto) {
     // Procurar o usuário pelo e-mail
-    const user = await this.prismaService.user.findUnique({
+    const user = await this.prismaService.user.findFirst({
       where: {
-        email: data.email,
+        email: {
+          equals: data.email,
+          mode: 'insensitive',
+        },
       },
     });
 
@@ -176,7 +179,7 @@ export class AuthService {
 
     const refreshToken = await this.jwtService.signAsync(payloadRefresh, {
       expiresIn: '7d',
-      secret: jwtConstants.refresh,
+      secret: this.getJwtSecret('JWT_SECRET_REFRESH'),
     });
 
     // Salvar no banco
@@ -199,7 +202,7 @@ export class AuthService {
     const accessToken = this.jwtService.signAsync(
       { sub: user.id , email: user.email },
       {
-        secret: jwtConstants.access,
+        secret: this.getJwtSecret('JWT_SECRET_ACCESS'),
         expiresIn: '15m',
       },
     );
@@ -218,7 +221,7 @@ export class AuthService {
     // Verifica a autenticidade do refreshToken e busca o usuário
     try {
       const payload = this.jwtService.verify(refreshToken, {
-        secret: jwtConstants.refresh,
+        secret: this.getJwtSecret('JWT_SECRET_REFRESH'),
       });
 
       // Verificar se o token existe no banco
@@ -295,9 +298,9 @@ export class AuthService {
 
     const token = await this.generatePasswordResetToken(user.id);
 
-    await this.notificationService.sendPasswordResetEmail({
+    this.queuePasswordResetEmail({
       email: user.email,
-      name: `${user.name} ${user.surname}`,
+      name: [user.name, user.surname].filter(Boolean).join(' '),
       resetToken: token,
       expiresInMinutes: 15,
     });
@@ -334,7 +337,7 @@ export class AuthService {
     return this.jwtService.signAsync(
       { sub: userId, purpose: 'reset' },
       {
-        secret: jwtConstants.passwordReset,
+        secret: this.getPasswordResetSecret(),
         expiresIn: '15m',
       },
     );
@@ -343,7 +346,7 @@ export class AuthService {
   private verifyPasswordResetToken(token: string): any {
     try {
       const payload = this.jwtService.verify(token, {
-        secret: jwtConstants.passwordReset,
+        secret: this.getPasswordResetSecret(),
       });
 
       if (payload.purpose !== 'reset') {
@@ -362,9 +365,32 @@ export class AuthService {
     }
   }
 
+  private getPasswordResetSecret(): string {
+    const secret =
+      process.env.JWT_SECRET_PASSWORD_RESET ||
+      process.env.JWT_SECRET_REFERRAL ||
+      jwtConstants.passwordReset;
+
+    if (!secret) {
+      throw new Error('JWT password reset secret not configured');
+    }
+
+    return secret;
+  }
+
+  private getJwtSecret(envName: string): string {
+    const secret = process.env[envName];
+
+    if (!secret) {
+      throw new Error(`${envName} is not configured`);
+    }
+
+    return secret;
+  }
+
   async validateConsultantInviteToken(token: string) {
     try {
-      const payload = this.jwtService.verify(token, { secret: jwtConstants.referral });
+      const payload = this.jwtService.verify(token, { secret: this.getJwtSecret('JWT_SECRET_REFERRAL') });
 
       if (payload.type !== 'CONSULTANT_INVITE') {
         throw new UnauthorizedException('Token inválido');
@@ -421,7 +447,7 @@ export class AuthService {
 
   async validateSpecialistInviteToken(token: string) {
     try {
-      const payload = this.jwtService.verify(token, { secret: jwtConstants.referral });
+      const payload = this.jwtService.verify(token, { secret: this.getJwtSecret('JWT_SECRET_REFERRAL') });
 
       if (payload.type !== 'SPECIALIST_INVITE') {
         throw new UnauthorizedException('Token inválido');
@@ -484,6 +510,19 @@ export class AuthService {
           surname: user.surname,
           role: user.role,
         })
+        .catch(() => {});
+    });
+  }
+
+  private queuePasswordResetEmail(data: {
+    email: string;
+    name: string;
+    resetToken: string;
+    expiresInMinutes: number;
+  }): void {
+    setImmediate(() => {
+      this.notificationService
+        .sendPasswordResetEmail(data)
         .catch(() => {});
     });
   }

@@ -176,6 +176,9 @@ export class ResetPasswordDto {
 }
 
 export class LoginDto {
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
   @IsEmail()
   email: string;
 
