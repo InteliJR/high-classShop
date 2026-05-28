@@ -158,6 +158,15 @@ export interface LoginValues {
   password: string;
 }
 
+export interface ForgotPasswordValues {
+  email: string;
+}
+
+export interface ResetPasswordValues {
+  new_password: string;
+  confirm_password: string;
+}
+
 // Tipagem das informações de registro
 export interface RegisterValues {
   name: string;

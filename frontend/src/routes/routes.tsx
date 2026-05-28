@@ -2,6 +2,8 @@ import { createBrowserRouter } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
 import Catalog from "../pages/catalog/CatalogPage";
 import Login from "../pages/auth/LoginPage";
+import ForgotPasswordPage from "../pages/auth/ForgotPasswordPage";
+import ResetPasswordPage from "../pages/auth/ResetPasswordPage";
 import RegisterPage from "../pages/auth/RegisterPage";
 import ProtectedRoute from "./ProtectedRoute";
 import ConsultantDashboard from "../pages/consultant/ConsultantDashboard";
@@ -46,6 +48,14 @@ export default function RouterApp() {
     {
       path: "/login",
       element: <Login />,
+    },
+    {
+      path: "/forgot-password",
+      element: <ForgotPasswordPage />,
+    },
+    {
+      path: "/reset-password",
+      element: <ResetPasswordPage />,
     },
     {
       path: "/register",

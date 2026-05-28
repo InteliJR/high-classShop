@@ -115,9 +115,9 @@ export default function Login() {
           </div>
           {/* Campo de ações */}
           <div className="flex flex-col justify-center items-center gap-4 text-color-a sm:gap-8 sm:pt-8 pt-4">
-            <a className="text-xs text-color-a sm:text-base">
+            <Link to="/forgot-password" className="text-xs text-color-a sm:text-base hover:underline">
               Esqueceu sua senha?
-            </a>
+            </Link>
             <input
               type="submit"
               className="text-sm bg-background-secondary p-2 w-full text-color-text-secondary rounded-md sm:text-2xl sm:rounded-lg hover:bg-gray-500"

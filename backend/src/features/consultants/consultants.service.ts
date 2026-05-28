@@ -6,11 +6,15 @@ import { UserRole } from 'src/auth/dto/auth';
 import * as bcrypt from 'bcrypt';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { Prisma } from '@prisma/client';
+import { NotificationService } from '../notifications/notification.service';
 
 
 @Injectable()
 export class ConsultantsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationService: NotificationService,
+  ) {}
 
   // Busca todos os consultores.
   async findAll() {
@@ -63,6 +67,17 @@ export class ConsultantsService {
       // Cria o usuário
       const user = await this.prisma.user.create({
         data: { ...dataSave, password_hash: passwordHash, role: registerRole },
+      });
+
+      setImmediate(() => {
+        this.notificationService
+          .sendWelcomeEmail({
+            email: user.email,
+            name: user.name,
+            surname: user.surname,
+            role: user.role,
+          })
+          .catch(() => {});
       });
 
       return {

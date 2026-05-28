@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { SesService } from 'src/aws/ses.service';
 import { randomUUID } from 'crypto';
+import { validateEmail } from 'src/shared/email-validator';
 import {
   AppointmentConfirmedEmailDto,
   AppointmentCreatedEmailDto,
@@ -19,6 +20,8 @@ import {
   ContractSentEmailDto,
   ContractStatusChangedEmailDto,
   AdvisorInviteEmailDto,
+  PasswordResetEmailDto,
+  WelcomeEmailDto,
 } from './dto/notification-email.dto';
 
 // ============================================================================
@@ -146,6 +149,17 @@ export class NotificationService {
     const correlationId = randomUUID();
 
     try {
+      const validationResult = validateEmail(recipientEmail);
+      if (!validationResult.isValid) {
+        this.logger.warn('Email blocked by validation before SES send', {
+          correlationId,
+          type,
+          recipient: recipientEmail,
+          reason: validationResult.error,
+        });
+        return;
+      }
+
       // LAYER 1: Circuit Breaker Check
       if (this.isCircuitOpen()) {
         this.logger.warn(`⚠️ Circuit breaker OPEN - email blocked`, {
@@ -247,6 +261,83 @@ export class NotificationService {
   // NOTIFICATION METHODS - PRIORITY GROUP 1 (Core)
   // ==========================================================================
 
+  private getDashboardPathByRole(role: string): string {
+    const paths: Record<string, string> = {
+      CUSTOMER: '/catalog/cars',
+      CONSULTANT: '/consultant/dashboard',
+      SPECIALIST: '/specialist/dashboard',
+      ADMIN: '/admin/dashboard',
+    };
+
+    return paths[role] || '/login';
+  }
+
+  async sendWelcomeEmail(data: WelcomeEmailDto): Promise<void> {
+    if (!this.notificationsEnabled) {
+      this.logger.debug('Notifications disabled - skipping sendWelcomeEmail');
+      return;
+    }
+
+    const fullName = [data.name, data.surname].filter(Boolean).join(' ');
+    const destinationPath = this.getDashboardPathByRole(data.role);
+    const destinationUrl = `${this.frontendUrl.replace(/\/$/, '')}${destinationPath}`;
+    const subject = `Boas-vindas | High-Class Shop`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
+        <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+        </div>
+        <div style="padding: 40px 30px; background-color: #ffffff;">
+          <h2 style="color: #1e293b; margin-top: 0;">Cadastro concluÃ­do</h2>
+          <p style="font-size: 16px; color: #334155;">OlÃ¡ <strong>${fullName}</strong>,</p>
+          <p style="font-size: 16px; color: #334155;">
+            Seu cadastro na High-Class Shop foi concluÃ­do com sucesso.
+          </p>
+          <p style="font-size: 16px; color: #334155;">
+            Acesse a plataforma para continuar sua experiÃªncia.
+          </p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${destinationUrl}"
+               style="display: inline-block; background-color: #1e293b; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
+                      font-weight: 600; font-size: 16px;">
+              Acessar Plataforma
+            </a>
+          </div>
+        </div>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+High-Class Shop - Cadastro concluÃ­do
+
+OlÃ¡ ${fullName},
+
+Seu cadastro na High-Class Shop foi concluÃ­do com sucesso.
+
+Acesse a plataforma:
+${destinationUrl}
+
+High-Class Shop - Marketplace de Bens de Luxo
+    `.trim();
+
+    await this.sendEmailSafely(
+      'WELCOME',
+      data.email,
+      subject,
+      html,
+      text,
+    );
+  }
+
   /**
    * Event 2: Appointment Confirmed
    * Notifica cliente que especialista confirmou o agendamento
@@ -333,6 +424,84 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para ver detalhes e inici
     await this.sendEmailSafely(
       'APPOINTMENT_CONFIRMED',
       data.clientEmail,
+      subject,
+      html,
+      text,
+    );
+  }
+
+  async sendPasswordResetEmail(
+    data: PasswordResetEmailDto,
+  ): Promise<void> {
+    if (!this.notificationsEnabled) {
+      this.logger.debug(
+        'Notifications disabled - skipping sendPasswordResetEmail',
+      );
+      return;
+    }
+
+    const resetUrl = `${this.frontendUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(
+      data.resetToken,
+    )}`;
+    const subject = `Recuperação de Senha | High-Class Shop`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
+        <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+        </div>
+        <div style="padding: 40px 30px; background-color: #ffffff;">
+          <h2 style="color: #1e293b; margin-top: 0;">Recuperação de Senha</h2>
+          <p style="font-size: 16px; color: #334155;">Olá <strong>${data.name}</strong>,</p>
+          <p style="font-size: 16px; color: #334155;">
+            Recebemos uma solicitação para redefinir sua senha. Clique no botão abaixo para criar uma nova senha.
+          </p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}"
+               style="display: inline-block; background-color: #1e293b; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
+                      font-weight: 600; font-size: 16px;">
+              Redefinir Senha
+            </a>
+          </div>
+          <p style="font-size: 16px; color: #334155;">
+            Este link expira em ${data.expiresInMinutes} minutos.
+          </p>
+          <p style="font-size: 14px; color: #64748b;">
+            Se você não solicitou essa alteração, ignore este email.
+          </p>
+        </div>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+High-Class Shop - Recuperação de Senha
+
+Olá ${data.name},
+
+Recebemos uma solicitação para redefinir sua senha.
+
+Acesse o link abaixo para criar uma nova senha:
+
+${resetUrl}
+
+Este link expira em ${data.expiresInMinutes} minutos.
+
+Se você não solicitou essa alteração, ignore este email.
+
+© 2026 High-Class Shop
+    `.trim();
+
+    await this.sendEmailSafely(
+      'PASSWORD_RESET',
+      data.email,
       subject,
       html,
       text,

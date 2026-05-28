@@ -30,6 +30,7 @@ JWT_SECRET_ACCESS=<string-forte>
 JWT_SECRET_REFRESH=<string-forte>
 JWT_SECRET_REFERRAL=<string-forte>
 JWT_SECRET_ADVISOR=<string-forte>   # convites de assessor, expira em 7d
+JWT_SECRET_PASSWORD_RESET=<string-forte>  # recuperação de senha, expira em 15min
 ```
 
 ### AWS (S3 + SES)

@@ -6,18 +6,29 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { ApiResponseDto, ChangePasswordDto, LoginDto, RegisterConsultantDto, RegisterSpecialistDto, UserRegisterDto } from './dto/auth';
+import {
+  ApiResponseDto,
+  ChangePasswordDto,
+  ForgotPasswordDto,
+  LoginDto,
+  RegisterConsultantDto,
+  RegisterSpecialistDto,
+  ResetPasswordDto,
+  UserRegisterDto,
+} from './dto/auth';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { jwtConstants } from './constants';
 import { UserEntity } from './entities/user.entity';
 import { UserRole } from '@prisma/client';
+import { NotificationService } from 'src/features/notifications/notification.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prismaService: PrismaService,
     private jwtService: JwtService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async register(data: UserRegisterDto) {
@@ -44,6 +55,8 @@ export class AuthService {
     const user = await this.prismaService.user.create({
       data: { ...dataSave, password_hash: passwordHash, role: registerRole },
     });
+
+    this.queueWelcomeEmail(user);
 
     return {
       user: UserEntity.fromPrisma(user),
@@ -266,6 +279,89 @@ export class AuthService {
     return { message: 'Senha alterada com sucesso' };
   }
 
+  async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
+    const user = await this.prismaService.user.findFirst({
+      where: {
+        email: {
+          equals: dto.email.trim(),
+          mode: 'insensitive',
+        },
+      },
+    });
+
+    if (!user) {
+      return;
+    }
+
+    const token = await this.generatePasswordResetToken(user.id);
+
+    await this.notificationService.sendPasswordResetEmail({
+      email: user.email,
+      name: `${user.name} ${user.surname}`,
+      resetToken: token,
+      expiresInMinutes: 15,
+    });
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
+    if (dto.new_password !== dto.confirm_password) {
+      throw new BadRequestException('As senhas não coincidem');
+    }
+
+    const payload = this.verifyPasswordResetToken(dto.token);
+    const user = await this.prismaService.user.findUnique({
+      where: { id: payload.sub },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.new_password, 10);
+    await this.prismaService.user.update({
+      where: { id: user.id },
+      data: { password_hash: passwordHash },
+    });
+
+    await this.prismaService.refreshToken.deleteMany({
+      where: { user_id: user.id },
+    });
+
+    return { message: 'Senha redefinida com sucesso' };
+  }
+
+  private async generatePasswordResetToken(userId: string): Promise<string> {
+    return this.jwtService.signAsync(
+      { sub: userId, purpose: 'reset' },
+      {
+        secret: jwtConstants.passwordReset,
+        expiresIn: '15m',
+      },
+    );
+  }
+
+  private verifyPasswordResetToken(token: string): any {
+    try {
+      const payload = this.jwtService.verify(token, {
+        secret: jwtConstants.passwordReset,
+      });
+
+      if (payload.purpose !== 'reset') {
+        throw new UnauthorizedException('Token de redefinição inválido');
+      }
+
+      return payload;
+    } catch (error: any) {
+      if (error.name === 'TokenExpiredError') {
+        throw new UnauthorizedException('Token expirado ou inválido');
+      }
+      if (error.name === 'JsonWebTokenError') {
+        throw new UnauthorizedException('Token inválido');
+      }
+      throw new UnauthorizedException('Token inválido ou expirado');
+    }
+  }
+
   async validateConsultantInviteToken(token: string) {
     try {
       const payload = this.jwtService.verify(token, { secret: jwtConstants.referral });
@@ -318,6 +414,8 @@ export class AuthService {
       },
     });
 
+    this.queueWelcomeEmail(user);
+
     return { user: UserEntity.fromPrisma(user) };
   }
 
@@ -367,7 +465,27 @@ export class AuthService {
       },
     });
 
+    this.queueWelcomeEmail(user);
+
     return { user: UserEntity.fromPrisma(user) };
+  }
+
+  private queueWelcomeEmail(user: {
+    email: string;
+    name: string;
+    surname?: string | null;
+    role: UserRole;
+  }): void {
+    setImmediate(() => {
+      this.notificationService
+        .sendWelcomeEmail({
+          email: user.email,
+          name: user.name,
+          surname: user.surname,
+          role: user.role,
+        })
+        .catch(() => {});
+    });
   }
 
   // Logout - remover refresh token do banco
