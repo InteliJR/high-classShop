@@ -28,6 +28,7 @@ import { DriveImportModule } from './features/drive-import/drive-import.module';
 import { MeetingsModule } from './features/meetings/meetings.module';
 import { ProductImportJobsModule } from './features/product-import-jobs/product-import-jobs.module';
 import { CustomerAdvisorsModule } from './features/customer-advisors/customer-advisors.module';
+import { OfficeModule } from './features/office/office.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { CustomerAdvisorsModule } from './features/customer-advisors/customer-ad
     MeetingsModule,
     ProductImportJobsModule,
     CustomerAdvisorsModule,
+    OfficeModule,
   ],
   providers: [
     {

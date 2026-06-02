@@ -111,6 +111,34 @@ export class RegisterConsultantDto {
   civil_state?: CivilState;
 }
 
+export class RegisterOfficeDto {
+  @IsString()
+  @IsNotEmpty()
+  invite_token: string;
+
+  @IsString()
+  @MinLength(2)
+  name: string;
+
+  @IsString()
+  @MinLength(2)
+  surname: string;
+
+  @IsString()
+  @Length(11, 11, { message: 'CPF deve ter 11 dígitos' })
+  @Matches(/^\d{11}$/, { message: 'CPF deve conter apenas números' })
+  cpf: string;
+
+  @IsString()
+  @Length(7, 10, { message: 'RG deve ter entre 7 e 10 dígitos' })
+  @Matches(/^\d{7,10}$/, { message: 'RG deve conter apenas números (7-10 dígitos)' })
+  rg: string;
+
+  @IsString()
+  @MinLength(6)
+  password: string;
+}
+
 export class RegisterSpecialistDto {
   @IsString()
   @IsNotEmpty()

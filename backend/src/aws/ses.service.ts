@@ -323,6 +323,62 @@ body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;mar
     }
 
     /**
+     * Send an office (gerente do escritório) invite email — sent by ADMIN.
+     */
+    async sendOfficeInviteEmail(
+        recipientEmail: string,
+        inviteLink: string,
+        companyName: string,
+    ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+        try {
+            const htmlBody = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px}
+.header{background-color:#1a1a1a;color:#fff;padding:20px;text-align:center}
+.content{background-color:#f9f9f9;padding:30px;border-radius:5px;margin-top:20px}
+.button{display:inline-block;background-color:#1a1a1a;color:#fff!important;padding:12px 30px;text-decoration:none;border-radius:5px;margin:20px 0;font-weight:bold}
+.footer{text-align:center;margin-top:30px;font-size:12px;color:#666}
+</style></head><body>
+<div class="header"><h1>High-class Shop</h1></div>
+<div class="content">
+<h2>Você foi convidado(a) como Gerente de Escritório</h2>
+<p>Olá,</p>
+<p>Você recebeu um convite para gerenciar o escritório <strong>${companyName}</strong> na plataforma <strong>High-class Shop</strong>. Como gerente você poderá convidar e administrar consultores, visualizar clientes e configurar a marca do escritório.</p>
+<p>Clique no botão abaixo para completar seu cadastro:</p>
+<center><a href="${inviteLink}" class="button">Criar minha conta de Gerente</a></center>
+<p style="font-size:12px;color:#666;margin-top:20px">Ou copie este link:<br><a href="${inviteLink}" style="word-break:break-all">${inviteLink}</a></p>
+<p style="font-size:12px;color:#999">Este convite é válido por 7 dias e foi gerado especificamente para você.</p>
+<p style="font-size:12px;color:#999">Se você não esperava esse convite, ignore esta mensagem.</p>
+</div>
+<div class="footer"><p>© 2026 High-class Shop. Todos os direitos reservados.</p></div>
+</body></html>`;
+            const textBody = `High-class Shop — Convite de Gerente de Escritório\n\nVocê foi convidado(a) para gerenciar o escritório ${companyName}.\n\nAcesse: ${inviteLink}\n\nO link expira em 7 dias.`;
+
+            const emailParams = {
+                Source: this.fromEmail,
+                Destination: { ToAddresses: [recipientEmail] },
+                Message: {
+                    Subject: {
+                        Data: `Convite para gerenciar ${companyName} — High-class Shop`,
+                        Charset: 'UTF-8',
+                    },
+                    Body: {
+                        Html: { Data: htmlBody, Charset: 'UTF-8' },
+                        Text: { Data: textBody, Charset: 'UTF-8' },
+                    },
+                },
+            };
+
+            const command = new SendEmailCommand(emailParams);
+            const response = await this.sesClient.send(command);
+            this.logger.log(`Office invite email sent to ${recipientEmail}`);
+            return { success: true, messageId: response.MessageId };
+        } catch (error) {
+            this.logger.error(`Failed to send office invite email to ${recipientEmail}`, error);
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+        }
+    }
+
+    /**
      * Send a specialist invite email from admin
      */
     async sendSpecialistInviteEmail(
