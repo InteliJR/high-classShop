@@ -12,6 +12,7 @@ import {
   ForgotPasswordDto,
   LoginDto,
   RegisterConsultantDto,
+  RegisterOfficeDto,
   RegisterSpecialistDto,
   ResetPasswordDto,
   UserRegisterDto,
@@ -125,6 +126,11 @@ export class AuthService {
     // Validar se as senhas são parecidas
     if (!passwordMatch) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Bloqueio de conta desativada (consultor removido pelo OFFICE/ADMIN)
+    if (user.is_active === false) {
+      throw new UnauthorizedException('Conta desativada. Contate o escritório.');
     }
 
     // Criação do token de acesss
@@ -525,6 +531,81 @@ export class AuthService {
         .sendPasswordResetEmail(data)
         .catch(() => {});
     });
+  }
+
+  // ─── OFFICE (gerente do escritório) ────────────────────────────────────
+  async validateOfficeInviteToken(token: string) {
+    try {
+      const payload = this.jwtService.verify(token, { secret: jwtConstants.referral });
+
+      if (payload.type !== 'OFFICE_INVITE') {
+        throw new UnauthorizedException('Token inválido');
+      }
+
+      const company = await this.prismaService.company.findUnique({
+        where: { id: payload.companyId },
+        select: { id: true, name: true },
+      });
+      if (!company) throw new BadRequestException('Escritório não encontrado');
+
+      // Garante 1 OFFICE por Company
+      const existingOffice = await this.prismaService.user.findFirst({
+        where: { company_id: company.id, role: UserRole.OFFICE },
+        select: { id: true },
+      });
+      if (existingOffice) {
+        throw new BadRequestException('Este escritório já possui um gerente cadastrado');
+      }
+
+      const existingUser = await this.prismaService.user.findUnique({
+        where: { email: payload.email },
+      });
+      if (existingUser) {
+        throw new BadRequestException(
+          'Já existe uma conta cadastrada com este email. Faça login para acessar sua conta.',
+        );
+      }
+
+      return {
+        companyId: payload.companyId,
+        companyName: company.name,
+        email: payload.email,
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      if (error instanceof UnauthorizedException) throw error;
+      throw new UnauthorizedException('Token de convite inválido ou expirado');
+    }
+  }
+
+  async registerOffice(dto: RegisterOfficeDto) {
+    const { invite_token, password, ...rest } = dto;
+
+    const { companyId, email } = await this.validateOfficeInviteToken(invite_token);
+
+    const existingByCpf = await this.prismaService.user.findUnique({ where: { cpf: rest.cpf } });
+    if (existingByCpf) throw new UnauthorizedException('Já existe uma conta cadastrada com este CPF');
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    try {
+      const user = await this.prismaService.user.create({
+        data: {
+          ...rest,
+          email,
+          password_hash: passwordHash,
+          role: UserRole.OFFICE,
+          company_id: companyId,
+        },
+      });
+      return { user: UserEntity.fromPrisma(user) };
+    } catch (e: any) {
+      // Race: outro OFFICE foi criado em paralelo (índice parcial único 1 OFFICE/Company)
+      if (e?.code === 'P2002') {
+        throw new BadRequestException('Este escritório já possui um gerente cadastrado');
+      }
+      throw e;
+    }
   }
 
   // Logout - remover refresh token do banco

@@ -174,6 +174,40 @@ export class CompaniesService {
     return { inviteLink, email };
   }
 
+  // Gera convite p/ o gerente do escritório (role=OFFICE) — só ADMIN chama.
+  async inviteOffice(companyId: string, email: string) {
+    const company = await this.findOne(companyId);
+
+    const existingOffice = await this.prisma.user.findFirst({
+      where: { company_id: companyId, role: 'OFFICE' },
+      select: { id: true },
+    });
+    if (existingOffice) {
+      throw new ConflictException('Este escritório já possui um gerente cadastrado');
+    }
+
+    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      throw new ConflictException('Já existe uma conta cadastrada com este email');
+    }
+
+    const token = this.jwtService.sign(
+      { type: 'OFFICE_INVITE', companyId, email },
+      { expiresIn: '7d' },
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const inviteLink = `${frontendUrl}/register-office?invite=${token}`;
+
+    setImmediate(() => {
+      this.sesService
+        .sendOfficeInviteEmail(email, inviteLink, company.name)
+        .catch(() => {});
+    });
+
+    return { inviteLink, email };
+  }
+
   // Busca consultores associados a uma empresa, com paginação.
   async findConsultantsByCompany(
     companyId: string,

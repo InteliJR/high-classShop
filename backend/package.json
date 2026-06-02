@@ -41,6 +41,7 @@
     "exceljs": "^4.4.0",
     "googleapis": "^144.0.0",
     "iconv-lite": "^0.7.2",
+    "isomorphic-dompurify": "^3.15.0",
     "pdf-lib": "^1.17.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
@@ -86,6 +87,12 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "moduleNameMapper": {
+      "^src/(.*)$": "<rootDir>/$1"
+    },
+    "transformIgnorePatterns": [
+      "/node_modules/(?!(@exodus/bytes|isomorphic-dompurify)/)"
+    ],
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],

@@ -74,6 +74,14 @@ export class AuthGuard implements CanActivate {
         throw new UnauthorizedException('Unauthorized');
       }
 
+      // Bloqueio de conta desativada (revogação imediata mesmo com access token válido)
+      if (user.is_active === false) {
+        this.logger.warn(
+          `[AuthGuard] Usuário ${user.id} desativado tentou acessar ${request.method} ${request.url}`,
+        );
+        throw new UnauthorizedException('Conta desativada');
+      }
+
       request['user'] = UserEntity.fromPrisma(user);
     } catch (error) {
       if (this.verboseAuthLogs) {

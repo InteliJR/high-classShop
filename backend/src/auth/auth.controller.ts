@@ -82,6 +82,22 @@ export class AuthController {
   }
 
   @Public()
+  @Post('validate-office-invite')
+  @HttpCode(HttpStatus.OK)
+  async validateOfficeInvite(@Body() body: { token: string }) {
+    const result = await this.authService.validateOfficeInviteToken(body.token);
+    return { sucess: true, message: 'Convite válido', data: result };
+  }
+
+  @Public()
+  @Post('register-office')
+  @HttpCode(HttpStatus.CREATED)
+  async registerOffice(@Body() dto: auth.RegisterOfficeDto) {
+    const result = await this.authService.registerOffice(dto);
+    return { sucess: true, message: 'Conta de escritório criada com sucesso', data: result };
+  }
+
+  @Public()
   @UseGuards(RateLimitGuard)
   @RateLimit({ windowMs: 900, max: 5 }) // 5 attempts per 15 minutes
   @Post('login')

@@ -13,6 +13,8 @@ import {
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
+import { Roles } from '../../shared/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 
 /**
  * Define a rota base para este controlador.
@@ -74,6 +76,17 @@ export class CompaniesController {
     @Body('email') email: string,
   ) {
     return this.companiesService.inviteConsultant(id, email);
+  }
+
+  // Rota para gerar link de convite de gerente OFFICE — exclusivo do ADMIN.
+  @Roles(UserRole.ADMIN)
+  @Post(':id/invite-office')
+  @HttpCode(HttpStatus.OK)
+  inviteOffice(
+    @Param('id') id: string,
+    @Body('email') email: string,
+  ) {
+    return this.companiesService.inviteOffice(id, email);
   }
 
   // Rota para apagar um escritório.
