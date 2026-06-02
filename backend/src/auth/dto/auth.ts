@@ -10,6 +10,7 @@ import {
   Length,
   Matches
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { UserEntity } from '../entities/user.entity';
 import { IsValidCPF } from '../../shared/validators/cpf.validator';
 
@@ -181,7 +182,31 @@ export class ChangePasswordDto {
   new_password: string;
 }
 
+export class ForgotPasswordDto {
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsEmail()
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  token: string;
+
+  @IsString()
+  @MinLength(6)
+  new_password: string;
+
+  @IsString()
+  @MinLength(6)
+  confirm_password: string;
+}
+
 export class LoginDto {
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
   @IsEmail()
   email: string;
 

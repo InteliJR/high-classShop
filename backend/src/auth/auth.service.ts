@@ -6,18 +6,30 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { ApiResponseDto, ChangePasswordDto, LoginDto, RegisterConsultantDto, RegisterOfficeDto, RegisterSpecialistDto, UserRegisterDto } from './dto/auth';
+import {
+  ApiResponseDto,
+  ChangePasswordDto,
+  ForgotPasswordDto,
+  LoginDto,
+  RegisterConsultantDto,
+  RegisterOfficeDto,
+  RegisterSpecialistDto,
+  ResetPasswordDto,
+  UserRegisterDto,
+} from './dto/auth';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { jwtConstants } from './constants';
 import { UserEntity } from './entities/user.entity';
 import { UserRole } from '@prisma/client';
+import { NotificationService } from 'src/features/notifications/notification.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prismaService: PrismaService,
     private jwtService: JwtService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async register(data: UserRegisterDto) {
@@ -45,6 +57,8 @@ export class AuthService {
       data: { ...dataSave, password_hash: passwordHash, role: registerRole },
     });
 
+    this.queueWelcomeEmail(user);
+
     return {
       user: UserEntity.fromPrisma(user),
     };
@@ -53,7 +67,7 @@ export class AuthService {
   async validateReferralToken(token: string) {
     try {
       const payload = this.jwtService.verify(token, {
-        secret: jwtConstants.referral,
+        secret: this.getJwtSecret('JWT_SECRET_REFERRAL'),
       });
 
       // Buscar o consultor para retornar o nome completo
@@ -90,9 +104,12 @@ export class AuthService {
 
   async login(data: LoginDto) {
     // Procurar o usuário pelo e-mail
-    const user = await this.prismaService.user.findUnique({
+    const user = await this.prismaService.user.findFirst({
       where: {
-        email: data.email,
+        email: {
+          equals: data.email,
+          mode: 'insensitive',
+        },
       },
     });
 
@@ -168,7 +185,7 @@ export class AuthService {
 
     const refreshToken = await this.jwtService.signAsync(payloadRefresh, {
       expiresIn: '7d',
-      secret: jwtConstants.refresh,
+      secret: this.getJwtSecret('JWT_SECRET_REFRESH'),
     });
 
     // Salvar no banco
@@ -191,7 +208,7 @@ export class AuthService {
     const accessToken = this.jwtService.signAsync(
       { sub: user.id , email: user.email },
       {
-        secret: jwtConstants.access,
+        secret: this.getJwtSecret('JWT_SECRET_ACCESS'),
         expiresIn: '15m',
       },
     );
@@ -210,7 +227,7 @@ export class AuthService {
     // Verifica a autenticidade do refreshToken e busca o usuário
     try {
       const payload = this.jwtService.verify(refreshToken, {
-        secret: jwtConstants.refresh,
+        secret: this.getJwtSecret('JWT_SECRET_REFRESH'),
       });
 
       // Verificar se o token existe no banco
@@ -271,9 +288,115 @@ export class AuthService {
     return { message: 'Senha alterada com sucesso' };
   }
 
+  async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
+    const user = await this.prismaService.user.findFirst({
+      where: {
+        email: {
+          equals: dto.email.trim(),
+          mode: 'insensitive',
+        },
+      },
+    });
+
+    if (!user) {
+      return;
+    }
+
+    const token = await this.generatePasswordResetToken(user.id);
+
+    this.queuePasswordResetEmail({
+      email: user.email,
+      name: [user.name, user.surname].filter(Boolean).join(' '),
+      resetToken: token,
+      expiresInMinutes: 15,
+    });
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
+    if (dto.new_password !== dto.confirm_password) {
+      throw new BadRequestException('As senhas não coincidem');
+    }
+
+    const payload = this.verifyPasswordResetToken(dto.token);
+    const user = await this.prismaService.user.findUnique({
+      where: { id: payload.sub },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.new_password, 10);
+    await this.prismaService.user.update({
+      where: { id: user.id },
+      data: { password_hash: passwordHash },
+    });
+
+    await this.prismaService.refreshToken.deleteMany({
+      where: { user_id: user.id },
+    });
+
+    return { message: 'Senha redefinida com sucesso' };
+  }
+
+  private async generatePasswordResetToken(userId: string): Promise<string> {
+    return this.jwtService.signAsync(
+      { sub: userId, purpose: 'reset' },
+      {
+        secret: this.getPasswordResetSecret(),
+        expiresIn: '15m',
+      },
+    );
+  }
+
+  private verifyPasswordResetToken(token: string): any {
+    try {
+      const payload = this.jwtService.verify(token, {
+        secret: this.getPasswordResetSecret(),
+      });
+
+      if (payload.purpose !== 'reset') {
+        throw new UnauthorizedException('Token de redefinição inválido');
+      }
+
+      return payload;
+    } catch (error: any) {
+      if (error.name === 'TokenExpiredError') {
+        throw new UnauthorizedException('Token expirado ou inválido');
+      }
+      if (error.name === 'JsonWebTokenError') {
+        throw new UnauthorizedException('Token inválido');
+      }
+      throw new UnauthorizedException('Token inválido ou expirado');
+    }
+  }
+
+  private getPasswordResetSecret(): string {
+    const secret =
+      process.env.JWT_SECRET_PASSWORD_RESET ||
+      process.env.JWT_SECRET_REFERRAL ||
+      jwtConstants.passwordReset;
+
+    if (!secret) {
+      throw new Error('JWT password reset secret not configured');
+    }
+
+    return secret;
+  }
+
+  private getJwtSecret(envName: string): string {
+    const secret = process.env[envName];
+
+    if (!secret) {
+      throw new Error(`${envName} is not configured`);
+    }
+
+    return secret;
+  }
+
   async validateConsultantInviteToken(token: string) {
     try {
-      const payload = this.jwtService.verify(token, { secret: jwtConstants.referral });
+      const payload = this.jwtService.verify(token, { secret: this.getJwtSecret('JWT_SECRET_REFERRAL') });
 
       if (payload.type !== 'CONSULTANT_INVITE') {
         throw new UnauthorizedException('Token inválido');
@@ -323,12 +446,14 @@ export class AuthService {
       },
     });
 
+    this.queueWelcomeEmail(user);
+
     return { user: UserEntity.fromPrisma(user) };
   }
 
   async validateSpecialistInviteToken(token: string) {
     try {
-      const payload = this.jwtService.verify(token, { secret: jwtConstants.referral });
+      const payload = this.jwtService.verify(token, { secret: this.getJwtSecret('JWT_SECRET_REFERRAL') });
 
       if (payload.type !== 'SPECIALIST_INVITE') {
         throw new UnauthorizedException('Token inválido');
@@ -372,7 +497,40 @@ export class AuthService {
       },
     });
 
+    this.queueWelcomeEmail(user);
+
     return { user: UserEntity.fromPrisma(user) };
+  }
+
+  private queueWelcomeEmail(user: {
+    email: string;
+    name: string;
+    surname?: string | null;
+    role: UserRole;
+  }): void {
+    setImmediate(() => {
+      this.notificationService
+        .sendWelcomeEmail({
+          email: user.email,
+          name: user.name,
+          surname: user.surname,
+          role: user.role,
+        })
+        .catch(() => {});
+    });
+  }
+
+  private queuePasswordResetEmail(data: {
+    email: string;
+    name: string;
+    resetToken: string;
+    expiresInMinutes: number;
+  }): void {
+    setImmediate(() => {
+      this.notificationService
+        .sendPasswordResetEmail(data)
+        .catch(() => {});
+    });
   }
 
   // ─── OFFICE (gerente do escritório) ────────────────────────────────────

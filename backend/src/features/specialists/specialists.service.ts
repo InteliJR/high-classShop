@@ -12,6 +12,7 @@ import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { SesService } from 'src/aws/ses.service';
 import { jwtConstants } from 'src/auth/constants';
+import { NotificationService } from '../notifications/notification.service';
 
 @Injectable()
 export class SpecialistsService {
@@ -19,6 +20,7 @@ export class SpecialistsService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private sesService: SesService,
+    private notificationService: NotificationService,
   ) {}
 
   // Gera link de convite para que um especialista se cadastre via self-registration.
@@ -83,7 +85,7 @@ export class SpecialistsService {
       // Hash da senha antes de salvar no banco de dados
       const hashedPassword = await bcrypt.hash(data.password_hash, 10);
 
-      return await this.prisma.user.create({
+      const user = await this.prisma.user.create({
         data: {
           name: data.name,
           surname: data.surname,
@@ -100,6 +102,19 @@ export class SpecialistsService {
           calendly_url: data.calendly_url?.trim() || null,
         },
       });
+
+      setImmediate(() => {
+        this.notificationService
+          .sendWelcomeEmail({
+            email: user.email,
+            name: user.name,
+            surname: user.surname,
+            role: user.role,
+          })
+          .catch(() => {});
+      });
+
+      return user;
     } catch (error) {
       if (error instanceof ConflictException) {
         throw error;

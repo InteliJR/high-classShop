@@ -4,10 +4,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { SpecialistsService } from './specialists.service';
 import { SpecialistsController } from './specialists.controller';
 import { AwsModule } from 'src/aws/aws.module';
+import { NotificationModule } from '../notifications/notification.module';
 
 @Module({
   imports: [
     AwsModule,
+    NotificationModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

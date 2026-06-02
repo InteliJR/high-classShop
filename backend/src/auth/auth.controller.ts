@@ -127,6 +127,29 @@ export class AuthController {
   }
 
   @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('forgot-password')
+  async forgotPassword(@Body() body: auth.ForgotPasswordDto) {
+    await this.authService.forgotPassword(body);
+    return {
+      success: true,
+      message:
+        'Se o e-mail existir em nosso sistema, você receberá instruções para redefinir sua senha.',
+    };
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('reset-password')
+  async resetPassword(@Body() body: auth.ResetPasswordDto) {
+    const result = await this.authService.resetPassword(body);
+    return {
+      success: true,
+      ...result,
+    };
+  }
+
+  @Public()
   @Post('refresh')
   async refresh(
     @Req() request: express.Request,
