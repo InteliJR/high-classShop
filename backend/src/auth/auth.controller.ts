@@ -82,6 +82,22 @@ export class AuthController {
   }
 
   @Public()
+  @Post('validate-office-invite')
+  @HttpCode(HttpStatus.OK)
+  async validateOfficeInvite(@Body() body: { token: string }) {
+    const result = await this.authService.validateOfficeInviteToken(body.token);
+    return { sucess: true, message: 'Convite válido', data: result };
+  }
+
+  @Public()
+  @Post('register-office')
+  @HttpCode(HttpStatus.CREATED)
+  async registerOffice(@Body() dto: auth.RegisterOfficeDto) {
+    const result = await this.authService.registerOffice(dto);
+    return { sucess: true, message: 'Conta de escritório criada com sucesso', data: result };
+  }
+
+  @Public()
   @UseGuards(RateLimitGuard)
   @RateLimit({ windowMs: 900, max: 5 }) // 5 attempts per 15 minutes
   @Post('login')
@@ -107,6 +123,29 @@ export class AuthController {
         access_token: accessToken,
         user: user,
       },
+    };
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('forgot-password')
+  async forgotPassword(@Body() body: auth.ForgotPasswordDto) {
+    await this.authService.forgotPassword(body);
+    return {
+      success: true,
+      message:
+        'Se o e-mail existir em nosso sistema, você receberá instruções para redefinir sua senha.',
+    };
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('reset-password')
+  async resetPassword(@Body() body: auth.ResetPasswordDto) {
+    const result = await this.authService.resetPassword(body);
+    return {
+      success: true,
+      ...result,
     };
   }
 

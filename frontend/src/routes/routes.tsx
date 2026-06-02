@@ -2,6 +2,8 @@ import { createBrowserRouter } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
 import Catalog from "../pages/catalog/CatalogPage";
 import Login from "../pages/auth/LoginPage";
+import ForgotPasswordPage from "../pages/auth/ForgotPasswordPage";
+import ResetPasswordPage from "../pages/auth/ResetPasswordPage";
 import RegisterPage from "../pages/auth/RegisterPage";
 import ProtectedRoute from "./ProtectedRoute";
 import ConsultantDashboard from "../pages/consultant/ConsultantDashboard";
@@ -31,6 +33,12 @@ import LandingPage from "../pages/landing-page/LandingPage";
 import MeetingRoomPage from "../pages/meetings/MeetingRoomPage";
 import AdvisorAcceptPage from "../pages/advisor/AdvisorAcceptPage";
 import AdvisorDashboardPage from "../pages/advisor/AdvisorDashboardPage";
+import RegisterOfficePage from "../pages/auth/RegisterOfficePage";
+import OfficeDashboardPage from "../pages/office/OfficeDashboardPage";
+import OfficeConsultantsPage from "../pages/office/OfficeConsultantsPage";
+import OfficeBatchInvitePage from "../pages/office/OfficeBatchInvitePage";
+import OfficeClientsPage from "../pages/office/OfficeClientsPage";
+import OfficeCompanySettingsPage from "../pages/office/OfficeCompanySettingsPage";
 
 export default function RouterApp() {
   const routerApp = createBrowserRouter([
@@ -48,6 +56,14 @@ export default function RouterApp() {
       element: <Login />,
     },
     {
+      path: "/forgot-password",
+      element: <ForgotPasswordPage />,
+    },
+    {
+      path: "/reset-password",
+      element: <ResetPasswordPage />,
+    },
+    {
       path: "/register",
       element: <RegisterPage />,
     },
@@ -58,6 +74,61 @@ export default function RouterApp() {
     {
       path: "/register-specialist",
       element: <RegisterSpecialistPage />,
+    },
+    {
+      path: "/register-office",
+      element: <RegisterOfficePage />,
+    },
+    // OFFICE routes
+    {
+      path: "/office/dashboard",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["OFFICE", "ADMIN"]}>
+            <OfficeDashboardPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/office/consultants",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["OFFICE", "ADMIN"]}>
+            <OfficeConsultantsPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/office/invite-batch",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["OFFICE", "ADMIN"]}>
+            <OfficeBatchInvitePage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/office/clients",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["OFFICE", "ADMIN"]}>
+            <OfficeClientsPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/office/company",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["OFFICE", "ADMIN"]}>
+            <OfficeCompanySettingsPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
     },
     // Customer routes
     {

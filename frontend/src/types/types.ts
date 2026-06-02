@@ -128,7 +128,7 @@ export interface Product {
 }
 
 // Usuários
-export type UserRole = 'CUSTOMER' |'CONSULTANT' |'SPECIALIST' |'ADMIN';
+export type UserRole = 'CUSTOMER' |'CONSULTANT' |'SPECIALIST' |'ADMIN' |'OFFICE';
 export type CivilState = 'SINGLE' |'MARRIED' |'DIVORCED' |'WIDOWED' |'SEPARATED' |'STABLE_UNION' ;
 export type SpecialityType = 'CAR' |'BOAT' |'AIRCRAFT';
 
@@ -156,6 +156,15 @@ export interface UserProps {
 export interface LoginValues {
   email: string;
   password: string;
+}
+
+export interface ForgotPasswordValues {
+  email: string;
+}
+
+export interface ResetPasswordValues {
+  new_password: string;
+  confirm_password: string;
 }
 
 // Tipagem das informações de registro

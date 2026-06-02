@@ -155,3 +155,17 @@ export interface AdvisorInviteEmailDto {
   customerName: string;
   acceptUrl: string;
 }
+
+export interface PasswordResetEmailDto {
+  email: string;
+  name: string;
+  resetToken: string;
+  expiresInMinutes: number;
+}
+
+export interface WelcomeEmailDto {
+  email: string;
+  name: string;
+  surname?: string | null;
+  role: string;
+}

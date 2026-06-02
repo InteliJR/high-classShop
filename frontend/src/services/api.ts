@@ -25,11 +25,19 @@ api.interceptors.response.use(
   async (err) => {
     const original = err.config;
     const { refresh, clearAccessToken, clearUser } = useAuth.getState();
+    const requestUrl = original?.url ?? "";
+    const isPublicAuthEndpoint =
+      requestUrl.includes("auth/login") ||
+      requestUrl.includes("auth/register") ||
+      requestUrl.includes("auth/forgot-password") ||
+      requestUrl.includes("auth/reset-password") ||
+      requestUrl.includes("auth/validate");
 
     if (
       err.response?.status === 401 &&
       !original._retry &&
-      !original.url?.includes("auth/refresh")
+      !requestUrl.includes("auth/refresh") &&
+      !isPublicAuthEndpoint
     ) {
       original._retry = true;
       try {
@@ -54,9 +62,7 @@ api.interceptors.response.use(
         : err.response?.data?.error?.message) ||
       err.response?.data?.details?.hint;
 
-    const isAuthEndpoint =
-      original?.url?.includes("/auth/login") ||
-      original?.url?.includes("/auth/register");
+    const isAuthEndpoint = requestUrl.includes("auth/");
 
     if (!err.friendlyMessage) {
       if (status === 400) {

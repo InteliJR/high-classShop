@@ -26,6 +26,8 @@ export default function ProtectedRoute({
         return "/specialist/dashboard";
       case "ADMIN":
         return "/admin/dashboard";
+      case "OFFICE":
+        return "/office/dashboard";
       default:
         return "/login";
     }

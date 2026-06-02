@@ -10,6 +10,7 @@ import {
   Length,
   Matches
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { UserEntity } from '../entities/user.entity';
 import { IsValidCPF } from '../../shared/validators/cpf.validator';
 
@@ -111,6 +112,34 @@ export class RegisterConsultantDto {
   civil_state?: CivilState;
 }
 
+export class RegisterOfficeDto {
+  @IsString()
+  @IsNotEmpty()
+  invite_token: string;
+
+  @IsString()
+  @MinLength(2)
+  name: string;
+
+  @IsString()
+  @MinLength(2)
+  surname: string;
+
+  @IsString()
+  @Length(11, 11, { message: 'CPF deve ter 11 dígitos' })
+  @Matches(/^\d{11}$/, { message: 'CPF deve conter apenas números' })
+  cpf: string;
+
+  @IsString()
+  @Length(7, 10, { message: 'RG deve ter entre 7 e 10 dígitos' })
+  @Matches(/^\d{7,10}$/, { message: 'RG deve conter apenas números (7-10 dígitos)' })
+  rg: string;
+
+  @IsString()
+  @MinLength(6)
+  password: string;
+}
+
 export class RegisterSpecialistDto {
   @IsString()
   @IsNotEmpty()
@@ -153,7 +182,31 @@ export class ChangePasswordDto {
   new_password: string;
 }
 
+export class ForgotPasswordDto {
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsEmail()
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  token: string;
+
+  @IsString()
+  @MinLength(6)
+  new_password: string;
+
+  @IsString()
+  @MinLength(6)
+  confirm_password: string;
+}
+
 export class LoginDto {
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
   @IsEmail()
   email: string;
 

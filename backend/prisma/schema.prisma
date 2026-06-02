@@ -47,6 +47,26 @@ enum UserRole {
   CONSULTANT @map("CONSULTANT")
   SPECIALIST @map("SPECIALIST")
   ADMIN      @map("ADMIN")
+  OFFICE     @map("OFFICE")
+}
+
+// ConsultantInviteJobStatus: estado do job de convite em lote (CSV)
+enum ConsultantInviteJobStatus {
+  PENDING               @map("PENDING")
+  PROCESSING            @map("PROCESSING")
+  COMPLETED             @map("COMPLETED")
+  COMPLETED_WITH_ERRORS @map("COMPLETED_WITH_ERRORS")
+  FAILED                @map("FAILED")
+}
+
+// ConsultantInviteItemStatus: estado por linha do CSV
+enum ConsultantInviteItemStatus {
+  PENDING    @map("PENDING")
+  PROCESSING @map("PROCESSING")
+  SENT       @map("SENT")
+  ACCEPTED   @map("ACCEPTED")
+  FAILED     @map("FAILED")
+  DUPLICATE  @map("DUPLICATE")
 }
 
 // ProductType: categorias principais de produto
@@ -429,6 +449,11 @@ model User {
   role          UserRole
   password_hash String
 
+  // Soft-delete / desativação (consultor desativado por OFFICE/ADMIN não faz login)
+  is_active      Boolean   @default(true)
+  deactivated_at DateTime?
+  deactivated_by String?   @db.Uuid
+
   civil_state           CivilState?
   speciality            ProductType?
   identification_number String?      @unique @db.VarChar(50)
@@ -480,6 +505,7 @@ model User {
   calendly_oauth_states    CalendlyOauthState[]
   advisorRelation          CustomerAdvisor?      @relation("CustomerAdvisors")
   advisorOf                CustomerAdvisor[]     @relation("AdvisorOf")
+  consultant_invite_jobs   ConsultantInviteJob[] @relation("OfficeInviteJobs")
 }
 
 model CalendlyConnection {
@@ -573,7 +599,8 @@ model Company {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  users User[] // Consultores e Especialistas associados
+  users                 User[] // Consultores, Especialistas e OFFICE manager associados
+  consultant_invite_jobs ConsultantInviteJob[]
 }
 
 // PlatformCompany: dados da empresa dona da plataforma (singleton)
@@ -1269,6 +1296,58 @@ model ProductImportJobItem {
 // ─── CustomerAdvisor ─────────────────────────────────────────────────────────
 // Cliente pode convidar um assessor pessoal via e-mail.
 // token: JWT assinado para o link de aceite. accepted_at: null até o assessor aceitar.
+
+// ─── ConsultantInviteJob ─────────────────────────────────────────────────────
+// Job assíncrono criado pelo OFFICE para convidar consultores em lote (CSV).
+// Espelha estrutura de ProductImportJob para consistência operacional.
+
+model ConsultantInviteJob {
+  id              String                    @id @default(uuid()) @db.Uuid
+  company_id      String                    @db.Uuid
+  created_by      String                    @db.Uuid
+  status          ConsultantInviteJobStatus @default(PENDING)
+  total_items     Int                       @default(0)
+  processed_items Int                       @default(0)
+  success_items   Int                       @default(0)
+  failed_items    Int                       @default(0)
+  duplicate_items Int                       @default(0)
+  started_at      DateTime?
+  finished_at     DateTime?
+  error_message   String?
+  created_at      DateTime                  @default(now())
+  updated_at      DateTime                  @updatedAt
+
+  company Company                   @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  creator User                      @relation("OfficeInviteJobs", fields: [created_by], references: [id], onDelete: Cascade)
+  items   ConsultantInviteJobItem[]
+
+  @@index([company_id])
+  @@index([created_by])
+  @@index([status])
+  @@index([created_at])
+}
+
+model ConsultantInviteJobItem {
+  id            String                     @id @default(uuid()) @db.Uuid
+  job_id        String                     @db.Uuid
+  row_number    Int
+  name          String
+  email         String
+  status        ConsultantInviteItemStatus @default(PENDING)
+  token         String?                    @unique
+  consultant_id String?                    @db.Uuid
+  error_message String?
+  attempts      Int                        @default(0)
+  processed_at  DateTime?
+  created_at    DateTime                   @default(now())
+  updated_at    DateTime                   @updatedAt
+
+  job ConsultantInviteJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+
+  @@index([job_id])
+  @@index([status])
+  @@index([email])
+}
 
 model CustomerAdvisor {
   id          String    @id @default(uuid()) @db.Uuid

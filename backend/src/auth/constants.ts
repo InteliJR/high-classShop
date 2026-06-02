@@ -3,4 +3,6 @@ export const jwtConstants = {
   refresh: process.env.JWT_SECRET_REFRESH,
   referral: process.env.JWT_SECRET_REFERRAL,
   advisor: process.env.JWT_SECRET_ADVISOR,
+  passwordReset:
+    process.env.JWT_SECRET_PASSWORD_RESET || process.env.JWT_SECRET_REFERRAL,
 };

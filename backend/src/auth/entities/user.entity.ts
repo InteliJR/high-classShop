@@ -48,6 +48,15 @@ export class UserEntity
   consultant_id: string | null;
 
   @Expose()
+  is_active: boolean;
+
+  @Expose()
+  deactivated_at: Date | null;
+
+  @Expose()
+  deactivated_by: string | null;
+
+  @Expose()
   identification_number: string | null;
 
   @Expose()
