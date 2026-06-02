@@ -128,7 +128,7 @@ export interface Product {
 }
 
 // Usuários
-export type UserRole = 'CUSTOMER' |'CONSULTANT' |'SPECIALIST' |'ADMIN';
+export type UserRole = 'CUSTOMER' |'CONSULTANT' |'SPECIALIST' |'ADMIN' |'OFFICE';
 export type CivilState = 'SINGLE' |'MARRIED' |'DIVORCED' |'WIDOWED' |'SEPARATED' |'STABLE_UNION' ;
 export type SpecialityType = 'CAR' |'BOAT' |'AIRCRAFT';
 

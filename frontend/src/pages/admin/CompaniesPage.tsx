@@ -9,6 +9,7 @@ import {
   type Company,
   type CompanyConsultant,
 } from "../../services/companies.service";
+import { adminInviteOffice } from "../../services/office";
 import {
   getPlatformCompany,
   type PlatformCompany,
@@ -360,6 +361,32 @@ export default function CompaniesPage() {
 
                     {/* Ações */}
                     <div className="flex justify-end items-center gap-4 text-gray-400">
+                      <button
+                        title="Convidar gerente do escritório (OFFICE)"
+                        onClick={async () => {
+                          const email = window.prompt(
+                            `Convidar gerente para ${company.name} (e-mail):`,
+                          );
+                          if (!email) return;
+                          try {
+                            await adminInviteOffice(company.id, email.trim().toLowerCase());
+                            alert("Convite enviado!");
+                          } catch (e) {
+                            const err = e as {
+                              friendlyMessage?: string;
+                              response?: { data?: { message?: string } };
+                            };
+                            alert(
+                              err.friendlyMessage ||
+                                err.response?.data?.message ||
+                                "Erro ao convidar gerente",
+                            );
+                          }
+                        }}
+                        className="text-xs font-medium bg-gray-800 text-white px-2 py-1 rounded hover:bg-black"
+                      >
+                        + Gerente
+                      </button>
                       <button onClick={() => setCompanyToEdit(company)}>
                         <img
                           src={EditIcon}
