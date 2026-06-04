@@ -32,6 +32,9 @@
 }
 
 :root {
+  --brand-primary: #3C3C3C;
+  --brand-secondary: #1C1C1C;
+
   /* Fontes da plataforma */
   font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
 

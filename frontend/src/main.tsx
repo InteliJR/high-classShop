@@ -4,6 +4,7 @@ import "./index.css";
 import { RouterProvider } from "react-router-dom";
 import { CookiesProvider } from "react-cookie";
 import { AuthProvider } from "./contexts/AuthContext";
+import { ThemeProvider } from "./contexts/ThemeProvider";
 
 import RouterApp from "./routes/routes.tsx";
 
@@ -12,9 +13,11 @@ const router = RouterApp();
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <CookiesProvider>
-      <AuthProvider>
-        <RouterProvider router={router} />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </ThemeProvider>
     </CookiesProvider>
   </StrictMode>
 );

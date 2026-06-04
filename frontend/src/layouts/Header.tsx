@@ -6,12 +6,15 @@ import { useAuth } from "../store/authStateManager";
 import { AppContext } from "../contexts/AppContext";
 import { useNavigate } from "react-router-dom";
 import UserDropdown from "../components/ui/UserDropdown";
+import { getLogoSource, getUserCompany } from "../utils/branding";
 
 export default function Header() {
   const { isSidebarCollapsed, setSidebarCollapsed } = useContext(AppContext);
   const isMobile = useIsMobile();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const company = getUserCompany(user);
+  const brandLogo = getLogoSource(company?.logo) ?? Logo;
 
   // Lista de itens do menu para visitantes
   const menuItems = [
@@ -23,10 +26,11 @@ export default function Header() {
   return (
     <>
       <header
-        className={`w-full sticky flex h-24 bg-background-secondary text-white z-50
+        className={`w-full sticky flex h-24 text-white z-50
           justify-end items-center px-6 sm:px-18 ${
             !isMobile && !isSidebarCollapsed && ""
           }`}
+        style={{ backgroundColor: "var(--brand-primary)" }}
       >
         <div className="flex w-full justify-between sm:flex-row-reverse items-center">
           {isMobile && (
@@ -76,13 +80,18 @@ export default function Header() {
           )}
 
           {user ? (
-            <div className="flex items-center w-full justify-end">
+            <div className="flex items-center w-full justify-between">
+              <img
+                src={brandLogo}
+                alt={company?.name ?? "High Class"}
+                className="max-h-14 w-auto max-w-36 object-contain"
+              />
               <div className="ml-2 mr-2 sm:mr-4 shrink-0">
                 <UserDropdown />
               </div>
             </div>
           ) : (
-            <img src={Logo} className="w-25 sm:w-35 h-auto" />
+            <img src={brandLogo} alt="High Class" className="w-25 sm:w-35 h-auto" />
           )}
         </div>
       </header>

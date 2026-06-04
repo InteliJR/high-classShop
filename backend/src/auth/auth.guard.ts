@@ -45,7 +45,10 @@ export class AuthGuard implements CanActivate {
     if (!token) {
       // Throttle dos logs para evitar spam
       const now = Date.now();
-      if (this.verboseAuthLogs && now - this.lastNoTokenLogTime > this.LOG_THROTTLE_MS) {
+      if (
+        this.verboseAuthLogs &&
+        now - this.lastNoTokenLogTime > this.LOG_THROTTLE_MS
+      ) {
         this.logger.debug(
           `[AuthGuard] Token não fornecido em requisição protegida (${request.method} ${request.url})`,
         );
@@ -64,6 +67,29 @@ export class AuthGuard implements CanActivate {
         where: {
           id: payload.sub,
           email: payload.email,
+        },
+        include: {
+          company: {
+            select: {
+              id: true,
+              name: true,
+              logo: true,
+              color_identity: true,
+            },
+          },
+          consultant: {
+            select: {
+              id: true,
+              company: {
+                select: {
+                  id: true,
+                  name: true,
+                  logo: true,
+                  color_identity: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -85,7 +111,9 @@ export class AuthGuard implements CanActivate {
       request['user'] = UserEntity.fromPrisma(user);
     } catch (error) {
       if (this.verboseAuthLogs) {
-        this.logger.warn(`[AuthGuard] Falha ao verificar token: ${error?.message}`);
+        this.logger.warn(
+          `[AuthGuard] Falha ao verificar token: ${error?.message}`,
+        );
       }
       throw new UnauthorizedException('Unauthorized');
     }

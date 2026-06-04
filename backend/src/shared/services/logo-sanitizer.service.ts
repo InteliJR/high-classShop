@@ -101,7 +101,7 @@ export class LogoSanitizerService {
       USE_PROFILES: { svg: true, svgFilters: true },
       FORBID_TAGS: ['script', 'foreignObject', 'iframe', 'object', 'embed'],
       FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onsubmit'],
-      ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|ftp|sftp|#):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+      ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|ftp|sftp|#):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
     });
 
     // Double-check: regex paranoica pra coisas que DOMPurify *deveria* ter pego.

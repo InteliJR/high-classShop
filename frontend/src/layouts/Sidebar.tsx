@@ -18,12 +18,15 @@ import Logo from "../assets/logo_brokerage.png";
 import { useIsMobile } from "../hooks/use-is-mobile";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../store/authStateManager";
+import { getLogoSource, getUserCompany } from "../utils/branding";
 
 export default function Sidebar() {
   const { isSidebarCollapsed, setSidebarCollapsed } = useContext(AppContext);
   const isMobile = useIsMobile();
   const location = useLocation();
   const user = useAuth((state) => state.user);
+  const company = getUserCompany(user);
+  const brandLogo = getLogoSource(company?.logo) ?? Logo;
 
   // Lista de links por cargo
   const links = [];
@@ -172,8 +175,9 @@ export default function Sidebar() {
               : "translate-x-0 opacity-100"
           }
           ${isMobile ? "w-2/5 fixed h-full" : "w-64 min-h-screen"}
-          top-0 left-0 transition-normal ease-out duration-300 z-50 fixed bg-black text-white
+          top-0 left-0 transition-normal ease-out duration-300 z-50 fixed text-white
         `}
+        style={{ backgroundColor: "var(--brand-secondary)" }}
       >
       {/* Botão para esconder a sidebar */}
       {isMobile && (
@@ -188,7 +192,11 @@ export default function Sidebar() {
       )}
 
       <div className="w-2/3 flex justify-center items-center mx-auto">
-        <img src={Logo} className="" />
+        <img
+          src={brandLogo}
+          alt={company?.name ?? "High Class"}
+          className="max-h-24 w-auto object-contain"
+        />
       </div>
 
       {/* Botões navegáveis */}
@@ -200,9 +208,14 @@ export default function Sidebar() {
             onClick={() => { if (isMobile) setSidebarCollapsed(false); }}
             className={`w-full flex gap-3 items-center p-3 rounded-md transition-colors ${
               location.pathname === link.to
-                ? ""
+                ? "text-white"
                 : "text-gray-300 hover:bg-white/10 hover:text-white"
             }`}
+            style={
+              location.pathname === link.to
+                ? { backgroundColor: "var(--brand-primary)" }
+                : undefined
+            }
           >
             {link.icon}
             <p>{link.label}</p>
