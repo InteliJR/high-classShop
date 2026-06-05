@@ -45,15 +45,21 @@ export interface CompanyMock {
   logo?: string;
   description?: string;
   commission_rate?: number;
+  color_identity?: string[];
 }
+
+const GENIUS_LOGO =
+  'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQwIiBoZWlnaHQ9IjgwIiB2aWV3Qm94PSIwIDAgMjQwIDgwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIyNDAiIGhlaWdodD0iODAiIHJ4PSIxMiIgZmlsbD0iIzBGNEEzRCIvPjx0ZXh0IHg9IjI0IiB5PSI0OCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjI4IiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjRjdEMDcyIj5HRU5JVVM8L3RleHQ+PC9zdmc+';
 
 // Mock de empresas fictícias
 export const mockCompanies: CompanyMock[] = [
   {
     name: 'Genius Assessoria Automotiva',
     cnpj: '12345678000190',
+    logo: GENIUS_LOGO,
     description: 'Especialistas em avaliação e consultoria de veículos de luxo',
     commission_rate: 12.5,
+    color_identity: ['#0F4A3D', '#151515'],
   },
   {
     name: 'Oceano Marítimo',
@@ -105,6 +111,7 @@ export const mockUsers: UserMock[] = [
     rg: '22334455',
     role: 'CONSULTANT',
     password_hash: COMMON_PASSWORD_HASH,
+    company_id: GENIUS_COMPANY_REF,
   },
   {
     name: 'Carlos',

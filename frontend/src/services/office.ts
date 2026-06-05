@@ -32,6 +32,7 @@ export interface OfficeCompany {
   name: string;
   cnpj: string;
   logo: string | null;
+  logoUrl?: string | null;
   description: string | null;
   commission_rate: number | null;
   bank: string | null;
@@ -128,7 +129,11 @@ export const officeService = {
     const fd = new FormData();
     fd.append('logo', file);
     return api
-      .post('office/company/logo', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .post<{ id: string; logo: string | null; logoUrl: string | null }>(
+        'office/company/logo',
+        fd,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      )
       .then((r) => r.data);
   },
 

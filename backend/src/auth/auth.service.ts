@@ -23,6 +23,8 @@ import { jwtConstants } from './constants';
 import { UserEntity } from './entities/user.entity';
 import { UserRole } from '@prisma/client';
 import { NotificationService } from 'src/features/notifications/notification.service';
+import { S3Service } from 'src/aws/s3.service';
+import { resolveCompanyLogoUrl } from './utils/company-logo.util';
 
 @Injectable()
 export class AuthService {
@@ -30,6 +32,7 @@ export class AuthService {
     private readonly prismaService: PrismaService,
     private jwtService: JwtService,
     private readonly notificationService: NotificationService,
+    private readonly s3Service: S3Service,
   ) {}
 
   async register(data: UserRegisterDto) {
@@ -86,7 +89,9 @@ export class AuthService {
       });
 
       if (existingUser) {
-        throw new BadRequestException('Já existe uma conta cadastrada com este email. Faça login para acessar sua conta.');
+        throw new BadRequestException(
+          'Já existe uma conta cadastrada com este email. Faça login para acessar sua conta.',
+        );
       }
 
       return {
@@ -130,7 +135,9 @@ export class AuthService {
 
     // Bloqueio de conta desativada (consultor removido pelo OFFICE/ADMIN)
     if (user.is_active === false) {
-      throw new UnauthorizedException('Conta desativada. Contate o escritório.');
+      throw new UnauthorizedException(
+        'Conta desativada. Contate o escritório.',
+      );
     }
 
     // Criação do token de acesss
@@ -138,18 +145,21 @@ export class AuthService {
 
     // Criação do refresh token com rotation
     const refreshToken = await this.createRefreshToken(user.id);
+    const userWithBranding = await this.getUserWithBranding(user.id);
 
     return {
       accessToken,
       refreshToken,
-      user: UserEntity.fromPrisma(user),  
+      user: UserEntity.fromPrisma(userWithBranding),
     };
   }
 
   //Criação do accessToken a partir do refreshToken
-  async refresh( refresh_token : string): Promise<{ accessToken: string; refreshToken: string; user: UserEntity }> {
+  async refresh(
+    refresh_token: string,
+  ): Promise<{ accessToken: string; refreshToken: string; user: UserEntity }> {
     const user = await this.verifyRefreshToken(refresh_token);
-    
+
     // Invalidate old refresh token (ignore if already deleted - race condition)
     try {
       await this.prismaService.refreshToken.delete({
@@ -165,11 +175,12 @@ export class AuthService {
     // Create new refresh token (rotation)
     const newRefreshToken = await this.createRefreshToken(user.id);
     const accessToken = await this.generateAccessToken(user);
-    
+    const userWithBranding = await this.getUserWithBranding(user.id);
+
     return {
       accessToken,
       refreshToken: newRefreshToken,
-      user: UserEntity.fromPrisma(user),
+      user: UserEntity.fromPrisma(userWithBranding),
     };
   }
 
@@ -177,7 +188,7 @@ export class AuthService {
   private async createRefreshToken(userId: string): Promise<string> {
     // Gerar um ID único para garantir que tokens sejam diferentes mesmo em milissegundos consecutivos
     const jti = crypto.randomUUID();
-    
+
     const payloadRefresh = {
       sub: userId,
       jti, // JWT ID único
@@ -203,10 +214,65 @@ export class AuthService {
     return refreshToken;
   }
 
+  private async getUserWithBranding(userId: string) {
+    const user = await this.prismaService.user.findUniqueOrThrow({
+      where: { id: userId },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+            logo: true,
+            color_identity: true,
+          },
+        },
+        consultant: {
+          select: {
+            id: true,
+            company: {
+              select: {
+                id: true,
+                name: true,
+                logo: true,
+                color_identity: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const [companyLogoUrl, consultantCompanyLogoUrl] = await Promise.all([
+      resolveCompanyLogoUrl(this.s3Service, user.company?.logo ?? null),
+      resolveCompanyLogoUrl(
+        this.s3Service,
+        user.consultant?.company?.logo ?? null,
+      ),
+    ]);
+
+    return {
+      ...user,
+      company: user.company
+        ? { ...user.company, logoUrl: companyLogoUrl }
+        : user.company,
+      consultant: user.consultant
+        ? {
+            ...user.consultant,
+            company: user.consultant.company
+              ? {
+                  ...user.consultant.company,
+                  logoUrl: consultantCompanyLogoUrl,
+                }
+              : user.consultant.company,
+          }
+        : user.consultant,
+    };
+  }
+
   // Criação do accessToken e do usuário
   async generateAccessToken(user: UserEntity) {
     const accessToken = this.jwtService.signAsync(
-      { sub: user.id , email: user.email },
+      { sub: user.id, email: user.email },
       {
         secret: this.getJwtSecret('JWT_SECRET_ACCESS'),
         expiresIn: '15m',
@@ -217,12 +283,12 @@ export class AuthService {
   }
 
   // Verificar se o refreshToken é válido
-  private async verifyRefreshToken(refresh_token : string) {
+  private async verifyRefreshToken(refresh_token: string) {
     const refreshToken = refresh_token;
 
     if (!refreshToken) {
-       throw new UnauthorizedException('Unauthorized');
-     }
+      throw new UnauthorizedException('Unauthorized');
+    }
 
     // Verifica a autenticidade do refreshToken e busca o usuário
     try {
@@ -269,12 +335,18 @@ export class AuthService {
     }
   }
 
-  async changePassword(userId: string, dto: ChangePasswordDto): Promise<{ message: string }> {
+  async changePassword(
+    userId: string,
+    dto: ChangePasswordDto,
+  ): Promise<{ message: string }> {
     const user = await this.prismaService.user.findUniqueOrThrow({
       where: { id: userId },
     });
 
-    const passwordMatch = await bcrypt.compare(dto.current_password, user.password_hash);
+    const passwordMatch = await bcrypt.compare(
+      dto.current_password,
+      user.password_hash,
+    );
     if (!passwordMatch) {
       throw new UnauthorizedException('Senha atual incorreta');
     }
@@ -396,7 +468,9 @@ export class AuthService {
 
   async validateConsultantInviteToken(token: string) {
     try {
-      const payload = this.jwtService.verify(token, { secret: this.getJwtSecret('JWT_SECRET_REFERRAL') });
+      const payload = this.jwtService.verify(token, {
+        secret: this.getJwtSecret('JWT_SECRET_REFERRAL'),
+      });
 
       if (payload.type !== 'CONSULTANT_INVITE') {
         throw new UnauthorizedException('Token inválido');
@@ -416,10 +490,16 @@ export class AuthService {
       });
 
       if (existingUser) {
-        throw new BadRequestException('Já existe uma conta cadastrada com este email. Faça login para acessar sua conta.');
+        throw new BadRequestException(
+          'Já existe uma conta cadastrada com este email. Faça login para acessar sua conta.',
+        );
       }
 
-      return { companyId: payload.companyId, companyName: company.name, email: payload.email };
+      return {
+        companyId: payload.companyId,
+        companyName: company.name,
+        email: payload.email,
+      };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       throw new UnauthorizedException('Token de convite inválido ou expirado');
@@ -429,10 +509,16 @@ export class AuthService {
   async registerConsultant(dto: RegisterConsultantDto) {
     const { invite_token, password, ...rest } = dto;
 
-    const { companyId, email } = await this.validateConsultantInviteToken(invite_token);
+    const { companyId, email } =
+      await this.validateConsultantInviteToken(invite_token);
 
-    const existingByCpf = await this.prismaService.user.findUnique({ where: { cpf: rest.cpf } });
-    if (existingByCpf) throw new UnauthorizedException('Já existe uma conta cadastrada com este CPF');
+    const existingByCpf = await this.prismaService.user.findUnique({
+      where: { cpf: rest.cpf },
+    });
+    if (existingByCpf)
+      throw new UnauthorizedException(
+        'Já existe uma conta cadastrada com este CPF',
+      );
 
     const passwordHash = await bcrypt.hash(password, 10);
 
@@ -453,7 +539,9 @@ export class AuthService {
 
   async validateSpecialistInviteToken(token: string) {
     try {
-      const payload = this.jwtService.verify(token, { secret: this.getJwtSecret('JWT_SECRET_REFERRAL') });
+      const payload = this.jwtService.verify(token, {
+        secret: this.getJwtSecret('JWT_SECRET_REFERRAL'),
+      });
 
       if (payload.type !== 'SPECIALIST_INVITE') {
         throw new UnauthorizedException('Token inválido');
@@ -464,7 +552,9 @@ export class AuthService {
       });
 
       if (existingUser) {
-        throw new BadRequestException('Já existe uma conta cadastrada com este email. Faça login para acessar sua conta.');
+        throw new BadRequestException(
+          'Já existe uma conta cadastrada com este email. Faça login para acessar sua conta.',
+        );
       }
 
       return {
@@ -480,10 +570,16 @@ export class AuthService {
   async registerSpecialist(dto: RegisterSpecialistDto) {
     const { invite_token, password, ...rest } = dto;
 
-    const { email, speciality } = await this.validateSpecialistInviteToken(invite_token);
+    const { email, speciality } =
+      await this.validateSpecialistInviteToken(invite_token);
 
-    const existingByCpf = await this.prismaService.user.findUnique({ where: { cpf: rest.cpf } });
-    if (existingByCpf) throw new UnauthorizedException('Já existe uma conta cadastrada com este CPF');
+    const existingByCpf = await this.prismaService.user.findUnique({
+      where: { cpf: rest.cpf },
+    });
+    if (existingByCpf)
+      throw new UnauthorizedException(
+        'Já existe uma conta cadastrada com este CPF',
+      );
 
     const passwordHash = await bcrypt.hash(password, 10);
 
@@ -527,16 +623,16 @@ export class AuthService {
     expiresInMinutes: number;
   }): void {
     setImmediate(() => {
-      this.notificationService
-        .sendPasswordResetEmail(data)
-        .catch(() => {});
+      this.notificationService.sendPasswordResetEmail(data).catch(() => {});
     });
   }
 
   // ─── OFFICE (gerente do escritório) ────────────────────────────────────
   async validateOfficeInviteToken(token: string) {
     try {
-      const payload = this.jwtService.verify(token, { secret: jwtConstants.referral });
+      const payload = this.jwtService.verify(token, {
+        secret: jwtConstants.referral,
+      });
 
       if (payload.type !== 'OFFICE_INVITE') {
         throw new UnauthorizedException('Token inválido');
@@ -554,7 +650,9 @@ export class AuthService {
         select: { id: true },
       });
       if (existingOffice) {
-        throw new BadRequestException('Este escritório já possui um gerente cadastrado');
+        throw new BadRequestException(
+          'Este escritório já possui um gerente cadastrado',
+        );
       }
 
       const existingUser = await this.prismaService.user.findUnique({
@@ -581,10 +679,16 @@ export class AuthService {
   async registerOffice(dto: RegisterOfficeDto) {
     const { invite_token, password, ...rest } = dto;
 
-    const { companyId, email } = await this.validateOfficeInviteToken(invite_token);
+    const { companyId, email } =
+      await this.validateOfficeInviteToken(invite_token);
 
-    const existingByCpf = await this.prismaService.user.findUnique({ where: { cpf: rest.cpf } });
-    if (existingByCpf) throw new UnauthorizedException('Já existe uma conta cadastrada com este CPF');
+    const existingByCpf = await this.prismaService.user.findUnique({
+      where: { cpf: rest.cpf },
+    });
+    if (existingByCpf)
+      throw new UnauthorizedException(
+        'Já existe uma conta cadastrada com este CPF',
+      );
 
     const passwordHash = await bcrypt.hash(password, 10);
 
@@ -602,7 +706,9 @@ export class AuthService {
     } catch (e: any) {
       // Race: outro OFFICE foi criado em paralelo (índice parcial único 1 OFFICE/Company)
       if (e?.code === 'P2002') {
-        throw new BadRequestException('Este escritório já possui um gerente cadastrado');
+        throw new BadRequestException(
+          'Este escritório já possui um gerente cadastrado',
+        );
       }
       throw e;
     }

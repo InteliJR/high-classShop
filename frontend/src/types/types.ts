@@ -132,6 +132,16 @@ export type UserRole = 'CUSTOMER' |'CONSULTANT' |'SPECIALIST' |'ADMIN' |'OFFICE'
 export type CivilState = 'SINGLE' |'MARRIED' |'DIVORCED' |'WIDOWED' |'SEPARATED' |'STABLE_UNION' ;
 export type SpecialityType = 'CAR' |'BOAT' |'AIRCRAFT';
 
+export interface CompanyBranding {
+  id: string;
+  name: string;
+  logo?: string | null;
+  logoUrl?: string | null;
+  color_identity?: string[];
+  primary_color?: string | null;
+  secondary_color?: string | null;
+}
+
 export interface UserProps {
   id: string;
   name: string;
@@ -149,6 +159,11 @@ export interface UserProps {
   bank?: string;
   agency?: string;
   checking_account?: string;
+  company?: CompanyBranding | null;
+  consultant?: {
+    id: string;
+    company?: CompanyBranding | null;
+  } | null;
   created_at?: Date;
 }
 

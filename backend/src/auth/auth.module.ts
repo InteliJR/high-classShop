@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { NotificationModule } from 'src/features/notifications/notification.module';
+import { AwsModule } from 'src/aws/aws.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { NotificationModule } from 'src/features/notifications/notification.modu
       global: true,
     }),
     NotificationModule,
+    AwsModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, AuthGuard],

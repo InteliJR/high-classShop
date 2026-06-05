@@ -1,6 +1,21 @@
 import { Exclude, Expose } from 'class-transformer';
 import { $Enums, User as PrismaUser, UserRole } from '@prisma/client';
 
+type CompanyBranding = {
+  id: string;
+  name: string;
+  logo: string | null;
+  logoUrl?: string | null;
+  color_identity?: string[];
+  primary_color?: string | null;
+  secondary_color?: string | null;
+};
+
+type ConsultantBranding = {
+  id: string;
+  company: CompanyBranding | null;
+};
+
 /**
  * User Entity com exclusão automática de campos sensíveis
  * Usa class-transformer para omitir password_hash automaticamente
@@ -81,6 +96,12 @@ export class UserEntity
   @Expose()
   checking_account: string | null;
 
+  @Expose()
+  company?: CompanyBranding | null;
+
+  @Expose()
+  consultant?: ConsultantBranding | null;
+
   @Exclude()
   password_hash: string;
 
@@ -90,15 +111,35 @@ export class UserEntity
   @Exclude()
   updated_at: Date;
 
-  constructor(partial: Partial<PrismaUser>) {
+  constructor(
+    partial: Partial<PrismaUser> & {
+      company?: CompanyBranding | null;
+      consultant?: ConsultantBranding | null;
+    },
+  ) {
     Object.assign(this, partial);
   }
 
   /**
    * Converte User do Prisma para UserEntity (omitindo campos sensíveis)
    */
-  static fromPrisma(user: PrismaUser): UserEntity {
-    return new UserEntity(user);
+  static fromPrisma(
+    user: PrismaUser & {
+      company?: CompanyBranding | null;
+      consultant?: ConsultantBranding | null;
+    },
+  ): UserEntity {
+    return new UserEntity({
+      ...user,
+      company: UserEntity.withBrandingColors(user.company),
+      consultant: user.consultant
+        ? {
+            ...user.consultant,
+            company:
+              UserEntity.withBrandingColors(user.consultant.company) ?? null,
+          }
+        : user.consultant,
+    });
   }
 
   /**
@@ -106,5 +147,20 @@ export class UserEntity
    */
   static fromPrismaArray(users: PrismaUser[]): UserEntity[] {
     return users.map((user) => new UserEntity(user));
+  }
+
+  private static withBrandingColors(
+    company?: CompanyBranding | null,
+  ): CompanyBranding | null | undefined {
+    if (!company) return company;
+
+    return {
+      ...company,
+      logoUrl: company.logoUrl ?? null,
+      primary_color:
+        company.primary_color ?? company.color_identity?.[0] ?? null,
+      secondary_color:
+        company.secondary_color ?? company.color_identity?.[1] ?? null,
+    };
   }
 }

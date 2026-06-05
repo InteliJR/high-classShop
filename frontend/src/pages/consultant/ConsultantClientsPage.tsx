@@ -188,7 +188,7 @@ export default function ConsultantClientsPage() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setClientForProcess(client)}
-                        className="text-xs bg-black text-white px-3 py-1.5 rounded hover:bg-gray-800 transition-colors whitespace-nowrap"
+                        className="text-xs bg-brand-primary text-brand-primary-fg px-3 py-1.5 rounded hover:opacity-90 transition-colors whitespace-nowrap"
                       >
                         + Processo
                       </button>

@@ -45,6 +45,10 @@ type CreateCompanyDto = {
   color_identity?: string[];
 };
 
+// Payload de update — mesmos campos do create, todos opcionais. Inclui `logo`
+// em base64 quando o usuário trocar a imagem do escritório.
+export type UpdateCompanyPayload = Partial<CreateCompanyDto>;
+
 // Função auxiliar para extrair mensagem de erro
 function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
@@ -86,7 +90,7 @@ export async function createCompany(data: CreateCompanyDto): Promise<Company> {
 // Atualiza os dados de uma empresa existente.
 export async function updateCompany(
   id: string,
-  data: Partial<Company>,
+  data: UpdateCompanyPayload,
 ): Promise<Company> {
   try {
     const { data: updatedCompany } = await api.put<Company>(

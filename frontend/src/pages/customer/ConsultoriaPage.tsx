@@ -274,7 +274,7 @@ export default function ConsultoriaPage() {
           agendar uma consultoria.
         </p>
         <div className="flex flex-wrap items-center gap-3">
-          <span className="rounded-md bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+          <span className="rounded-md bg-brand-primary/10 px-3 py-1 text-sm font-medium text-brand-primary">
             {selectedTypeLabel
               ? `Consultoria de ${selectedTypeLabel}`
               : "Selecione uma categoria"}
@@ -314,7 +314,7 @@ export default function ConsultoriaPage() {
           <div key={group.type} className="space-y-6">
             {/* Category Header */}
             <div className="flex items-center gap-4 border-b-2 border-gray-200 pb-4">
-              <div className="p-3 bg-primary/10 rounded-full text-primary">
+              <div className="p-3 bg-brand-primary/10 rounded-full text-brand-primary">
                 {group.icon}
               </div>
               <h2 className="text-2xl font-bold text-gray-900">

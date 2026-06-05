@@ -117,6 +117,7 @@ async function main() {
         logo: companyMock.logo ?? null,
         description: companyMock.description ?? null,
         commission_rate: companyMock.commission_rate ?? null,
+        color_identity: companyMock.color_identity ?? [],
       },
     });
 
@@ -165,6 +166,17 @@ async function main() {
     console.log(
       `  ➡️  Created user: ${user.email} (ID: ${user.id})${companyInfo}`,
     );
+  }
+
+  const demoConsultantId = createdUsers.get('marcos.consultor@example.com');
+  const demoCustomerId = createdUsers.get('joao.cliente@example.com');
+
+  if (demoConsultantId && demoCustomerId) {
+    await prisma.user.update({
+      where: { id: demoCustomerId },
+      data: { consultant_id: demoConsultantId },
+    });
+    console.log('  ✅ Linked demo customer to demo consultant');
   }
 
   // Get specialist IDs
