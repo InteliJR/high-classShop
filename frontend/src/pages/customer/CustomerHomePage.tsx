@@ -81,7 +81,7 @@ export default function CustomerHomePage() {
               </div>
             </div>
             
-            <button className="mt-4 px-6 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary/90 transition-colors">
+            <button className="mt-4 px-6 py-3 bg-brand-primary text-brand-primary-fg font-semibold rounded-lg hover:opacity-90 transition-colors">
               Explorar Agora
             </button>
           </div>
@@ -111,7 +111,7 @@ export default function CustomerHomePage() {
               <p>✓ Agendamento flexível</p>
             </div>
             
-            <button className="mt-4 px-6 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary/90 transition-colors">
+            <button className="mt-4 px-6 py-3 bg-brand-primary text-brand-primary-fg font-semibold rounded-lg hover:opacity-90 transition-colors">
               Agendar Consultoria
             </button>
           </div>

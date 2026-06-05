@@ -12,6 +12,8 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { UserEntity } from './entities/user.entity';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from 'src/shared/decorators/public.decorator';
+import { S3Service } from 'src/aws/s3.service';
+import { resolveCompanyLogoUrl } from './utils/company-logo.util';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -26,6 +28,7 @@ export class AuthGuard implements CanActivate {
     private readonly jwtService: JwtService,
     private readonly prismaService: PrismaService,
     private readonly reflector: Reflector,
+    private readonly s3Service: S3Service,
   ) {}
 
   // Implementar a função de can activate do guard
@@ -45,7 +48,10 @@ export class AuthGuard implements CanActivate {
     if (!token) {
       // Throttle dos logs para evitar spam
       const now = Date.now();
-      if (this.verboseAuthLogs && now - this.lastNoTokenLogTime > this.LOG_THROTTLE_MS) {
+      if (
+        this.verboseAuthLogs &&
+        now - this.lastNoTokenLogTime > this.LOG_THROTTLE_MS
+      ) {
         this.logger.debug(
           `[AuthGuard] Token não fornecido em requisição protegida (${request.method} ${request.url})`,
         );
@@ -65,6 +71,29 @@ export class AuthGuard implements CanActivate {
           id: payload.sub,
           email: payload.email,
         },
+        include: {
+          company: {
+            select: {
+              id: true,
+              name: true,
+              logo: true,
+              color_identity: true,
+            },
+          },
+          consultant: {
+            select: {
+              id: true,
+              company: {
+                select: {
+                  id: true,
+                  name: true,
+                  logo: true,
+                  color_identity: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       if (!user) {
@@ -82,10 +111,39 @@ export class AuthGuard implements CanActivate {
         throw new UnauthorizedException('Conta desativada');
       }
 
-      request['user'] = UserEntity.fromPrisma(user);
+      // Gera signed URL do logo (S3) para o branding do header/sidebar do frontend.
+      const [companyLogoUrl, consultantCompanyLogoUrl] = await Promise.all([
+        resolveCompanyLogoUrl(this.s3Service, user.company?.logo ?? null),
+        resolveCompanyLogoUrl(
+          this.s3Service,
+          user.consultant?.company?.logo ?? null,
+        ),
+      ]);
+
+      const enrichedUser = {
+        ...user,
+        company: user.company
+          ? { ...user.company, logoUrl: companyLogoUrl }
+          : user.company,
+        consultant: user.consultant
+          ? {
+              ...user.consultant,
+              company: user.consultant.company
+                ? {
+                    ...user.consultant.company,
+                    logoUrl: consultantCompanyLogoUrl,
+                  }
+                : user.consultant.company,
+            }
+          : user.consultant,
+      };
+
+      request['user'] = UserEntity.fromPrisma(enrichedUser);
     } catch (error) {
       if (this.verboseAuthLogs) {
-        this.logger.warn(`[AuthGuard] Falha ao verificar token: ${error?.message}`);
+        this.logger.warn(
+          `[AuthGuard] Falha ao verificar token: ${error?.message}`,
+        );
       }
       throw new UnauthorizedException('Unauthorized');
     }
