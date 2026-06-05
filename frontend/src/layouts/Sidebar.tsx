@@ -18,7 +18,7 @@ import Logo from "../assets/logo_brokerage.png";
 import { useIsMobile } from "../hooks/use-is-mobile";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../store/authStateManager";
-import { getLogoSource, getUserCompany } from "../utils/branding";
+import { resolveCompanyLogo, getUserCompany } from "../utils/branding";
 
 export default function Sidebar() {
   const { isSidebarCollapsed, setSidebarCollapsed } = useContext(AppContext);
@@ -26,7 +26,7 @@ export default function Sidebar() {
   const location = useLocation();
   const user = useAuth((state) => state.user);
   const company = getUserCompany(user);
-  const brandLogo = getLogoSource(company?.logo) ?? Logo;
+  const brandLogo = resolveCompanyLogo(company) ?? Logo;
 
   // Lista de links por cargo
   const links = [];
@@ -175,7 +175,7 @@ export default function Sidebar() {
               : "translate-x-0 opacity-100"
           }
           ${isMobile ? "w-2/5 fixed h-full" : "w-64 min-h-screen"}
-          top-0 left-0 transition-normal ease-out duration-300 z-50 fixed text-white
+          top-0 left-0 transition-normal ease-out duration-300 z-50 fixed text-brand-secondary-fg
         `}
         style={{ backgroundColor: "var(--brand-secondary)" }}
       >
@@ -208,8 +208,8 @@ export default function Sidebar() {
             onClick={() => { if (isMobile) setSidebarCollapsed(false); }}
             className={`w-full flex gap-3 items-center p-3 rounded-md transition-colors ${
               location.pathname === link.to
-                ? "text-white"
-                : "text-gray-300 hover:bg-white/10 hover:text-white"
+                ? "text-brand-primary-fg"
+                : "text-gray-300 hover:bg-white/10 hover:text-brand-secondary-fg"
             }`}
             style={
               location.pathname === link.to

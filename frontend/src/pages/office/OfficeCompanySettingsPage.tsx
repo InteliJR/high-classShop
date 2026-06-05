@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { officeService, type OfficeCompany } from "../../services/office";
 import Button from "../../components/ui/button";
+import { resolveCompanyLogo } from "../../utils/branding";
 
 const DEFAULT_COLORS = ["#1a1a1a", "#3b82f6", "#10b981", "#f59e0b"];
 
@@ -59,9 +60,14 @@ export default function OfficeCompanySettingsPage() {
     setUploading(true);
     setMsg(null);
     try {
-      const r = await officeService.uploadLogo(file);
-      const updated = r as { logo: string };
-      if (company) setCompany({ ...company, logo: updated.logo });
+      const updated = await officeService.uploadLogo(file);
+      if (company) {
+        setCompany({
+          ...company,
+          logo: updated.logo,
+          logoUrl: updated.logoUrl,
+        });
+      }
       setMsg({ ok: true, text: "Logo enviado." });
     } catch (err) {
       setMsg({
@@ -97,11 +103,20 @@ export default function OfficeCompanySettingsPage() {
       <section className="bg-white p-6 rounded-lg shadow mb-6">
         <h2 className="text-lg font-semibold mb-4">Logo</h2>
         <div className="flex items-center gap-4">
-          {company.logo && (
-            <div className="w-24 h-24 border border-gray-200 rounded overflow-hidden bg-gray-50 flex items-center justify-center text-xs text-gray-400">
-              {company.logo}
-            </div>
-          )}
+          {(() => {
+            const src = resolveCompanyLogo(company);
+            return src ? (
+              <img
+                src={src}
+                alt={`Logo ${company.name}`}
+                className="w-24 h-24 border border-gray-200 rounded object-contain bg-gray-50"
+              />
+            ) : (
+              <div className="w-24 h-24 border border-dashed border-gray-300 rounded bg-gray-50 flex items-center justify-center text-xs text-gray-400">
+                Sem logo
+              </div>
+            );
+          })()}
           <input
             type="file"
             accept="image/png,image/jpeg,image/webp,image/svg+xml"

@@ -5,6 +5,7 @@ type CompanyBranding = {
   id: string;
   name: string;
   logo: string | null;
+  logoUrl?: string | null;
   color_identity?: string[];
   primary_color?: string | null;
   secondary_color?: string | null;
@@ -155,6 +156,7 @@ export class UserEntity
 
     return {
       ...company,
+      logoUrl: company.logoUrl ?? null,
       primary_color:
         company.primary_color ?? company.color_identity?.[0] ?? null,
       secondary_color:

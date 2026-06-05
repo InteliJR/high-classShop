@@ -6,7 +6,7 @@ import { useAuth } from "../store/authStateManager";
 import { AppContext } from "../contexts/AppContext";
 import { useNavigate } from "react-router-dom";
 import UserDropdown from "../components/ui/UserDropdown";
-import { getLogoSource, getUserCompany } from "../utils/branding";
+import { resolveCompanyLogo, getUserCompany } from "../utils/branding";
 
 export default function Header() {
   const { isSidebarCollapsed, setSidebarCollapsed } = useContext(AppContext);
@@ -14,7 +14,7 @@ export default function Header() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const company = getUserCompany(user);
-  const brandLogo = getLogoSource(company?.logo) ?? Logo;
+  const brandLogo = resolveCompanyLogo(company) ?? Logo;
 
   // Lista de itens do menu para visitantes
   const menuItems = [
@@ -26,7 +26,7 @@ export default function Header() {
   return (
     <>
       <header
-        className={`w-full sticky flex h-24 text-white z-50
+        className={`w-full sticky flex h-24 text-brand-primary-fg z-50
           justify-end items-center px-6 sm:px-18 ${
             !isMobile && !isSidebarCollapsed && ""
           }`}

@@ -19,6 +19,13 @@
   --color-button-muted: #C1C7CD;
 
   --color-text-dark: #000000;
+
+  /* Tokens de whitelabel — leem CSS vars setadas pelo ThemeProvider em runtime.
+     O fallback garante que telas neutras (admin/specialist) usem a marca padrão. */
+  --color-brand-primary: var(--brand-primary, #3C3C3C);
+  --color-brand-primary-fg: var(--brand-primary-fg, #FFFFFF);
+  --color-brand-secondary: var(--brand-secondary, #1C1C1C);
+  --color-brand-secondary-fg: var(--brand-secondary-fg, #FFFFFF);
 }
 
 @layer components {
@@ -34,6 +41,8 @@
 :root {
   --brand-primary: #3C3C3C;
   --brand-secondary: #1C1C1C;
+  --brand-primary-fg: #FFFFFF;
+  --brand-secondary-fg: #FFFFFF;
 
   /* Fontes da plataforma */
   font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;

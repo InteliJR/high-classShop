@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CompaniesService } from './companies.service';
 import { CompaniesController } from './companies.controller';
 import { AwsModule } from 'src/aws/aws.module';
+import { LogoSanitizerService } from 'src/shared/services/logo-sanitizer.service';
 
 @Module({
   imports: [
@@ -17,6 +18,6 @@ import { AwsModule } from 'src/aws/aws.module';
     }),
   ],
   controllers: [CompaniesController],
-  providers: [CompaniesService],
+  providers: [CompaniesService, LogoSanitizerService],
 })
 export class CompaniesModule {}

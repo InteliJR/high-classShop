@@ -11,6 +11,8 @@ import { UpdateCompanyDto } from './dto/update-company.dto';
 import { Prisma } from '@prisma/client';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { SesService } from 'src/aws/ses.service';
+import { S3Service } from 'src/aws/s3.service';
+import { LogoSanitizerService } from 'src/shared/services/logo-sanitizer.service';
 
 @Injectable()
 export class CompaniesService {
@@ -18,7 +20,44 @@ export class CompaniesService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private sesService: SesService,
+    private s3Service: S3Service,
+    private logoSanitizer: LogoSanitizerService,
   ) {}
+
+  // Heurística: chave S3 (gerada por nós) sempre começa com `companies/`.
+  // Logos legados em base64 não têm prefixo de path.
+  private isS3Key(value: string | null | undefined): value is string {
+    return !!value && value.startsWith('companies/');
+  }
+
+  // Resolve a URL pública (signed) do logo quando ele está no S3.
+  // Legados em base64 ficam com logoUrl=null — o frontend cai no fallback.
+  private async resolveLogoUrl(logo: string | null): Promise<string | null> {
+    if (!this.isS3Key(logo)) return null;
+    return this.s3Service.getSignedUrl(logo);
+  }
+
+  // Sobe um novo logo (base64) para o S3 e remove o anterior (best-effort).
+  // Retorna a key salva para persistir em `company.logo`.
+  private async processLogoUpload(
+    companyId: string,
+    base64: string,
+    previousKey?: string | null,
+  ): Promise<string> {
+    const sanitized = this.logoSanitizer.sanitizeBase64(base64);
+    const key = `companies/${companyId}/logo-${Date.now()}.${sanitized.extension}`;
+    await this.s3Service.uploadBuffer(
+      sanitized.buffer,
+      key,
+      sanitized.contentType,
+    );
+
+    if (previousKey && this.isS3Key(previousKey) && previousKey !== key) {
+      this.s3Service.deleteObject(previousKey).catch(() => {});
+    }
+
+    return key;
+  }
 
   // Busca todas as empresas com contagem de consultores.
   async findAll() {
@@ -33,13 +72,17 @@ export class CompaniesService {
 
     const companiesWithConsultantCount = await Promise.all(
       companies.map(async (c) => {
-        const consultants_count = await this.prisma.user.count({
-          where: { company_id: c.id, role: 'CONSULTANT' },
-        });
+        const [consultants_count, logoUrl] = await Promise.all([
+          this.prisma.user.count({
+            where: { company_id: c.id, role: 'CONSULTANT' },
+          }),
+          this.resolveLogoUrl(c.logo),
+        ]);
         return {
           ...c,
           commission_rate: c.commission_rate ? Number(c.commission_rate) : null,
           consultants_count,
+          logoUrl,
           _count: undefined,
         };
       }),
@@ -49,9 +92,10 @@ export class CompaniesService {
   }
 
   // Cria uma nova empresa na base de dados.
+  // Se `logo` (base64) vier no payload, faz upload pro S3 após o insert
+  // (precisamos do id da empresa pra montar a key `companies/<id>/...`).
   async create(data: CreateCompanyDto) {
     try {
-      // Verifica se já existe empresa com o mesmo CNPJ
       const existingCompany = await this.prisma.company.findUnique({
         where: { cnpj: data.cnpj },
       });
@@ -62,13 +106,26 @@ export class CompaniesService {
         );
       }
 
-      return await this.prisma.company.create({ data });
+      const { logo: logoBase64, ...rest } = data;
+      const created = await this.prisma.company.create({ data: rest });
+
+      if (logoBase64) {
+        const key = await this.processLogoUpload(created.id, logoBase64, null);
+        await this.prisma.company.update({
+          where: { id: created.id },
+          data: { logo: key },
+        });
+      }
+
+      return this.findOne(created.id);
     } catch (error) {
-      if (error instanceof ConflictException) {
+      if (
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
 
-      // Tratamento de erros do Prisma
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
           throw new ConflictException(
@@ -83,26 +140,34 @@ export class CompaniesService {
     }
   }
 
-  // Retorna uma única empresa pelo ID.
+  // Retorna uma única empresa pelo ID com logoUrl resolvida (signed S3).
   async findOne(id: string) {
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) {
       throw new NotFoundException('Empresa não encontrada');
     }
+    const logoUrl = await this.resolveLogoUrl(company.logo);
     return {
       ...company,
       commission_rate: company.commission_rate
         ? Number(company.commission_rate)
         : null,
+      logoUrl,
     };
   }
 
   // Atualiza os dados de uma empresa existente.
+  // Se `logo` (base64) vier no payload, faz upload pro S3 e remove o anterior.
   async update(id: string, data: UpdateCompanyDto) {
     try {
-      await this.findOne(id);
+      const current = await this.prisma.company.findUnique({
+        where: { id },
+        select: { id: true, logo: true },
+      });
+      if (!current) {
+        throw new NotFoundException('Empresa não encontrada');
+      }
 
-      // Se está atualizando o CNPJ, verifica se já existe outro com o mesmo CNPJ
       if (data.cnpj) {
         const existingCompany = await this.prisma.company.findFirst({
           where: {
@@ -118,11 +183,24 @@ export class CompaniesService {
         }
       }
 
-      return await this.prisma.company.update({ where: { id }, data });
+      const { logo: logoBase64, ...rest } = data;
+      const updateData: Prisma.CompanyUpdateInput = { ...rest };
+
+      if (logoBase64) {
+        updateData.logo = await this.processLogoUpload(
+          id,
+          logoBase64,
+          current.logo,
+        );
+      }
+
+      await this.prisma.company.update({ where: { id }, data: updateData });
+      return this.findOne(id);
     } catch (error) {
       if (
         error instanceof NotFoundException ||
-        error instanceof ConflictException
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
       ) {
         throw error;
       }
@@ -141,9 +219,18 @@ export class CompaniesService {
     }
   }
 
-  // Apaga uma empresa pelo ID.
+  // Apaga uma empresa pelo ID + limpa o logo no S3 (best-effort).
   async remove(id: string) {
-    await this.findOne(id);
+    const company = await this.prisma.company.findUnique({
+      where: { id },
+      select: { id: true, logo: true },
+    });
+    if (!company) {
+      throw new NotFoundException('Empresa não encontrada');
+    }
+    if (this.isS3Key(company.logo)) {
+      this.s3Service.deleteObject(company.logo).catch(() => {});
+    }
     await this.prisma.company.delete({ where: { id } });
     return { ok: true };
   }

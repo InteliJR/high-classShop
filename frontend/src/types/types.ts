@@ -136,6 +136,7 @@ export interface CompanyBranding {
   id: string;
   name: string;
   logo?: string | null;
+  logoUrl?: string | null;
   color_identity?: string[];
   primary_color?: string | null;
   secondary_color?: string | null;

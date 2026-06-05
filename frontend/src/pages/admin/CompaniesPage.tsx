@@ -21,6 +21,7 @@ import TrashIcon from "../../assets/icons/trash.svg";
 import Modal from "../../components/ui/Modal";
 import NewCompanyForm from "./NewCompanyForm";
 import { AppContext } from "../../contexts/AppContext";
+import { resolveCompanyLogo } from "../../utils/branding";
 import {
   ChevronDown,
   ChevronUp,
@@ -303,17 +304,20 @@ export default function CompaniesPage() {
                           <ChevronDown className="w-5 h-5 text-gray-500" />
                         )}
                       </button>
-                      {company.logo ? (
-                        <img
-                          src={`data:image/png;base64,${company.logo}`}
-                          alt={company.name}
-                          className="h-8 w-24 object-contain"
-                        />
-                      ) : (
-                        <div className="h-8 w-24 flex items-center justify-center bg-gray-200 rounded text-xs text-gray-500">
-                          Sem Logo
-                        </div>
-                      )}
+                      {(() => {
+                        const logoSrc = resolveCompanyLogo(company);
+                        return logoSrc ? (
+                          <img
+                            src={logoSrc}
+                            alt={company.name}
+                            className="h-8 w-24 object-contain"
+                          />
+                        ) : (
+                          <div className="h-8 w-24 flex items-center justify-center bg-gray-200 rounded text-xs text-gray-500">
+                            Sem Logo
+                          </div>
+                        );
+                      })()}
                       <div>
                         <span className="font-medium">{company.name}</span>
                         <span className="block text-xs text-gray-400">

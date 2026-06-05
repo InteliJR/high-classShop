@@ -12,6 +12,7 @@ import { SesService } from 'src/aws/ses.service';
 import { S3Service } from 'src/aws/s3.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { LogoSanitizerService } from 'src/shared/services/logo-sanitizer.service';
+import { resolveCompanyLogoUrl } from 'src/auth/utils/company-logo.util';
 import { InviteConsultantDto } from './dto/invite-consultant.dto';
 import { OfficeUpdateCompanyDto } from './dto/update-company.dto';
 import { OfficeUpdateConsultantDto } from './dto/update-consultant.dto';
@@ -300,9 +301,11 @@ export class OfficeService {
     const companyId = this.resolveCompanyId(scope, requestedCompanyId);
     const company = await this.prisma.company.findUnique({ where: { id: companyId } });
     if (!company) throw new NotFoundException('Escritório não encontrado');
+    const logoUrl = await resolveCompanyLogoUrl(this.s3, company.logo);
     return {
       ...company,
       commission_rate: company.commission_rate ? Number(company.commission_rate) : null,
+      logoUrl,
     };
   }
 
@@ -345,9 +348,11 @@ export class OfficeService {
       );
     }
 
+    const logoUrl = await resolveCompanyLogoUrl(this.s3, updated.logo);
     return {
       ...updated,
       commission_rate: updated.commission_rate ? Number(updated.commission_rate) : null,
+      logoUrl,
     };
   }
 
@@ -382,6 +387,7 @@ export class OfficeService {
       this.s3.deleteObject(previousKey).catch(() => {});
     }
 
-    return updated;
+    const logoUrl = await resolveCompanyLogoUrl(this.s3, updated.logo);
+    return { ...updated, logoUrl };
   }
 }

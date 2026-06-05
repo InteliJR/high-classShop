@@ -23,6 +23,8 @@ import { jwtConstants } from './constants';
 import { UserEntity } from './entities/user.entity';
 import { UserRole } from '@prisma/client';
 import { NotificationService } from 'src/features/notifications/notification.service';
+import { S3Service } from 'src/aws/s3.service';
+import { resolveCompanyLogoUrl } from './utils/company-logo.util';
 
 @Injectable()
 export class AuthService {
@@ -30,6 +32,7 @@ export class AuthService {
     private readonly prismaService: PrismaService,
     private jwtService: JwtService,
     private readonly notificationService: NotificationService,
+    private readonly s3Service: S3Service,
   ) {}
 
   async register(data: UserRegisterDto) {
@@ -212,7 +215,7 @@ export class AuthService {
   }
 
   private async getUserWithBranding(userId: string) {
-    return this.prismaService.user.findUniqueOrThrow({
+    const user = await this.prismaService.user.findUniqueOrThrow({
       where: { id: userId },
       include: {
         company: {
@@ -238,6 +241,32 @@ export class AuthService {
         },
       },
     });
+
+    const [companyLogoUrl, consultantCompanyLogoUrl] = await Promise.all([
+      resolveCompanyLogoUrl(this.s3Service, user.company?.logo ?? null),
+      resolveCompanyLogoUrl(
+        this.s3Service,
+        user.consultant?.company?.logo ?? null,
+      ),
+    ]);
+
+    return {
+      ...user,
+      company: user.company
+        ? { ...user.company, logoUrl: companyLogoUrl }
+        : user.company,
+      consultant: user.consultant
+        ? {
+            ...user.consultant,
+            company: user.consultant.company
+              ? {
+                  ...user.consultant.company,
+                  logoUrl: consultantCompanyLogoUrl,
+                }
+              : user.consultant.company,
+          }
+        : user.consultant,
+    };
   }
 
   // Criação do accessToken e do usuário

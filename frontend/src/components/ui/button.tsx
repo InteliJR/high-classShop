@@ -1,16 +1,16 @@
 import React from 'react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'solid' | 'light' | 'muted';
+  variant?: 'solid' | 'light' | 'muted' | 'brand';
 }
 
 export default function Button({
   children,
   className,
   variant = 'solid',
-  ...props 
+  ...props
 }: ButtonProps) {
-  
+
   const buttonStyles = `
     font-semibold py-2 px-4 rounded-lg
     cursor-pointer transition-all duration-200
@@ -19,19 +19,25 @@ export default function Button({
     active:scale-95
   `;
 
-  const variantStyles = { 
+  const variantStyles = {
     solid: `
       bg-button-solid text-white
       hover:bg-[--color-button-solid-hover]
-      focus:ring-[--color-button-solid]`, 
+      focus:ring-[--color-button-solid]`,
     light: `
       bg-white text-gray-900 border border-gray-300
       hover:bg-gray-100
-      focus:ring-gray-400`, 
+      focus:ring-gray-400`,
     muted: `
       bg-gray-300 text-gray-900
       hover:bg-gray-400
       focus:ring-gray-300`,
+    // 'brand' consome os tokens whitelabel — fundo = cor primária do escritório
+    // e texto auto-derivado por contraste WCAG via ThemeProvider.
+    brand: `
+      bg-brand-primary text-brand-primary-fg
+      hover:opacity-90
+      focus:ring-brand-primary`,
   };
 
   return (

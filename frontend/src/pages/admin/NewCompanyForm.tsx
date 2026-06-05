@@ -7,6 +7,15 @@ import {
   updateCompany,
   type Company,
 } from "../../services/companies.service";
+import { resolveCompanyLogo } from "../../utils/branding";
+
+const LOGO_MAX_BYTES = 2 * 1024 * 1024; // 2MB
+const LOGO_ALLOWED_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/svg+xml",
+];
 
 interface NewCompanyFormProps {
   onSuccess: () => void;
@@ -145,6 +154,17 @@ export default function NewCompanyForm({
       return;
     }
 
+    if (logo) {
+      if (!LOGO_ALLOWED_TYPES.includes(logo.type)) {
+        setError("Logo inválido. Aceitos: PNG, JPEG, WebP ou SVG.");
+        return;
+      }
+      if (logo.size > LOGO_MAX_BYTES) {
+        setError("Logo excede o limite de 2MB.");
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     setError(null);
 
@@ -156,8 +176,10 @@ export default function NewCompanyForm({
         ? parseFloat(commissionRate)
         : undefined;
 
+      // Converte o ficheiro selecionado para base64 — usado em create e update.
+      const logoBase64 = logo ? await fileToBase64(logo) : undefined;
+
       if (companyToEdit) {
-        // Modo de edição
         await updateCompany(companyToEdit.id, {
           name,
           cnpj: cleanCNPJ,
@@ -166,14 +188,9 @@ export default function NewCompanyForm({
           agency: agency || undefined,
           checking_account: checkingAccount || undefined,
           color_identity: colorIdentity,
+          logo: logoBase64,
         });
       } else {
-        // Modo de criação - converte logo para base64 se existir
-        let logoBase64: string | undefined;
-        if (logo) {
-          logoBase64 = await fileToBase64(logo);
-        }
-
         await createCompany({
           name,
           cnpj: cleanCNPJ,
@@ -343,6 +360,7 @@ export default function NewCompanyForm({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {colorIdentity.map((color, index) => {
             const inputId = `color_identity_${index}`;
+            const isValid = /^#[0-9a-fA-F]{6}$/.test(color);
             return (
               <div key={inputId}>
                 <label
@@ -355,9 +373,10 @@ export default function NewCompanyForm({
                   <input
                     id={inputId}
                     type="color"
-                    value={color}
+                    value={isValid ? color : "#000000"}
                     onChange={(e) => handleColorChange(index, e.target.value)}
-                    className="h-10 w-12 border border-brand-border rounded-md cursor-pointer"
+                    aria-label={`Seletor de ${COLOR_LABELS[index]}`}
+                    className="h-10 w-10 shrink-0 rounded-full border border-brand-border shadow-sm cursor-pointer p-0 bg-transparent appearance-none [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-full [&::-moz-color-swatch]:border-none [&::-moz-color-swatch]:rounded-full"
                   />
                   <input
                     type="text"
@@ -365,9 +384,19 @@ export default function NewCompanyForm({
                     onChange={(e) => handleColorChange(index, e.target.value)}
                     maxLength={7}
                     placeholder="#RRGGBB"
-                    className="flex-1 px-3 py-2 border border-brand-border rounded-md shadow-sm uppercase focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
+                    aria-invalid={!isValid}
+                    className={`min-w-0 flex-1 px-3 py-2 border rounded-md shadow-sm uppercase focus:outline-none focus:ring-2 ${
+                      isValid
+                        ? "border-brand-border focus:ring-brand-dark focus:border-brand-dark"
+                        : "border-red-400 focus:ring-red-400 focus:border-red-400"
+                    }`}
                   />
                 </div>
+                {!isValid && (
+                  <p className="mt-1 text-xs text-red-500">
+                    Formato inválido. Use #RRGGBB (ex.: #1A2B3C).
+                  </p>
+                )}
               </div>
             );
           })}
@@ -382,17 +411,38 @@ export default function NewCompanyForm({
         >
           Logo
         </label>
-        <input
-          id="logo"
-          type="file"
-          accept="image/*"
-          onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              setLogo(e.target.files[0]);
-            }
-          }}
-          className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-100 file:text-brand-dark hover:file:bg-gray-200 cursor-pointer"
-        />
+        <div className="mt-1 flex items-center gap-3">
+          {(() => {
+            const previewSrc = logo
+              ? URL.createObjectURL(logo)
+              : resolveCompanyLogo(companyToEdit ?? null);
+            return previewSrc ? (
+              <img
+                src={previewSrc}
+                alt="Pré-visualização do logo"
+                className="h-14 w-14 rounded-md object-contain border border-brand-border bg-white"
+              />
+            ) : (
+              <div className="h-14 w-14 rounded-md border border-dashed border-brand-border bg-gray-50 flex items-center justify-center text-[10px] text-gray-400 text-center px-1">
+                Sem logo
+              </div>
+            );
+          })()}
+          <input
+            id="logo"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) {
+                setLogo(e.target.files[0]);
+              }
+            }}
+            className="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-100 file:text-brand-dark hover:file:bg-gray-200 cursor-pointer"
+          />
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          PNG, JPEG, WebP ou SVG (≤2MB).
+        </p>
       </div>
 
       {/* Exibe a mensagem de erro apenas se o estado 'error' tiver algum conteúdo. */}

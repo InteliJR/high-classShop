@@ -28,24 +28,52 @@ export class LogoSanitizerService {
     if (!file?.buffer?.length) {
       throw new BadRequestException('Arquivo de logo vazio');
     }
+    return this.sanitizeBuffer(file.buffer);
+  }
 
-    const real = this.detectByMagicBytes(file.buffer);
+  /**
+   * Variante que recebe string base64 (com ou sem prefixo data:image/...;base64,).
+   * Decodifica e delega para sanitizeBuffer (mesma validação por magic bytes + SVG).
+   */
+  sanitizeBase64(base64: string): SanitizedLogo {
+    if (!base64?.length) {
+      throw new BadRequestException('Logo em base64 vazio');
+    }
+
+    const match = base64.match(/^data:image\/[\w+.-]+;base64,(.+)$/i);
+    const payload = match ? match[1] : base64;
+
+    let buffer: Buffer;
+    try {
+      buffer = Buffer.from(payload, 'base64');
+    } catch {
+      throw new BadRequestException('Base64 inválido');
+    }
+    if (!buffer.length) {
+      throw new BadRequestException('Logo em base64 vazio após decode');
+    }
+
+    return this.sanitizeBuffer(buffer);
+  }
+
+  private sanitizeBuffer(buffer: Buffer): SanitizedLogo {
+    const real = this.detectByMagicBytes(buffer);
 
     if (real === 'png') {
-      if (file.buffer.length > RASTER_LIMIT) throw new PayloadTooLargeException('Logo PNG excede 2MB');
-      return { buffer: file.buffer, contentType: 'image/png', extension: 'png' };
+      if (buffer.length > RASTER_LIMIT) throw new PayloadTooLargeException('Logo PNG excede 2MB');
+      return { buffer, contentType: 'image/png', extension: 'png' };
     }
     if (real === 'jpg') {
-      if (file.buffer.length > RASTER_LIMIT) throw new PayloadTooLargeException('Logo JPEG excede 2MB');
-      return { buffer: file.buffer, contentType: 'image/jpeg', extension: 'jpg' };
+      if (buffer.length > RASTER_LIMIT) throw new PayloadTooLargeException('Logo JPEG excede 2MB');
+      return { buffer, contentType: 'image/jpeg', extension: 'jpg' };
     }
     if (real === 'webp') {
-      if (file.buffer.length > RASTER_LIMIT) throw new PayloadTooLargeException('Logo WebP excede 2MB');
-      return { buffer: file.buffer, contentType: 'image/webp', extension: 'webp' };
+      if (buffer.length > RASTER_LIMIT) throw new PayloadTooLargeException('Logo WebP excede 2MB');
+      return { buffer, contentType: 'image/webp', extension: 'webp' };
     }
     if (real === 'svg') {
-      if (file.buffer.length > SVG_LIMIT) throw new PayloadTooLargeException('Logo SVG excede 500KB');
-      const sanitized = this.sanitizeSvg(file.buffer.toString('utf-8'));
+      if (buffer.length > SVG_LIMIT) throw new PayloadTooLargeException('Logo SVG excede 500KB');
+      const sanitized = this.sanitizeSvg(buffer.toString('utf-8'));
       return { buffer: Buffer.from(sanitized, 'utf-8'), contentType: 'image/svg+xml', extension: 'svg' };
     }
 

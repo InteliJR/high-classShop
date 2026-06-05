@@ -12,6 +12,8 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { UserEntity } from './entities/user.entity';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from 'src/shared/decorators/public.decorator';
+import { S3Service } from 'src/aws/s3.service';
+import { resolveCompanyLogoUrl } from './utils/company-logo.util';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -26,6 +28,7 @@ export class AuthGuard implements CanActivate {
     private readonly jwtService: JwtService,
     private readonly prismaService: PrismaService,
     private readonly reflector: Reflector,
+    private readonly s3Service: S3Service,
   ) {}
 
   // Implementar a função de can activate do guard
@@ -108,7 +111,34 @@ export class AuthGuard implements CanActivate {
         throw new UnauthorizedException('Conta desativada');
       }
 
-      request['user'] = UserEntity.fromPrisma(user);
+      // Gera signed URL do logo (S3) para o branding do header/sidebar do frontend.
+      const [companyLogoUrl, consultantCompanyLogoUrl] = await Promise.all([
+        resolveCompanyLogoUrl(this.s3Service, user.company?.logo ?? null),
+        resolveCompanyLogoUrl(
+          this.s3Service,
+          user.consultant?.company?.logo ?? null,
+        ),
+      ]);
+
+      const enrichedUser = {
+        ...user,
+        company: user.company
+          ? { ...user.company, logoUrl: companyLogoUrl }
+          : user.company,
+        consultant: user.consultant
+          ? {
+              ...user.consultant,
+              company: user.consultant.company
+                ? {
+                    ...user.consultant.company,
+                    logoUrl: consultantCompanyLogoUrl,
+                  }
+                : user.consultant.company,
+            }
+          : user.consultant,
+      };
+
+      request['user'] = UserEntity.fromPrisma(enrichedUser);
     } catch (error) {
       if (this.verboseAuthLogs) {
         this.logger.warn(
