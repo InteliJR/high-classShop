@@ -42,7 +42,10 @@ interface ExpandedCompanyState {
   error: string | null;
 }
 
+type InviteRole = "CONSULTANT" | "OFFICE";
+
 interface InviteState {
+  role: InviteRole;
   companyId: string;
   companyName: string;
   email: string;
@@ -159,8 +162,9 @@ export default function CompaniesPage() {
     [expandedCompanies, loadConsultants],
   );
 
-  const openInviteModal = useCallback((company: Company) => {
+  const openInviteModal = useCallback((company: Company, role: InviteRole = "CONSULTANT") => {
     setInviteState({
+      role,
       companyId: company.id,
       companyName: company.name,
       email: "",
@@ -174,16 +178,25 @@ export default function CompaniesPage() {
   const handleSendInvite = useCallback(async () => {
     if (!inviteState) return;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(inviteState.email.trim())) {
+    const trimmedEmail = inviteState.email.trim();
+    if (!emailRegex.test(trimmedEmail)) {
       setInviteState((prev) => prev ? { ...prev, error: "Informe um e-mail válido." } : null);
       return;
     }
     setInviteState((prev) => prev ? { ...prev, isLoading: true, error: null } : null);
     try {
-      const result = await inviteConsultant(inviteState.companyId, inviteState.email.trim());
+      const result = inviteState.role === "OFFICE"
+        ? await adminInviteOffice(inviteState.companyId, trimmedEmail.toLowerCase())
+        : await inviteConsultant(inviteState.companyId, trimmedEmail);
       setInviteState((prev) => prev ? { ...prev, isLoading: false, inviteLink: result.inviteLink } : null);
     } catch (err) {
-      setInviteState((prev) => prev ? { ...prev, isLoading: false, error: (err as Error).message || "Erro ao gerar convite." } : null);
+      const e = err as {
+        friendlyMessage?: string;
+        response?: { data?: { message?: string } };
+        message?: string;
+      };
+      const message = e.friendlyMessage || e.response?.data?.message || e.message || "Erro ao gerar convite.";
+      setInviteState((prev) => prev ? { ...prev, isLoading: false, error: message } : null);
     }
   }, [inviteState]);
 
@@ -367,26 +380,7 @@ export default function CompaniesPage() {
                     <div className="flex justify-end items-center gap-4 text-gray-400">
                       <button
                         title="Convidar gerente do escritório (OFFICE)"
-                        onClick={async () => {
-                          const email = window.prompt(
-                            `Convidar gerente para ${company.name} (e-mail):`,
-                          );
-                          if (!email) return;
-                          try {
-                            await adminInviteOffice(company.id, email.trim().toLowerCase());
-                            alert("Convite enviado!");
-                          } catch (e) {
-                            const err = e as {
-                              friendlyMessage?: string;
-                              response?: { data?: { message?: string } };
-                            };
-                            alert(
-                              err.friendlyMessage ||
-                                err.response?.data?.message ||
-                                "Erro ao convidar gerente",
-                            );
-                          }
-                        }}
+                        onClick={() => openInviteModal(company, "OFFICE")}
                         className="text-xs font-medium bg-gray-800 text-white px-2 py-1 rounded hover:bg-black"
                       >
                         + Gerente
@@ -570,11 +564,13 @@ export default function CompaniesPage() {
         </div>
       </Modal>
 
-      {/* Modal de convite de consultor */}
+      {/* Modal de convite de consultor / gerente */}
       <Modal isOpen={!!inviteState} onClose={() => setInviteState(null)}>
         {inviteState && (
           <div className="space-y-4">
-            <h2 className="h2-style">Convidar Consultor</h2>
+            <h2 className="h2-style">
+              {inviteState.role === "OFFICE" ? "Convidar Gerente" : "Convidar Consultor"}
+            </h2>
             <p className="text-sm text-gray-500">
               Escritório: <strong>{inviteState.companyName}</strong>
             </p>
@@ -582,7 +578,7 @@ export default function CompaniesPage() {
             {inviteState.inviteLink ? (
               <div className="space-y-3">
                 <p className="text-sm text-green-700 font-medium">
-                  Link de convite gerado! Envie para o consultor:
+                  Link de convite gerado! Envie para o {inviteState.role === "OFFICE" ? "gerente" : "consultor"}:
                 </p>
                 <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
                   <span className="text-xs text-gray-700 truncate flex-1 font-mono">
@@ -611,7 +607,7 @@ export default function CompaniesPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    E-mail do consultor
+                    E-mail do {inviteState.role === "OFFICE" ? "gerente" : "consultor"}
                   </label>
                   <input
                     type="email"
@@ -619,7 +615,7 @@ export default function CompaniesPage() {
                     onChange={(e) =>
                       setInviteState((prev) => prev ? { ...prev, email: e.target.value } : null)
                     }
-                    placeholder="consultor@exemplo.com"
+                    placeholder={inviteState.role === "OFFICE" ? "gerente@exemplo.com" : "consultor@exemplo.com"}
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md"
                     autoFocus
                   />
