@@ -4,6 +4,7 @@ import {
   Building2,
   Users,
   UserCog,
+  UserPlus,
   Car,
   Ship,
   Plane,
@@ -149,6 +150,35 @@ export default function Sidebar() {
           },
           {
             to: "/admin/my-company",
+            label: "Minha Empresa",
+            icon: <Building2 size={20} />,
+          },
+        );
+        break;
+      case "OFFICE":
+        links.push(
+          {
+            to: "/office/dashboard",
+            label: "Dashboard",
+            icon: <LayoutDashboard size={20} />,
+          },
+          {
+            to: "/office/consultants",
+            label: "Consultores",
+            icon: <Users size={20} />,
+          },
+          {
+            to: "/office/clients",
+            label: "Clientes",
+            icon: <UserCog size={20} />,
+          },
+          {
+            to: "/office/invite-batch",
+            label: "Convites em Lote",
+            icon: <UserPlus size={20} />,
+          },
+          {
+            to: "/office/company",
             label: "Minha Empresa",
             icon: <Building2 size={20} />,
           },
