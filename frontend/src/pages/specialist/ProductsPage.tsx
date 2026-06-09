@@ -196,6 +196,7 @@ export default function ProductsPage() {
             <table className="w-full">
               <thead className="border-b">
                 <tr className="text-left">
+                  <th className="pb-3 text-sm font-medium text-gray-600">Foto</th>
                   <th className="pb-3 text-sm font-medium text-gray-600">Marca</th>
                   <th className="pb-3 text-sm font-medium text-gray-600">Modelo</th>
                   <th className="pb-3 text-sm font-medium text-gray-600">Ano</th>
@@ -207,6 +208,23 @@ export default function ProductsPage() {
               <tbody>
                 {filteredProducts.map((product) => (
                   <tr key={product.id} className="border-b hover:bg-gray-50">
+                    <td className="py-3 pr-3">
+                      {product.imageUrl ? (
+                        <img
+                          src={product.imageUrl}
+                          alt={`${product.marca} ${product.modelo}`}
+                          className="w-16 h-16 object-cover rounded-md border border-gray-200"
+                          loading="lazy"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <div className="w-16 h-16 rounded-md border border-gray-200 bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
+                          sem foto
+                        </div>
+                      )}
+                    </td>
                     <td className="py-3">{product.marca}</td>
                     <td className="py-3">{product.modelo}</td>
                     <td className="py-3">{product.ano || "-"}</td>
