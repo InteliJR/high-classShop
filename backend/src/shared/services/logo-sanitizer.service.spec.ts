@@ -17,7 +17,9 @@ jest.mock('isomorphic-dompurify', () => ({
 import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
 import { LogoSanitizerService } from './logo-sanitizer.service';
 
-const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PNG_HEADER = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+]);
 const JPG_HEADER = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
 const WEBP_HEADER = Buffer.concat([
   Buffer.from('RIFF', 'ascii'),
@@ -35,7 +37,9 @@ describe('LogoSanitizerService', () => {
 
   // C9: PNG renomeado .svg — detectByMagicBytes pega
   it('aceita PNG por magic bytes (independente de mime)', () => {
-    const r = svc.sanitize(mkFile(Buffer.concat([PNG_HEADER, Buffer.from('rest')])));
+    const r = svc.sanitize(
+      mkFile(Buffer.concat([PNG_HEADER, Buffer.from('rest')])),
+    );
     expect(r.extension).toBe('png');
   });
 
@@ -56,13 +60,17 @@ describe('LogoSanitizerService', () => {
   });
 
   it('rejeita buffer vazio', () => {
-    expect(() => svc.sanitize(mkFile(Buffer.alloc(0)))).toThrow(BadRequestException);
+    expect(() => svc.sanitize(mkFile(Buffer.alloc(0)))).toThrow(
+      BadRequestException,
+    );
   });
 
   // C11: SVG >500KB (limite 512*1024 = 524288)
   it('rejeita SVG acima de 500KB', () => {
     const big = '<svg>' + 'x'.repeat(600_000) + '</svg>';
-    expect(() => svc.sanitize(mkFile(Buffer.from(big)))).toThrow(PayloadTooLargeException);
+    expect(() => svc.sanitize(mkFile(Buffer.from(big)))).toThrow(
+      PayloadTooLargeException,
+    );
   });
 
   it('rejeita PNG acima de 2MB', () => {
@@ -72,7 +80,8 @@ describe('LogoSanitizerService', () => {
 
   // C6: SVG com <script>
   it('remove <script> de SVG', () => {
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script><circle/></svg>';
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script><circle/></svg>';
     const r = svc.sanitize(mkFile(Buffer.from(svg)));
     expect(r.buffer.toString()).not.toMatch(/<script/i);
     expect(r.buffer.toString()).toContain('circle');
@@ -80,7 +89,8 @@ describe('LogoSanitizerService', () => {
 
   // C7: SVG com onclick
   it('remove atributos on* (onclick/onload)', () => {
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><a onclick="x()" onload="y()"><circle/></a></svg>';
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><a onclick="x()" onload="y()"><circle/></a></svg>';
     const r = svc.sanitize(mkFile(Buffer.from(svg)));
     expect(r.buffer.toString()).not.toMatch(/onclick=/i);
     expect(r.buffer.toString()).not.toMatch(/onload=/i);
@@ -88,7 +98,8 @@ describe('LogoSanitizerService', () => {
 
   // C8: foreignObject removido
   it('remove <foreignObject>', () => {
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><body><script>x</script></body></foreignObject></svg>';
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><body><script>x</script></body></foreignObject></svg>';
     const r = svc.sanitize(mkFile(Buffer.from(svg)));
     expect(r.buffer.toString()).not.toMatch(/foreignobject/i);
     expect(r.buffer.toString()).not.toMatch(/<script/i);
@@ -96,7 +107,8 @@ describe('LogoSanitizerService', () => {
 
   // SVG válido limpo passa
   it('aceita SVG limpo', () => {
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="5"/></svg>';
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="5"/></svg>';
     const r = svc.sanitize(mkFile(Buffer.from(svg)));
     expect(r.contentType).toBe('image/svg+xml');
     expect(r.buffer.toString()).toContain('circle');
@@ -104,7 +116,8 @@ describe('LogoSanitizerService', () => {
 
   // SVG com javascript: URI
   it('remove URIs javascript: em href', () => {
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><a href="javascript:alert(1)"><circle/></a></svg>';
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><a href="javascript:alert(1)"><circle/></a></svg>';
     const r = svc.sanitize(mkFile(Buffer.from(svg)));
     expect(r.buffer.toString().toLowerCase()).not.toContain('javascript:');
   });

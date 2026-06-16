@@ -4,7 +4,7 @@ import { IsString, IsOptional } from 'class-validator';
 
 // Remove o campo password do CreateConsultantDto e adiciona password_hash como opcional
 export class UpdateConsultantDto extends PartialType(
-  OmitType(CreateConsultantDto, ['password'] as const)
+  OmitType(CreateConsultantDto, ['password'] as const),
 ) {
   @IsString()
   @IsOptional()

@@ -28,7 +28,7 @@ export class AuthController {
   async register(@Body() body: auth.UserRegisterDto) {
     const { user } = await this.authService.register(body);
     return {
-      sucess: true,
+      success: true,
       message: 'Conta criada com sucesso',
       data: {
         user: user,
@@ -50,7 +50,9 @@ export class AuthController {
   @Public()
   @Post('validate-consultant-invite')
   async validateConsultantInvite(@Body() body: { token: string }) {
-    const payload = await this.authService.validateConsultantInviteToken(body.token);
+    const payload = await this.authService.validateConsultantInviteToken(
+      body.token,
+    );
     return { success: true, message: 'Token válido', data: payload };
   }
 
@@ -59,7 +61,7 @@ export class AuthController {
   async registerConsultant(@Body() body: auth.RegisterConsultantDto) {
     const { user } = await this.authService.registerConsultant(body);
     return {
-      sucess: true,
+      success: true,
       message: 'Conta criada com sucesso',
       data: { user },
     };
@@ -69,8 +71,10 @@ export class AuthController {
   @Post('validate-specialist-invite')
   @HttpCode(HttpStatus.OK)
   async validateSpecialistInvite(@Body() body: { token: string }) {
-    const result = await this.authService.validateSpecialistInviteToken(body.token);
-    return { sucess: true, message: 'Convite válido', data: result };
+    const result = await this.authService.validateSpecialistInviteToken(
+      body.token,
+    );
+    return { success: true, message: 'Convite válido', data: result };
   }
 
   @Public()
@@ -78,7 +82,11 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   async registerSpecialist(@Body() dto: auth.RegisterSpecialistDto) {
     const result = await this.authService.registerSpecialist(dto);
-    return { sucess: true, message: 'Conta de especialista criada com sucesso', data: result };
+    return {
+      success: true,
+      message: 'Conta de especialista criada com sucesso',
+      data: result,
+    };
   }
 
   @Public()
@@ -86,7 +94,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async validateOfficeInvite(@Body() body: { token: string }) {
     const result = await this.authService.validateOfficeInviteToken(body.token);
-    return { sucess: true, message: 'Convite válido', data: result };
+    return { success: true, message: 'Convite válido', data: result };
   }
 
   @Public()
@@ -94,7 +102,11 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   async registerOffice(@Body() dto: auth.RegisterOfficeDto) {
     const result = await this.authService.registerOffice(dto);
-    return { sucess: true, message: 'Conta de escritório criada com sucesso', data: result };
+    return {
+      success: true,
+      message: 'Conta de escritório criada com sucesso',
+      data: result,
+    };
   }
 
   @Public()
@@ -117,7 +129,7 @@ export class AuthController {
     });
 
     return {
-      sucess: true,
+      success: true,
       message: 'Login realizado com sucesso',
       data: {
         access_token: accessToken,

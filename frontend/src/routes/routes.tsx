@@ -9,12 +9,12 @@ import ProtectedRoute from "./ProtectedRoute";
 import ConsultantDashboard from "../pages/consultant/ConsultantDashboard";
 import ConsultantClientsPage from "../pages/consultant/ConsultantClientsPage";
 import ConsultantProcessesPage from "../pages/consultant/ConsultantProcessesPage";
+import ConsultantProcessDetailPage from "../pages/consultant/ConsultantProcessDetailPage";
 import RegisterConsultantPage from "../pages/auth/RegisterConsultantPage";
 import RegisterSpecialistPage from "../pages/auth/RegisterSpecialistPage";
 import DashboardPage from "../pages/admin/DashboardPage";
 import CompaniesPage from "../pages/admin/CompaniesPage";
 import SpecialistsPage from "../pages/admin/SpecialistsPage";
-import ConsultantsPage from "../pages/admin/ConsultantsPage";
 import SettingsPage from "../pages/admin/SettingsPage";
 import MyCompanyPage from "../pages/admin/MyCompanyPage";
 import ProductsPage from "../pages/specialist/ProductsPage";
@@ -214,6 +214,16 @@ export default function RouterApp() {
       ),
     },
     {
+      path: "/consultant/processes/:processId",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["CONSULTANT"]}>
+            <ConsultantProcessDetailPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
       path: "/admin/dashboard",
       element: (
         <MainLayout>
@@ -249,16 +259,6 @@ export default function RouterApp() {
         <MainLayout>
           <ProtectedRoute allowedRoles={["ADMIN"]}>
             <SpecialistsPage />
-          </ProtectedRoute>
-        </MainLayout>
-      ),
-    },
-    {
-      path: "/admin/consultants",
-      element: (
-        <MainLayout>
-          <ProtectedRoute allowedRoles={["ADMIN"]}>
-            <ConsultantsPage />
           </ProtectedRoute>
         </MainLayout>
       ),
@@ -342,7 +342,7 @@ export default function RouterApp() {
       path: "/processes/:processId/negotiation",
       element: (
         <MainLayout>
-          <ProtectedRoute allowedRoles={["CUSTOMER", "SPECIALIST", "CONSULTANT"]}>
+          <ProtectedRoute allowedRoles={["CUSTOMER", "SPECIALIST"]}>
             <NegotiationPage />
           </ProtectedRoute>
         </MainLayout>

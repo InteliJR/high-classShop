@@ -1,4 +1,4 @@
-import { Aircraft } from "@prisma/client";
+import { Aircraft } from '@prisma/client';
 
 export class AircraftImage {
   id: number;
@@ -7,6 +7,6 @@ export class AircraftImage {
   is_primary: boolean;
   aircraft_id?: number | null;
   created_at: Date;
-  
+
   aircraft?: Aircraft;
 }

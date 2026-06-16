@@ -121,7 +121,7 @@ export class CarsController {
     pagination.per_page = perPage;
 
     return {
-      sucess: true,
+      success: true,
       message: 'Carros listados com sucesso',
       data: data,
       meta: {

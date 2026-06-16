@@ -4,6 +4,7 @@
   import { AppContext, AppProvider } from "../contexts/AppContext";
 import { useIsMobile } from "../hooks/use-is-mobile";
   import { AuthContext } from "../contexts/AuthContext";
+import RequireCalendlyModal from "../components/calendly/RequireCalendlyModal";
 
   interface MainLayoutProps {
     children: React.ReactNode;
@@ -47,6 +48,7 @@ import { useIsMobile } from "../hooks/use-is-mobile";
                 {children}
               </main>
             </div>
+            {user?.role === "SPECIALIST" && <RequireCalendlyModal />}
           </div>
       </AppProvider>
     );

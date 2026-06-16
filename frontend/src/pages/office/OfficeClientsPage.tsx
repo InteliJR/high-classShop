@@ -48,8 +48,8 @@ export default function OfficeClientsPage() {
       )}
 
       {clients.length > 0 && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="w-full">
+        <div className="bg-white rounded-lg shadow overflow-x-auto">
+          <table className="w-full min-w-[640px]">
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Cliente</th>

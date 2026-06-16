@@ -116,8 +116,8 @@ export default function OfficeConsultantsPage() {
       )}
 
       {consultants.length > 0 && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="w-full">
+        <div className="bg-white rounded-lg shadow overflow-x-auto">
+          <table className="w-full min-w-[640px]">
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Nome</th>
@@ -134,7 +134,9 @@ export default function OfficeConsultantsPage() {
                   <td className="px-4 py-3 text-sm">{c.name} {c.surname}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{c.email}</td>
                   <td className="px-4 py-3 text-sm">{c.clients_count}</td>
-                  <td className="px-4 py-3 text-sm">{c.commission_rate ?? "—"}%</td>
+                  <td className="px-4 py-3 text-sm">
+                    {c.commission_rate != null ? `${c.commission_rate}%` : "—"}
+                  </td>
                   <td className="px-4 py-3 text-sm">
                     {c.is_active ? (
                       <span className="text-green-600">Ativo</span>

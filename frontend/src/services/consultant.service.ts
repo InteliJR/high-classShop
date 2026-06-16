@@ -155,6 +155,7 @@ export async function registerConsultant(data: {
   surname: string;
   cpf: string;
   rg: string;
+  phone: string;
   password: string;
   civil_state?: string;
 }): Promise<unknown> {

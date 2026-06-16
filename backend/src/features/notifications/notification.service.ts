@@ -329,13 +329,7 @@ ${destinationUrl}
 High-Class Shop - Marketplace de Bens de Luxo
     `.trim();
 
-    await this.sendEmailSafely(
-      'WELCOME',
-      data.email,
-      subject,
-      html,
-      text,
-    );
+    await this.sendEmailSafely('WELCOME', data.email, subject, html, text);
   }
 
   /**
@@ -430,9 +424,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para ver detalhes e inici
     );
   }
 
-  async sendPasswordResetEmail(
-    data: PasswordResetEmailDto,
-  ): Promise<void> {
+  async sendPasswordResetEmail(data: PasswordResetEmailDto): Promise<void> {
     if (!this.notificationsEnabled) {
       this.logger.debug(
         'Notifications disabled - skipping sendPasswordResetEmail',
@@ -1318,7 +1310,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para continua
     const currentStatusLabel =
       statusLabelMap[data.currentStatus] ?? data.currentStatus;
     const previousStatusLabel = data.previousStatus
-      ? statusLabelMap[data.previousStatus] ?? data.previousStatus
+      ? (statusLabelMap[data.previousStatus] ?? data.previousStatus)
       : undefined;
 
     const subject = `Atualização no Processo #${data.processId.slice(0, 8)} | High-Class Shop`;

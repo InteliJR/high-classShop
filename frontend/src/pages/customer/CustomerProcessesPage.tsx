@@ -43,7 +43,7 @@ interface ProcessClient {
 }
 
 interface ApiResponse {
-  sucess: boolean;
+  success: boolean;
   message: string;
   data: ProcessClient[];
   meta?: {

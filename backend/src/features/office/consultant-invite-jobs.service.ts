@@ -37,7 +37,9 @@ function sanitizeCellEcho(s: string): string {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 @Injectable()
-export class ConsultantInviteJobsService implements OnModuleInit, OnModuleDestroy {
+export class ConsultantInviteJobsService
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(ConsultantInviteJobsService.name);
   private readonly runningJobs = new Set<string>();
   private recoveryTimer?: NodeJS.Timeout;
@@ -68,9 +70,7 @@ export class ConsultantInviteJobsService implements OnModuleInit, OnModuleDestro
     fileBuffer: Buffer,
     requestedCompanyId?: string,
   ) {
-    const companyId = scope.isAdmin
-      ? requestedCompanyId
-      : scope.companyId!;
+    const companyId = scope.isAdmin ? requestedCompanyId : scope.companyId!;
     if (!companyId) throw new BadRequestException('companyId obrigatório');
 
     if (!scope.isAdmin && companyId !== scope.companyId) {
@@ -280,7 +280,8 @@ export class ConsultantInviteJobsService implements OnModuleInit, OnModuleDestro
       job.status === ConsultantInviteJobStatus.COMPLETED ||
       job.status === ConsultantInviteJobStatus.COMPLETED_WITH_ERRORS ||
       job.status === ConsultantInviteJobStatus.FAILED
-    ) return;
+    )
+      return;
 
     await this.prisma.consultantInviteJob.update({
       where: { id: jobId },
@@ -297,7 +298,8 @@ export class ConsultantInviteJobsService implements OnModuleInit, OnModuleDestro
       if (
         item.status !== ConsultantInviteItemStatus.PENDING &&
         item.status !== ConsultantInviteItemStatus.PROCESSING
-      ) continue;
+      )
+        continue;
 
       await this.prisma.consultantInviteJobItem.update({
         where: { id: item.id },
@@ -326,7 +328,11 @@ export class ConsultantInviteJobsService implements OnModuleInit, OnModuleDestro
         }
 
         const token = this.jwt.sign(
-          { type: 'CONSULTANT_INVITE', companyId: job.company_id, email: item.email },
+          {
+            type: 'CONSULTANT_INVITE',
+            companyId: job.company_id,
+            email: item.email,
+          },
           { secret: jwtConstants.referral, expiresIn: '7d' },
         );
 
@@ -399,9 +405,12 @@ export class ConsultantInviteJobsService implements OnModuleInit, OnModuleDestro
     ).length;
     const processed = success + failed + duplicate;
 
-    let finalStatus: ConsultantInviteJobStatus = ConsultantInviteJobStatus.COMPLETED;
-    if (failed > 0 && success > 0) finalStatus = ConsultantInviteJobStatus.COMPLETED_WITH_ERRORS;
-    else if (failed > 0 && success === 0) finalStatus = ConsultantInviteJobStatus.FAILED;
+    let finalStatus: ConsultantInviteJobStatus =
+      ConsultantInviteJobStatus.COMPLETED;
+    if (failed > 0 && success > 0)
+      finalStatus = ConsultantInviteJobStatus.COMPLETED_WITH_ERRORS;
+    else if (failed > 0 && success === 0)
+      finalStatus = ConsultantInviteJobStatus.FAILED;
 
     await this.prisma.consultantInviteJob.update({
       where: { id: jobId },

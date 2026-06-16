@@ -35,7 +35,7 @@ export class MeetingsController {
     );
 
     return {
-      sucess: true,
+      success: true,
       message: meeting
         ? 'Reunião encontrada com sucesso'
         : 'Reunião ainda não iniciada para este processo',
@@ -62,7 +62,7 @@ export class MeetingsController {
     );
 
     return {
-      sucess: true,
+      success: true,
       message: body?.isAdvanced
         ? 'Reunião adiantada com sucesso'
         : 'Reunião iniciada com sucesso',
@@ -87,7 +87,7 @@ export class MeetingsController {
     );
 
     return {
-      sucess: true,
+      success: true,
       message: result.message,
       data: result,
     };
@@ -110,7 +110,7 @@ export class MeetingsController {
     );
 
     return {
-      sucess: true,
+      success: true,
       message: 'Conversa concluída e fluxo atualizado com sucesso',
       data: result,
     };

@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, IsEmail, Length, Matches, IsUUID } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsEmail,
+  Length,
+  Matches,
+  IsUUID,
+} from 'class-validator';
 
 export class CreateConsultantDto {
   @IsString()

@@ -130,13 +130,8 @@ export default function Sidebar() {
           },
           {
             to: "/admin/companies",
-            label: "Empresas",
+            label: "Escritórios",
             icon: <Building2 size={20} />,
-          },
-          {
-            to: "/admin/consultants",
-            label: "Consultores",
-            icon: <Users size={20} />,
           },
           {
             to: "/admin/specialists",

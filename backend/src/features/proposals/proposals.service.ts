@@ -351,18 +351,44 @@ export class ProposalsService {
     const process = await this.prisma.process.findUnique({
       where: { id: processId },
       include: {
-        client: { select: { id: true, name: true, surname: true, role: true } },
+        client: {
+          select: {
+            id: true,
+            name: true,
+            surname: true,
+            role: true,
+            consultant_id: true,
+          },
+        },
         specialist: {
           select: { id: true, name: true, surname: true, role: true },
         },
         car: {
-          select: { id: true, valor: true, marca: true, modelo: true, is_active: true },
+          select: {
+            id: true,
+            valor: true,
+            marca: true,
+            modelo: true,
+            is_active: true,
+          },
         },
         boat: {
-          select: { id: true, valor: true, marca: true, modelo: true, is_active: true },
+          select: {
+            id: true,
+            valor: true,
+            marca: true,
+            modelo: true,
+            is_active: true,
+          },
         },
         aircraft: {
-          select: { id: true, valor: true, marca: true, modelo: true, is_active: true },
+          select: {
+            id: true,
+            valor: true,
+            marca: true,
+            modelo: true,
+            is_active: true,
+          },
         },
         accepted_proposal: { select: { id: true } },
         proposals: {
@@ -390,9 +416,11 @@ export class ProposalsService {
       });
     }
 
-    // 2. Validar que usuário é participante
+    // 2. Validar que usuário é participante (cliente, especialista ou consultor do cliente)
     const isParticipant =
-      process.client_id === userId || process.specialist_id === userId;
+      process.client_id === userId ||
+      process.specialist_id === userId ||
+      process.client?.consultant_id === userId;
 
     if (!isParticipant) {
       throw new ForbiddenException({
@@ -719,7 +747,11 @@ export class ProposalsService {
       where: { id: proposalId },
       include: {
         process: {
-          select: { client_id: true, specialist_id: true },
+          select: {
+            client_id: true,
+            specialist_id: true,
+            client: { select: { consultant_id: true } },
+          },
         },
         proposed_by: {
           select: { id: true, name: true, surname: true, role: true },
@@ -741,10 +773,11 @@ export class ProposalsService {
       });
     }
 
-    // Validar participação
+    // Validar participação (cliente, especialista ou consultor do cliente)
     const isParticipant =
       proposal.process.client_id === userId ||
-      proposal.process.specialist_id === userId;
+      proposal.process.specialist_id === userId ||
+      proposal.process.client?.consultant_id === userId;
 
     if (!isParticipant) {
       throw new ForbiddenException({

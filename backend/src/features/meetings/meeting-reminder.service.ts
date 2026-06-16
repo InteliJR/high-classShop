@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ProcessStatus, StatusAgendamento } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { NotificationService } from 'src/features/notifications/notification.service';
@@ -83,13 +88,17 @@ export class MeetingReminderService implements OnModuleInit, OnModuleDestroy {
       }
 
       const apptTime = appointment.appointment_datetime.getTime();
-      const clientName = `${appointment.client.name} ${appointment.client.surname || ''}`.trim();
-      const specialistName = `${appointment.specialist.name} ${appointment.specialist.surname || ''}`.trim();
+      const clientName =
+        `${appointment.client.name} ${appointment.client.surname || ''}`.trim();
+      const specialistName =
+        `${appointment.specialist.name} ${appointment.specialist.surname || ''}`.trim();
 
       const is15min =
-        apptTime >= window15Start.getTime() && apptTime <= window15End.getTime();
+        apptTime >= window15Start.getTime() &&
+        apptTime <= window15End.getTime();
       const isNow =
-        apptTime >= windowNowStart.getTime() && apptTime <= windowNowEnd.getTime();
+        apptTime >= windowNowStart.getTime() &&
+        apptTime <= windowNowEnd.getTime();
 
       const key15 = `${appointment.id}_15min`;
       const keyNow = `${appointment.id}_now`;
@@ -139,10 +148,13 @@ export class MeetingReminderService implements OnModuleInit, OnModuleDestroy {
             isStartingNow: true,
           }),
         ]).catch((error) => {
-          this.logger.error('Falha ao enviar lembrete no horário (não crítico)', {
-            appointmentId: appointment.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
+          this.logger.error(
+            'Falha ao enviar lembrete no horário (não crítico)',
+            {
+              appointmentId: appointment.id,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          );
         });
       }
     }

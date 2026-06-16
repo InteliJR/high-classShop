@@ -71,10 +71,7 @@ export class CompaniesController {
   // Rota para gerar link de convite de consultor para um escritório.
   @Post(':id/invite-consultant')
   @HttpCode(HttpStatus.OK)
-  inviteConsultant(
-    @Param('id') id: string,
-    @Body('email') email: string,
-  ) {
+  inviteConsultant(@Param('id') id: string, @Body('email') email: string) {
     return this.companiesService.inviteConsultant(id, email);
   }
 
@@ -82,10 +79,7 @@ export class CompaniesController {
   @Roles(UserRole.ADMIN)
   @Post(':id/invite-office')
   @HttpCode(HttpStatus.OK)
-  inviteOffice(
-    @Param('id') id: string,
-    @Body('email') email: string,
-  ) {
+  inviteOffice(@Param('id') id: string, @Body('email') email: string) {
     return this.companiesService.inviteOffice(id, email);
   }
 

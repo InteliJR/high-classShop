@@ -72,7 +72,12 @@ export class CalendlyController {
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
 
     if (error) {
-      const reason = encodeURIComponent(errorDescription || error);
+      const rawReason = errorDescription || error;
+      const isGoogleDomainBlocked =
+        /google.*(domain|workspace)|domain.*denied/i.test(rawReason);
+      const reason = encodeURIComponent(
+        isGoogleDomainBlocked ? 'google_domain_blocked' : rawReason,
+      );
       return res.redirect(
         `${frontendUrl}/profile?calendly=error&reason=${reason}`,
       );
@@ -88,11 +93,15 @@ export class CalendlyController {
       await this.calendlyIntegrationService.handleOAuthCallback(code, state);
       return res.redirect(`${frontendUrl}/profile?calendly=connected`);
     } catch (callbackError: any) {
-      const reason = encodeURIComponent(
+      const rawReason =
         callbackError?.response?.data?.error_description ||
-          callbackError?.response?.data?.message ||
-          callbackError?.message ||
-          'Falha ao conectar Calendly',
+        callbackError?.response?.data?.message ||
+        callbackError?.message ||
+        'Falha ao conectar Calendly';
+      const isGoogleDomainBlocked =
+        /google.*(domain|workspace)|domain.*denied/i.test(rawReason);
+      const reason = encodeURIComponent(
+        isGoogleDomainBlocked ? 'google_domain_blocked' : rawReason,
       );
 
       return res.redirect(

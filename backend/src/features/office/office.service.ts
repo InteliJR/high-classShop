@@ -49,27 +49,39 @@ export class OfficeService {
   async dashboard(scope: Scope, requestedCompanyId?: string) {
     const companyId = this.resolveCompanyId(scope, requestedCompanyId);
 
-    const [activeConsultants, inactiveConsultants, clientsCount, openProcesses] =
-      await Promise.all([
-        this.prisma.user.count({
-          where: { company_id: companyId, role: UserRole.CONSULTANT, is_active: true },
-        }),
-        this.prisma.user.count({
-          where: { company_id: companyId, role: UserRole.CONSULTANT, is_active: false },
-        }),
-        this.prisma.user.count({
-          where: {
-            role: UserRole.CUSTOMER,
-            consultant: { company_id: companyId },
-          },
-        }),
-        this.prisma.process.count({
-          where: {
-            status: { notIn: [ProcessStatus.COMPLETED, ProcessStatus.REJECTED] },
-            client: { consultant: { company_id: companyId } },
-          },
-        }),
-      ]);
+    const [
+      activeConsultants,
+      inactiveConsultants,
+      clientsCount,
+      openProcesses,
+    ] = await Promise.all([
+      this.prisma.user.count({
+        where: {
+          company_id: companyId,
+          role: UserRole.CONSULTANT,
+          is_active: true,
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          company_id: companyId,
+          role: UserRole.CONSULTANT,
+          is_active: false,
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          role: UserRole.CUSTOMER,
+          consultant: { company_id: companyId },
+        },
+      }),
+      this.prisma.process.count({
+        where: {
+          status: { notIn: [ProcessStatus.COMPLETED, ProcessStatus.REJECTED] },
+          client: { consultant: { company_id: companyId } },
+        },
+      }),
+    ]);
 
     return {
       companyId,
@@ -81,7 +93,10 @@ export class OfficeService {
   }
 
   // ─── Consultor: listar ──────────────────────────────────────────────────
-  async listConsultants(scope: Scope, opts: { onlyActive?: boolean; q?: string } = {}) {
+  async listConsultants(
+    scope: Scope,
+    opts: { onlyActive?: boolean; q?: string } = {},
+  ) {
     const companyId = scope.isAdmin ? undefined : scope.companyId!;
 
     const where: any = { role: UserRole.CONSULTANT };
@@ -123,7 +138,11 @@ export class OfficeService {
   }
 
   // ─── Consultor: editar ──────────────────────────────────────────────────
-  async updateConsultant(scope: Scope, consultantId: string, dto: OfficeUpdateConsultantDto) {
+  async updateConsultant(
+    scope: Scope,
+    consultantId: string,
+    dto: OfficeUpdateConsultantDto,
+  ) {
     const where: any = { id: consultantId, role: UserRole.CONSULTANT };
     if (!scope.isAdmin) where.company_id = scope.companyId;
 
@@ -151,7 +170,11 @@ export class OfficeService {
   }
 
   // ─── Consultor: desativar (soft) ───────────────────────────────────────
-  async deactivateConsultant(scope: Scope, consultantId: string, actorId: string) {
+  async deactivateConsultant(
+    scope: Scope,
+    consultantId: string,
+    actorId: string,
+  ) {
     const where: any = { id: consultantId, role: UserRole.CONSULTANT };
     if (!scope.isAdmin) where.company_id = scope.companyId;
 
@@ -160,7 +183,8 @@ export class OfficeService {
       select: { id: true, is_active: true },
     });
     if (!consultant) throw new NotFoundException('Consultor não encontrado');
-    if (!consultant.is_active) return { success: true, message: 'Consultor já estava inativo' };
+    if (!consultant.is_active)
+      return { success: true, message: 'Consultor já estava inativo' };
 
     // Bloqueia desativação se há processos ATIVOS dos clientes desse consultor
     const activeProcesses = await this.prisma.process.count({
@@ -194,7 +218,10 @@ export class OfficeService {
       this.prisma.refreshToken.deleteMany({ where: { user_id: consultantId } }),
     ]);
 
-    return { success: true, message: 'Consultor desativado e clientes desvinculados' };
+    return {
+      success: true,
+      message: 'Consultor desativado e clientes desvinculados',
+    };
   }
 
   // ─── Consultor: reativar ───────────────────────────────────────────────
@@ -213,7 +240,11 @@ export class OfficeService {
   }
 
   // ─── Convite consultor individual ──────────────────────────────────────
-  async inviteConsultant(scope: Scope, dto: InviteConsultantDto, requestedCompanyId?: string) {
+  async inviteConsultant(
+    scope: Scope,
+    dto: InviteConsultantDto,
+    requestedCompanyId?: string,
+  ) {
     const companyId = this.resolveCompanyId(scope, requestedCompanyId);
 
     const company = await this.prisma.company.findUnique({
@@ -226,7 +257,9 @@ export class OfficeService {
       where: { email: dto.email },
     });
     if (existingUser) {
-      throw new ConflictException('Já existe uma conta cadastrada com este email');
+      throw new ConflictException(
+        'Já existe uma conta cadastrada com este email',
+      );
     }
 
     // Token reusa shape do consultant invite atual (auth.service.validateConsultantInviteToken)
@@ -239,16 +272,23 @@ export class OfficeService {
     const inviteLink = `${frontendUrl}/register-consultant?invite=${token}`;
 
     setImmediate(() => {
-      this.ses.sendConsultantInviteEmail(dto.email, inviteLink, company.name).catch((e) => {
-        this.logger.warn(`[office.invite] falha no SES p/ ${dto.email}: ${e?.message}`);
-      });
+      this.ses
+        .sendConsultantInviteEmail(dto.email, inviteLink, company.name)
+        .catch((e) => {
+          this.logger.warn(
+            `[office.invite] falha no SES p/ ${dto.email}: ${e?.message}`,
+          );
+        });
     });
 
     return { inviteLink, email: dto.email };
   }
 
   // ─── Clientes (read-only) ──────────────────────────────────────────────
-  async listClients(scope: Scope, opts: { consultantId?: string; q?: string } = {}) {
+  async listClients(
+    scope: Scope,
+    opts: { consultantId?: string; q?: string } = {},
+  ) {
     const where: any = { role: UserRole.CUSTOMER };
 
     if (scope.isAdmin) {
@@ -299,18 +339,26 @@ export class OfficeService {
   // ─── Company: get ──────────────────────────────────────────────────────
   async getCompany(scope: Scope, requestedCompanyId?: string) {
     const companyId = this.resolveCompanyId(scope, requestedCompanyId);
-    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+    });
     if (!company) throw new NotFoundException('Escritório não encontrado');
     const logoUrl = await resolveCompanyLogoUrl(this.s3, company.logo);
     return {
       ...company,
-      commission_rate: company.commission_rate ? Number(company.commission_rate) : null,
+      commission_rate: company.commission_rate
+        ? Number(company.commission_rate)
+        : null,
       logoUrl,
     };
   }
 
   // ─── Company: editar ───────────────────────────────────────────────────
-  async updateCompany(scope: Scope, dto: OfficeUpdateCompanyDto, requestedCompanyId?: string) {
+  async updateCompany(
+    scope: Scope,
+    dto: OfficeUpdateCompanyDto,
+    requestedCompanyId?: string,
+  ) {
     const companyId = this.resolveCompanyId(scope, requestedCompanyId);
 
     if (dto.cnpj) {
@@ -322,7 +370,8 @@ export class OfficeService {
       const dup = await this.prisma.company.findFirst({
         where: { cnpj: normalizedCnpj, NOT: { id: companyId } },
       });
-      if (dup) throw new ConflictException('CNPJ já cadastrado em outro escritório');
+      if (dup)
+        throw new ConflictException('CNPJ já cadastrado em outro escritório');
       dto.cnpj = normalizedCnpj;
     }
 
@@ -341,7 +390,8 @@ export class OfficeService {
     const financialChanged =
       (dto.bank && dto.bank !== before.bank) ||
       (dto.agency && dto.agency !== before.agency) ||
-      (dto.checking_account && dto.checking_account !== before.checking_account);
+      (dto.checking_account &&
+        dto.checking_account !== before.checking_account);
     if (financialChanged) {
       this.logger.warn(
         `[office.updateCompany] DADOS FINANCEIROS alterados company=${companyId} role=${scope.isAdmin ? 'ADMIN' : 'OFFICE'}`,
@@ -351,7 +401,9 @@ export class OfficeService {
     const logoUrl = await resolveCompanyLogoUrl(this.s3, updated.logo);
     return {
       ...updated,
-      commission_rate: updated.commission_rate ? Number(updated.commission_rate) : null,
+      commission_rate: updated.commission_rate
+        ? Number(updated.commission_rate)
+        : null,
       logoUrl,
     };
   }

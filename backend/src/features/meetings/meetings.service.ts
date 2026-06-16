@@ -389,7 +389,8 @@ export class MeetingsService {
             processId,
             previousStatus: ProcessStatus.SCHEDULING,
             currentStatus: ProcessStatus.NEGOTIATION,
-            changedByName: `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+            changedByName:
+              `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
             reason: 'Conversa concluída e processo avançado para negociação.',
             productDetails: this.getProductDetails(process),
           }),

@@ -8,6 +8,7 @@ export interface UserProfile {
   role: string;
   cpf: string;
   rg: string;
+  phone: string | null;
   civil_state: string | null;
   speciality: string | null;
   calendly_url: string | null;
@@ -19,6 +20,7 @@ export interface UpdateUserData {
   surname?: string;
   cpf?: string;
   rg?: string;
+  phone?: string;
   calendly_url?: string;
 }
 

@@ -13,7 +13,11 @@
  * - Protege contra DoS (arquivos gigantescos)
  */
 
-import { InvalidPdfException, FileTooLargeException, InvalidMimeTypeException } from '../exceptions/custom-exceptions';
+import {
+  InvalidPdfException,
+  FileTooLargeException,
+  InvalidMimeTypeException,
+} from '../exceptions/custom-exceptions';
 
 /**
  * Configurações de validação de PDF
@@ -44,7 +48,9 @@ export function validatePdfFile(
   fileName: string,
 ): boolean {
   // 1. Validar MIME type
-  if (!PDF_VALIDATION_CONFIG.ALLOWED_MIME_TYPES.includes(mimeType?.toLowerCase())) {
+  if (
+    !PDF_VALIDATION_CONFIG.ALLOWED_MIME_TYPES.includes(mimeType?.toLowerCase())
+  ) {
     throw new InvalidMimeTypeException(
       mimeType || 'unknown',
       PDF_VALIDATION_CONFIG.ALLOWED_MIME_TYPES,

@@ -46,7 +46,7 @@ export class ProcessesController {
     const process = await this.processesService.create(createProcessDto);
 
     return {
-      sucess: true,
+      success: true,
       message: 'Processo criado com sucesso',
       data: process,
     };
@@ -87,7 +87,7 @@ export class ProcessesController {
     pagination.total = count;
 
     return {
-      sucess: true,
+      success: true,
       message: 'Processos listados com sucesso',
       data: processes,
       meta: {
@@ -107,14 +107,20 @@ export class ProcessesController {
    * @returns {Promise<ApiResponseDto<ProcessResponse>>} - Single process with all related data
    * @throws {NotFoundException} - Process not found
    */
+  @UseGuards(AuthGuard)
   @Get(':id')
   async getById(
     @Param('id', new ParseUUIDPipe()) processId: string,
+    @Req() req: { user?: { id: string; role?: string } },
   ): Promise<ApiResponseDto<ProcessResponse>> {
-    const process = await this.processesService.getById(processId);
+    const process = await this.processesService.getById(
+      processId,
+      req.user?.id,
+      req.user?.role,
+    );
 
     return {
-      sucess: true,
+      success: true,
       message: 'Processo obtido com sucesso',
       data: process,
     };
@@ -156,7 +162,7 @@ export class ProcessesController {
     pagination.total = count;
 
     return {
-      sucess: true,
+      success: true,
       message: 'Processos do especialista listados com sucesso',
       data: processes,
       meta: {
@@ -190,7 +196,7 @@ export class ProcessesController {
     );
 
     return {
-      sucess: true,
+      success: true,
       message: 'Status do processo atualizado com sucesso',
       data: updatedProcess,
     };
@@ -231,7 +237,7 @@ export class ProcessesController {
     );
 
     return {
-      sucess: true,
+      success: true,
       message: 'Produto associado ao processo com sucesso',
       data: updatedProcess,
     };
@@ -253,7 +259,7 @@ export class ProcessesController {
       await this.processesService.getProcessCompletionReason(processId);
 
     return {
-      sucess: true,
+      success: true,
       message: 'Razão de conclusão do processo obtida com sucesso',
       data: { reason },
     };
@@ -275,7 +281,7 @@ export class ProcessesController {
       await this.processesService.getByIdWithActiveContract(processId);
 
     return {
-      sucess: true,
+      success: true,
       message: 'Processo com contrato ativo obtido com sucesso',
       data: processWithContract,
     };
@@ -294,6 +300,7 @@ export class ProcessesController {
   async getByClient(
     @Param('clientId', new ParseUUIDPipe()) clientId: string,
     @Query() { perPage, page }: QueryDto,
+    @Req() req: { user?: { id: string; role?: string } },
   ): Promise<ApiResponseDto<ProcessResponse[], unknown>> {
     page = Number(page);
     perPage = Number(perPage);
@@ -301,6 +308,8 @@ export class ProcessesController {
     const { processes, count } = await this.processesService.getByClientId(
       clientId,
       { page, perPage },
+      req.user?.id,
+      req.user?.role,
     );
 
     const skip = (page - 1) * perPage;
@@ -312,7 +321,7 @@ export class ProcessesController {
     pagination.total = count;
 
     return {
-      sucess: true,
+      success: true,
       message: 'Processos do cliente listados com sucesso',
       data: processes,
       meta: {
@@ -351,7 +360,7 @@ export class ProcessesController {
     );
 
     return {
-      sucess: true,
+      success: true,
       message: 'Processo rejeitado com sucesso',
       data: result,
     };
@@ -383,7 +392,7 @@ export class ProcessesController {
     );
 
     return {
-      sucess: true,
+      success: true,
       message: 'Agendamento confirmado com sucesso',
       data: result,
     };
@@ -415,7 +424,7 @@ export class ProcessesController {
     );
 
     return {
-      sucess: true,
+      success: true,
       message: 'Agendamento cancelado com sucesso',
       data: result,
     };

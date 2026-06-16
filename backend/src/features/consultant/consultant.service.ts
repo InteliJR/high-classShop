@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { UpdateClientDto } from './dto/update-client.dto';
@@ -91,7 +97,9 @@ export class ConsultantService {
           message: 'Link de convite gerado com sucesso',
           email: sendInvitationDto.email,
           registrationLink,
-          warning: 'O link foi gerado, mas não conseguimos enviar por email. Compartilhe-o manualmente com ' + sendInvitationDto.email,
+          warning:
+            'O link foi gerado, mas não conseguimos enviar por email. Compartilhe-o manualmente com ' +
+            sendInvitationDto.email,
         };
       }
 
@@ -112,7 +120,9 @@ export class ConsultantService {
         message: 'Link de convite gerado com sucesso',
         email: sendInvitationDto.email,
         registrationLink,
-        warning: 'O link foi gerado, mas não conseguimos enviar por email. Compartilhe-o manualmente com ' + sendInvitationDto.email,
+        warning:
+          'O link foi gerado, mas não conseguimos enviar por email. Compartilhe-o manualmente com ' +
+          sendInvitationDto.email,
       };
     }
   }
@@ -123,10 +133,7 @@ export class ConsultantService {
    * @param email - Email of the potential client
    * @returns JWT token
    */
-  private generateReferralToken(
-    consultantId: string,
-    email: string,
-  ): string {
+  private generateReferralToken(consultantId: string, email: string): string {
     const payload = {
       consultantId,
       email,
@@ -188,13 +195,22 @@ export class ConsultantService {
   /**
    * Create a process on behalf of a client
    */
-  async createProcessForClient(consultantId: string, dto: CreateConsultantProcessDto) {
+  async createProcessForClient(
+    consultantId: string,
+    dto: CreateConsultantProcessDto,
+  ) {
     const client = await this.prismaService.user.findFirst({
-      where: { id: dto.client_id, consultant_id: consultantId, role: 'CUSTOMER' },
+      where: {
+        id: dto.client_id,
+        consultant_id: consultantId,
+        role: 'CUSTOMER',
+      },
     });
 
     if (!client) {
-      throw new ForbiddenException('Cliente não encontrado ou não pertence a este consultor');
+      throw new ForbiddenException(
+        'Cliente não encontrado ou não pertence a este consultor',
+      );
     }
 
     const specialist = await this.prismaService.user.findFirst({
@@ -205,17 +221,103 @@ export class ConsultantService {
       throw new NotFoundException('Especialista não encontrado');
     }
 
-    const productFieldMap = { CAR: 'car_id', BOAT: 'boat_id', AIRCRAFT: 'aircraft_id' } as const;
-    const productField = dto.product_id ? productFieldMap[dto.product_type] : undefined;
+    const productFieldMap = {
+      CAR: 'car_id',
+      BOAT: 'boat_id',
+      AIRCRAFT: 'aircraft_id',
+    } as const;
+    const productField = dto.product_id
+      ? productFieldMap[dto.product_type]
+      : undefined;
 
-    const process = await this.prismaService.process.create({
-      data: {
+    const activeStatuses = [
+      'SCHEDULING',
+      'NEGOTIATION',
+      'PROCESSING_CONTRACT',
+      'DOCUMENTATION',
+    ] as const;
+
+    if (productField && dto.product_id) {
+      const existing = await this.prismaService.process.findFirst({
+        where: {
+          client_id: dto.client_id,
+          specialist_id: dto.specialist_id,
+          [productField]: dto.product_id,
+        },
+      });
+      if (existing) {
+        throw new ConflictException(
+          'Já existe processo para este cliente com este produto.',
+        );
+      }
+    } else {
+      const activeConsultancy = await this.prismaService.process.findFirst({
+        where: {
+          client_id: dto.client_id,
+          specialist_id: dto.specialist_id,
+          product_type: null,
+          status: { in: [...activeStatuses] as any },
+        },
+      });
+      if (activeConsultancy) {
+        throw new ConflictException(
+          'Já existe consultoria ativa entre este cliente e este especialista.',
+        );
+      }
+    }
+
+    const pendingExpiresAt = new Date();
+    pendingExpiresAt.setDate(pendingExpiresAt.getDate() + 7);
+
+    const isConsultancy = !productField || !dto.product_id;
+
+    const [, process] = await this.prismaService.$transaction(async (tx) => {
+      const appointmentData: any = {
         client_id: dto.client_id,
         specialist_id: dto.specialist_id,
-        product_type: dto.product_type,
-        ...(productField && dto.product_id ? { [productField]: dto.product_id } : {}),
+        appointment_datetime: null,
+        status: 'PENDING',
+        notes: isConsultancy
+          ? `Consultoria criada pelo consultor em nome do cliente (${new Date().toISOString()})`
+          : `Processo criado pelo consultor em nome do cliente (${new Date().toISOString()})`,
+        user_clicked_at: new Date(),
+        pending_expires_at: pendingExpiresAt,
+      };
+      if (!isConsultancy) {
+        appointmentData.product_type = dto.product_type;
+        appointmentData.product_id = dto.product_id;
+      }
+
+      const createdAppointment = await tx.appointment.create({
+        data: appointmentData,
+      });
+
+      const processData: any = {
+        client_id: dto.client_id,
+        specialist_id: dto.specialist_id,
+        appointment_id: createdAppointment.id,
+        product_type: isConsultancy ? null : dto.product_type,
         status: 'SCHEDULING',
-      },
+        notes: isConsultancy
+          ? `Consultoria iniciada pelo consultor (${new Date().toISOString()})`
+          : `Processo iniciado pelo consultor (${new Date().toISOString()})`,
+      };
+      if (!isConsultancy && productField && dto.product_id) {
+        processData[productField] = dto.product_id;
+      }
+
+      const createdProcess = await tx.process.create({ data: processData });
+
+      await tx.processStatusHistory.create({
+        data: {
+          processId: createdProcess.id,
+          status: 'SCHEDULING',
+          changed_by: consultantId,
+          changed_at: new Date(),
+        },
+      });
+
+      return [createdAppointment, createdProcess];
     });
 
     return process;
@@ -230,13 +332,17 @@ export class ConsultantService {
     });
 
     if (!client) {
-      throw new ForbiddenException('Cliente não encontrado ou não pertence a este consultor');
+      throw new ForbiddenException(
+        'Cliente não encontrado ou não pertence a este consultor',
+      );
     }
 
     return this.prismaService.process.findMany({
       where: { client_id: clientId },
       include: {
-        specialist: { select: { id: true, name: true, surname: true, speciality: true } },
+        specialist: {
+          select: { id: true, name: true, surname: true, speciality: true },
+        },
       },
       orderBy: { created_at: 'desc' },
     });
@@ -267,7 +373,9 @@ export class ConsultantService {
     const processes = await this.prismaService.process.findMany({
       where,
       include: {
-        specialist: { select: { id: true, name: true, surname: true, speciality: true } },
+        specialist: {
+          select: { id: true, name: true, surname: true, speciality: true },
+        },
       },
       orderBy: { created_at: 'desc' },
     });

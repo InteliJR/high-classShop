@@ -1092,7 +1092,7 @@ export class AppointmentsService {
 
     // Verificar se já existe agendamento PENDING ou SCHEDULED
     this.logger.log(`[createPending] Verificando agendamento duplicado...`);
-    let existingWhere: any = {
+    const existingWhere: any = {
       client_id: dto.client_id,
       specialist_id: dto.specialist_id,
       status: {
@@ -1484,7 +1484,10 @@ export class AppointmentsService {
     );
 
     // Fire-and-forget: notificar cliente sobre confirmação do agendamento
-    const confirmedProduct = await this.getProductByType(updated.product_type, updated.product_id);
+    const confirmedProduct = await this.getProductByType(
+      updated.product_type,
+      updated.product_id,
+    );
     const confirmedProductDetails = confirmedProduct
       ? `${(confirmedProduct as any).marca || ''} ${(confirmedProduct as any).modelo || ''}`.trim()
       : '';
@@ -1493,8 +1496,10 @@ export class AppointmentsService {
       this.notificationService
         .sendAppointmentConfirmedEmail({
           clientEmail: updated.client.email,
-          clientName: `${updated.client.name} ${updated.client.surname || ''}`.trim(),
-          specialistName: `${updated.specialist.name} ${updated.specialist.surname || ''}`.trim(),
+          clientName:
+            `${updated.client.name} ${updated.client.surname || ''}`.trim(),
+          specialistName:
+            `${updated.specialist.name} ${updated.specialist.surname || ''}`.trim(),
           appointmentDate: updated.appointment_datetime || new Date(),
           productDetails: confirmedProductDetails,
           processId: process.id,
@@ -1605,7 +1610,9 @@ export class AppointmentsService {
     const cancellerName = isSpecialist
       ? `${appointment.specialist.name} ${appointment.specialist.surname || ''}`.trim()
       : `${appointment.client.name} ${appointment.client.surname || ''}`.trim();
-    const recipientEmail = isSpecialist ? appointment.client.email : appointment.specialist.email;
+    const recipientEmail = isSpecialist
+      ? appointment.client.email
+      : appointment.specialist.email;
     const recipientName = isSpecialist
       ? `${appointment.client.name} ${appointment.client.surname || ''}`.trim()
       : `${appointment.specialist.name} ${appointment.specialist.surname || ''}`.trim();

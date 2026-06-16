@@ -104,7 +104,7 @@ export class DriveImportService {
 
     let hasPrimary: boolean = false;
     let uploaded = 0;
-    let skipped = 0;
+    const skipped = 0;
     let failed = 0;
 
     for (const file of files) {
@@ -623,7 +623,9 @@ export class DriveImportService {
         select: { image_url: true },
       });
       keys = records.map((r) => r.image_url);
-      await this.prisma.boat_image.deleteMany({ where: { boat_id: productId } });
+      await this.prisma.boat_image.deleteMany({
+        where: { boat_id: productId },
+      });
     } else {
       const records = await this.prisma.aircraft_image.findMany({
         where: { aircraft_id: productId },
@@ -759,7 +761,8 @@ export class DriveImportService {
             : '';
           throw new Error(
             `Google Drive retornou ${status} para arquivo ${fileId}. ` +
-              (errorBody || 'Verifique se a pasta está compartilhada como "Qualquer pessoa com o link".'),
+              (errorBody ||
+                'Verifique se a pasta está compartilhada como "Qualquer pessoa com o link".'),
           );
         }
 
@@ -769,7 +772,12 @@ export class DriveImportService {
       }
     }
 
-    throw lastError ?? new Error(`Falha ao baixar arquivo ${fileId} do Google Drive após ${MAX_RETRIES} tentativas`);
+    throw (
+      lastError ??
+      new Error(
+        `Falha ao baixar arquivo ${fileId} do Google Drive após ${MAX_RETRIES} tentativas`,
+      )
+    );
   }
 
   private async sleepBetweenDownloads(): Promise<void> {

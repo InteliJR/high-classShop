@@ -1176,9 +1176,11 @@ export default function CreateContractPage() {
                     valueAsNumber: true,
                     min: { value: 0, message: "Valor deve ser positivo" },
                   })}
-                  readOnly
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
                 />
+                <p className="text-xs text-gray-400 mt-1">
+                  Calculado automaticamente, edite se necessário.
+                </p>
                 {platformValue > 0 && (
                   <p className="text-sm text-gray-500 mt-1">
                     {formatBRL(platformValue)}
@@ -1208,9 +1210,11 @@ export default function CreateContractPage() {
                     valueAsNumber: true,
                     min: { value: 0, message: "Valor deve ser positivo" },
                   })}
-                  readOnly
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
                 />
+                <p className="text-xs text-gray-400 mt-1">
+                  Calculado automaticamente, edite se necessário.
+                </p>
                 {officeValue > 0 && (
                   <p className="text-sm text-gray-500 mt-1">
                     {formatBRL(officeValue)}
@@ -1240,9 +1244,11 @@ export default function CreateContractPage() {
                     valueAsNumber: true,
                     min: { value: 0, message: "Valor deve ser positivo" },
                   })}
-                  readOnly
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
                 />
+                <p className="text-xs text-gray-400 mt-1">
+                  Calculado automaticamente, edite se necessário.
+                </p>
                 {specialistValue > 0 && (
                   <p className="text-sm text-gray-500 mt-1">
                     {formatBRL(specialistValue)}
@@ -1263,9 +1269,11 @@ export default function CreateContractPage() {
                   type="number"
                   step="0.01"
                   {...register("payment_seller_value", { valueAsNumber: true })}
-                  readOnly
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
                 />
+                <p className="text-xs text-gray-400 mt-1">
+                  Calculado automaticamente, edite se necessário.
+                </p>
                 {sellerNetPreviewValue > 0 && (
                   <p className="text-sm text-green-600 mt-1">
                     {formatBRL(sellerNetPreviewValue)}

@@ -52,6 +52,7 @@ export default function CustomerProfilePage() {
     surname: "",
     cpf: "",
     rg: "",
+    phone: "",
     calendly_url: "",
   });
 
@@ -87,6 +88,7 @@ export default function CustomerProfilePage() {
           surname: userData.surname || "",
           cpf: userData.cpf || "",
           rg: userData.rg || "",
+          phone: userData.phone || "",
           calendly_url: userData.calendly_url || "",
         });
       } catch (err) {
@@ -170,9 +172,16 @@ export default function CustomerProfilePage() {
     }
 
     if (calendly === "error") {
-      setError(
-        `Falha ao conectar Calendly${reason ? `: ${decodeURIComponent(reason)}` : ""}`,
-      );
+      const decodedReason = reason ? decodeURIComponent(reason) : "";
+      if (decodedReason === "google_domain_blocked") {
+        setError(
+          "Sua conexão com o Google foi bloqueada pelo administrador do seu domínio (Google Workspace). Peça ao admin do domínio para autorizar o Calendly em https://admin.google.com → Segurança → Acesso a apps e tente novamente.",
+        );
+      } else {
+        setError(
+          `Falha ao conectar Calendly${decodedReason ? `: ${decodedReason}` : ""}`,
+        );
+      }
     }
 
     if (calendly) {
@@ -238,6 +247,11 @@ export default function CustomerProfilePage() {
         cpf: formData.cpf,
         rg: formData.rg,
       };
+
+      const cleanPhone = formData.phone.replace(/\D/g, "");
+      if (cleanPhone) {
+        dataToUpdate.phone = cleanPhone;
+      }
 
       // Só envia calendly_url se for especialista
       if (user.role === "SPECIALIST") {
@@ -520,6 +534,22 @@ export default function CustomerProfilePage() {
                   placeholder="Apenas números"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
                   required
+                />
+              </div>
+
+              {/* Telefone */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Telefone
+                </label>
+                <input
+                  type="text"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleInputChange}
+                  maxLength={16}
+                  placeholder="(11) 99999-9999"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
                 />
               </div>
             </div>

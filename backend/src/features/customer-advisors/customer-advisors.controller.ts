@@ -22,7 +22,11 @@ export class CustomerAdvisorsController {
   async inviteAdvisor(@Req() req: any, @Body() body: InviteAdvisorDto) {
     const customerId: string = req.user?.sub ?? req.user?.id;
     const result = await this.service.inviteAdvisor(customerId, body.email);
-    return { success: true, message: 'Convite enviado com sucesso', data: result };
+    return {
+      success: true,
+      message: 'Convite enviado com sucesso',
+      data: result,
+    };
   }
 
   @Get('customers/me/advisor')
@@ -39,7 +43,11 @@ export class CustomerAdvisorsController {
   async removeAdvisor(@Req() req: any) {
     const customerId: string = req.user?.sub ?? req.user?.id;
     const result = await this.service.removeAdvisor(customerId);
-    return { success: true, message: 'Assessor removido com sucesso', data: result };
+    return {
+      success: true,
+      message: 'Assessor removido com sucesso',
+      data: result,
+    };
   }
 
   @Get('advisors/me/clients')
@@ -51,10 +59,7 @@ export class CustomerAdvisorsController {
 
   @Post('auth/accept-advisor-invite')
   @HttpCode(HttpStatus.OK)
-  async acceptAdvisorInvite(
-    @Req() req: any,
-    @Body() body: { token: string },
-  ) {
+  async acceptAdvisorInvite(@Req() req: any, @Body() body: { token: string }) {
     const advisorId: string = req.user?.sub ?? req.user?.id;
     const result = await this.service.acceptInvite(body.token, advisorId);
     return {

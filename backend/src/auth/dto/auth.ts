@@ -8,7 +8,7 @@ import {
   IsUUID,
   IsNotEmpty,
   Length,
-  Matches
+  Matches,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { UserEntity } from '../entities/user.entity';
@@ -56,8 +56,16 @@ export class UserRegisterDto {
 
   @IsString()
   @Length(7, 10, { message: 'RG deve ter entre 7 e 10 dígitos' })
-  @Matches(/^\d{7,10}$/, { message: 'RG deve conter apenas números (7-10 dígitos)' })
+  @Matches(/^\d{7,10}$/, {
+    message: 'RG deve conter apenas números (7-10 dígitos)',
+  })
   rg: string;
+
+  @IsString()
+  @Matches(/^\d{10,11}$/, {
+    message: 'Telefone deve conter entre 10 e 11 dígitos (DDD + número)',
+  })
+  phone: string;
 
   @IsString()
   @MinLength(6)
@@ -100,8 +108,16 @@ export class RegisterConsultantDto {
 
   @IsString()
   @Length(7, 10, { message: 'RG deve ter entre 7 e 10 dígitos' })
-  @Matches(/^\d{7,10}$/, { message: 'RG deve conter apenas números (7-10 dígitos)' })
+  @Matches(/^\d{7,10}$/, {
+    message: 'RG deve conter apenas números (7-10 dígitos)',
+  })
   rg: string;
+
+  @IsString()
+  @Matches(/^\d{10,11}$/, {
+    message: 'Telefone deve conter entre 10 e 11 dígitos (DDD + número)',
+  })
+  phone: string;
 
   @IsString()
   @MinLength(6)
@@ -132,8 +148,16 @@ export class RegisterOfficeDto {
 
   @IsString()
   @Length(7, 10, { message: 'RG deve ter entre 7 e 10 dígitos' })
-  @Matches(/^\d{7,10}$/, { message: 'RG deve conter apenas números (7-10 dígitos)' })
+  @Matches(/^\d{7,10}$/, {
+    message: 'RG deve conter apenas números (7-10 dígitos)',
+  })
   rg: string;
+
+  @IsString()
+  @Matches(/^\d{10,11}$/, {
+    message: 'Telefone deve conter entre 10 e 11 dígitos (DDD + número)',
+  })
+  phone: string;
 
   @IsString()
   @MinLength(6)
@@ -160,8 +184,16 @@ export class RegisterSpecialistDto {
 
   @IsString()
   @Length(7, 10, { message: 'RG deve ter entre 7 e 10 dígitos' })
-  @Matches(/^\d{7,10}$/, { message: 'RG deve conter apenas números (7-10 dígitos)' })
+  @Matches(/^\d{7,10}$/, {
+    message: 'RG deve conter apenas números (7-10 dígitos)',
+  })
   rg: string;
+
+  @IsString()
+  @Matches(/^\d{10,11}$/, {
+    message: 'Telefone deve conter entre 10 e 11 dígitos (DDD + número)',
+  })
+  phone: string;
 
   @IsString()
   @MinLength(6)
@@ -217,7 +249,7 @@ export class LoginDto {
 
 // Resposta da API
 export class ApiResponseDto<D, M, ED> {
-  sucess: boolean;
+  success: boolean;
   message?: string;
   data?: D;
   meta?: M;

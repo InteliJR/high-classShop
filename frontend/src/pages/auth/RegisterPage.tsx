@@ -32,6 +32,7 @@ export default function RegisterPage() {
       email: "",
       cpf: "",
       rg: "",
+      phone: "",
       password: "",
       civil_state: undefined,
       consultant_id: undefined,
@@ -101,11 +102,13 @@ export default function RegisterPage() {
     try {
       const cpfClean = data.cpf.replace(/\D/g, "");
       const rgClean = data.rg.replace(/\D/g, "");
+      const phoneClean = data.phone.replace(/\D/g, "");
       
       const registerData: any = {
         ...data,
         cpf: cpfClean,
         rg: rgClean,
+        phone: phoneClean,
       };
       
       // Só inclui consultant_id se for modo referência
@@ -142,6 +145,21 @@ export default function RegisterPage() {
   const formatRG = (value: string) => {
     const cleaned = value.replace(/\D/g, "");
     return cleaned.slice(0, 10);
+  };
+
+  const formatPhone = (value: string) => {
+    const cleaned = value.replace(/\D/g, "").slice(0, 11);
+    if (cleaned.length <= 2) return `(${cleaned}`;
+    if (cleaned.length <= 6)
+      return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2)}`;
+    if (cleaned.length <= 10)
+      return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
+    return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`;
+  };
+
+  const validatePhone = (value: string) => {
+    const d = value.replace(/\D/g, "").length;
+    return d === 10 || d === 11;
   };
 
   if (isValidatingToken) {
@@ -354,6 +372,34 @@ export default function RegisterPage() {
                   />
                   {errors.rg && <p className="text-xs text-red-600 mt-1">{errors.rg.message}</p>}
                 </div>
+              </div>
+
+              {/* Telefone */}
+              <div>
+                <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">
+                  Telefone
+                </label>
+                <input
+                  id="phone"
+                  type="text"
+                  placeholder="(11) 99999-9999"
+                  maxLength={16}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 transition-all ${
+                    errors.phone
+                      ? 'border-red-500 focus:ring-red-500'
+                      : watch("phone") && validatePhone(watch("phone"))
+                      ? 'border-green-500 focus:ring-green-500'
+                      : 'border-gray-300 focus:ring-gray-900 focus:border-transparent'
+                  }`}
+                  {...register("phone", {
+                    required: "Telefone é obrigatório",
+                    validate: (value) => validatePhone(value) || "Telefone deve ter 10 ou 11 dígitos",
+                    onChange: (e) => {
+                      e.target.value = formatPhone(e.target.value);
+                    }
+                  })}
+                />
+                {errors.phone && <p className="text-xs text-red-600 mt-1">{errors.phone.message}</p>}
               </div>
 
               {/* Senha e Estado Civil - Lado a lado */}

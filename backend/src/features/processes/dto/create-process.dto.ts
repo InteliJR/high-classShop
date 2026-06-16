@@ -1,5 +1,13 @@
 import { $Enums } from '@prisma/client';
-import { IsNotEmpty, IsOptional, IsUUID, IsInt, Min, ValidateIf, IsEnum } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsUUID,
+  IsInt,
+  Min,
+  ValidateIf,
+  IsEnum,
+} from 'class-validator';
 
 /**
  * DTO para criar novo processo

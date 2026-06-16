@@ -6,7 +6,10 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { RATE_LIMIT_KEY, RateLimitOptions } from '../decorators/rate-limit.decorator';
+import {
+  RATE_LIMIT_KEY,
+  RateLimitOptions,
+} from '../decorators/rate-limit.decorator';
 
 interface RateLimitRecord {
   count: number;

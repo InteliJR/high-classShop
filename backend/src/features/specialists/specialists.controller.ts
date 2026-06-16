@@ -57,8 +57,15 @@ export class SpecialistsController {
     if (!body.email || !body.speciality) {
       throw new BadRequestException('Email e especialidade são obrigatórios');
     }
-    const result = await this.specialistsService.inviteSpecialist(body.email, body.speciality);
-    return { sucess: true, message: 'Convite enviado com sucesso', data: result };
+    const result = await this.specialistsService.inviteSpecialist(
+      body.email,
+      body.speciality,
+    );
+    return {
+      success: true,
+      message: 'Convite enviado com sucesso',
+      data: result,
+    };
   }
 
   // Rota para buscar um único especialista pelo seu ID.
@@ -69,10 +76,7 @@ export class SpecialistsController {
 
   // Rota para atualizar os dados de um especialista.
   @Put(':id')
-  update(
-    @Param('id') id: string,
-    @Body() body: UpdateSpecialistDto,
-  ) {
+  update(@Param('id') id: string, @Body() body: UpdateSpecialistDto) {
     return this.specialistsService.update(id, body);
   }
 

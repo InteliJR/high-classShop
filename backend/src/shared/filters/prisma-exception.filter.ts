@@ -68,7 +68,8 @@ export class PrismaExceptionFilter implements ExceptionFilter {
       case 'P2003':
         return {
           status: HttpStatus.BAD_REQUEST,
-          message: 'Violação de chave estrangeira. Registro relacionado não existe',
+          message:
+            'Violação de chave estrangeira. Registro relacionado não existe',
         };
 
       case 'P2004':
@@ -104,4 +105,3 @@ export class PrismaExceptionFilter implements ExceptionFilter {
     }
   }
 }
-

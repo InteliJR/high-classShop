@@ -239,9 +239,13 @@ export class CompaniesService {
   async inviteConsultant(companyId: string, email: string) {
     const company = await this.findOne(companyId);
 
-    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
     if (existingUser) {
-      throw new ConflictException('Já existe uma conta cadastrada com este email');
+      throw new ConflictException(
+        'Já existe uma conta cadastrada com este email',
+      );
     }
 
     const token = this.jwtService.sign(
@@ -270,12 +274,18 @@ export class CompaniesService {
       select: { id: true },
     });
     if (existingOffice) {
-      throw new ConflictException('Este escritório já possui um gerente cadastrado');
+      throw new ConflictException(
+        'Este escritório já possui um gerente cadastrado',
+      );
     }
 
-    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
     if (existingUser) {
-      throw new ConflictException('Já existe uma conta cadastrada com este email');
+      throw new ConflictException(
+        'Já existe uma conta cadastrada com este email',
+      );
     }
 
     const token = this.jwtService.sign(

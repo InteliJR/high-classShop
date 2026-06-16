@@ -9,10 +9,7 @@ import { SesService } from './ses.service';
 // Tornar global evita ter que importar AwsModule no AppModule e em cada feature.
 @Global()
 @Module({
-  imports: [
-    ConfigModule,
-    JwtModule.register({}),
-  ],
+  imports: [ConfigModule, JwtModule.register({})],
   providers: [S3Service, SesService],
   exports: [S3Service, SesService],
 })

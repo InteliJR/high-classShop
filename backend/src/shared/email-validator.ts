@@ -39,8 +39,9 @@ export interface EmailValidationResult {
  */
 function isValidFormat(email: string): boolean {
   // RFC 5322 Official Standard
-  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
-  
+  const emailRegex =
+    /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+
   return emailRegex.test(email);
 }
 
@@ -62,11 +63,11 @@ function isDisposableEmail(email: string): boolean {
 function checkForTypos(email: string): string | undefined {
   const [localPart, domain] = email.split('@');
   const lowerDomain = domain?.toLowerCase();
-  
+
   if (COMMON_TYPOS[lowerDomain]) {
     return `${localPart}@${COMMON_TYPOS[lowerDomain]}`;
   }
-  
+
   return undefined;
 }
 
@@ -147,7 +148,7 @@ export function validateEmail(email: string): EmailValidationResult {
 
   // Check local part (before @)
   const [localPart, domain] = trimmedEmail.split('@');
-  
+
   if (localPart.length > 64) {
     return {
       isValid: false,
@@ -201,14 +202,14 @@ export function validateEmail(email: string): EmailValidationResult {
  */
 export function validateEmailOrThrow(email: string): string {
   const result = validateEmail(email);
-  
+
   if (!result.isValid) {
     const errorMessage = result.suggestion
       ? `${result.error}. Você quis dizer: ${result.suggestion}?`
       : result.error;
-    
+
     throw new Error(errorMessage);
   }
-  
+
   return email.trim();
 }

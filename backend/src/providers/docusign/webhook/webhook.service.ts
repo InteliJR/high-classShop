@@ -290,7 +290,7 @@ export class DocuSignWebhookService {
         }
 
         // 7.3 Sincronizar status do processo com base no status do contrato
-        let processStatusUpdate: any = {};
+        const processStatusUpdate: any = {};
         let updateProcessActiveContract = false;
 
         if (
@@ -392,7 +392,9 @@ export class DocuSignWebhookService {
           process: {
             select: {
               client: { select: { email: true, name: true, surname: true } },
-              specialist: { select: { email: true, name: true, surname: true } },
+              specialist: {
+                select: { email: true, name: true, surname: true },
+              },
             },
           },
         },
@@ -400,12 +402,15 @@ export class DocuSignWebhookService {
 
       if (contractWithDetails) {
         const buyerEmail = contractWithDetails.process?.client?.email;
-        const buyerName = contractWithDetails.buyer_name || 
+        const buyerName =
+          contractWithDetails.buyer_name ||
           `${contractWithDetails.process?.client?.name || ''} ${contractWithDetails.process?.client?.surname || ''}`.trim();
         const sellerEmail = contractWithDetails.process?.specialist?.email;
-        const sellerName = contractWithDetails.seller_name ||
+        const sellerName =
+          contractWithDetails.seller_name ||
           `${contractWithDetails.process?.specialist?.name || ''} ${contractWithDetails.process?.specialist?.surname || ''}`.trim();
-        const vehicleDetails = `${contractWithDetails.vehicle_model || ''} ${contractWithDetails.vehicle_year || ''}`.trim();
+        const vehicleDetails =
+          `${contractWithDetails.vehicle_model || ''} ${contractWithDetails.vehicle_year || ''}`.trim();
 
         setImmediate(() => {
           // Notificar baseado no status
@@ -427,7 +432,11 @@ export class DocuSignWebhookService {
                   error: err.message,
                 });
               });
-          } else if (providerStatus === 'COMPLETED' && buyerEmail && sellerEmail) {
+          } else if (
+            providerStatus === 'COMPLETED' &&
+            buyerEmail &&
+            sellerEmail
+          ) {
             this.notificationService
               .sendContractSignedEmail({
                 buyerEmail,

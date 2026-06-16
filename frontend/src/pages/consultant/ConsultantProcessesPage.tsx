@@ -208,7 +208,7 @@ export default function ConsultantProcessesPage() {
           <div>
             <h2 className="h2-style">Processos</h2>
             <p className="text-sm text-gray-500 mt-1">
-              Clique em um processo para gerenciar a negociação.
+              Clique em um processo para ver os detalhes.
             </p>
           </div>
           <span className="text-sm text-gray-500">
@@ -245,7 +245,7 @@ export default function ConsultantProcessesPage() {
               {pageProcesses.map((proc) => (
                 <div
                   key={proc.id}
-                  onClick={() => navigate(`/processes/${proc.id}/negotiation`)}
+                  onClick={() => navigate(`/consultant/processes/${proc.id}`)}
                   className="grid grid-cols-[1.5fr_1.5fr_1fr_1fr_1fr] gap-4 items-center px-4 py-3 bg-white rounded-lg border border-gray-100 hover:border-gray-300 cursor-pointer transition-colors"
                 >
                   <div className="text-sm font-medium text-gray-900">
