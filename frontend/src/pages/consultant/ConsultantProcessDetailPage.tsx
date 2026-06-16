@@ -10,12 +10,16 @@ import {
   MessageSquare,
   Package,
   RefreshCw,
+  Send,
   User,
   UserCog,
   X,
 } from "lucide-react";
 import {
+  acceptProposal,
+  createProposal,
   getProcessProposals,
+  rejectProposal,
   type NegotiationMeta,
   type NegotiationProcessInfo,
   type NegotiationProposal,
@@ -24,6 +28,7 @@ import {
   getProcessById,
   type Process,
 } from "../../services/processes.service";
+import { useAuth } from "../../store/authStateManager";
 
 const STATUS_LABELS: Record<string, string> = {
   SCHEDULING: "Agendamento",
@@ -104,6 +109,7 @@ function ProposalStatusBadge({ status }: { status: string }) {
 export default function ConsultantProcessDetailPage() {
   const { processId } = useParams<{ processId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [process, setProcess] = useState<Process | null>(null);
   const [proposals, setProposals] = useState<NegotiationProposal[]>([]);
@@ -112,6 +118,14 @@ export default function ConsultantProcessDetailPage() {
   const [meta, setMeta] = useState<NegotiationMeta | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [proposedValue, setProposedValue] = useState<string>("");
+  const [message, setMessage] = useState<string>("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const [pendingActionProposalId, setPendingActionProposalId] = useState<
+    string | null
+  >(null);
 
   const timelineRef = useRef<HTMLDivElement>(null);
 
@@ -166,6 +180,103 @@ export default function ConsultantProcessDetailPage() {
     }
   }, [proposals]);
 
+  const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, "");
+    const numeric = parseInt(raw) || 0;
+    const formatted = (numeric / 100).toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    setProposedValue(formatted);
+  };
+
+  const handleSubmitProposal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    if (!processId || !processInfo) return;
+
+    const value = parseFloat(proposedValue.replace(/\D/g, "")) / 100;
+
+    if (isNaN(value) || value <= 0) {
+      setFormError("Informe um valor válido.");
+      return;
+    }
+
+    if (value < processInfo.minimum_value) {
+      setFormError(
+        `O valor mínimo permitido é ${formatCurrency(processInfo.minimum_value)}.`,
+      );
+      return;
+    }
+
+    const lastPending = proposals.find((p) => p.status === "PENDING");
+
+    try {
+      setIsSending(true);
+      await createProposal({
+        process_id: processId,
+        proposed_value: value,
+        message: message || undefined,
+        counter_to_id: lastPending?.id,
+      });
+      setProposedValue("");
+      setMessage("");
+      await load();
+    } catch (err) {
+      console.error("[ConsultantProcessDetailPage] Erro ao enviar:", err);
+      setFormError(
+        err instanceof Error ? err.message : "Erro ao enviar proposta.",
+      );
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleAccept = async (proposalId: string) => {
+    try {
+      setPendingActionProposalId(proposalId);
+      await acceptProposal(proposalId, "Proposta aceita pelo consultor");
+      await load();
+    } catch (err) {
+      console.error("[ConsultantProcessDetailPage] Erro ao aceitar:", err);
+      setError(err instanceof Error ? err.message : "Erro ao aceitar proposta");
+    } finally {
+      setPendingActionProposalId(null);
+    }
+  };
+
+  const handleReject = async (proposalId: string) => {
+    try {
+      setPendingActionProposalId(proposalId);
+      await rejectProposal(proposalId, "Proposta rejeitada pelo consultor");
+      await load();
+    } catch (err) {
+      console.error("[ConsultantProcessDetailPage] Erro ao rejeitar:", err);
+      setError(
+        err instanceof Error ? err.message : "Erro ao rejeitar proposta",
+      );
+    } finally {
+      setPendingActionProposalId(null);
+    }
+  };
+
+  const canCreateProposal = (): boolean => {
+    if (!processInfo || !meta) return false;
+    if (processInfo.status !== "NEGOTIATION") return false;
+    return meta.can_create_proposal;
+  };
+
+  const canRespondToProposal = (proposal: NegotiationProposal): boolean => {
+    if (!user || proposal.status !== "PENDING") return false;
+    if (processInfo?.status !== "NEGOTIATION") return false;
+    // Consultor atua pelo cliente: pode responder quando proposta é destinada ao cliente
+    return (
+      proposal.proposed_to.id === user.id ||
+      proposal.proposed_to.role === "CUSTOMER"
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24 text-gray-600">
@@ -204,6 +315,8 @@ export default function ConsultantProcessDetailPage() {
     STATUS_COLORS[process.status] ?? "bg-gray-100 text-gray-600";
 
   const acceptedProposal = proposals.find((p) => p.status === "ACCEPTED");
+  const isAwaitingProduct = !process.product_type || !process.product_id;
+  const showCreateForm = canCreateProposal();
 
   return (
     <div className="text-text-main w-full">
@@ -219,8 +332,7 @@ export default function ConsultantProcessDetailPage() {
           <div>
             <h1 className="h1-style">Detalhes do processo</h1>
             <p className="text-sm text-gray-500 mt-1">
-              Visualização somente leitura. A negociação é conduzida entre
-              cliente e especialista.
+              Acompanhe e atue na negociação em nome do cliente.
             </p>
           </div>
         </div>
@@ -346,7 +458,7 @@ export default function ConsultantProcessDetailPage() {
           <h2 className="h2-style">Histórico de propostas</h2>
         </div>
 
-        {!process.product_type || !process.product_id ? (
+        {isAwaitingProduct ? (
           <div className="text-center py-10 text-gray-500 text-sm">
             A negociação ainda não foi iniciada. O especialista precisa
             associar um produto ao processo.
@@ -393,10 +505,106 @@ export default function ConsultantProcessDetailPage() {
                   </p>
                 )}
                 <ProposalStatusBadge status={proposal.status} />
+
+                {canRespondToProposal(proposal) && (
+                  <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                    <button
+                      onClick={() => handleAccept(proposal.id)}
+                      disabled={pendingActionProposalId !== null}
+                      className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                    >
+                      {pendingActionProposalId === proposal.id ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Check size={16} />
+                      )}
+                      Aceitar
+                    </button>
+                    <button
+                      onClick={() => handleReject(proposal.id)}
+                      disabled={pendingActionProposalId !== null}
+                      className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                    >
+                      {pendingActionProposalId === proposal.id ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <X size={16} />
+                      )}
+                      Rejeitar
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
+
+        {showCreateForm && (
+          <div className="mt-6 pt-4 border-t border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              Enviar nova proposta
+            </h3>
+            {formError && (
+              <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
+                <AlertCircle size={16} />
+                {formError}
+              </div>
+            )}
+            <form
+              onSubmit={handleSubmitProposal}
+              className="flex flex-col md:flex-row gap-3"
+            >
+              <div className="flex-1 flex flex-col md:flex-row gap-3">
+                <div className="relative flex-1 min-w-0">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500">R$</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={proposedValue}
+                    onChange={handleValueChange}
+                    placeholder="0,00"
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 text-right font-medium"
+                    disabled={isSending}
+                  />
+                </div>
+                <input
+                  type="text"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Mensagem (opcional)"
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
+                  disabled={isSending}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isSending || !proposedValue}
+                className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-slate-700 text-white font-medium rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSending ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <Send size={18} />
+                )}
+                Enviar proposta
+              </button>
+            </form>
+            {processInfo && (
+              <p className="mt-2 text-xs text-gray-500">
+                Valor mínimo aceito: {formatCurrency(processInfo.minimum_value)}
+              </p>
+            )}
+          </div>
+        )}
+
+        {!showCreateForm &&
+          processInfo?.status === "NEGOTIATION" &&
+          !isAwaitingProduct && (
+            <div className="mt-6 p-3 bg-gray-50 border border-gray-200 rounded-lg text-center text-sm text-gray-600">
+              Aguardando resposta do especialista.
+            </div>
+          )}
       </div>
     </div>
   );

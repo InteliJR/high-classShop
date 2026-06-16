@@ -76,6 +76,7 @@ export class ProposalsService {
             name: true,
             surname: true,
             role: true,
+            consultant_id: true,
           },
         },
         specialist: {
@@ -130,11 +131,13 @@ export class ProposalsService {
       });
     }
 
-    // 3. Validar que usuário é participante do processo
+    // 3. Validar que usuário é participante do processo (cliente, especialista ou consultor do cliente)
     const isClient = process.client_id === userId;
     const isSpecialist = process.specialist_id === userId;
+    const isConsultantOfClient = process.client?.consultant_id === userId;
+    const isOnClientSide = isClient || isConsultantOfClient;
 
-    if (!isClient && !isSpecialist) {
+    if (!isClient && !isSpecialist && !isConsultantOfClient) {
       this.logger.warn(
         `[create] Usuário ${userId} não é participante do processo ${dto.process_id}`,
       );
@@ -148,19 +151,23 @@ export class ProposalsService {
       });
     }
 
-    // 4. Validar alternância (não pode enviar 2 propostas seguidas)
+    // 4. Validar alternância por lado (cliente/consultor vs especialista) — não pode dois envios seguidos do mesmo lado
     const lastProposal = process.proposals[0];
-    if (lastProposal && lastProposal.proposed_by.id === userId) {
-      // Só bloqueia se a última proposta está PENDING
-      if (lastProposal.status === ProposalStatus.PENDING) {
+    if (lastProposal && lastProposal.status === ProposalStatus.PENDING) {
+      const lastProposerSide =
+        lastProposal.proposed_by.id === process.specialist_id
+          ? 'SPECIALIST'
+          : 'CLIENT';
+      const userSide = isOnClientSide ? 'CLIENT' : 'SPECIALIST';
+      if (lastProposerSide === userSide) {
         this.logger.warn(
-          `[create] Usuário ${userId} tentou enviar proposta seguida`,
+          `[create] Usuário ${userId} tentou enviar proposta seguida (lado ${userSide})`,
         );
         throw new BadRequestException({
           success: false,
           error: {
             code: 400,
-            message: 'Aguarde a resposta da sua proposta anterior',
+            message: 'Aguarde a resposta da proposta anterior',
             details: {
               last_proposal_id: lastProposal.id,
               last_proposal_status: lastProposal.status,
@@ -255,8 +262,10 @@ export class ProposalsService {
       }
     }
 
-    // 8. Determinar destinatário
-    const proposedToId = isClient ? process.specialist_id : process.client_id;
+    // 8. Determinar destinatário (lado oposto)
+    const proposedToId = isOnClientSide
+      ? process.specialist_id
+      : process.client_id;
 
     // 9. Criar proposta em transação
     const proposal = await this.prisma.$transaction(async (tx) => {
@@ -299,13 +308,13 @@ export class ProposalsService {
 
     // Fire-and-forget: Enviar notificação de nova proposta
     // Reutiliza productValue já calculado acima
-    const recipientName = isClient
+    const recipientName = isOnClientSide
       ? `${process.specialist.name} ${process.specialist.surname || ''}`.trim()
       : `${process.client.name} ${process.client.surname || ''}`.trim();
-    const proposerName = isClient
+    const proposerName = isOnClientSide
       ? `${process.client.name} ${process.client.surname || ''}`.trim()
       : `${process.specialist.name} ${process.specialist.surname || ''}`.trim();
-    const recipientEmail = isClient
+    const recipientEmail = isOnClientSide
       ? process.specialist.email!
       : process.client.email!;
 
@@ -467,10 +476,25 @@ export class ProposalsService {
     );
     const pendingResponseFrom = lastPendingProposal?.proposed_to_id;
 
-    // 5. Verificar se usuário pode criar proposta
+    // 5. Verificar se usuário pode criar proposta (lógica por lado)
+    const userSide: 'CLIENT' | 'SPECIALIST' | null =
+      process.client_id === userId || process.client?.consultant_id === userId
+        ? 'CLIENT'
+        : process.specialist_id === userId
+          ? 'SPECIALIST'
+          : null;
+
+    const lastPendingTargetSide: 'CLIENT' | 'SPECIALIST' | null =
+      lastPendingProposal
+        ? lastPendingProposal.proposed_to_id === process.specialist_id
+          ? 'SPECIALIST'
+          : 'CLIENT'
+        : null;
+
     const canCreateProposal =
+      userSide !== null &&
       process.status === ProcessStatus.NEGOTIATION &&
-      (!lastPendingProposal || lastPendingProposal.proposed_to_id === userId);
+      (!lastPendingProposal || lastPendingTargetSide === userSide);
 
     return {
       proposals: process.proposals.map((p) => this.mapToResponseEntity(p)),
@@ -812,6 +836,7 @@ export class ProposalsService {
             car_id: true,
             boat_id: true,
             aircraft_id: true,
+            client: { select: { consultant_id: true } },
           },
         },
       },
@@ -828,8 +853,13 @@ export class ProposalsService {
       });
     }
 
-    // Validar que é o destinatário
-    if (proposal.proposed_to_id !== userId) {
+    // Validar destinatário — usuário direto ou consultor do cliente quando a proposta é para o cliente
+    const isDirectTarget = proposal.proposed_to_id === userId;
+    const isConsultantOfTargetClient =
+      proposal.process.client?.consultant_id === userId &&
+      proposal.proposed_to_id === proposal.process.client_id;
+
+    if (!isDirectTarget && !isConsultantOfTargetClient) {
       throw new ForbiddenException({
         success: false,
         error: {
