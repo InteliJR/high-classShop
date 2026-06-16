@@ -1289,22 +1289,21 @@ export default function CreateContractPage() {
               <h3 className="text-base font-semibold text-gray-900">
                 Dados da Plataforma
               </h3>
-              <span className="text-xs text-gray-400 bg-gray-100 rounded px-2 py-0.5">
-                Preenchido automaticamente
+              <span className="text-xs text-gray-500 bg-gray-100 rounded px-2 py-0.5">
+                Pré-preenchido (editável)
               </span>
             </div>
-            <input type="hidden" {...register("platform_name", { required: "Razão social é obrigatória" })} />
-            <input type="hidden" {...register("platform_bank", { required: "Banco é obrigatório" })} />
-            <input type="hidden" {...register("platform_agency", { required: "Agência é obrigatória" })} />
-            <input type="hidden" {...register("platform_checking_account", { required: "Conta é obrigatória" })} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  Razão Social
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Razão Social *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("platform_name") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("platform_name", { required: "Razão social é obrigatória" })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  placeholder="Razão social da plataforma"
+                />
                 {errors.platform_name && (
                   <p className="text-red-500 text-sm mt-1">
                     {errors.platform_name.message}
@@ -1313,13 +1312,15 @@ export default function CreateContractPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  CNPJ
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CNPJ *
                 </label>
-                <input type="hidden" {...register("platform_cnpj", { required: "CNPJ é obrigatório" })} />
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("platform_cnpj") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("platform_cnpj", { required: "CNPJ é obrigatório" })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  placeholder="00.000.000/0000-00"
+                />
                 {errors.platform_cnpj && (
                   <p className="text-red-500 text-sm mt-1">
                     {errors.platform_cnpj.message}
@@ -1328,12 +1329,15 @@ export default function CreateContractPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  Banco
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Banco *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("platform_bank") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("platform_bank", { required: "Banco é obrigatório" })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  placeholder="Banco"
+                />
                 {errors.platform_bank && (
                   <p className="text-red-500 text-sm mt-1">
                     {errors.platform_bank.message}
@@ -1342,12 +1346,15 @@ export default function CreateContractPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  Agência
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Agência *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("platform_agency") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("platform_agency", { required: "Agência é obrigatória" })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  placeholder="Agência"
+                />
                 {errors.platform_agency && (
                   <p className="text-red-500 text-sm mt-1">
                     {errors.platform_agency.message}
@@ -1356,12 +1363,15 @@ export default function CreateContractPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  Conta Corrente
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Conta Corrente *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("platform_checking_account") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("platform_checking_account", { required: "Conta é obrigatória" })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  placeholder="Conta corrente"
+                />
                 {errors.platform_checking_account && (
                   <p className="text-red-500 text-sm mt-1">
                     {errors.platform_checking_account.message}
@@ -1377,22 +1387,21 @@ export default function CreateContractPage() {
               <h3 className="text-base font-semibold text-gray-900">
                 Dados do Escritório
               </h3>
-              <span className="text-xs text-gray-400 bg-gray-100 rounded px-2 py-0.5">
-                Preenchido automaticamente
+              <span className="text-xs text-gray-500 bg-gray-100 rounded px-2 py-0.5">
+                Pré-preenchido (editável)
               </span>
             </div>
-            <input type="hidden" {...register("office_name", { required: "Razão social é obrigatória" })} />
-            <input type="hidden" {...register("office_bank")} />
-            <input type="hidden" {...register("office_agency")} />
-            <input type="hidden" {...register("office_checking_account")} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  Razão Social
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Razão Social *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("office_name") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("office_name", { required: "Razão social é obrigatória" })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  placeholder="Razão social do escritório"
+                />
                 {errors.office_name && (
                   <p className="text-red-500 text-sm mt-1">
                     {errors.office_name.message}
@@ -1401,13 +1410,15 @@ export default function CreateContractPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  CNPJ
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CNPJ *
                 </label>
-                <input type="hidden" {...register("office_cnpj", { required: "CNPJ é obrigatório" })} />
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("office_cnpj") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("office_cnpj", { required: "CNPJ é obrigatório" })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  placeholder="00.000.000/0000-00"
+                />
                 {errors.office_cnpj && (
                   <p className="text-red-500 text-sm mt-1">
                     {errors.office_cnpj.message}
@@ -1416,30 +1427,39 @@ export default function CreateContractPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Banco
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("office_bank") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("office_bank")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  placeholder="Banco"
+                />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Agência
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("office_agency") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("office_agency")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  placeholder="Agência"
+                />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Conta Corrente
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("office_checking_account") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("office_checking_account")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  placeholder="Conta corrente"
+                />
               </div>
             </div>
           </section>
@@ -1450,19 +1470,21 @@ export default function CreateContractPage() {
               <h3 className="text-base font-semibold text-gray-900">
                 Dados do Especialista
               </h3>
-              <span className="text-xs text-gray-400 bg-gray-100 rounded px-2 py-0.5">
-                Parcialmente preenchido
+              <span className="text-xs text-gray-500 bg-gray-100 rounded px-2 py-0.5">
+                Pré-preenchido (editável)
               </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  Nome
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome *
                 </label>
-                <input type="hidden" {...register("specialist_name", { required: "Nome do especialista é obrigatório" })} />
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("specialist_name") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("specialist_name", { required: "Nome do especialista é obrigatório" })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  placeholder="Nome completo"
+                />
                 {errors.specialist_name && (
                   <p className="text-red-500 text-sm mt-1">
                     {errors.specialist_name.message}
@@ -1471,13 +1493,15 @@ export default function CreateContractPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  E-mail
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  E-mail *
                 </label>
-                <input type="hidden" {...register("specialist_email", { required: "E-mail do especialista é obrigatório" })} />
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("specialist_email") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="email"
+                  {...register("specialist_email", { required: "E-mail do especialista é obrigatório" })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  placeholder="email@exemplo.com"
+                />
                 {errors.specialist_email && (
                   <p className="text-red-500 text-sm mt-1">
                     {errors.specialist_email.message}
@@ -1486,13 +1510,15 @@ export default function CreateContractPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
-                  CPF
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CPF *
                 </label>
-                <input type="hidden" {...register("specialist_document", { required: "CPF do especialista é obrigatório" })} />
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px]">
-                  {watch("specialist_document") || <span className="text-gray-400">—</span>}
-                </div>
+                <input
+                  type="text"
+                  {...register("specialist_document", { required: "CPF do especialista é obrigatório" })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  placeholder="000.000.000-00"
+                />
                 {errors.specialist_document && (
                   <p className="text-red-500 text-sm mt-1">
                     {errors.specialist_document.message}
