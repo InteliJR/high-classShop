@@ -91,6 +91,19 @@ interface ContractFormData {
   description: string;
 }
 
+function extractBackendMessage(error: any): string {
+  const candidate =
+    error?.response?.data?.error?.message ??
+    error?.response?.data?.message ??
+    error?.friendlyMessage ??
+    "";
+
+  if (Array.isArray(candidate)) return candidate.join(", ");
+  if (typeof candidate === "string") return candidate;
+  if (candidate == null) return "";
+  return String(candidate);
+}
+
 export default function CreateContractPage() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -439,18 +452,15 @@ export default function CreateContractPage() {
     } catch (error: any) {
       console.error("Erro ao criar preview:", error);
 
-      const backendMessage: string =
-        error.response?.data?.error?.message ||
-        error.response?.data?.message ||
-        error.friendlyMessage ||
-        "";
+      const backendMessage = extractBackendMessage(error);
+      const lowerMessage = backendMessage.toLowerCase();
 
       const isEmailConflict =
-        backendMessage.toLowerCase().includes("vendedor") &&
-        backendMessage.toLowerCase().includes("especialista") ||
-        backendMessage.toLowerCase().includes("same") ||
-        error.response?.data?.error?.code === 400 &&
-          error.response?.data?.error?.details?.seller_email != null;
+        (lowerMessage.includes("vendedor") &&
+          lowerMessage.includes("especialista")) ||
+        lowerMessage.includes("same") ||
+        (error.response?.data?.error?.code === 400 &&
+          error.response?.data?.error?.details?.seller_email != null);
 
       if (isEmailConflict) {
         setSubmitStatus({
@@ -510,18 +520,15 @@ export default function CreateContractPage() {
       console.error("Erro ao enviar contrato:", error);
       setShowPreviewModal(false);
 
-      const backendMessage: string =
-        error.response?.data?.error?.message ||
-        error.response?.data?.message ||
-        error.friendlyMessage ||
-        "";
+      const backendMessage = extractBackendMessage(error);
+      const lowerMessage = backendMessage.toLowerCase();
 
       const isEmailConflict =
-        backendMessage.toLowerCase().includes("vendedor") &&
-        backendMessage.toLowerCase().includes("especialista") ||
-        backendMessage.toLowerCase().includes("same") ||
-        error.response?.data?.error?.code === 400 &&
-          error.response?.data?.error?.details?.seller_email != null;
+        (lowerMessage.includes("vendedor") &&
+          lowerMessage.includes("especialista")) ||
+        lowerMessage.includes("same") ||
+        (error.response?.data?.error?.code === 400 &&
+          error.response?.data?.error?.details?.seller_email != null);
 
       setSubmitStatus({
         type: "error",
