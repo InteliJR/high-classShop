@@ -11,11 +11,13 @@ export class ProcessResponse {
     id: string;
     name: string;
     email: string;
+    phone?: string | null;
   };
   specialist: {
     id: string;
     name: string;
     especialidade: $Enums.ProductType | null;
+    phone?: string | null;
   };
   product: Product | null;
   notes: string | null;

@@ -19,8 +19,11 @@ import { CreateConsultantProcessDto } from './dto/create-consultant-process.dto'
 import { ApiResponseDto } from 'src/shared/dto/api-response.dto';
 import { ClientEntity } from './entity/client.entity';
 import * as auth from 'src/auth/dto/auth';
+import { Roles } from 'src/shared/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 
 @Controller('consultant')
+@Roles(UserRole.CONSULTANT)
 export class ConsultantController {
   constructor(private readonly consultantService: ConsultantService) {}
 
@@ -28,7 +31,8 @@ export class ConsultantController {
    * Helper method to validate UUID format
    */
   private isValidUUID(uuid: string): boolean {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     return uuidRegex.test(uuid);
   }
 
@@ -37,12 +41,14 @@ export class ConsultantController {
    * List all clients for the authenticated consultant
    */
   @Get('clients')
-  async findAllClients(@Request() req: auth.RequestWithUser): Promise<ApiResponseDto<ClientEntity[], any>> {
+  async findAllClients(
+    @Request() req: auth.RequestWithUser,
+  ): Promise<ApiResponseDto<ClientEntity[], any>> {
     const consultantId = req.user.id;
     const clients = await this.consultantService.findAllClients(consultantId);
 
     return {
-      sucess: true,
+      success: true,
       message: 'Clientes listados com sucesso',
       data: clients as ClientEntity[],
     };
@@ -65,7 +71,7 @@ export class ConsultantController {
     );
 
     return {
-      sucess: true,
+      success: true,
       message: result.message,
       data: {
         email: result.email,
@@ -86,8 +92,15 @@ export class ConsultantController {
     @Request() req: auth.RequestWithUser,
     @Body() dto: CreateConsultantProcessDto,
   ): Promise<ApiResponseDto<any, any>> {
-    const process = await this.consultantService.createProcessForClient(req.user.id, dto);
-    return { sucess: true, message: 'Processo criado com sucesso', data: process };
+    const process = await this.consultantService.createProcessForClient(
+      req.user.id,
+      dto,
+    );
+    return {
+      success: true,
+      message: 'Processo criado com sucesso',
+      data: process,
+    };
   }
 
   /**
@@ -100,11 +113,18 @@ export class ConsultantController {
     @Query('status') status?: string,
     @Query('clientId') clientId?: string,
   ): Promise<ApiResponseDto<any, any>> {
-    const processes = await this.consultantService.getAllProcesses(req.user.id, {
-      status,
-      clientId,
-    });
-    return { sucess: true, message: 'Processos listados com sucesso', data: processes };
+    const processes = await this.consultantService.getAllProcesses(
+      req.user.id,
+      {
+        status,
+        clientId,
+      },
+    );
+    return {
+      success: true,
+      message: 'Processos listados com sucesso',
+      data: processes,
+    };
   }
 
   /**
@@ -116,8 +136,15 @@ export class ConsultantController {
     @Request() req: auth.RequestWithUser,
     @Param('id') clientId: string,
   ): Promise<ApiResponseDto<any, any>> {
-    const processes = await this.consultantService.getClientProcesses(req.user.id, clientId);
-    return { sucess: true, message: 'Processos listados com sucesso', data: processes };
+    const processes = await this.consultantService.getClientProcesses(
+      req.user.id,
+      clientId,
+    );
+    return {
+      success: true,
+      message: 'Processos listados com sucesso',
+      data: processes,
+    };
   }
 
   /**
@@ -134,7 +161,7 @@ export class ConsultantController {
 
     if (!this.isValidUUID(clientId)) {
       return {
-        sucess: false,
+        success: false,
         message: 'ID do cliente inválido. Deve ser um UUID válido.',
         data: null as any,
       };
@@ -147,7 +174,7 @@ export class ConsultantController {
     );
 
     return {
-      sucess: true,
+      success: true,
       message: 'Cliente atualizado com sucesso',
       data: client as ClientEntity,
     };
@@ -167,16 +194,19 @@ export class ConsultantController {
 
     if (!this.isValidUUID(clientId)) {
       return {
-        sucess: false,
+        success: false,
         message: 'ID do cliente inválido. Deve ser um UUID válido.',
         data: null,
       };
     }
 
-    const result = await this.consultantService.removeClient(consultantId, clientId);
+    const result = await this.consultantService.removeClient(
+      consultantId,
+      clientId,
+    );
 
     return {
-      sucess: result.success,
+      success: result.success,
       message: result.message,
       data: null,
     };

@@ -52,18 +52,13 @@ export default function StartProcessForClientModal({
     setError(null);
     setIsSubmitting(true);
     try {
-      const result = await createConsultantProcess({
+      await createConsultantProcess({
         client_id: selectedClient.id,
         specialist_id: specialistId,
         product_type: productType,
         product_id: productId,
       });
-      const newProcessId = (result as { id?: string } | null)?.id;
-      if (newProcessId) {
-        navigate(`/processes/${newProcessId}/negotiation`);
-      } else {
-        navigate("/consultant/processes");
-      }
+      navigate("/consultant/processes");
     } catch (err) {
       setError((err as Error).message || "Erro ao criar processo. Tente novamente.");
       setIsSubmitting(false);

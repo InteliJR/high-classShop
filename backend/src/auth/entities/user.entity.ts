@@ -44,6 +44,9 @@ export class UserEntity
   @Expose()
   rg: string;
 
+  @Expose()
+  phone: string | null;
+
   // @Expose()
   // profile_image_url: string | null;
 

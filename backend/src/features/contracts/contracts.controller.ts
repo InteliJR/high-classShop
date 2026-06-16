@@ -101,7 +101,7 @@ export class ContractsController {
     this.logger.debug(`Prefill data returned for process ${processId}`);
 
     return {
-      sucess: true,
+      success: true,
       message: 'Dados do contrato carregados com sucesso',
       data: prefillData,
     };
@@ -188,7 +188,7 @@ export class ContractsController {
     );
 
     return {
-      sucess: true,
+      success: true,
       message: 'Contrato gerado e enviado para assinatura com sucesso',
       data: contract,
     };
@@ -248,9 +248,7 @@ export class ContractsController {
     this.logger.log(
       `Criando preview de contrato para usuário ${userId} (${userEmail})`,
     );
-    this.logger.debug(
-      `Process: ${previewContractDto.process_id}`,
-    );
+    this.logger.debug(`Process: ${previewContractDto.process_id}`);
 
     const preview = await this.contractsService.previewContract(
       previewContractDto,
@@ -262,7 +260,7 @@ export class ContractsController {
     );
 
     return {
-      sucess: true,
+      success: true,
       message: 'Preview criado com sucesso. A URL expira em 10 minutos.',
       data: preview,
     };
@@ -339,7 +337,7 @@ export class ContractsController {
     );
 
     return {
-      sucess: true,
+      success: true,
       message: 'Contrato enviado para assinatura com sucesso',
       data: result,
     };
@@ -376,7 +374,7 @@ export class ContractsController {
     this.logger.log(`Preview cancelado com sucesso. EnvelopeID: ${envelopeId}`);
 
     return {
-      sucess: true,
+      success: true,
       message: 'Preview cancelado com sucesso',
       data: null,
     };

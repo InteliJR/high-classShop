@@ -131,7 +131,7 @@ export default function SpecialistsPage() {
         <p className="text-base mb-8 mt-2">Lista completa de especialistas</p>
 
         {/* Cabeçalho da lista */}
-        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 px-4 py-2 text-base font-normal text-left text-text-secondary min-w-[620px]">
+        <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 px-4 py-2 text-base font-normal text-left text-text-secondary">
           <div>Nome</div>
           <div>Especialidade</div>
           <div>Processos Abertos</div>
@@ -152,7 +152,7 @@ export default function SpecialistsPage() {
               return (
                 <div
                   key={specialist.id}
-                  className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6 rounded-lg shadow-sm bg-white min-w-[620px]"
+                  className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-3 md:gap-5 items-start md:items-center bg-brand-card p-4 md:p-6 rounded-lg shadow-sm bg-white"
                 >
                   <div className="flex items-center gap-3">
                     <span className="font-normal">

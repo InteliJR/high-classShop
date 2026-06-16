@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Patch,
-  Param,
-  Body,
-  Logger,
-} from '@nestjs/common';
+import { Controller, Get, Patch, Param, Body, Logger } from '@nestjs/common';
 import { SettingsService, SettingResponse } from './settings.service';
 import { Roles } from 'src/shared/decorators/roles.decorator';
 import { UpdateSettingDto } from './dto/update-setting.dto';

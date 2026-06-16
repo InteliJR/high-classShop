@@ -1,152 +1,168 @@
-import { Injectable, InternalServerErrorException, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  BadRequestException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { validateEmail } from '../shared/email-validator';
 
 interface ReferralPayload {
-    consultantId: string;
-    email: string;
+  consultantId: string;
+  email: string;
 }
 
 @Injectable()
 export class SesService {
-    private readonly sesClient: SESClient;
-    private readonly logger = new Logger(SesService.name);
-    private readonly fromEmail: string;
-    private readonly frontendUrl: string;
+  private readonly sesClient: SESClient;
+  private readonly logger = new Logger(SesService.name);
+  private readonly fromEmail: string;
+  private readonly frontendUrl: string;
 
-    constructor(
-        private readonly configService: ConfigService,
-        private readonly jwtService: JwtService,
-    ) {
-        this.sesClient = new SESClient({
-            region: this.configService.getOrThrow('AWS_REGION'),
-            credentials: {
-                accessKeyId: this.configService.getOrThrow('AWS_ACCESS_KEY_ID'),
-                secretAccessKey: this.configService.getOrThrow('AWS_SECRET_ACCESS_KEY'),
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly jwtService: JwtService,
+  ) {
+    this.sesClient = new SESClient({
+      region: this.configService.getOrThrow('AWS_REGION'),
+      credentials: {
+        accessKeyId: this.configService.getOrThrow('AWS_ACCESS_KEY_ID'),
+        secretAccessKey: this.configService.getOrThrow('AWS_SECRET_ACCESS_KEY'),
+      },
+    });
+
+    this.fromEmail = this.configService.get(
+      'EMAIL_FROM',
+      'noreply@highclass.com',
+    );
+    this.frontendUrl = this.configService.get(
+      'FRONTEND_URL',
+      'http://localhost:5173',
+    );
+  }
+
+  /**
+   * Generate a JWT token for referral link
+   * @param consultantId - ID of the consultant sending the invitation
+   * @param email - Email of the potential client
+   * @returns JWT token
+   */
+  private generateReferralToken(consultantId: string, email: string): string {
+    const payload: ReferralPayload = {
+      consultantId,
+      email,
+    };
+
+    // Token expires in 7 days
+    return this.jwtService.sign(payload, {
+      secret: this.configService.getOrThrow('JWT_SECRET_REFERRAL'),
+      expiresIn: '7d',
+    });
+  }
+
+  /**
+   * Send a registration/referral link to a potential client
+   * @param recipientEmail - Email address of the potential client
+   * @param consultantId - ID of the consultant sending the invitation
+   * @param consultantName - Name of the consultant for personalization
+   * @returns Object with success status and messageId
+   * @throws BadRequestException if email is invalid
+   */
+  async sendRegistrationEmail(
+    recipientEmail: string,
+    consultantId: string,
+    consultantName: string,
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      // Validate email format before attempting to send (bounce prevention)
+      const validationResult = validateEmail(recipientEmail);
+
+      if (!validationResult.isValid) {
+        const errorMessage = validationResult.suggestion
+          ? `${validationResult.error}. Você quis dizer: ${validationResult.suggestion}?`
+          : validationResult.error;
+
+        this.logger.warn(
+          `Email validation failed for ${recipientEmail}: ${errorMessage}`,
+        );
+        throw new BadRequestException(errorMessage);
+      }
+
+      // Generate JWT token with consultant ID and email
+      const referralToken = this.generateReferralToken(
+        consultantId,
+        recipientEmail,
+      );
+      const registrationUrl = `${this.frontendUrl}/register?ref=${referralToken}`;
+      const emailParams = {
+        Source: this.fromEmail,
+        Destination: {
+          ToAddresses: [recipientEmail],
+        },
+        Message: {
+          Subject: {
+            Data: `Convite para High-class Shop - ${consultantName}`,
+            Charset: 'UTF-8',
+          },
+          Body: {
+            Html: {
+              Data: this.generateRegistrationEmailHtml(
+                consultantName,
+                registrationUrl,
+              ),
+              Charset: 'UTF-8',
             },
-        });
+            Text: {
+              Data: this.generateRegistrationEmailText(
+                consultantName,
+                registrationUrl,
+              ),
+              Charset: 'UTF-8',
+            },
+          },
+        },
+      };
 
-        this.fromEmail = this.configService.get('EMAIL_FROM', 'noreply@highclass.com');
-        this.frontendUrl = this.configService.get('FRONTEND_URL', 'http://localhost:5173');
+      const command = new SendEmailCommand(emailParams);
+      const response = await this.sesClient.send(command);
+
+      this.logger.log(
+        `Registration email sent to ${recipientEmail} from consultant ${consultantId}`,
+      );
+
+      return {
+        success: true,
+        messageId: response.MessageId,
+      };
+    } catch (error) {
+      // Re-throw BadRequestException (invalid email)
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      // For SES errors, log and return error instead of throwing
+      this.logger.error(
+        `Failed to send registration email to ${recipientEmail}`,
+        error,
+      );
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
     }
+  }
 
-    /**
-     * Generate a JWT token for referral link
-     * @param consultantId - ID of the consultant sending the invitation
-     * @param email - Email of the potential client
-     * @returns JWT token
-     */
-    private generateReferralToken(consultantId: string, email: string): string {
-        const payload: ReferralPayload = {
-            consultantId,
-            email,
-        };
-
-        // Token expires in 7 days
-        return this.jwtService.sign(payload, {
-            secret: this.configService.getOrThrow('JWT_SECRET_REFERRAL'),
-            expiresIn: '7d',
-        });
-    }
-
-    /**
-     * Send a registration/referral link to a potential client
-     * @param recipientEmail - Email address of the potential client
-     * @param consultantId - ID of the consultant sending the invitation
-     * @param consultantName - Name of the consultant for personalization
-     * @returns Object with success status and messageId
-     * @throws BadRequestException if email is invalid
-     */
-    async sendRegistrationEmail(
-        recipientEmail: string,
-        consultantId: string,
-        consultantName: string,
-    ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-        try {
-            // Validate email format before attempting to send (bounce prevention)
-            const validationResult = validateEmail(recipientEmail);
-
-            if (!validationResult.isValid) {
-                const errorMessage = validationResult.suggestion
-                    ? `${validationResult.error}. Você quis dizer: ${validationResult.suggestion}?`
-                    : validationResult.error;
-
-                this.logger.warn(`Email validation failed for ${recipientEmail}: ${errorMessage}`);
-                throw new BadRequestException(errorMessage);
-            }
-
-            // Generate JWT token with consultant ID and email
-            const referralToken = this.generateReferralToken(consultantId, recipientEmail);
-            const registrationUrl = `${this.frontendUrl}/register?ref=${referralToken}`;
-            const emailParams = {
-                Source: this.fromEmail,
-                Destination: {
-                    ToAddresses: [recipientEmail],
-                },
-                Message: {
-                    Subject: {
-                        Data: `Convite para High-class Shop - ${consultantName}`,
-                        Charset: 'UTF-8',
-                    },
-                    Body: {
-                        Html: {
-                            Data: this.generateRegistrationEmailHtml(
-                                consultantName,
-                                registrationUrl,
-                            ),
-                            Charset: 'UTF-8',
-                        },
-                        Text: {
-                            Data: this.generateRegistrationEmailText(
-                                consultantName,
-                                registrationUrl,
-                            ),
-                            Charset: 'UTF-8',
-                        },
-                    },
-                },
-            };
-
-            const command = new SendEmailCommand(emailParams);
-            const response = await this.sesClient.send(command);
-
-            this.logger.log(
-                `Registration email sent to ${recipientEmail} from consultant ${consultantId}`,
-            );
-
-            return {
-                success: true,
-                messageId: response.MessageId,
-            };
-        } catch (error) {
-            // Re-throw BadRequestException (invalid email)
-            if (error instanceof BadRequestException) {
-                throw error;
-            }
-
-            // For SES errors, log and return error instead of throwing
-            this.logger.error(
-                `Failed to send registration email to ${recipientEmail}`,
-                error,
-            );
-
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : 'Unknown error',
-            };
-        }
-    }
-
-    /**
-     * Generate HTML version of the registration email
-     */
-    private generateRegistrationEmailHtml(
-        consultantName: string,
-        registrationUrl: string,
-    ): string {
-        return `
+  /**
+   * Generate HTML version of the registration email
+   */
+  private generateRegistrationEmailHtml(
+    consultantName: string,
+    registrationUrl: string,
+  ): string {
+    return `
       <!DOCTYPE html>
       <html>
       <head>
@@ -234,16 +250,16 @@ export class SesService {
       </body>
       </html>
     `;
-    }
+  }
 
-    /**
-     * Generate plain text version of the registration email
-     */
-    private generateRegistrationEmailText(
-        consultantName: string,
-        registrationUrl: string,
-    ): string {
-        return `
+  /**
+   * Generate plain text version of the registration email
+   */
+  private generateRegistrationEmailText(
+    consultantName: string,
+    registrationUrl: string,
+  ): string {
+    return `
 High-class Shop - Convite para Cadastro
 
 Olá,
@@ -262,28 +278,28 @@ ${consultantName}.
 © 2025 High-class Shop. Todos os direitos reservados.
 Se você não solicitou este convite, por favor ignore este e-mail.
     `.trim();
-    }
+  }
 
-    /**
-     * Send a consultant invite email from admin/company
-     */
-    async sendConsultantInviteEmail(
-        recipientEmail: string,
-        inviteLink: string,
-        companyName: string,
-    ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-        try {
-            const emailParams = {
-                Source: this.fromEmail,
-                Destination: { ToAddresses: [recipientEmail] },
-                Message: {
-                    Subject: {
-                        Data: `Convite para ser Consultor — ${companyName} | High-class Shop`,
-                        Charset: 'UTF-8',
-                    },
-                    Body: {
-                        Html: {
-                            Data: `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+  /**
+   * Send a consultant invite email from admin/company
+   */
+  async sendConsultantInviteEmail(
+    recipientEmail: string,
+    inviteLink: string,
+    companyName: string,
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const emailParams = {
+        Source: this.fromEmail,
+        Destination: { ToAddresses: [recipientEmail] },
+        Message: {
+          Subject: {
+            Data: `Convite para ser Consultor — ${companyName} | High-class Shop`,
+            Charset: 'UTF-8',
+          },
+          Body: {
+            Html: {
+              Data: `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px}
 .header{background-color:#1a1a1a;color:#fff;padding:20px;text-align:center}
 .content{background-color:#f9f9f9;padding:30px;border-radius:5px;margin-top:20px}
@@ -302,36 +318,42 @@ body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;mar
 </div>
 <div class="footer"><p>© 2025 High-class Shop. Todos os direitos reservados.</p></div>
 </body></html>`,
-                            Charset: 'UTF-8',
-                        },
-                        Text: {
-                            Data: `High-class Shop — Convite de Consultor\n\nVocê foi convidado como Consultor no escritório ${companyName}.\n\nAcesse: ${inviteLink}\n\nLink válido por 7 dias.`,
-                            Charset: 'UTF-8',
-                        },
-                    },
-                },
-            };
+              Charset: 'UTF-8',
+            },
+            Text: {
+              Data: `High-class Shop — Convite de Consultor\n\nVocê foi convidado como Consultor no escritório ${companyName}.\n\nAcesse: ${inviteLink}\n\nLink válido por 7 dias.`,
+              Charset: 'UTF-8',
+            },
+          },
+        },
+      };
 
-            const command = new SendEmailCommand(emailParams);
-            const response = await this.sesClient.send(command);
-            this.logger.log(`Consultant invite email sent to ${recipientEmail}`);
-            return { success: true, messageId: response.MessageId };
-        } catch (error) {
-            this.logger.error(`Failed to send consultant invite email to ${recipientEmail}`, error);
-            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-        }
+      const command = new SendEmailCommand(emailParams);
+      const response = await this.sesClient.send(command);
+      this.logger.log(`Consultant invite email sent to ${recipientEmail}`);
+      return { success: true, messageId: response.MessageId };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send consultant invite email to ${recipientEmail}`,
+        error,
+      );
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
     }
+  }
 
-    /**
-     * Send an office (gerente do escritório) invite email — sent by ADMIN.
-     */
-    async sendOfficeInviteEmail(
-        recipientEmail: string,
-        inviteLink: string,
-        companyName: string,
-    ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-        try {
-            const htmlBody = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+  /**
+   * Send an office (gerente do escritório) invite email — sent by ADMIN.
+   */
+  async sendOfficeInviteEmail(
+    recipientEmail: string,
+    inviteLink: string,
+    companyName: string,
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const htmlBody = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px}
 .header{background-color:#1a1a1a;color:#fff;padding:20px;text-align:center}
 .content{background-color:#f9f9f9;padding:30px;border-radius:5px;margin-top:20px}
@@ -351,50 +373,56 @@ body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;mar
 </div>
 <div class="footer"><p>© 2026 High-class Shop. Todos os direitos reservados.</p></div>
 </body></html>`;
-            const textBody = `High-class Shop — Convite de Gerente de Escritório\n\nVocê foi convidado(a) para gerenciar o escritório ${companyName}.\n\nAcesse: ${inviteLink}\n\nO link expira em 7 dias.`;
+      const textBody = `High-class Shop — Convite de Gerente de Escritório\n\nVocê foi convidado(a) para gerenciar o escritório ${companyName}.\n\nAcesse: ${inviteLink}\n\nO link expira em 7 dias.`;
 
-            const emailParams = {
-                Source: this.fromEmail,
-                Destination: { ToAddresses: [recipientEmail] },
-                Message: {
-                    Subject: {
-                        Data: `Convite para gerenciar ${companyName} — High-class Shop`,
-                        Charset: 'UTF-8',
-                    },
-                    Body: {
-                        Html: { Data: htmlBody, Charset: 'UTF-8' },
-                        Text: { Data: textBody, Charset: 'UTF-8' },
-                    },
-                },
-            };
+      const emailParams = {
+        Source: this.fromEmail,
+        Destination: { ToAddresses: [recipientEmail] },
+        Message: {
+          Subject: {
+            Data: `Convite para gerenciar ${companyName} — High-class Shop`,
+            Charset: 'UTF-8',
+          },
+          Body: {
+            Html: { Data: htmlBody, Charset: 'UTF-8' },
+            Text: { Data: textBody, Charset: 'UTF-8' },
+          },
+        },
+      };
 
-            const command = new SendEmailCommand(emailParams);
-            const response = await this.sesClient.send(command);
-            this.logger.log(`Office invite email sent to ${recipientEmail}`);
-            return { success: true, messageId: response.MessageId };
-        } catch (error) {
-            this.logger.error(`Failed to send office invite email to ${recipientEmail}`, error);
-            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-        }
+      const command = new SendEmailCommand(emailParams);
+      const response = await this.sesClient.send(command);
+      this.logger.log(`Office invite email sent to ${recipientEmail}`);
+      return { success: true, messageId: response.MessageId };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send office invite email to ${recipientEmail}`,
+        error,
+      );
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
     }
+  }
 
-    /**
-     * Send a specialist invite email from admin
-     */
-    async sendSpecialistInviteEmail(
-        recipientEmail: string,
-        inviteLink: string,
-        speciality: 'CAR' | 'BOAT' | 'AIRCRAFT',
-    ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-        try {
-            const specialityLabels: Record<string, string> = {
-                CAR: 'Carros',
-                BOAT: 'Embarcações',
-                AIRCRAFT: 'Aeronaves',
-            };
-            const specialityLabel = specialityLabels[speciality] ?? speciality;
+  /**
+   * Send a specialist invite email from admin
+   */
+  async sendSpecialistInviteEmail(
+    recipientEmail: string,
+    inviteLink: string,
+    speciality: 'CAR' | 'BOAT' | 'AIRCRAFT',
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const specialityLabels: Record<string, string> = {
+        CAR: 'Carros',
+        BOAT: 'Embarcações',
+        AIRCRAFT: 'Aeronaves',
+      };
+      const specialityLabel = specialityLabels[speciality] ?? speciality;
 
-            const htmlBody = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+      const htmlBody = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px}
 .header{background-color:#1a1a1a;color:#fff;padding:20px;text-align:center}
 .content{background-color:#f9f9f9;padding:30px;border-radius:5px;margin-top:20px}
@@ -414,30 +442,36 @@ body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;mar
 </div>
 <div class="footer"><p>© 2025 High-class Shop. Todos os direitos reservados.</p></div>
 </body></html>`;
-            const textBody = `High-class Shop — Convite de Especialista\n\nVocê recebeu um convite para se tornar Especialista em ${specialityLabel} na High Class Shop.\n\nAcesse: ${inviteLink}\n\nO link expira em 7 dias.`;
+      const textBody = `High-class Shop — Convite de Especialista\n\nVocê recebeu um convite para se tornar Especialista em ${specialityLabel} na High Class Shop.\n\nAcesse: ${inviteLink}\n\nO link expira em 7 dias.`;
 
-            const emailParams = {
-                Source: this.fromEmail,
-                Destination: { ToAddresses: [recipientEmail] },
-                Message: {
-                    Subject: {
-                        Data: `Convite para se tornar Especialista na High Class Shop`,
-                        Charset: 'UTF-8',
-                    },
-                    Body: {
-                        Html: { Data: htmlBody, Charset: 'UTF-8' },
-                        Text: { Data: textBody, Charset: 'UTF-8' },
-                    },
-                },
-            };
+      const emailParams = {
+        Source: this.fromEmail,
+        Destination: { ToAddresses: [recipientEmail] },
+        Message: {
+          Subject: {
+            Data: `Convite para se tornar Especialista na High Class Shop`,
+            Charset: 'UTF-8',
+          },
+          Body: {
+            Html: { Data: htmlBody, Charset: 'UTF-8' },
+            Text: { Data: textBody, Charset: 'UTF-8' },
+          },
+        },
+      };
 
-            const command = new SendEmailCommand(emailParams);
-            const response = await this.sesClient.send(command);
-            this.logger.log(`Specialist invite email sent to ${recipientEmail}`);
-            return { success: true, messageId: response.MessageId };
-        } catch (error) {
-            this.logger.error(`Failed to send specialist invite email to ${recipientEmail}`, error);
-            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-        }
+      const command = new SendEmailCommand(emailParams);
+      const response = await this.sesClient.send(command);
+      this.logger.log(`Specialist invite email sent to ${recipientEmail}`);
+      return { success: true, messageId: response.MessageId };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send specialist invite email to ${recipientEmail}`,
+        error,
+      );
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
     }
+  }
 }

@@ -124,7 +124,7 @@ export class BoatsController {
     pagination.per_page = perPage;
 
     return {
-      sucess: true,
+      success: true,
       message: 'Barcos listados com sucesso',
       data: data,
       meta: {

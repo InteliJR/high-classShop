@@ -10,7 +10,6 @@ import Button from "../../components/ui/button";
 import Modal from "../../components/ui/Modal";
 import InviteClientForm from "./InviteClientForm";
 import EditClientForm from "./EditClientForm";
-import CreateConsultantProcessModal from "./CreateConsultantProcessModal";
 import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import TrashIcon from "../../assets/icons/trash.svg";
 import EditIcon from "../../assets/icons/edit.svg";
@@ -60,7 +59,6 @@ export default function ConsultantClientsPage() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [clientToEdit, setClientToEdit] = useState<Client | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
-  const [clientForProcess, setClientForProcess] = useState<Client | null>(null);
 
   const fetchClients = useCallback(async () => {
     try {
@@ -107,20 +105,6 @@ export default function ConsultantClientsPage() {
     }
   };
 
-  const handleProcessCreated = () => {
-    const clientId = clientForProcess?.id;
-    setClientForProcess(null);
-    if (clientId) {
-      // Refresh processes for that client
-      setClientProcesses((prev) => {
-        const next = { ...prev };
-        delete next[clientId];
-        return next;
-      });
-      toggleExpand(clientId);
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -146,7 +130,7 @@ export default function ConsultantClientsPage() {
       <div className="p-6 rounded-lg shadow bg-white">
         <h2 className="h2-style">Clientes</h2>
         <p className="text-sm text-gray-500 mt-1 mb-6">
-          Expanda um cliente para ver seus processos e criar novos.
+          Expanda um cliente para ver seus processos. Para criar processo, abra o catálogo e clique em "Iniciar processo para cliente" no produto.
         </p>
 
         {clients.length === 0 ? (
@@ -186,12 +170,6 @@ export default function ConsultantClientsPage() {
                     </p>
 
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setClientForProcess(client)}
-                        className="text-xs bg-brand-primary text-brand-primary-fg px-3 py-1.5 rounded hover:opacity-90 transition-colors whitespace-nowrap"
-                      >
-                        + Processo
-                      </button>
                       <button onClick={() => setClientToEdit(client)} className="p-1.5 hover:bg-gray-100 rounded">
                         <img src={EditIcon} alt="Editar" className="h-4 w-4" />
                       </button>
@@ -219,7 +197,7 @@ export default function ConsultantClientsPage() {
                           {processes.map((proc) => (
                             <div
                               key={proc.id}
-                              onClick={() => navigate(`/processes/${proc.id}/negotiation`)}
+                              onClick={() => navigate(`/consultant/processes/${proc.id}`)}
                               className="flex items-center justify-between bg-white rounded-lg px-4 py-3 border border-gray-100 hover:border-gray-300 cursor-pointer transition-colors"
                             >
                               <div className="flex items-center gap-3">
@@ -271,15 +249,6 @@ export default function ConsultantClientsPage() {
         </div>
       </Modal>
 
-      <Modal isOpen={!!clientForProcess} onClose={() => setClientForProcess(null)}>
-        {clientForProcess && (
-          <CreateConsultantProcessModal
-            client={clientForProcess}
-            onSuccess={handleProcessCreated}
-            onClose={() => setClientForProcess(null)}
-          />
-        )}
-      </Modal>
     </div>
   );
 }

@@ -1,61 +1,69 @@
-import { IsString, IsNumber, IsOptional, IsUUID, IsArray, ValidateNested, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsUUID,
+  IsArray,
+  ValidateNested,
+  IsBoolean,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 class ImageDto {
-    @IsString()
-    data: string; // base64 string
+  @IsString()
+  data: string; // base64 string
 
-    @IsBoolean()
-    is_primary: boolean;
+  @IsBoolean()
+  is_primary: boolean;
 }
 
 export class CreateCarDto {
-    @IsString()
-    marca: string;
+  @IsString()
+  marca: string;
 
-    @IsString()
-    modelo: string;
+  @IsString()
+  modelo: string;
 
-    @IsNumber()
-    valor: number;
+  @IsNumber()
+  valor: number;
 
-    @IsString()
-    estado: string;
+  @IsString()
+  estado: string;
 
-    @IsNumber()
-    ano: number;
+  @IsNumber()
+  ano: number;
 
-    @IsOptional()
-    @IsString()
-    cor?: string;
+  @IsOptional()
+  @IsString()
+  cor?: string;
 
-    @IsOptional()
-    @IsNumber()
-    km?: number;
+  @IsOptional()
+  @IsNumber()
+  km?: number;
 
-    @IsOptional()
-    @IsString()
-    cambio?: string;
+  @IsOptional()
+  @IsString()
+  cambio?: string;
 
-    @IsOptional()
-    @IsString()
-    combustivel?: string;
+  @IsOptional()
+  @IsString()
+  combustivel?: string;
 
-    @IsOptional()
-    @IsString()
-    tipo_categoria?: string;
+  @IsOptional()
+  @IsString()
+  tipo_categoria?: string;
 
-    @IsOptional()
-    @IsString()
-    descricao?: string;
+  @IsOptional()
+  @IsString()
+  descricao?: string;
 
-    @IsOptional()
-    @IsUUID()
-    specialist_id?: string;
+  @IsOptional()
+  @IsUUID()
+  specialist_id?: string;
 
-    @IsOptional()
-    @IsArray()
-    @ValidateNested({ each: true })
-    @Type(() => ImageDto)
-    images?: ImageDto[];
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ImageDto)
+  images?: ImageDto[];
 }

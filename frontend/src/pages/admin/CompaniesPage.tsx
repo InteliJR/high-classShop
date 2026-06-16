@@ -272,7 +272,7 @@ export default function CompaniesPage() {
         </p>
 
         {/* Cabeçalho da Lista */}
-        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 px-4 py-2 text-base font-normal text-left text-text-secondary min-w-[700px]">
+        <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 px-4 py-2 text-base font-normal text-left text-text-secondary">
           <div>Empresa</div>
           <div>% Plataforma</div>
           <div>% Escritório</div>
@@ -299,7 +299,7 @@ export default function CompaniesPage() {
                   className="rounded-lg shadow-sm bg-white overflow-hidden"
                 >
                   {/* Linha principal da empresa */}
-                  <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 items-center bg-brand-card p-6 min-w-[700px]">
+                  <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-3 md:gap-5 items-start md:items-center bg-brand-card p-4 md:p-6">
                     <div className="flex items-center gap-3">
                       {/* Botão expand/collapse */}
                       <button

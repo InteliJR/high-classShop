@@ -257,31 +257,6 @@ export async function generateContract(
   return response.data.data;
 }
 
-/**
- * Get contract by ID
- * @param contractId - ID of the contract to retrieve
- */
-export async function getContract(
-  contractId: string,
-): Promise<ContractResponse> {
-  const response = await api.get<ApiResponse<ContractResponse>>(
-    `/contracts/${contractId}`,
-    { withCredentials: true },
-  );
-  return response.data.data;
-}
-
-/**
- * List all contracts (admin/specialist only)
- */
-export async function listContracts(): Promise<ContractResponse[]> {
-  const response = await api.get<ApiResponse<ContractResponse[]>>(
-    "/contracts",
-    { withCredentials: true },
-  );
-  return response.data.data;
-}
-
 // === FUNÇÕES DE PREVIEW ===
 
 /**

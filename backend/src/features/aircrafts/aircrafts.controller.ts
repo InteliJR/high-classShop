@@ -124,7 +124,7 @@ export class AircraftsController {
     pagination.per_page = perPage;
 
     return {
-      sucess: true,
+      success: true,
       message: 'Aeronaves listados com sucesso',
       data: data,
       meta: {

@@ -189,6 +189,7 @@ export interface RegisterValues {
   email: string;
   cpf: string;
   rg: string;
+  phone: string;
   password: string;
   civil_state?: CivilState;
   consultant_id?: string;

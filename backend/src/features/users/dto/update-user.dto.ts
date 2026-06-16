@@ -43,8 +43,18 @@ export class UpdateUserDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^\d{9,10}$/, { message: 'RG deve conter entre 9 e 10 dígitos numéricos' })
+  @Matches(/^\d{9,10}$/, {
+    message: 'RG deve conter entre 9 e 10 dígitos numéricos',
+  })
   rg?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{10,11}$/, {
+    message:
+      'Telefone deve conter entre 10 e 11 dígitos numéricos (DDD + número)',
+  })
+  phone?: string;
 
   @IsOptional()
   @IsString()

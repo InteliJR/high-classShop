@@ -16,10 +16,16 @@ export async function createApp(): Promise<Express> {
   const configuredFrontendUrl = (
     process.env.FRONTEND_URL || 'http://localhost:5173'
   ).replace(/\/$/, '');
-  const allowedOrigins = new Set([configuredFrontendUrl, 'http://localhost:5173']);
+  const allowedOrigins = new Set([
+    configuredFrontendUrl,
+    'http://localhost:5173',
+  ]);
 
   app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
       if (!origin || allowedOrigins.has(origin)) {
         callback(null, true);
       } else {

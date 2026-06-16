@@ -117,9 +117,6 @@ Entry: `main.tsx` → `RouterProvider` wraps everything; `AuthProvider` + `Cooki
 
 ## Known inconsistencies (do not fix without coordinating)
 
-- `GET /contracts` and `GET /contracts/:id` don't exist in backend — frontend calls them
-- `/aircraft` vs `/aircrafts` route naming inconsistency in some frontend files
-- Some backend responses use `"sucess"` (typo) — changing breaks existing clients
 - Supabase production DB has schema drift vs migrations — use `prisma db push` for additive changes in prod; never `migrate deploy` against prod without verifying
 - `CustomerAdvisor.customer_id` is `@unique` — one advisor/invite per customer; re-invite uses `upsert`
 

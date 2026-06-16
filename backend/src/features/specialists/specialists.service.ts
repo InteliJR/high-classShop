@@ -24,8 +24,13 @@ export class SpecialistsService {
   ) {}
 
   // Gera link de convite para que um especialista se cadastre via self-registration.
-  async inviteSpecialist(email: string, speciality: 'CAR' | 'BOAT' | 'AIRCRAFT') {
-    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+  async inviteSpecialist(
+    email: string,
+    speciality: 'CAR' | 'BOAT' | 'AIRCRAFT',
+  ) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
     if (existingUser) {
       throw new BadRequestException('Já existe um usuário com este email');
     }
@@ -35,11 +40,15 @@ export class SpecialistsService {
       { expiresIn: '7d', secret: jwtConstants.referral },
     );
 
-    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+    const frontendUrl = (
+      process.env.FRONTEND_URL || 'http://localhost:5173'
+    ).replace(/\/$/, '');
     const inviteLink = `${frontendUrl}/register-specialist?invite=${token}`;
 
     setImmediate(() => {
-      this.sesService.sendSpecialistInviteEmail(email, inviteLink, speciality).catch(() => {});
+      this.sesService
+        .sendSpecialistInviteEmail(email, inviteLink, speciality)
+        .catch(() => {});
     });
 
     return { inviteLink, email };

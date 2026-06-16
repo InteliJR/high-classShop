@@ -29,8 +29,8 @@ export class OfficeUpdateCompanyDto {
   cnpj?: string;
 
   @IsOptional() @IsString() @MaxLength(120) bank?: string;
-  @IsOptional() @IsString() @MaxLength(10)  agency?: string;
-  @IsOptional() @IsString() @MaxLength(20)  checking_account?: string;
+  @IsOptional() @IsString() @MaxLength(10) agency?: string;
+  @IsOptional() @IsString() @MaxLength(20) checking_account?: string;
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -40,7 +40,12 @@ export class OfficeUpdateCompanyDto {
 
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(4, { message: 'Máximo 4 cores (primary, secondary, accent, neutral)' })
-  @Matches(HEX_COLOR, { each: true, message: 'Cor deve ser hex (#RGB ou #RRGGBB)' })
+  @ArrayMaxSize(4, {
+    message: 'Máximo 4 cores (primary, secondary, accent, neutral)',
+  })
+  @Matches(HEX_COLOR, {
+    each: true,
+    message: 'Cor deve ser hex (#RGB ou #RRGGBB)',
+  })
   color_identity?: string[];
 }

@@ -7,7 +7,11 @@ import {
 jest.mock('src/shared/services/logo-sanitizer.service', () => ({
   LogoSanitizerService: class {
     sanitize() {
-      return { buffer: Buffer.alloc(0), contentType: 'image/png', extension: 'png' };
+      return {
+        buffer: Buffer.alloc(0),
+        contentType: 'image/png',
+        extension: 'png',
+      };
     }
   },
 }));
@@ -42,7 +46,9 @@ function mkPrisma() {
 }
 
 function mkSes() {
-  return { sendConsultantInviteEmail: jest.fn().mockResolvedValue({ success: true }) };
+  return {
+    sendConsultantInviteEmail: jest.fn().mockResolvedValue({ success: true }),
+  };
 }
 
 function mkJwt(value = 'tok123') {
@@ -64,7 +70,10 @@ describe('OfficeService — tenant isolation', () => {
     ).rejects.toThrow(NotFoundException);
     // filtro DEVE incluir company_id da scope
     expect(prisma.user.findFirst).toHaveBeenCalledWith({
-      where: expect.objectContaining({ company_id: 'companyA', role: 'CONSULTANT' }),
+      where: expect.objectContaining({
+        company_id: 'companyA',
+        role: 'CONSULTANT',
+      }),
     });
   });
 
@@ -121,7 +130,9 @@ describe('OfficeService — tenant isolation', () => {
     const prisma = mkPrisma();
     prisma.user.findFirst.mockResolvedValue(null); // consultor de outra company
     const svc = mkSvc(prisma);
-    const r = await svc.listClients(SCOPE_OFFICE_A, { consultantId: 'consultorB' });
+    const r = await svc.listClients(SCOPE_OFFICE_A, {
+      consultantId: 'consultorB',
+    });
     expect(r).toEqual([]);
     expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
@@ -152,7 +163,11 @@ describe('OfficeService — tenant isolation', () => {
   // S5: PATCH company ignora id no body — sempre usa scope
   it('updateCompany: usa companyId do scope', async () => {
     const prisma = mkPrisma();
-    prisma.company.findUnique.mockResolvedValue({ bank: 'X', agency: '1', checking_account: '2' });
+    prisma.company.findUnique.mockResolvedValue({
+      bank: 'X',
+      agency: '1',
+      checking_account: '2',
+    });
     prisma.company.update.mockResolvedValue({ id: 'companyA', name: 'A' });
     const svc = mkSvc(prisma);
     await svc.updateCompany(SCOPE_OFFICE_A, { name: 'Novo' });
@@ -184,7 +199,9 @@ describe('OfficeService — tenant isolation', () => {
   // ADMIN sem companyId no query string → 400
   it('dashboard: ADMIN sem companyId → BadRequest', async () => {
     const svc = mkSvc(mkPrisma());
-    await expect(svc.dashboard(SCOPE_ADMIN)).rejects.toThrow(BadRequestException);
+    await expect(svc.dashboard(SCOPE_ADMIN)).rejects.toThrow(
+      BadRequestException,
+    );
   });
 
   // Comprovar isolamento entre OFFICE A e OFFICE B (não confunde tenants)

@@ -27,7 +27,8 @@ import { OfficeUpdateCompanyDto } from './dto/update-company.dto';
 import { OfficeUpdateConsultantDto } from './dto/update-consultant.dto';
 import { OfficeService } from './office.service';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const assertUuid = (id: string, field = 'id') => {
   if (!UUID_RE.test(id)) throw new BadRequestException(`${field} inválido`);
 };
@@ -83,13 +84,18 @@ export class OfficeController {
 
   @Post('company/logo')
   @HttpCode(HttpStatus.OK)
-  @UseInterceptors(FileInterceptor('logo', { limits: { fileSize: 2 * 1024 * 1024 + 1 } }))
+  @UseInterceptors(
+    FileInterceptor('logo', { limits: { fileSize: 2 * 1024 * 1024 + 1 } }),
+  )
   uploadLogo(
     @OfficeScope() scope: OfficeScopeData,
     @UploadedFile() file: Express.Multer.File,
     @Query('companyId') companyId?: string,
   ) {
-    if (!file) throw new BadRequestException('Arquivo de logo obrigatório (campo "logo")');
+    if (!file)
+      throw new BadRequestException(
+        'Arquivo de logo obrigatório (campo "logo")',
+      );
     if (companyId) assertUuid(companyId, 'companyId');
     return this.office.uploadCompanyLogo(scope, file, companyId);
   }
@@ -101,7 +107,8 @@ export class OfficeController {
     @Query('active') active?: string,
     @Query('q') q?: string,
   ) {
-    const onlyActive = active === 'true' ? true : active === 'false' ? false : undefined;
+    const onlyActive =
+      active === 'true' ? true : active === 'false' ? false : undefined;
     return this.office.listConsultants(scope, { onlyActive, q });
   }
 
@@ -162,7 +169,9 @@ export class OfficeController {
   // ─── Batch invite jobs ─────────────────────────────────────────────────
   @Post('invite-jobs')
   @HttpCode(HttpStatus.ACCEPTED)
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 + 1 } }))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 + 1 } }),
+  )
   createInviteJob(
     @OfficeScope() scope: OfficeScopeData,
     @Request() req: RequestWithUser,
@@ -171,7 +180,12 @@ export class OfficeController {
   ) {
     if (!file) throw new BadRequestException('CSV obrigatório (campo "file")');
     if (companyId) assertUuid(companyId, 'companyId');
-    return this.inviteJobs.createJobFromCsv(scope, req.user.id, file.buffer, companyId);
+    return this.inviteJobs.createJobFromCsv(
+      scope,
+      req.user.id,
+      file.buffer,
+      companyId,
+    );
   }
 
   @Get('invite-jobs')
@@ -184,10 +198,7 @@ export class OfficeController {
   }
 
   @Get('invite-jobs/:id')
-  getInviteJob(
-    @OfficeScope() scope: OfficeScopeData,
-    @Param('id') id: string,
-  ) {
+  getInviteJob(@OfficeScope() scope: OfficeScopeData, @Param('id') id: string) {
     assertUuid(id);
     return this.inviteJobs.getJobStatus(scope, id);
   }

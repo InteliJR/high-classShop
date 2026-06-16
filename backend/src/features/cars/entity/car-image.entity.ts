@@ -1,4 +1,4 @@
-import { Car } from "@prisma/client";
+import { Car } from '@prisma/client';
 
 export class CarImage {
   id: number;
@@ -7,6 +7,6 @@ export class CarImage {
   is_primary: boolean;
   car_id?: number | null;
   created_at: Date;
-  
+
   car?: Car;
 }

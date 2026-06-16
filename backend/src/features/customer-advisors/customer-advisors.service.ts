@@ -27,7 +27,9 @@ export class CustomerAdvisorsService {
 
     // Não convidar a si mesmo
     if (customer.email.toLowerCase() === invitedEmail.toLowerCase()) {
-      throw new BadRequestException('Você não pode convidar a si mesmo como assessor');
+      throw new BadRequestException(
+        'Você não pode convidar a si mesmo como assessor',
+      );
     }
 
     // Verificar se já tem assessor ativo (aceito)
@@ -48,7 +50,12 @@ export class CustomerAdvisorsService {
     const record = await this.prisma.customerAdvisor.upsert({
       where: { customer_id: customerId },
       create: { customer_id: customerId, email: invitedEmail, token },
-      update: { email: invitedEmail, token, advisor_id: null, accepted_at: null },
+      update: {
+        email: invitedEmail,
+        token,
+        advisor_id: null,
+        accepted_at: null,
+      },
     });
 
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
@@ -65,7 +72,11 @@ export class CustomerAdvisorsService {
         .catch(() => {});
     });
 
-    return { id: record.id, email: record.email, accepted_at: record.accepted_at };
+    return {
+      id: record.id,
+      email: record.email,
+      accepted_at: record.accepted_at,
+    };
   }
 
   async getAdvisor(customerId: string) {
@@ -86,7 +97,9 @@ export class CustomerAdvisorsService {
     });
     if (!record) throw new NotFoundException('Nenhum assessor vinculado');
 
-    await this.prisma.customerAdvisor.delete({ where: { customer_id: customerId } });
+    await this.prisma.customerAdvisor.delete({
+      where: { customer_id: customerId },
+    });
     return { removed: true };
   }
 
@@ -113,7 +126,8 @@ export class CustomerAdvisorsService {
     const record = await this.prisma.customerAdvisor.findUnique({
       where: { customer_id: payload.customerId },
     });
-    if (!record) throw new NotFoundException('Convite não encontrado ou já cancelado');
+    if (!record)
+      throw new NotFoundException('Convite não encontrado ou já cancelado');
     if (record.token !== token) {
       throw new UnauthorizedException('Link de convite inválido ou expirado');
     }

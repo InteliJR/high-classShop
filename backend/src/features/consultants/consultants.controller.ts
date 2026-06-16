@@ -44,10 +44,7 @@ export class ConsultantsController {
 
   // Rota para atualizar os dados de um consultor.
   @Put(':id')
-  update(
-    @Param('id') id: string,
-    @Body() body: UpdateConsultantDto,
-  ) {
+  update(@Param('id') id: string, @Body() body: UpdateConsultantDto) {
     return this.consultantsService.update(id, body);
   }
 

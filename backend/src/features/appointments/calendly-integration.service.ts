@@ -8,7 +8,13 @@ import {
 } from '@nestjs/common';
 import { CalendlySyncStatus, Prisma, UserRole } from '@prisma/client';
 import axios from 'axios';
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from 'crypto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { parseDate } from 'src/shared/utils/date.utils';
 
@@ -57,13 +63,20 @@ export class CalendlyIntegrationService {
       throw new NotFoundException('Usuário não encontrado');
     }
 
-    if (user.role !== UserRole.SPECIALIST && user.role !== UserRole.CONSULTANT) {
-      throw new ForbiddenException('Somente especialistas e consultores podem conectar Calendly');
+    if (
+      user.role !== UserRole.SPECIALIST &&
+      user.role !== UserRole.CONSULTANT
+    ) {
+      throw new ForbiddenException(
+        'Somente especialistas e consultores podem conectar Calendly',
+      );
     }
 
     const clientId = this.getRequiredEnv('CALENDLY_OAUTH_CLIENT_ID');
     const redirectUri = this.getRequiredEnv('CALENDLY_OAUTH_REDIRECT_URI');
-    const authBaseUrl = process.env.CALENDLY_OAUTH_AUTHORIZE_URL || 'https://auth.calendly.com/oauth/authorize';
+    const authBaseUrl =
+      process.env.CALENDLY_OAUTH_AUTHORIZE_URL ||
+      'https://auth.calendly.com/oauth/authorize';
     const scopes = process.env.CALENDLY_OAUTH_SCOPES || 'default';
 
     const state = randomBytes(24).toString('hex');
@@ -135,7 +148,11 @@ export class CalendlyIntegrationService {
       },
     });
 
-    if (!stateRecord || stateRecord.used_at || stateRecord.expires_at < new Date()) {
+    if (
+      !stateRecord ||
+      stateRecord.used_at ||
+      stateRecord.expires_at < new Date()
+    ) {
       throw new BadRequestException('State OAuth inválido ou expirado');
     }
 
@@ -143,14 +160,18 @@ export class CalendlyIntegrationService {
       stateRecord.user.role !== UserRole.SPECIALIST &&
       stateRecord.user.role !== UserRole.CONSULTANT
     ) {
-      throw new ForbiddenException('Usuário não permitido para integração Calendly');
+      throw new ForbiddenException(
+        'Usuário não permitido para integração Calendly',
+      );
     }
 
     const token = await this.exchangeAuthorizationCode(code);
     const me = await this.fetchCalendlyMe(token.access_token);
 
     if (!me.resource?.uri) {
-      throw new InternalServerErrorException('Calendly não retornou URI de usuário');
+      throw new InternalServerErrorException(
+        'Calendly não retornou URI de usuário',
+      );
     }
 
     const expiresAt = token.expires_in
@@ -205,7 +226,9 @@ export class CalendlyIntegrationService {
     try {
       await this.ensureWebhookSubscription(upsertedConnection.user_id);
     } catch (error: any) {
-      this.logger.warn(`Falha ao criar webhook Calendly (não crítico): ${error?.message}`);
+      this.logger.warn(
+        `Falha ao criar webhook Calendly (não crítico): ${error?.message}`,
+      );
     }
 
     return stateRecord.user_id;
@@ -256,7 +279,10 @@ export class CalendlyIntegrationService {
     }
 
     const inviteeData = inviteeUri
-      ? await this.getCalendlyResourceWithRefresh(connection.user_id, inviteeUri)
+      ? await this.getCalendlyResourceWithRefresh(
+          connection.user_id,
+          inviteeUri,
+        )
       : null;
 
     const inviteeResource = inviteeData?.resource || inviteeData;
@@ -276,14 +302,22 @@ export class CalendlyIntegrationService {
       }
     }
 
-    const resolvedEventUri = eventUri || inviteeResource?.event || inviteeResource?.scheduled_event?.uri;
+    const resolvedEventUri =
+      eventUri ||
+      inviteeResource?.event ||
+      inviteeResource?.scheduled_event?.uri;
     if (!resolvedEventUri) {
       return null;
     }
 
-    const eventData = await this.getCalendlyResourceWithRefresh(connection.user_id, resolvedEventUri);
+    const eventData = await this.getCalendlyResourceWithRefresh(
+      connection.user_id,
+      resolvedEventUri,
+    );
     const eventResource = eventData?.resource || eventData;
-    const eventStartTime = eventResource?.start_time || eventData?.payload?.scheduled_event?.start_time;
+    const eventStartTime =
+      eventResource?.start_time ||
+      eventData?.payload?.scheduled_event?.start_time;
 
     if (!eventStartTime) {
       return null;
@@ -321,7 +355,9 @@ export class CalendlyIntegrationService {
 
     const eventUri = payload.event || payload.scheduled_event?.uri;
     const inviteeUri =
-      typeof payload.invitee === 'string' ? payload.invitee : payload.invitee?.uri;
+      typeof payload.invitee === 'string'
+        ? payload.invitee
+        : payload.invitee?.uri;
 
     if (!eventUri && !inviteeUri) {
       return {
@@ -348,7 +384,9 @@ export class CalendlyIntegrationService {
 
     if (eventType === 'invitee.created') {
       const startTimeRaw =
-        payload.scheduled_event?.start_time || payload.event_start_time || payload.start_time;
+        payload.scheduled_event?.start_time ||
+        payload.event_start_time ||
+        payload.start_time;
       const parsedStartTime = startTimeRaw ? parseDate(startTimeRaw) : null;
 
       await this.prisma.appointment.update({
@@ -361,7 +399,8 @@ export class CalendlyIntegrationService {
           calendly_sync_status: parsedStartTime
             ? CalendlySyncStatus.SYNCED
             : appointment.calendly_sync_status,
-          appointment_datetime: parsedStartTime || appointment.appointment_datetime,
+          appointment_datetime:
+            parsedStartTime || appointment.appointment_datetime,
         },
       });
 
@@ -392,13 +431,18 @@ export class CalendlyIntegrationService {
     };
   }
 
-  private async getCalendlyResourceWithRefresh(userId: string, uri: string): Promise<any> {
+  private async getCalendlyResourceWithRefresh(
+    userId: string,
+    uri: string,
+  ): Promise<any> {
     const connection = await this.prisma.calendlyConnection.findUnique({
       where: { user_id: userId },
     });
 
     if (!connection || !connection.is_active) {
-      throw new NotFoundException('Conexão Calendly não encontrada para o especialista');
+      throw new NotFoundException(
+        'Conexão Calendly não encontrada para o especialista',
+      );
     }
 
     let accessToken = this.decryptToken(connection.access_token_encrypted);
@@ -430,7 +474,9 @@ export class CalendlyIntegrationService {
   }> {
     const refreshToken = this.decryptToken(connection.refresh_token_encrypted);
 
-    const tokenUrl = process.env.CALENDLY_OAUTH_TOKEN_URL || 'https://auth.calendly.com/oauth/token';
+    const tokenUrl =
+      process.env.CALENDLY_OAUTH_TOKEN_URL ||
+      'https://auth.calendly.com/oauth/token';
     const clientId = this.getRequiredEnv('CALENDLY_OAUTH_CLIENT_ID');
     const clientSecret = this.getRequiredEnv('CALENDLY_OAUTH_CLIENT_SECRET');
 
@@ -441,20 +487,28 @@ export class CalendlyIntegrationService {
       client_secret: clientSecret,
     });
 
-    const { data } = await axios.post<CalendlyTokenResponse>(tokenUrl, payload.toString(), {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+    const { data } = await axios.post<CalendlyTokenResponse>(
+      tokenUrl,
+      payload.toString(),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        timeout: 20000,
       },
-      timeout: 20000,
-    });
+    );
 
-    const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : null;
+    const expiresAt = data.expires_in
+      ? new Date(Date.now() + data.expires_in * 1000)
+      : null;
 
     return this.prisma.calendlyConnection.update({
       where: { id: connection.id },
       data: {
         access_token_encrypted: this.encryptToken(data.access_token),
-        refresh_token_encrypted: this.encryptToken(data.refresh_token || refreshToken),
+        refresh_token_encrypted: this.encryptToken(
+          data.refresh_token || refreshToken,
+        ),
         token_type: data.token_type || 'Bearer',
         scope: data.scope,
         expires_at: expiresAt,
@@ -470,7 +524,10 @@ export class CalendlyIntegrationService {
     });
   }
 
-  private async fetchCalendlyResource(accessToken: string, uri: string): Promise<any> {
+  private async fetchCalendlyResource(
+    accessToken: string,
+    uri: string,
+  ): Promise<any> {
     const normalizedUri = this.normalizeCalendlyUri(uri);
     const { data } = await axios.get(normalizedUri, {
       headers: {
@@ -482,8 +539,12 @@ export class CalendlyIntegrationService {
     return data;
   }
 
-  private async exchangeAuthorizationCode(code: string): Promise<CalendlyTokenResponse> {
-    const tokenUrl = process.env.CALENDLY_OAUTH_TOKEN_URL || 'https://auth.calendly.com/oauth/token';
+  private async exchangeAuthorizationCode(
+    code: string,
+  ): Promise<CalendlyTokenResponse> {
+    const tokenUrl =
+      process.env.CALENDLY_OAUTH_TOKEN_URL ||
+      'https://auth.calendly.com/oauth/token';
     const clientId = this.getRequiredEnv('CALENDLY_OAUTH_CLIENT_ID');
     const clientSecret = this.getRequiredEnv('CALENDLY_OAUTH_CLIENT_SECRET');
     const redirectUri = this.getRequiredEnv('CALENDLY_OAUTH_REDIRECT_URI');
@@ -496,27 +557,38 @@ export class CalendlyIntegrationService {
       client_secret: clientSecret,
     });
 
-    const { data } = await axios.post<CalendlyTokenResponse>(tokenUrl, payload.toString(), {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+    const { data } = await axios.post<CalendlyTokenResponse>(
+      tokenUrl,
+      payload.toString(),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        timeout: 20000,
       },
-      timeout: 20000,
-    });
+    );
 
     if (!data.access_token || !data.refresh_token) {
-      throw new InternalServerErrorException('Calendly não retornou tokens válidos');
+      throw new InternalServerErrorException(
+        'Calendly não retornou tokens válidos',
+      );
     }
 
     return data;
   }
 
-  private async fetchCalendlyMe(accessToken: string): Promise<CalendlyUserMeResponse> {
-    const { data } = await axios.get<CalendlyUserMeResponse>('https://api.calendly.com/users/me', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
+  private async fetchCalendlyMe(
+    accessToken: string,
+  ): Promise<CalendlyUserMeResponse> {
+    const { data } = await axios.get<CalendlyUserMeResponse>(
+      'https://api.calendly.com/users/me',
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        timeout: 20000,
       },
-      timeout: 20000,
-    });
+    );
 
     return data;
   }
@@ -574,7 +646,8 @@ export class CalendlyIntegrationService {
       data = response.data;
     } catch (error: any) {
       const status = error?.response?.status;
-      const shouldRetryWithoutSigningKey = Boolean(signingKey) && (status === 400 || status === 422);
+      const shouldRetryWithoutSigningKey =
+        Boolean(signingKey) && (status === 400 || status === 422);
 
       if (!shouldRetryWithoutSigningKey) {
         throw error;
@@ -615,7 +688,10 @@ export class CalendlyIntegrationService {
     });
   }
 
-  private validateWebhookSignature(rawBody: string | undefined, signatureHeader: string | undefined): void {
+  private validateWebhookSignature(
+    rawBody: string | undefined,
+    signatureHeader: string | undefined,
+  ): void {
     const signingKey = process.env.CALENDLY_WEBHOOK_SIGNING_KEY;
 
     if (!signingKey) {
@@ -632,7 +708,9 @@ export class CalendlyIntegrationService {
     }
 
     const signedPayload = `${parsedSignature.t}.${rawBody}`;
-    const expected = createHmac('sha256', signingKey).update(signedPayload).digest('hex');
+    const expected = createHmac('sha256', signingKey)
+      .update(signedPayload)
+      .digest('hex');
 
     const providedBuffer = Buffer.from(parsedSignature.v1, 'hex');
     const expectedBuffer = Buffer.from(expected, 'hex');
@@ -645,7 +723,10 @@ export class CalendlyIntegrationService {
     }
   }
 
-  private parseSignatureHeader(signatureHeader: string): { t?: string; v1?: string } {
+  private parseSignatureHeader(signatureHeader: string): {
+    t?: string;
+    v1?: string;
+  } {
     return signatureHeader.split(',').reduce(
       (acc, item) => {
         const [rawKey, rawValue] = item.split('=');
@@ -677,7 +758,9 @@ export class CalendlyIntegrationService {
   private getRequiredEnv(name: string): string {
     const value = process.env[name];
     if (!value) {
-      throw new InternalServerErrorException(`Variável de ambiente obrigatória ausente: ${name}`);
+      throw new InternalServerErrorException(
+        `Variável de ambiente obrigatória ausente: ${name}`,
+      );
     }
     return value;
   }
@@ -693,7 +776,9 @@ export class CalendlyIntegrationService {
 
     const normalizedRaw = raw.trim();
     const possibleBase64 = Buffer.from(normalizedRaw, 'base64');
-    const normalizedDecoded = possibleBase64.toString('base64').replace(/=+$/, '');
+    const normalizedDecoded = possibleBase64
+      .toString('base64')
+      .replace(/=+$/, '');
     const normalizedInput = normalizedRaw.replace(/=+$/, '');
 
     if (possibleBase64.length === 32 && normalizedDecoded === normalizedInput) {
@@ -715,17 +800,23 @@ export class CalendlyIntegrationService {
     const iv = randomBytes(12);
 
     const cipher = createCipheriv('aes-256-gcm', key, iv);
-    const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
+    const encrypted = Buffer.concat([
+      cipher.update(value, 'utf8'),
+      cipher.final(),
+    ]);
     const authTag = cipher.getAuthTag();
 
     return `v1:${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted.toString('base64')}`;
   }
 
   private decryptToken(value: string): string {
-    const [version, ivBase64, authTagBase64, encryptedBase64] = value.split(':');
+    const [version, ivBase64, authTagBase64, encryptedBase64] =
+      value.split(':');
 
     if (version !== 'v1' || !ivBase64 || !authTagBase64 || !encryptedBase64) {
-      throw new InternalServerErrorException('Formato de token criptografado inválido');
+      throw new InternalServerErrorException(
+        'Formato de token criptografado inválido',
+      );
     }
 
     const key = this.getEncryptionKeyBuffer();
@@ -736,7 +827,10 @@ export class CalendlyIntegrationService {
     const decipher = createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAuthTag(authTag);
 
-    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+    const decrypted = Buffer.concat([
+      decipher.update(encrypted),
+      decipher.final(),
+    ]);
     return decrypted.toString('utf8');
   }
 }

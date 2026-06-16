@@ -1,4 +1,10 @@
-import { IsIn, IsISO8601, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsIn,
+  IsISO8601,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class CalendlyScheduledDto {
   @IsString({ message: 'event_uri deve ser uma string' })

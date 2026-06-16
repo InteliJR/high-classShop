@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateConsultantDto } from './dto/create-consultant.dto';
 import { UpdateConsultantDto } from './dto/update-consultant.dto';
@@ -7,7 +12,6 @@ import * as bcrypt from 'bcrypt';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { Prisma } from '@prisma/client';
 import { NotificationService } from '../notifications/notification.service';
-
 
 @Injectable()
 export class ConsultantsService {
@@ -32,7 +36,9 @@ export class ConsultantsService {
       });
 
       if (existingUserByEmail) {
-        throw new ConflictException('Já existe um usuário cadastrado com este email');
+        throw new ConflictException(
+          'Já existe um usuário cadastrado com este email',
+        );
       }
 
       // Verificar se já existe usuário com o mesmo CPF
@@ -41,7 +47,9 @@ export class ConsultantsService {
       });
 
       if (existingUserByCpf) {
-        throw new ConflictException('Já existe um usuário cadastrado com este CPF');
+        throw new ConflictException(
+          'Já existe um usuário cadastrado com este CPF',
+        );
       }
 
       // Verificar se a empresa existe
@@ -84,7 +92,10 @@ export class ConsultantsService {
         user: UserEntity.fromPrisma(user),
       };
     } catch (error) {
-      if (error instanceof ConflictException || error instanceof BadRequestException) {
+      if (
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
 
@@ -93,19 +104,27 @@ export class ConsultantsService {
         if (error.code === 'P2002') {
           const target = (error.meta?.target as string[]) || [];
           if (target.includes('email')) {
-            throw new ConflictException('Já existe um usuário cadastrado com este email');
+            throw new ConflictException(
+              'Já existe um usuário cadastrado com este email',
+            );
           }
           if (target.includes('cpf')) {
-            throw new ConflictException('Já existe um usuário cadastrado com este CPF');
+            throw new ConflictException(
+              'Já existe um usuário cadastrado com este CPF',
+            );
           }
-          throw new ConflictException('Já existe um usuário cadastrado com estes dados');
+          throw new ConflictException(
+            'Já existe um usuário cadastrado com estes dados',
+          );
         }
         if (error.code === 'P2003') {
           throw new BadRequestException('Empresa não encontrada');
         }
       }
 
-      throw new BadRequestException('Erro ao criar consultor. Verifique os dados e tente novamente.');
+      throw new BadRequestException(
+        'Erro ao criar consultor. Verifique os dados e tente novamente.',
+      );
     }
   }
 
@@ -135,7 +154,9 @@ export class ConsultantsService {
         });
 
         if (existingUser) {
-          throw new ConflictException('Já existe outro usuário cadastrado com este email');
+          throw new ConflictException(
+            'Já existe outro usuário cadastrado com este email',
+          );
         }
       }
 
@@ -149,7 +170,9 @@ export class ConsultantsService {
         });
 
         if (existingUser) {
-          throw new ConflictException('Já existe outro usuário cadastrado com este CPF');
+          throw new ConflictException(
+            'Já existe outro usuário cadastrado com este CPF',
+          );
         }
       }
 
@@ -176,7 +199,11 @@ export class ConsultantsService {
         data: updateData,
       });
     } catch (error) {
-      if (error instanceof NotFoundException || error instanceof ConflictException || error instanceof BadRequestException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
 
@@ -184,10 +211,14 @@ export class ConsultantsService {
         if (error.code === 'P2002') {
           const target = (error.meta?.target as string[]) || [];
           if (target.includes('email')) {
-            throw new ConflictException('Já existe outro usuário cadastrado com este email');
+            throw new ConflictException(
+              'Já existe outro usuário cadastrado com este email',
+            );
           }
           if (target.includes('cpf')) {
-            throw new ConflictException('Já existe outro usuário cadastrado com este CPF');
+            throw new ConflictException(
+              'Já existe outro usuário cadastrado com este CPF',
+            );
           }
         }
         if (error.code === 'P2003') {
@@ -195,7 +226,9 @@ export class ConsultantsService {
         }
       }
 
-      throw new BadRequestException('Erro ao atualizar consultor. Verifique os dados e tente novamente.');
+      throw new BadRequestException(
+        'Erro ao atualizar consultor. Verifique os dados e tente novamente.',
+      );
     }
   }
 

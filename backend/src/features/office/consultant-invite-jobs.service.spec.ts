@@ -25,7 +25,9 @@ function mkPrisma() {
 function mkSvc(prisma: any) {
   const xlsx = new XlsxImportService();
   const jwt = { sign: jest.fn().mockReturnValue('tok') } as any;
-  const ses = { sendConsultantInviteEmail: jest.fn().mockResolvedValue({ success: true }) } as any;
+  const ses = {
+    sendConsultantInviteEmail: jest.fn().mockResolvedValue({ success: true }),
+  } as any;
   const svc = new ConsultantInviteJobsService(prisma, xlsx, jwt, ses);
   return svc;
 }
@@ -54,10 +56,14 @@ describe('ConsultantInviteJobsService — CSV + scope', () => {
       status: 'PENDING',
     }));
     const svc = mkSvc(prisma);
-    const csv = csvBuf('name,email\nJoão,joao@x.com\nMaria,not-an-email\nJoão2,joao@x.com');
+    const csv = csvBuf(
+      'name,email\nJoão,joao@x.com\nMaria,not-an-email\nJoão2,joao@x.com',
+    );
     await svc.createJobFromCsv(SCOPE_OFFICE_A, 'actor', csv);
 
-    const itemsArg = prisma.consultantInviteJob.create.mock.calls[0][0].data.items.createMany.data;
+    const itemsArg =
+      prisma.consultantInviteJob.create.mock.calls[0][0].data.items.createMany
+        .data;
     expect(itemsArg).toHaveLength(3);
     expect(itemsArg[0].status).toBe('PENDING');
     expect(itemsArg[1].status).toBe('FAILED');
@@ -77,7 +83,9 @@ describe('ConsultantInviteJobsService — CSV + scope', () => {
     const csv = csvBuf('name,email\n=cmd|"calc"!A1,a@b.com');
     await svc.createJobFromCsv(SCOPE_OFFICE_A, 'actor', csv);
 
-    const itemsArg = prisma.consultantInviteJob.create.mock.calls[0][0].data.items.createMany.data;
+    const itemsArg =
+      prisma.consultantInviteJob.create.mock.calls[0][0].data.items.createMany
+        .data;
     expect(itemsArg[0].name.startsWith("'")).toBe(true);
   });
 
@@ -101,9 +109,14 @@ describe('ConsultantInviteJobsService — CSV + scope', () => {
     }));
     const svc = mkSvc(prisma);
     const bom = Buffer.from([0xef, 0xbb, 0xbf]);
-    const csv = Buffer.concat([bom, csvBuf('name,email\nJoão Açaí,joao@x.com')]);
+    const csv = Buffer.concat([
+      bom,
+      csvBuf('name,email\nJoão Açaí,joao@x.com'),
+    ]);
     await svc.createJobFromCsv(SCOPE_OFFICE_A, 'actor', csv);
-    const itemsArg = prisma.consultantInviteJob.create.mock.calls[0][0].data.items.createMany.data;
+    const itemsArg =
+      prisma.consultantInviteJob.create.mock.calls[0][0].data.items.createMany
+        .data;
     expect(itemsArg[0].name).toContain('Açaí');
   });
 
@@ -125,7 +138,9 @@ describe('ConsultantInviteJobsService — CSV + scope', () => {
       error_message: null,
     });
     const svc = mkSvc(prisma);
-    await expect(svc.getJobStatus(SCOPE_OFFICE_A, 'jobB')).rejects.toThrow(NotFoundException);
+    await expect(svc.getJobStatus(SCOPE_OFFICE_A, 'jobB')).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   // ADMIN bypass: vê qualquer job
@@ -171,9 +186,9 @@ describe('ConsultantInviteJobsService — CSV + scope', () => {
     const prisma = mkPrisma();
     const svc = mkSvc(prisma);
     const csv = csvBuf('name,email\nJoão,j@x.com');
-    await expect(svc.createJobFromCsv(SCOPE_ADMIN, 'actor', csv)).rejects.toThrow(
-      BadRequestException,
-    );
+    await expect(
+      svc.createJobFromCsv(SCOPE_ADMIN, 'actor', csv),
+    ).rejects.toThrow(BadRequestException);
   });
 
   // Listagem respeita escopo

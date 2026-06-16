@@ -90,6 +90,7 @@ export async function registerOffice(data: {
   surname: string;
   cpf: string;
   rg: string;
+  phone: string;
   password: string;
 }): Promise<unknown> {
   const response = await api.post('/auth/register-office', data);

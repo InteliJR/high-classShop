@@ -17,6 +17,7 @@ export default function RegisterOfficePage() {
   const [surname, setSurname] = useState("");
   const [cpf, setCpf] = useState("");
   const [rg, setRg] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,8 +50,9 @@ export default function RegisterOfficePage() {
 
     const cleanCpf = cpf.replace(/\D/g, "");
     const cleanRg = rg.replace(/\D/g, "");
+    const cleanPhone = phone.replace(/\D/g, "");
 
-    if (!name.trim() || !surname.trim() || !cleanCpf || !cleanRg || !password) {
+    if (!name.trim() || !surname.trim() || !cleanCpf || !cleanRg || !cleanPhone || !password) {
       setFormError("Todos os campos são obrigatórios.");
       return;
     }
@@ -60,6 +62,10 @@ export default function RegisterOfficePage() {
     }
     if (cleanRg.length < 7 || cleanRg.length > 10) {
       setFormError("RG deve ter entre 7 e 10 dígitos.");
+      return;
+    }
+    if (cleanPhone.length < 10 || cleanPhone.length > 11) {
+      setFormError("Telefone deve ter 10 ou 11 dígitos.");
       return;
     }
     if (password.length < 6) {
@@ -75,6 +81,7 @@ export default function RegisterOfficePage() {
         surname: surname.trim(),
         cpf: cleanCpf,
         rg: cleanRg,
+        phone: cleanPhone,
         password,
       });
       setSuccess(true);
@@ -185,6 +192,19 @@ export default function RegisterOfficePage() {
               onChange={(e) => setRg(e.target.value)}
               placeholder="1234567"
               maxLength={10}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Telefone (DDD + número)</label>
+            <input
+              type="text"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="(11) 99999-9999"
+              maxLength={16}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
               required
             />

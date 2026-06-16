@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -112,7 +113,11 @@ export class ProcessesService {
     changedByName?: string;
     reason?: string;
     productDetails?: string;
-    client?: { email?: string | null; name?: string | null; surname?: string | null };
+    client?: {
+      email?: string | null;
+      name?: string | null;
+      surname?: string | null;
+    };
     specialist?: {
       email?: string | null;
       name?: string | null;
@@ -187,10 +192,14 @@ export class ProcessesService {
       ? productMap[createProcessDto.product_type!]
       : null;
 
-    // Verificar se o processo já existe (apenas para processos com produto)
+    const activeStatuses: ProcessStatus[] = [
+      ProcessStatus.SCHEDULING,
+      ProcessStatus.NEGOTIATION,
+      ProcessStatus.PROCESSING_CONTRACT,
+      ProcessStatus.DOCUMENTATION,
+    ];
+
     if (hasProduct) {
-      // TODO: Trocar para string quando o id for colocado como UUID
-      // Construção do where usando computed property
       const whereClause: {
         client_id: string;
         specialist_id: string;
@@ -203,7 +212,6 @@ export class ProcessesService {
         [`${fieldName}_id`]: Number(createProcessDto.product_id),
       };
 
-      // Verificar se o processo já existe
       this.logger.debug('[create] Verificando se processo já existe');
       const processAlreadyExists = await this.prismaService.process.findFirst({
         where: whereClause,
@@ -212,7 +220,27 @@ export class ProcessesService {
         this.logger.warn(
           `[create] Processo já existe para cliente ${client_id} e produto ${product_id}`,
         );
-        throw new BadRequestException();
+        throw new ConflictException(
+          'Já existe processo para este cliente com este produto.',
+        );
+      }
+    } else {
+      // Consultoria (sem produto): impedir múltiplos processos ativos entre os mesmos atores
+      const activeConsultancy = await this.prismaService.process.findFirst({
+        where: {
+          client_id,
+          specialist_id,
+          product_type: null,
+          status: { in: activeStatuses },
+        },
+      });
+      if (activeConsultancy) {
+        this.logger.warn(
+          `[create] Consultoria ativa já existe para cliente ${client_id} e especialista ${specialist_id}`,
+        );
+        throw new ConflictException(
+          'Já existe consultoria ativa entre este cliente e este especialista.',
+        );
       }
     }
 
@@ -449,7 +477,11 @@ export class ProcessesService {
    * @returns {Promise<ProcessResponse>} - The process with all related data
    * @throws {NotFoundException} - Process not found with the given ID
    */
-  async getById(processId: string): Promise<ProcessResponse> {
+  async getById(
+    processId: string,
+    userId?: string,
+    userRole?: string,
+  ): Promise<ProcessResponse> {
     try {
       const process = await this.prismaService.process.findUniqueOrThrow({
         where: { id: processId },
@@ -465,6 +497,34 @@ export class ProcessesService {
         },
       });
 
+      if (userId && userRole !== 'ADMIN') {
+        const isParticipant =
+          process.client_id === userId ||
+          process.specialist_id === userId ||
+          process.client?.consultant_id === userId;
+
+        if (!isParticipant) {
+          throw new ForbiddenException({
+            success: false,
+            error: {
+              code: 403,
+              message: 'Você não é participante deste processo',
+              details: { user_id: userId, process_id: processId },
+            },
+          });
+        }
+      }
+
+      const appointmentScheduled =
+        process.appointment?.status === StatusAgendamento.SCHEDULED;
+      const isClient = userId === process.client_id;
+      const isSpecialist = userId === process.specialist_id;
+      const canSeeSpecialistPhone =
+        userRole === 'ADMIN' ||
+        isSpecialist ||
+        !isClient ||
+        appointmentScheduled;
+
       return {
         id: process.id,
         status: process.status,
@@ -476,17 +536,26 @@ export class ProcessesService {
           id: process.client_id,
           email: process.client?.email || '',
           name: process.client?.name || '',
+          phone: isClient
+            ? (process.client?.phone ?? null)
+            : (process.client?.phone ?? null),
         },
         specialist: {
           especialidade: process.specialist.speciality,
           id: process.specialist.id,
           name: process.specialist.name,
+          phone: canSeeSpecialistPhone
+            ? (process.specialist.phone ?? null)
+            : null,
         },
         product: this.buildProduct(process),
         created_at: process.created_at,
         notes: process.notes,
       };
     } catch (err) {
+      if (err instanceof ForbiddenException) {
+        throw err;
+      }
       if (err.code === 'P2025') {
         throw new NotFoundException('Processo não encontrado');
       }
@@ -1042,7 +1111,8 @@ export class ProcessesService {
         processId,
         previousStatus: process.status,
         currentStatus: updatedProcess.status,
-        changedByName: `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+        changedByName:
+          `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
         reason: 'Produto associado ao processo após confirmação da reunião',
         productDetails: this.getProductDetails(updatedProcess),
         client: process.client,
@@ -1165,10 +1235,39 @@ export class ProcessesService {
   async getByClientId(
     clientId: string,
     { page, perPage }: QueryDto,
+    userId?: string,
+    userRole?: string,
   ): Promise<{
     processes: (ProcessResponse & { rejection_reason?: string | null })[];
     count: number;
   }> {
+    if (userId && userRole !== 'ADMIN' && userId !== clientId) {
+      const client = await this.prismaService.user.findUnique({
+        where: { id: clientId },
+        select: { consultant_id: true },
+      });
+
+      const isConsultantOfClient =
+        userRole === 'CONSULTANT' && client?.consultant_id === userId;
+      const isSpecialistWithProcess =
+        userRole === 'SPECIALIST' &&
+        (await this.prismaService.process.findFirst({
+          where: { client_id: clientId, specialist_id: userId },
+          select: { id: true },
+        }));
+
+      if (!isConsultantOfClient && !isSpecialistWithProcess) {
+        throw new ForbiddenException({
+          success: false,
+          error: {
+            code: 403,
+            message: 'Você não tem acesso a este cliente',
+            details: { user_id: userId, client_id: clientId },
+          },
+        });
+      }
+    }
+
     const pageNum = Number(page) || 1;
     const perPageNum = Number(perPage) || 20;
     const skip = (pageNum - 1) * perPageNum;
