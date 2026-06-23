@@ -368,7 +368,9 @@ export default function MeetingRoomPage() {
               to={
                 user?.role === "SPECIALIST"
                   ? "/specialist/processes"
-                  : "/customer/processes"
+                  : user?.role === "CONSULTANT"
+                    ? "/consultant/processes"
+                    : "/customer/processes"
               }
               className="text-sm text-slate-700 hover:text-slate-900"
             >

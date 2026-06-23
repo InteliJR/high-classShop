@@ -352,7 +352,7 @@ export default function RouterApp() {
       path: "/processes/:processId/meeting",
       element: (
         <MainLayout>
-          <ProtectedRoute allowedRoles={["CUSTOMER", "SPECIALIST"]}>
+          <ProtectedRoute allowedRoles={["CUSTOMER", "SPECIALIST", "CONSULTANT"]}>
             <MeetingRoomPage />
           </ProtectedRoute>
         </MainLayout>

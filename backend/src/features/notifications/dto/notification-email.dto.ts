@@ -41,6 +41,9 @@ export interface MeetingStartedEmailDto {
   processId: string;
   platformMeetingUrl: string;
   meetingLink?: string;
+  // Consultor que gerencia o cliente — recebe cópia quando presente
+  consultantEmail?: string;
+  consultantName?: string;
 }
 
 export interface MeetingAdvancedEmailDto {
@@ -50,6 +53,9 @@ export interface MeetingAdvancedEmailDto {
   processId: string;
   platformMeetingUrl: string;
   meetingLink?: string;
+  // Consultor que gerencia o cliente — recebe cópia quando presente
+  consultantEmail?: string;
+  consultantName?: string;
 }
 
 export interface MeetingReminderEmailDto {

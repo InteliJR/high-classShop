@@ -215,7 +215,16 @@ export class MeetingsService {
       include: {
         appointment: true,
         client: {
-          select: { id: true, email: true, name: true, surname: true },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            surname: true,
+            consultant_id: true,
+            consultant: {
+              select: { id: true, email: true, name: true, surname: true },
+            },
+          },
         },
         specialist: {
           select: { id: true, email: true, name: true, surname: true },
@@ -230,12 +239,14 @@ export class MeetingsService {
 
     const isClient = process.client_id === userId;
     const isSpecialist = process.specialist_id === userId;
+    // Consultor que gerencia o cliente também pode acompanhar a reunião
+    const isConsultant = process.client?.consultant_id === userId;
 
-    if (!isClient && !isSpecialist) {
+    if (!isClient && !isSpecialist && !isConsultant) {
       throw new ForbiddenException('Sem permissão para acessar esta reunião');
     }
 
-    return { process, isClient, isSpecialist };
+    return { process, isClient, isSpecialist, isConsultant };
   }
 
   private buildMeetingResponse(meetingSession: {
@@ -437,6 +448,12 @@ export class MeetingsService {
       );
     }
 
+    const consultant = process.client.consultant;
+    const consultantEmail = consultant?.email;
+    const consultantName = consultant
+      ? `${consultant.name} ${consultant.surname || ''}`.trim()
+      : undefined;
+
     if (
       process.status !== 'SCHEDULING' &&
       process.status !== 'NEGOTIATION' &&
@@ -477,6 +494,8 @@ export class MeetingsService {
           processId: process.id,
           platformMeetingUrl: `${this.frontendUrl}/processes/${process.id}/meeting`,
           meetingLink: jitsiLink,
+          consultantEmail,
+          consultantName,
         };
         const emailMethod = isAdvanced
           ? this.notificationService.sendMeetingAdvancedEmail(emailData)
@@ -540,6 +559,8 @@ export class MeetingsService {
             processId: process.id,
             platformMeetingUrl: `${this.frontendUrl}/processes/${process.id}/meeting`,
             meetingLink: demoLink,
+            consultantEmail,
+            consultantName,
           };
           const emailMethod = isAdvanced
             ? this.notificationService.sendMeetingAdvancedEmail(emailData)
@@ -622,6 +643,8 @@ export class MeetingsService {
         processId: process.id,
         platformMeetingUrl: `${this.frontendUrl}/processes/${process.id}/meeting`,
         meetingLink: meetLink,
+        consultantEmail,
+        consultantName,
       };
       const emailMethod = isAdvanced
         ? this.notificationService.sendMeetingAdvancedEmail(emailData)
