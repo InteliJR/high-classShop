@@ -80,3 +80,4 @@ ADRs **nunca são deletados** — apenas marcados.
 | [0001](0001-consultor-igual-assessor.md) | Consultor = Assessor (termo unificado) | Aceito | 2026-05-18 |
 | [0002](0002-vinculo-cliente-consultor.md) | Vínculo cliente↔consultor: `User.consultant_id` vs `CustomerAdvisor` | Aceito | 2026-05-18 |
 | [0003](0003-uuid-migration.md) | Migrar PKs `Car/Boat/Aircraft` e dependentes para UUID | Proposto | 2026-05-18 |
+| [0004](0004-google-meet-provedor-definitivo.md) | Adotar Google Meet como provedor definitivo (retirar Jitsi) | Aceito | 2026-06-24 |
