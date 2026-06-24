@@ -13,6 +13,7 @@ import {
   Send,
   User,
   UserCog,
+  Video,
   X,
 } from "lucide-react";
 import {
@@ -25,7 +26,9 @@ import {
   type NegotiationProposal,
 } from "../../services/proposals.service";
 import {
+  getMeetingByProcess,
   getProcessById,
+  type MeetingSession,
   type Process,
 } from "../../services/processes.service";
 import { useAuth } from "../../store/authStateManager";
@@ -116,6 +119,10 @@ export default function ConsultantProcessDetailPage() {
   const [processInfo, setProcessInfo] =
     useState<NegotiationProcessInfo | null>(null);
   const [meta, setMeta] = useState<NegotiationMeta | null>(null);
+  const [meetingSession, setMeetingSession] = useState<MeetingSession | null>(
+    null,
+  );
+  const [isLoadingMeeting, setIsLoadingMeeting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -138,6 +145,40 @@ export default function ConsultantProcessDetailPage() {
 
       const processData = await getProcessById(processId);
       setProcess(processData);
+
+      // Durante o agendamento não há negociação ainda — só o agendamento e a
+      // reunião. As propostas só são carregadas a partir da negociação.
+      const isScheduling = processData.status === "SCHEDULING";
+      const isAppointmentConfirmed =
+        processData.appointment_status === "SCHEDULED" ||
+        processData.appointment_status === "COMPLETED";
+
+      if (isScheduling) {
+        setProposals([]);
+        setProcessInfo(null);
+        setMeta(null);
+
+        if (isAppointmentConfirmed) {
+          try {
+            setIsLoadingMeeting(true);
+            const meeting = await getMeetingByProcess(processId);
+            setMeetingSession(meeting);
+          } catch (err) {
+            console.warn(
+              "[ConsultantProcessDetailPage] Falha ao carregar reunião",
+              err,
+            );
+            setMeetingSession(null);
+          } finally {
+            setIsLoadingMeeting(false);
+          }
+        } else {
+          setMeetingSession(null);
+        }
+        return;
+      }
+
+      setMeetingSession(null);
 
       const hasProduct = !!processData.product_type && !!processData.product_id;
       if (hasProduct) {
@@ -317,6 +358,10 @@ export default function ConsultantProcessDetailPage() {
   const acceptedProposal = proposals.find((p) => p.status === "ACCEPTED");
   const isAwaitingProduct = !process.product_type || !process.product_id;
   const showCreateForm = canCreateProposal();
+  const isScheduling = process.status === "SCHEDULING";
+  const isAppointmentConfirmed =
+    process.appointment_status === "SCHEDULED" ||
+    process.appointment_status === "COMPLETED";
 
   return (
     <div className="text-text-main w-full">
@@ -420,7 +465,7 @@ export default function ConsultantProcessDetailPage() {
         )}
       </div>
 
-      {processInfo && (
+      {!isScheduling && processInfo && (
         <div className="p-4 rounded-lg shadow bg-white mb-6 flex flex-wrap items-center gap-6 text-sm">
           <div className="flex items-center gap-2">
             <DollarSign size={16} className="text-green-600" />
@@ -453,6 +498,84 @@ export default function ConsultantProcessDetailPage() {
         </div>
       )}
 
+      {isScheduling ? (
+        <div className="p-6 rounded-lg shadow bg-white">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="h2-style">Agendamento</h2>
+          </div>
+
+          <div className="mb-4">
+            {isAppointmentConfirmed ? (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                <Check size={12} />
+                Agendamento confirmado
+              </span>
+            ) : process.appointment_status === "CANCELLED" ? (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full">
+                <X size={12} />
+                Agendamento cancelado
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
+                <Loader2 size={12} className="animate-spin" />
+                Aguardando confirmação do agendamento
+              </span>
+            )}
+          </div>
+
+          {process.appointment_datetime ? (
+            <div className="flex items-center gap-2 text-sm text-gray-700 mb-4">
+              <Calendar size={16} className="text-gray-400" />
+              Reunião marcada para {formatDate(process.appointment_datetime)}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 mb-4">
+              Data e horário ainda não definidos.
+            </p>
+          )}
+
+          {isAppointmentConfirmed ? (
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+              {isLoadingMeeting ? (
+                <p className="inline-flex items-center gap-2 text-sm text-gray-600">
+                  <Loader2 size={16} className="animate-spin" />
+                  Verificando reunião...
+                </p>
+              ) : meetingSession && !meetingSession.ended_at ? (
+                <>
+                  <p className="text-sm text-slate-800 mb-3">
+                    O especialista iniciou a reunião. Entre para acompanhar em
+                    nome do cliente.
+                  </p>
+                  <button
+                    onClick={() =>
+                      navigate(`/processes/${process.id}/meeting`)
+                    }
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-cyan-700 text-white rounded-lg font-medium hover:bg-cyan-800 transition-colors"
+                  >
+                    <Video size={16} />
+                    Entrar na reunião
+                  </button>
+                </>
+              ) : meetingSession?.ended_at ? (
+                <p className="text-sm text-slate-700">
+                  A reunião foi encerrada pelo especialista.
+                </p>
+              ) : (
+                <p className="text-sm text-slate-700">
+                  Aguardando o especialista iniciar a reunião. O acesso aparece
+                  aqui assim que ela começar.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+              A reunião ficará disponível assim que o agendamento for
+              confirmado.
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="p-6 rounded-lg shadow bg-white">
         <div className="flex items-center justify-between mb-4">
           <h2 className="h2-style">Histórico de propostas</h2>
@@ -606,6 +729,7 @@ export default function ConsultantProcessDetailPage() {
             </div>
           )}
       </div>
+      )}
     </div>
   );
 }

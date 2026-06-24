@@ -893,6 +893,80 @@ ${
     );
   }
 
+  /**
+   * Envia cópia da notificação de reunião ao consultor que gerencia o cliente.
+   * Só dispara quando o processo possui consultor vinculado (data.consultantEmail).
+   */
+  private async sendMeetingConsultantCopy(
+    data: MeetingStartedEmailDto | MeetingAdvancedEmailDto,
+    variant: 'STARTED' | 'ADVANCED',
+  ): Promise<void> {
+    if (!data.consultantEmail) {
+      return;
+    }
+
+    const consultantName = data.consultantName || 'Consultor';
+    const action = variant === 'ADVANCED' ? 'adiantada' : 'iniciada';
+    const subject = `Reunião do seu cliente ${action} | High-Class Shop`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
+        <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+        </div>
+        <div style="padding: 40px 30px; background-color: #ffffff;">
+          <h2 style="color: #1e293b; margin-top: 0;">Reunião ${action}</h2>
+          <p style="font-size: 16px; color: #334155;">Olá <strong>${consultantName}</strong>,</p>
+          <p style="font-size: 16px; color: #334155;">
+            A reunião do seu cliente <strong>${data.clientName}</strong> com o especialista
+            <strong>${data.specialistName}</strong> foi ${action}. Você pode acompanhar em nome do cliente.
+          </p>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
+            <p style="margin: 8px 0; color: #334155;"><strong>Processo:</strong> ${data.processId}</p>
+          </div>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${data.platformMeetingUrl}"
+               style="display: inline-block; background-color: #1e293b; color: #fff;
+                      padding: 14px 32px; text-decoration: none; border-radius: 6px;
+                      font-weight: 600; font-size: 16px;">
+              Entrar na Reunião
+            </a>
+          </div>
+          <p style="font-size: 14px; color: #64748b;">Se o botão não funcionar, acesse a plataforma:</p>
+          <p style="font-size: 14px; color: #334155; word-break: break-all;">${data.platformMeetingUrl}</p>
+        </div>
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+High-class Shop - Reunião ${action}
+
+Olá ${consultantName},
+
+A reunião do seu cliente ${data.clientName} com o especialista ${data.specialistName} foi ${action}. Você pode acompanhar em nome do cliente.
+
+Processo: ${data.processId}
+Acesse a reunião em: ${data.platformMeetingUrl}
+
+© 2026 High-class Shop
+    `.trim();
+
+    await this.sendEmailSafely(
+      `MEETING_${variant}_CONSULTANT`,
+      data.consultantEmail,
+      subject,
+      html,
+      text,
+    );
+  }
+
   async sendMeetingStartedEmail(data: MeetingStartedEmailDto): Promise<void> {
     if (!this.notificationsEnabled) {
       this.logger.debug(
@@ -965,6 +1039,8 @@ ${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
       html,
       text,
     );
+
+    await this.sendMeetingConsultantCopy(data, 'STARTED');
   }
 
   async sendMeetingAdvancedEmail(data: MeetingAdvancedEmailDto): Promise<void> {
@@ -1040,6 +1116,8 @@ ${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
       html,
       text,
     );
+
+    await this.sendMeetingConsultantCopy(data, 'ADVANCED');
   }
 
   async sendMeetingReminderEmail(data: MeetingReminderEmailDto): Promise<void> {
