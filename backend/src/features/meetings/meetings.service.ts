@@ -7,22 +7,16 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { google } from 'googleapis';
-import { GaxiosError } from 'gaxios';
 import { randomUUID } from 'crypto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { ProcessStatus, StatusAgendamento } from '@prisma/client';
+import { GoogleMeetOAuthService } from './google-meet-oauth.service';
 
 @Injectable()
 export class MeetingsService {
   private readonly logger = new Logger(MeetingsService.name);
-  private readonly calendarId: string;
-  private readonly timezone: string;
-  private readonly serviceAccountEmail?: string;
-  private readonly serviceAccountPrivateKey?: string;
-  private readonly meetPollingAttempts = 5;
-  private readonly meetPollingIntervalMs = 1000;
+  private readonly meetAccessType: 'OPEN' | 'TRUSTED' | 'RESTRICTED';
   private readonly demoMeetingFallbackEnabled: boolean;
   private readonly meetingProvider: 'GOOGLE' | 'JITSI';
   private readonly jitsiBaseUrl: string;
@@ -32,24 +26,15 @@ export class MeetingsService {
     private readonly prismaService: PrismaService,
     private readonly configService: ConfigService,
     private readonly notificationService: NotificationService,
+    private readonly googleMeetOAuthService: GoogleMeetOAuthService,
   ) {
-    this.calendarId = this.configService.get<string>(
-      'GOOGLE_MEET_CALENDAR_ID',
-      'primary',
-    );
-    this.timezone = this.configService.get<string>(
-      'GOOGLE_MEET_TIMEZONE',
-      'America/Sao_Paulo',
-    );
-    this.serviceAccountEmail = this.configService.get<string>(
-      'GOOGLE_MEET_SERVICE_ACCOUNT_EMAIL',
-    );
-
-    const privateKey = this.configService.get<string>(
-      'GOOGLE_MEET_SERVICE_ACCOUNT_PRIVATE_KEY',
-    );
-
-    this.serviceAccountPrivateKey = privateKey?.replace(/\\n/g, '\n');
+    const accessType = this.configService
+      .get<string>('GOOGLE_MEET_ACCESS_TYPE', 'OPEN')
+      ?.toUpperCase();
+    this.meetAccessType =
+      accessType === 'TRUSTED' || accessType === 'RESTRICTED'
+        ? accessType
+        : 'OPEN';
     this.demoMeetingFallbackEnabled =
       this.configService.get<string>(
         'MEETING_DEMO_FALLBACK_ENABLED',
@@ -76,137 +61,43 @@ export class MeetingsService {
     return `${this.jitsiBaseUrl.replace(/\/$/, '')}/${room}`;
   }
 
-  private getCalendarClient() {
-    if (!this.serviceAccountEmail || !this.serviceAccountPrivateKey) {
-      throw new ServiceUnavailableException(
-        'Integração de reunião não configurada no servidor',
-      );
-    }
+  /**
+   * Cria uma sala Google Meet via Meet REST API (spaces.create) com accessType
+   * configurado (OPEN por padrão → cliente externo/anônimo entra sem sala de espera).
+   * Retorna o nome do space (ex.: "spaces/abc") e o meetingUri.
+   */
+  private async createMeetSpace(): Promise<{
+    spaceName: string;
+    meetingUri: string;
+  }> {
+    const accessToken = await this.googleMeetOAuthService.getAccessToken();
 
-    const auth = new google.auth.JWT({
-      email: this.serviceAccountEmail,
-      key: this.serviceAccountPrivateKey,
-      scopes: ['https://www.googleapis.com/auth/calendar'],
+    const response = await fetch('https://meet.googleapis.com/v2/spaces', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        config: { accessType: this.meetAccessType },
+      }),
     });
 
-    return google.calendar({ version: 'v3', auth });
-  }
-
-  private isInvalidConferenceTypeError(error: unknown): boolean {
-    if (!(error instanceof GaxiosError)) {
-      return false;
-    }
-
-    const message = error.response?.data?.error?.message || error.message || '';
-
-    return (
-      typeof message === 'string' &&
-      message.toLowerCase().includes('invalid conference type value')
-    );
-  }
-
-  private async createCalendarEventWithMeet(
-    calendar: ReturnType<typeof google.calendar>,
-    processId: string,
-    specialistName: string,
-    clientName: string,
-    start: Date,
-    end: Date,
-  ) {
-    const baseRequestBody = {
-      summary: `Reunião High-class Shop - Processo ${processId}`,
-      description: `Reunião entre especialista ${specialistName} e cliente ${clientName}.`,
-      start: {
-        dateTime: start.toISOString(),
-        timeZone: this.timezone,
-      },
-      end: {
-        dateTime: end.toISOString(),
-        timeZone: this.timezone,
-      },
-    };
-
-    try {
-      return await calendar.events.insert({
-        calendarId: this.calendarId,
-        conferenceDataVersion: 1,
-        requestBody: {
-          ...baseRequestBody,
-          conferenceData: {
-            createRequest: {
-              conferenceSolutionKey: { type: 'hangoutsMeet' },
-              requestId: randomUUID(),
-            },
-          },
-        },
-      });
-    } catch (error) {
-      if (!this.isInvalidConferenceTypeError(error)) {
-        throw error;
-      }
-
-      this.logger.warn(
-        `[meetings] Calendar rejeitou conferenceSolutionKey.type=hangoutsMeet para processo ${processId}. Tentando fallback sem conferenceSolutionKey.`,
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(
+        `Meet spaces.create falhou (${response.status}): ${detail}`,
       );
-
-      return calendar.events.insert({
-        calendarId: this.calendarId,
-        conferenceDataVersion: 1,
-        requestBody: {
-          ...baseRequestBody,
-          conferenceData: {
-            createRequest: {
-              requestId: randomUUID(),
-            },
-          },
-        },
-      });
-    }
-  }
-
-  private extractMeetLinkFromEvent(event: any): string | null {
-    return (
-      event?.hangoutLink ||
-      event?.conferenceData?.entryPoints?.find(
-        (entry: any) => entry.entryPointType === 'video',
-      )?.uri ||
-      null
-    );
-  }
-
-  private async waitForMeetLink(
-    calendar: ReturnType<typeof google.calendar>,
-    eventId: string,
-  ): Promise<string | null> {
-    for (let attempt = 1; attempt <= this.meetPollingAttempts; attempt++) {
-      const getEvent: any = await calendar.events.get({
-        calendarId: this.calendarId,
-        eventId,
-      });
-
-      const meetLink = this.extractMeetLinkFromEvent(getEvent.data);
-      if (meetLink) {
-        return meetLink;
-      }
-
-      const conferenceStatus =
-        getEvent.data.conferenceData?.createRequest?.status?.statusCode;
-
-      if (conferenceStatus === 'failure') {
-        this.logger.error(
-          `[meetings] Falha definitiva ao gerar conferência para evento ${eventId}.`,
-        );
-        return null;
-      }
-
-      if (attempt < this.meetPollingAttempts) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, this.meetPollingIntervalMs),
-        );
-      }
     }
 
-    return null;
+    const data: any = await response.json();
+    if (!data?.meetingUri || !data?.name) {
+      throw new Error(
+        'Meet spaces.create retornou resposta sem meetingUri/name',
+      );
+    }
+
+    return { spaceName: data.name, meetingUri: data.meetingUri };
   }
 
   private async getAuthorizedProcess(processId: string, userId: string) {
@@ -513,25 +404,17 @@ export class MeetingsService {
       };
     }
 
-    const calendar = this.getCalendarClient();
-    const now = new Date();
-    const end = new Date(now.getTime() + 60 * 60 * 1000);
-
     const specialistName =
       `${process.specialist.name} ${process.specialist.surname || ''}`.trim();
     const clientName =
       `${process.client.name} ${process.client.surname || ''}`.trim();
 
-    let event;
+    let meetLink: string;
+    let spaceName: string;
     try {
-      event = await this.createCalendarEventWithMeet(
-        calendar,
-        process.id,
-        specialistName,
-        clientName,
-        now,
-        end,
-      );
+      const space = await this.createMeetSpace();
+      meetLink = space.meetingUri;
+      spaceName = space.spaceName;
     } catch (error) {
       if (this.demoMeetingFallbackEnabled) {
         const demoLink = this.buildDemoMeetingLink(process.id);
@@ -546,16 +429,14 @@ export class MeetingsService {
         });
 
         this.logger.warn(
-          `[meetings] Fallback DEMO ativado após falha no Google Calendar. processId=${process.id}`,
+          `[meetings] Fallback DEMO ativado após falha no Google Meet. processId=${process.id}`,
         );
 
         setImmediate(() => {
           const emailData = {
             clientEmail: process.client.email,
-            clientName:
-              `${process.client.name} ${process.client.surname || ''}`.trim(),
-            specialistName:
-              `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+            clientName,
+            specialistName,
             processId: process.id,
             platformMeetingUrl: `${this.frontendUrl}/processes/${process.id}/meeting`,
             meetingLink: demoLink,
@@ -578,50 +459,12 @@ export class MeetingsService {
         };
       }
 
-      this.logger.error('Falha ao criar evento no Google Calendar', {
+      this.logger.error('Falha ao criar sala no Google Meet', {
         processId: process.id,
         error: error instanceof Error ? error.message : 'erro desconhecido',
       });
       throw new ServiceUnavailableException(
-        'Não foi possível criar a reunião no provedor configurado. Verifique a configuração da plataforma.',
-      );
-    }
-
-    if (!event.data.id) {
-      this.logger.error('Google Calendar retornou evento sem ID', {
-        processId,
-      });
-      throw new ServiceUnavailableException(
-        'Não foi possível criar o evento de reunião automaticamente.',
-      );
-    }
-
-    let meetLink = this.extractMeetLinkFromEvent(event.data);
-
-    if (!meetLink) {
-      this.logger.warn(
-        `[meetings] Evento criado sem link imediato. Aguardando geração assíncrona do Meet para processId=${processId}.`,
-      );
-
-      meetLink = await this.waitForMeetLink(calendar, event.data.id);
-    }
-
-    if (!meetLink) {
-      if (this.demoMeetingFallbackEnabled) {
-        meetLink = this.buildDemoMeetingLink(process.id);
-        this.logger.warn(
-          `[meetings] Fallback DEMO ativado: evento sem link do Meet. processId=${process.id}, eventId=${event.data.id}`,
-        );
-      }
-    }
-
-    if (!meetLink) {
-      this.logger.error('Google Calendar retornou evento sem link de reunião', {
-        processId,
-        eventId: event.data.id,
-      });
-      throw new ServiceUnavailableException(
-        'O provedor criou o evento, mas não gerou link de reunião para esta configuração.',
+        'Não foi possível criar a reunião no Google Meet. Verifique a conta conectada nas configurações.',
       );
     }
 
@@ -629,7 +472,7 @@ export class MeetingsService {
       data: {
         process_id: process.id,
         started_by_id: userId,
-        calendar_event_id: event.data.id,
+        calendar_event_id: spaceName,
         meet_link: meetLink,
         started_at: new Date(),
       },

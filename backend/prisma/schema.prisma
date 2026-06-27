@@ -480,33 +480,34 @@ model User {
   calendly_user_uri         String?
   calendly_organization_uri String?
 
-  created_at               DateTime              @default(now())
-  updated_at               DateTime              @updatedAt
+  created_at               DateTime               @default(now())
+  updated_at               DateTime               @updatedAt
   cars                     Car[]
   boats                    Boat[]
   aircraft                 Aircraft[]
-  processesAsClient        Process[]             @relation("process_as_client")
-  processesAsSpecialist    Process[]             @relation("process_as_specialist")
-  appointmentsAsClient     Appointment[]         @relation("appointment_as_client")
-  appointmentsAsSpecialist Appointment[]         @relation("appointment_as_specialist")
+  processesAsClient        Process[]              @relation("process_as_client")
+  processesAsSpecialist    Process[]              @relation("process_as_specialist")
+  appointmentsAsClient     Appointment[]          @relation("appointment_as_client")
+  appointmentsAsSpecialist Appointment[]          @relation("appointment_as_specialist")
   car_interests            Car_interest[]
   boat_interests           Boat_interest[]
   aircraft_interests       Aircraft_interest[]
   refreshTokens            RefreshToken[]
-  created_contracts        Contract[]            @relation("contract_created_by")
-  signed_contracts         Contract[]            @relation("contract_signed_by")
+  created_contracts        Contract[]             @relation("contract_created_by")
+  signed_contracts         Contract[]             @relation("contract_signed_by")
   process_rejections       ProcessRejection[]
   // Propostas de negociação enviadas e recebidas pelo usuário
-  proposals_sent           NegotiationProposal[] @relation("proposal_author")
-  proposals_received       NegotiationProposal[] @relation("proposal_recipient")
-  meetings_started         MeetingSession[]      @relation("meeting_started_by")
-  meetings_ended           MeetingSession[]      @relation("meeting_ended_by")
+  proposals_sent           NegotiationProposal[]  @relation("proposal_author")
+  proposals_received       NegotiationProposal[]  @relation("proposal_recipient")
+  meetings_started         MeetingSession[]       @relation("meeting_started_by")
+  meetings_ended           MeetingSession[]       @relation("meeting_ended_by")
   product_import_jobs      ProductImportJob[]
   calendly_connection      CalendlyConnection?
   calendly_oauth_states    CalendlyOauthState[]
-  advisorRelation          CustomerAdvisor?      @relation("CustomerAdvisors")
-  advisorOf                CustomerAdvisor[]     @relation("AdvisorOf")
-  consultant_invite_jobs   ConsultantInviteJob[] @relation("OfficeInviteJobs")
+  google_meet_connections  GoogleMeetConnection[] @relation("google_meet_connected_by")
+  advisorRelation          CustomerAdvisor?       @relation("CustomerAdvisors")
+  advisorOf                CustomerAdvisor[]      @relation("AdvisorOf")
+  consultant_invite_jobs   ConsultantInviteJob[]  @relation("OfficeInviteJobs")
 }
 
 model CalendlyConnection {
@@ -543,6 +544,38 @@ model CalendlyOauthState {
   created_at    DateTime  @default(now())
 
   @@index([user_id])
+  @@index([expires_at])
+}
+
+// GoogleMeetConnection: conta Google Workspace (host único da plataforma) conectada via OAuth
+// para criar salas Meet (Meet REST API spaces.create). Tokens criptografados (AES-256-GCM).
+model GoogleMeetConnection {
+  id                      String    @id @default(uuid()) @db.Uuid
+  connected_by_id         String?   @db.Uuid
+  connected_by            User?     @relation("google_meet_connected_by", fields: [connected_by_id], references: [id], onDelete: SetNull)
+  google_email            String
+  access_token_encrypted  String
+  refresh_token_encrypted String
+  token_type              String    @default("Bearer")
+  scope                   String?
+  expires_at              DateTime?
+  is_active               Boolean   @default(true)
+  last_error              String?
+  created_at              DateTime  @default(now())
+  updated_at              DateTime  @updatedAt
+
+  @@index([is_active])
+  @@index([connected_by_id])
+}
+
+model GoogleMeetOauthState {
+  id         String    @id @default(uuid()) @db.Uuid
+  admin_id   String    @db.Uuid
+  state      String    @unique
+  expires_at DateTime
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+
   @@index([expires_at])
 }
 
