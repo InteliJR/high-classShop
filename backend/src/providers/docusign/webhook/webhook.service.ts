@@ -246,10 +246,10 @@ export class DocuSignWebhookService {
           webhookConfigurationId: payload.configurationId,
           apiVersion: payload.apiVersion,
         },
-        signed_at: new Date(),
       };
 
-      // Apenas atualizar signed_at se completado (evento de assinatura final)
+      // Apenas atualizar signed_at se completado (evento de assinatura final).
+      // Nunca sobrescrever em outros eventos (delivered/voided/etc.) nem se já assinado.
       if (providerStatus === 'COMPLETED' && !contract.signed_at) {
         // Usar data do webhook como signed_at (moment da assinatura)
         updateData.signed_at = new Date(generatedDateTime);

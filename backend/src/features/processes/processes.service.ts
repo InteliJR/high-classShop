@@ -6,6 +6,7 @@ import {
   NotFoundException,
   Logger,
   ForbiddenException,
+  HttpException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProcessDTO } from './dto/create-process.dto';
@@ -15,7 +16,7 @@ import {
   Product,
 } from './entity/process.response.entity';
 import { QueryDto } from 'src/shared/dto/query.dto';
-import { ProcessStatus, StatusAgendamento } from '@prisma/client';
+import { ProcessStatus, StatusAgendamento, UserRole } from '@prisma/client';
 import { ProcessesByStatus } from 'src/shared/dto/summary.dto';
 import { UpdateProcessDto } from './dto/update-process.dto';
 import { ProcessWithHistory } from './entity/process-history.response';
@@ -761,6 +762,8 @@ export class ProcessesService {
   async update(
     processId: string,
     updateProcessDto: UpdateProcessDto,
+    callerId?: string,
+    callerRole?: UserRole,
   ): Promise<ProcessWithHistory> {
     try {
       // Transction para atualizar o processo, adicionar mais uma linha sobre o histórico de status do processo, e obter o histórico atualizado
@@ -781,6 +784,22 @@ export class ProcessesService {
               aircraft: true,
             },
           });
+
+          // Autorização: apenas participantes do processo (cliente ou especialista)
+          // ou staff (ADMIN/OFFICE) podem alterar o status. Evita que qualquer
+          // usuário autenticado dirija um processo alheio.
+          const isStaff =
+            callerRole === UserRole.ADMIN || callerRole === UserRole.OFFICE;
+          const isParticipant =
+            !!callerId &&
+            (existingProcess.client_id === callerId ||
+              existingProcess.specialist_id === callerId);
+          if (!isStaff && !isParticipant) {
+            throw new ForbiddenException(
+              'Você não tem permissão para alterar este processo',
+            );
+          }
+
           //Verificar se ele já está com o status atualizado
           if (existingProcess.status === updateProcessDto.status) {
             throw new BadRequestException();
@@ -829,11 +848,14 @@ export class ProcessesService {
       };
       // Tratamento de erros
     } catch (err) {
-      if (err.code === 'P2002') {
-        throw new NotFoundException();
+      // Repassa exceções HTTP já tratadas (Forbidden/BadRequest/NotFound) sem
+      // convertê-las em 500.
+      if (err instanceof HttpException) {
+        throw err;
       }
-      if (err.status === 400) {
-        throw new BadRequestException();
+      // findUniqueOrThrow lança P2025 quando o processo não existe
+      if (err.code === 'P2025') {
+        throw new NotFoundException('Processo não encontrado');
       }
       throw new InternalServerErrorException();
     }

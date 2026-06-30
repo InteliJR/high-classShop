@@ -27,6 +27,7 @@ import { UserEntity } from 'src/auth/entities/user.entity';
 import {
   assertSpecialistCanCreate,
   assertSpecialistCanModify,
+  assertSpecialistOwnsProduct,
 } from 'src/shared/helpers/specialist-auth.helper';
 import { Public } from 'src/shared/decorators/public.decorator';
 import { ProductImportJobsService } from '../product-import-jobs/product-import-jobs.service';
@@ -142,7 +143,7 @@ export class CarsController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
-  update(
+  async update(
     @Param('id') id: number,
     @Body() updateCarDto: UpdateCarDto,
     @CurrentUser() user: UserEntity,
@@ -152,13 +153,17 @@ export class CarsController {
     }
 
     assertSpecialistCanModify('CAR', user);
+    const existing = await this.carsService.findOne(+id);
+    assertSpecialistOwnsProduct(user, existing?.specialist_id);
     return this.carsService.update(+id, updateCarDto);
   }
 
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
-  remove(@Param('id') id: string, @CurrentUser() user: UserEntity) {
+  async remove(@Param('id') id: string, @CurrentUser() user: UserEntity) {
     assertSpecialistCanModify('CAR', user);
+    const existing = await this.carsService.findOne(+id);
+    assertSpecialistOwnsProduct(user, existing?.specialist_id);
     return this.carsService.remove(+id);
   }
 }

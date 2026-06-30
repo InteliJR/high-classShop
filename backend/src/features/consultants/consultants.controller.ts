@@ -10,12 +10,17 @@ import {
 import { ConsultantsService } from './consultants.service';
 import { CreateConsultantDto } from './dto/create-consultant.dto';
 import { UpdateConsultantDto } from './dto/update-consultant.dto';
+import { Roles } from 'src/shared/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 
 /**
  * Define a rota base para este controlador.
  * Todas as rotas definidas aqui estarão sob o prefixo '/consultants'.
+ * Gestão administrativa de consultores — restrito ao ADMIN.
+ * (O fluxo de escritório usa as rotas /office/consultants.)
  */
 @Controller('consultants')
+@Roles(UserRole.ADMIN)
 export class ConsultantsController {
   /**
    * @param consultantsService - O serviço que contém a lógica de negócio para consultores.
