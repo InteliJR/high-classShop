@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
-import { Settings, Check, AlertCircle, Save } from "lucide-react";
+import { Settings, Check, AlertCircle, Save, Video } from "lucide-react";
 import { getSettings, updateSetting } from "../../services/settings.service";
+import {
+  getGoogleMeetStatus,
+  getGoogleMeetAuthorizeUrl,
+  disconnectGoogleMeet,
+  type GoogleMeetStatus,
+} from "../../services/googleMeet.service";
 
 /**
  * Admin Settings Page
@@ -16,6 +22,72 @@ export default function SettingsPage() {
   const [minimumProposalEnabled, setMinimumProposalEnabled] = useState(false);
   const [minimumProposalPercentage, setMinimumProposalPercentage] =
     useState("80");
+
+  // Google Meet connection state
+  const [meetStatus, setMeetStatus] = useState<GoogleMeetStatus | null>(null);
+  const [meetBusy, setMeetBusy] = useState(false);
+
+  const loadMeetStatus = async () => {
+    try {
+      const status = await getGoogleMeetStatus();
+      setMeetStatus(status);
+    } catch {
+      // status indisponível não bloqueia a tela de configurações
+      setMeetStatus(null);
+    }
+  };
+
+  const handleConnectMeet = async () => {
+    try {
+      setMeetBusy(true);
+      const url = await getGoogleMeetAuthorizeUrl();
+      window.location.href = url;
+    } catch (err) {
+      setError(
+        (err as any)?.friendlyMessage ||
+          (err instanceof Error ? err.message : "Erro ao iniciar conexão Google"),
+      );
+      setMeetBusy(false);
+    }
+  };
+
+  const handleDisconnectMeet = async () => {
+    try {
+      setMeetBusy(true);
+      await disconnectGoogleMeet();
+      await loadMeetStatus();
+      setSuccessMessage("Conta Google desconectada.");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      setError(
+        (err as any)?.friendlyMessage ||
+          (err instanceof Error ? err.message : "Erro ao desconectar"),
+      );
+    } finally {
+      setMeetBusy(false);
+    }
+  };
+
+  // Feedback do retorno do callback OAuth (?google=connected|error)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const google = params.get("google");
+    if (google === "connected") {
+      setSuccessMessage("Conta Google conectada para reuniões!");
+      setTimeout(() => setSuccessMessage(null), 4000);
+    } else if (google === "error") {
+      setError(
+        "Falha ao conectar a conta Google. Verifique se é uma conta Workspace e tente novamente.",
+      );
+    }
+    if (google) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMeetStatus();
+  }, []);
 
   // Load settings on mount
   useEffect(() => {
@@ -247,6 +319,71 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* Google Meet Connection Section */}
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Video size={18} className="text-slate-700" />
+                  Reuniões — Conta Google Meet
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Conecte uma conta Google Workspace para gerar as salas de
+                  reunião. A conta precisa ser Workspace (contas @gmail.com
+                  comuns não geram link do Meet via API).
+                </p>
+              </div>
+
+              <div className="p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1">
+                    {meetStatus?.connected ? (
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                          <Check size={12} /> Conectado
+                        </span>
+                        <span className="text-sm text-gray-700">
+                          {meetStatus.google_email}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                        Nenhuma conta conectada
+                      </span>
+                    )}
+                    {meetStatus?.last_error && (
+                      <p className="text-sm text-red-600 mt-2">
+                        Erro na conexão ({meetStatus.last_error}). Reconecte a
+                        conta.
+                      </p>
+                    )}
+                  </div>
+
+                  {meetStatus?.connected ? (
+                    <button
+                      onClick={handleDisconnectMeet}
+                      disabled={meetBusy}
+                      className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition disabled:opacity-50"
+                    >
+                      Desconectar
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleConnectMeet}
+                      disabled={meetBusy}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg font-medium hover:bg-slate-800 transition disabled:opacity-50"
+                    >
+                      {meetBusy ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      ) : (
+                        <Video size={16} />
+                      )}
+                      Conectar conta Google
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
