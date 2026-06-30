@@ -86,13 +86,23 @@ export type CreateConsultantProcessData = {
   product_id?: number;
 };
 
+export type ConsultantProcessResult = {
+  id: string;
+  appointment_id: string | null;
+  status: string;
+};
+
 /**
  * Create a process on behalf of a client
  */
-export async function createConsultantProcess(data: CreateConsultantProcessData): Promise<unknown> {
-  const response = await api.post<ApiResponse<unknown>>('/consultant/processes', data, {
-    withCredentials: true,
-  });
+export async function createConsultantProcess(
+  data: CreateConsultantProcessData,
+): Promise<ConsultantProcessResult> {
+  const response = await api.post<ApiResponse<ConsultantProcessResult>>(
+    '/consultant/processes',
+    data,
+    { withCredentials: true },
+  );
   return response.data.data;
 }
 

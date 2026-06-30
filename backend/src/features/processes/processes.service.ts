@@ -206,22 +206,26 @@ export class ProcessesService {
         aircraft_id?: number;
         boat_id?: number;
         car_id?: number;
+        status?: { in: ProcessStatus[] };
       } = {
         client_id,
         specialist_id,
         [`${fieldName}_id`]: Number(createProcessDto.product_id),
+        // Só bloqueia se houver processo ATIVO; processos encerrados
+        // (COMPLETED/REJECTED) permitem novo processo para o mesmo produto.
+        status: { in: activeStatuses },
       };
 
-      this.logger.debug('[create] Verificando se processo já existe');
+      this.logger.debug('[create] Verificando se processo ativo já existe');
       const processAlreadyExists = await this.prismaService.process.findFirst({
         where: whereClause,
       });
       if (processAlreadyExists) {
         this.logger.warn(
-          `[create] Processo já existe para cliente ${client_id} e produto ${product_id}`,
+          `[create] Processo ativo já existe para cliente ${client_id} e produto ${product_id}`,
         );
         throw new ConflictException(
-          'Já existe processo para este cliente com este produto.',
+          'Já existe processo ativo para este cliente com este produto.',
         );
       }
     } else {

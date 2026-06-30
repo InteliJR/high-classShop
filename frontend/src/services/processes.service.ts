@@ -307,7 +307,7 @@ export interface CreateAppointmentRequest {
   client_id: string;
   product_type: "CAR" | "BOAT" | "AIRCRAFT";
   product_id: string | number;
-  scheduled_date?: string;
+  appointment_datetime?: string;
   notes?: string;
 }
 
