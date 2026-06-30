@@ -27,6 +27,7 @@ import { UserEntity } from 'src/auth/entities/user.entity';
 import {
   assertSpecialistCanCreate,
   assertSpecialistCanModify,
+  assertSpecialistOwnsProduct,
 } from 'src/shared/helpers/specialist-auth.helper';
 import { Public } from 'src/shared/decorators/public.decorator';
 import { ProductImportJobsService } from '../product-import-jobs/product-import-jobs.service';
@@ -145,19 +146,23 @@ export class BoatsController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
-  update(
+  async update(
     @Param('id') id: string,
     @Body() updateBoatDto: UpdateBoatDto,
     @CurrentUser() user: UserEntity,
   ) {
     assertSpecialistCanModify('BOAT', user);
+    const existing = await this.boatsService.findOne(+id);
+    assertSpecialistOwnsProduct(user, existing?.specialist_id);
     return this.boatsService.update(+id, updateBoatDto);
   }
 
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
-  remove(@Param('id') id: string, @CurrentUser() user: UserEntity) {
+  async remove(@Param('id') id: string, @CurrentUser() user: UserEntity) {
     assertSpecialistCanModify('BOAT', user);
+    const existing = await this.boatsService.findOne(+id);
+    assertSpecialistOwnsProduct(user, existing?.specialist_id);
     return this.boatsService.remove(+id);
   }
 }

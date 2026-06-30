@@ -61,3 +61,32 @@ export function assertSpecialistCanModify(
 ): void {
   assertSpecialistCanCreate(productType, user);
 }
+
+/**
+ * Valida autorização a nível de objeto: um SPECIALIST só pode modificar/deletar
+ * produtos que pertencem a ele (product.specialist_id === user.id).
+ * - ADMIN ignora a checagem (pode modificar qualquer produto).
+ *
+ * @throws ForbiddenException se o specialist não for o dono do produto
+ */
+export function assertSpecialistOwnsProduct(
+  user: UserEntity,
+  productSpecialistId: string | null | undefined,
+): void {
+  if (user.role === UserRole.ADMIN) {
+    return;
+  }
+
+  if (user.role === UserRole.SPECIALIST) {
+    if (!productSpecialistId || productSpecialistId !== user.id) {
+      throw new ForbiddenException(
+        'Você só pode modificar produtos sob sua própria responsabilidade.',
+      );
+    }
+    return;
+  }
+
+  throw new ForbiddenException(
+    'Apenas ADMIN e SPECIALIST podem modificar produtos.',
+  );
+}

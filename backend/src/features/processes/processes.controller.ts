@@ -189,10 +189,20 @@ export class ProcessesController {
   async update(
     @Param('id', new ParseUUIDPipe()) processId: string,
     @Body() updateProcessDto: UpdateProcessDto,
+    @Req() req: any,
   ): Promise<ApiResponseDto<ProcessWithHistory>> {
+    const userId = req.user?.sub || req.user?.id;
+    const userRole = req.user?.role;
+
+    if (!userId) {
+      throw new UnauthorizedException('Usuário autenticado não identificado');
+    }
+
     const updatedProcess = await this.processesService.update(
       processId,
       updateProcessDto,
+      userId,
+      userRole,
     );
 
     return {

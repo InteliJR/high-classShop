@@ -187,11 +187,16 @@ export class ConsultantsService {
         }
       }
 
-      // Se está atualizando a senha, faz o hash
-      const updateData = { ...data };
-      if (data.password) {
-        updateData.password_hash = await bcrypt.hash(data.password, 10);
-        delete updateData.password;
+      // Descarta qualquer password_hash vindo do cliente; a senha só entra por `password`
+      // e é sempre re-hasheada aqui.
+      const {
+        password,
+        password_hash: _ignored,
+        ...rest
+      } = data as Record<string, any>;
+      const updateData: Record<string, any> = { ...rest };
+      if (password) {
+        updateData.password_hash = await bcrypt.hash(password, 10);
       }
 
       return await this.prisma.user.update({

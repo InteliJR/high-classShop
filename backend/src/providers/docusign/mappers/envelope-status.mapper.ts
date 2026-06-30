@@ -17,6 +17,7 @@ export function mapDocusignStatusToProviderStatus(
     case 'voided':
       return ProviderStatus.VOIDED;
     case 'timeout':
+    case 'timedout':
       return ProviderStatus.TIMEDOUT;
     default:
       return ProviderStatus.ERROR;
