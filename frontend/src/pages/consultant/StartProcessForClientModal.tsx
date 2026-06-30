@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { PopupModal, useCalendlyEventListener } from "react-calendly";
 import { getClients, createConsultantProcess, type Client } from "../../services/consultant.service";
+import { getUserById } from "../../services/users.service";
+import {
+  registerCalendlyScheduledEvent,
+  getCalendlySyncStatus,
+} from "../../services/appointments.service";
 import Button from "../../components/ui/button";
 import { Loader2, Search } from "lucide-react";
 
@@ -28,6 +34,17 @@ export default function StartProcessForClientModal({
   const [error, setError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  // Calendly
+  const [specialistCalendlyUrl, setSpecialistCalendlyUrl] = useState<
+    string | null
+  >(null);
+  const [pendingAppointmentId, setPendingAppointmentId] = useState<
+    string | null
+  >(null);
+  const [calendlyUrl, setCalendlyUrl] = useState<string | null>(null);
+  const [isCalendlyOpen, setIsCalendlyOpen] = useState(false);
+  const [calendlyMessage, setCalendlyMessage] = useState<string | null>(null);
+
   useEffect(() => {
     getClients()
       .then(setClients)
@@ -35,6 +52,13 @@ export default function StartProcessForClientModal({
       .finally(() => setIsLoadingClients(false));
     searchRef.current?.focus();
   }, []);
+
+  // Carrega o link do Calendly do especialista para permitir agendar a reunião
+  useEffect(() => {
+    getUserById(specialistId)
+      .then((u) => setSpecialistCalendlyUrl(u.calendly_url))
+      .catch(() => setSpecialistCalendlyUrl(null));
+  }, [specialistId]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -44,6 +68,35 @@ export default function StartProcessForClientModal({
     );
   }, [clients, search]);
 
+  // Sincroniza o horário escolhido no Calendly com o agendamento criado
+  useCalendlyEventListener({
+    onEventScheduled: async (event) => {
+      if (!pendingAppointmentId) return;
+
+      const payload = (event as any)?.data?.payload;
+      const eventUri = payload?.event?.uri;
+      const inviteeUri = payload?.invitee?.uri;
+
+      try {
+        if (eventUri && inviteeUri) {
+          await registerCalendlyScheduledEvent(pendingAppointmentId, {
+            event_uri: eventUri,
+            invitee_uri: inviteeUri,
+            client_event: "calendly.event_scheduled",
+            client_observed_at: new Date().toISOString(),
+          });
+          // Best-effort: garante que o status foi consultado antes de seguir
+          await getCalendlySyncStatus(pendingAppointmentId).catch(() => null);
+        }
+      } catch (err) {
+        console.error("Erro ao sincronizar evento do Calendly:", err);
+      } finally {
+        setIsCalendlyOpen(false);
+        navigate("/consultant/processes");
+      }
+    },
+  });
+
   const handleSubmit = async () => {
     if (!selectedClient) {
       setError("Selecione um cliente.");
@@ -52,13 +105,29 @@ export default function StartProcessForClientModal({
     setError(null);
     setIsSubmitting(true);
     try {
-      await createConsultantProcess({
+      const process = await createConsultantProcess({
         client_id: selectedClient.id,
         specialist_id: specialistId,
         product_type: productType,
         product_id: productId,
       });
-      navigate("/consultant/processes");
+
+      // Se o especialista tem Calendly, abre o popup para marcar o horário.
+      // Sem Calendly, segue o fluxo antigo (agendamento definido depois).
+      if (specialistCalendlyUrl && process.appointment_id) {
+        let url = specialistCalendlyUrl.trim();
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+          url = `https://${url}`;
+        }
+        setPendingAppointmentId(process.appointment_id);
+        setCalendlyUrl(url);
+        setIsCalendlyOpen(true);
+        setCalendlyMessage(
+          "Conclua o agendamento no Calendly para marcar o horário da reunião.",
+        );
+      } else {
+        navigate("/consultant/processes");
+      }
     } catch (err) {
       setError((err as Error).message || "Erro ao criar processo. Tente novamente.");
       setIsSubmitting(false);
@@ -127,6 +196,9 @@ export default function StartProcessForClientModal({
       </div>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
+      {calendlyMessage && (
+        <p className="text-sm text-blue-600">{calendlyMessage}</p>
+      )}
 
       <div className="flex justify-end gap-3 pt-2">
         <Button type="button" onClick={onClose} disabled={isSubmitting}>
@@ -140,6 +212,24 @@ export default function StartProcessForClientModal({
           {isSubmitting ? "Criando..." : "Criar processo"}
         </Button>
       </div>
+
+      {calendlyUrl && isCalendlyOpen && (
+        <PopupModal
+          url={calendlyUrl}
+          open={isCalendlyOpen}
+          onModalClose={() => {
+            setIsCalendlyOpen(false);
+            navigate("/consultant/processes");
+          }}
+          rootElement={document.getElementById("root") ?? document.body}
+          prefill={{
+            name: selectedClient
+              ? `${selectedClient.name} ${selectedClient.surname}`.trim()
+              : undefined,
+            email: selectedClient?.email,
+          }}
+        />
+      )}
     </div>
   );
 }

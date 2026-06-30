@@ -238,16 +238,19 @@ export class ConsultantService {
     ] as const;
 
     if (productField && dto.product_id) {
+      // Só bloqueia se houver processo ATIVO; processos encerrados
+      // (COMPLETED/REJECTED) permitem novo processo para o mesmo produto.
       const existing = await this.prismaService.process.findFirst({
         where: {
           client_id: dto.client_id,
           specialist_id: dto.specialist_id,
           [productField]: dto.product_id,
+          status: { in: [...activeStatuses] as any },
         },
       });
       if (existing) {
         throw new ConflictException(
-          'Já existe processo para este cliente com este produto.',
+          'Já existe processo ativo para este cliente com este produto.',
         );
       }
     } else {
