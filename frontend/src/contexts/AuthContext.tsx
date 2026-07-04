@@ -64,9 +64,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const data = response.data;
       setUser(data);
       return true;
-    } catch (error) {
-      clearUser();
-      clearAccessToken();
+    } catch (error: any) {
+      // ponytail: só limpa sessão em erro de auth — 5xx/network não derruba o usuário
+      const status = error?.response?.status;
+      if (status === 401 || status === 403) {
+        clearUser();
+        clearAccessToken();
+      }
       return false;
     }
   };

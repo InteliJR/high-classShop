@@ -220,8 +220,13 @@ export class AuthController {
       await this.authService.logout(refreshToken);
     }
 
-    // Clear cookie
-    response.clearCookie('refreshToken', { path: '/' });
+    // Clear cookie com os mesmos atributos usados na criação
+    response.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      path: '/',
+    });
 
     return {
       success: true,
