@@ -1,6 +1,7 @@
 import {
   Check,
   ChevronDown,
+  ChevronRight,
   Edit2,
   ExternalLink,
   Loader,
@@ -26,6 +27,7 @@ import {
   getMeetingByProcess,
   markConversationDone,
   startMeeting,
+  updateProcessStatus,
   type MeetingSession,
 } from "../../services/processes.service";
 
@@ -100,6 +102,9 @@ export default function ProcessCard({
   const [isLoadingMeeting, setIsLoadingMeeting] = useState(false);
   const [isConversationDoneLoading, setIsConversationDoneLoading] =
     useState(false);
+  const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false);
+  const [isAdvancing, setIsAdvancing] = useState(false);
+  const [advanceError, setAdvanceError] = useState<string | null>(null);
 
   // Verifica se é um processo de consultoria (sem produto atribuído)
   const isConsultancy = !process.product_type || !process.product_id;
@@ -261,6 +266,21 @@ export default function ProcessCard({
       );
     } finally {
       setIsCancelling(false);
+    }
+  };
+
+  const handleAdvanceProcess = async () => {
+    if (isAdvancing) return;
+    setIsAdvancing(true);
+    setAdvanceError(null);
+    try {
+      await updateProcessStatus(process.id, "DOCUMENTATION");
+      setShowAdvanceConfirm(false);
+      onStatusUpdated?.();
+    } catch (error) {
+      setAdvanceError(getActionErrorMessage(error, "Erro ao avançar processo"));
+    } finally {
+      setIsAdvancing(false);
     }
   };
 
@@ -593,6 +613,25 @@ export default function ProcessCard({
                   </span>
                 )}
               </div>
+              {/* Contract signing status */}
+              {activeContract.status === 'SIGNED' && activeContract.signed_at && (
+                <div className="flex items-center gap-1.5 mt-2 text-xs text-green-700">
+                  <CheckCircle size={14} />
+                  <span>Assinado em {new Date(activeContract.signed_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+              )}
+              {activeContract.status === 'PENDING' && (
+                <div className="flex items-center gap-1.5 mt-2 text-xs text-yellow-700">
+                  <Loader size={14} />
+                  <span>Aguardando assinatura</span>
+                </div>
+              )}
+              {activeContract.status === 'REJECTED' && (
+                <div className="flex items-center gap-1.5 mt-2 text-xs text-red-700">
+                  <XCircle size={14} />
+                  <span>Contrato recusado ou cancelado</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -808,6 +847,52 @@ export default function ProcessCard({
               </button>
             )}
           </div>
+
+          {/* Advance process — specialist only, NEGOTIATION, low prominence */}
+          {process.status === "NEGOTIATION" && !isClientView && (
+            <div className="flex items-center justify-end gap-2 mt-2">
+              {!showAdvanceConfirm ? (
+                <button
+                  onClick={() => setShowAdvanceConfirm(true)}
+                  className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <ChevronRight size={12} />
+                  Avançar processo
+                </button>
+              ) : (
+                <>
+                  <span className="text-xs text-gray-500">
+                    Avançar para documentação?
+                  </span>
+                  <button
+                    onClick={handleAdvanceProcess}
+                    disabled={isAdvancing}
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs border border-gray-300 text-gray-600 rounded hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    {isAdvancing ? (
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600" />
+                    ) : (
+                      <Check size={12} />
+                    )}
+                    Confirmar
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAdvanceConfirm(false);
+                      setAdvanceError(null);
+                    }}
+                    disabled={isAdvancing}
+                    className="text-gray-400 hover:text-gray-600 disabled:opacity-50 transition-colors"
+                  >
+                    <X size={12} />
+                  </button>
+                </>
+              )}
+              {advanceError && (
+                <p className="text-xs text-red-500">{advanceError}</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

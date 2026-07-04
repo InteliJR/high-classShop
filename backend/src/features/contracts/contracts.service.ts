@@ -783,6 +783,10 @@ export class ContractsService {
           type: createdContract.uploaded_by_type,
         },
         created_at: createdContract.created_at,
+        status: createdContract.status,
+        provider_status: createdContract.provider_status ?? null,
+        signed_at: createdContract.signed_at ?? null,
+        signed_by: null,
       };
     } catch (error) {
       // ===== TRATAMENTO DE ERROS =====
