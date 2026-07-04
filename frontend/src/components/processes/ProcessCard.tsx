@@ -357,6 +357,15 @@ export default function ProcessCard({
             </p>
           )}
         </div>
+        {!isClientView && (
+          <button
+            onClick={() => setShowUpdateModal(true)}
+            className="p-1 hover:bg-gray-100 rounded transition shrink-0"
+            aria-label="Alterar status"
+          >
+            <Edit2 size={18} />
+          </button>
+        )}
         {onToggleExpand && (
           <button
             onClick={onToggleExpand}
