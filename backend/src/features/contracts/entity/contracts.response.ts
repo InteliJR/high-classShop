@@ -13,4 +13,8 @@ export class ContractResponse {
     type: $Enums.UserRole;
   };
   created_at: Date;
+  status: string;
+  provider_status: string | null;
+  signed_at: Date | null;
+  signed_by: { id: string; name: string; surname: string } | null;
 }

@@ -303,7 +303,25 @@ export class AuthService {
       });
 
       if (!tokenRecord) {
-        throw new UnauthorizedException('Invalid refresh token');
+        // ponytail: grace window de 30s — token recém-rotacionado por outra aba/request
+        // JWT ainda é válido, então payload.sub é confiável
+        const graceCutoff = new Date(Date.now() - 30_000);
+        const recentToken = await this.prismaService.refreshToken.findFirst({
+          where: {
+            user_id: payload.sub,
+            expires_at: { gt: new Date() },
+            created_at: { gt: graceCutoff },
+          },
+        });
+        if (!recentToken) {
+          throw new UnauthorizedException('Invalid refresh token');
+        }
+        // Outra aba já rotacionou — retorna o usuário para o caller emitir novo access token
+        const graceUser = await this.prismaService.user.findUnique({
+          where: { id: payload.sub },
+        });
+        if (!graceUser) throw new UnauthorizedException('Unauthorized');
+        return graceUser;
       }
 
       // Verificar se o token expirou

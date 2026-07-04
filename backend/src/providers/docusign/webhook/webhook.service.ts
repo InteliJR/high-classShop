@@ -37,14 +37,14 @@ interface WebhookPayloadV21 {
  * Mapeamento de status provider para status do contrato
  */
 const PROVIDER_STATUS_TO_CONTRACT_STATUS: Record<string, string> = {
-  created: 'PENDING',
-  sent: 'PENDING',
-  delivered: 'PENDING',
-  completed: 'SIGNED',
-  declined: 'REJECTED',
-  voided: 'REJECTED',
-  timeout: 'REJECTED',
-  error: 'REJECTED',
+  CREATED: 'PENDING',
+  SENT: 'PENDING',
+  DELIVERED: 'PENDING',
+  COMPLETED: 'SIGNED',
+  DECLINED: 'REJECTED',
+  VOIDED: 'REJECTED',
+  TIMEDOUT: 'REJECTED',
+  ERROR: 'REJECTED',
 };
 
 /**
