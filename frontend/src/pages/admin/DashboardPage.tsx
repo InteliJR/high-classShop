@@ -72,8 +72,8 @@ export default function DashboardPage() {
           Seja bem vindo de volta, Administrador!
         </h1>
         <p className="text-gray-600">
-          Lorem ipsum dolor sit amet. Quo recusant accusamus quo lorem
-          repudiandae quo sed
+          Acompanhe os indicadores de desempenho, processos ativos e a
+          performance dos consultores em tempo real.
         </p>
       </div>
 
