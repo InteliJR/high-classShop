@@ -17,6 +17,7 @@ import CompaniesPage from "../pages/admin/CompaniesPage";
 import SpecialistsPage from "../pages/admin/SpecialistsPage";
 import SettingsPage from "../pages/admin/SettingsPage";
 import MyCompanyPage from "../pages/admin/MyCompanyPage";
+import CommissionsPage from "../pages/admin/CommissionsPage";
 import ProductsPage from "../pages/specialist/ProductsPage";
 import ProductFormPage from "../pages/specialist/ProductFormPage";
 import SpecialistDashboard from "../pages/specialist/SpecialistDashboard";
@@ -36,7 +37,6 @@ import AdvisorDashboardPage from "../pages/advisor/AdvisorDashboardPage";
 import RegisterOfficePage from "../pages/auth/RegisterOfficePage";
 import OfficeDashboardPage from "../pages/office/OfficeDashboardPage";
 import OfficeConsultantsPage from "../pages/office/OfficeConsultantsPage";
-import OfficeBatchInvitePage from "../pages/office/OfficeBatchInvitePage";
 import OfficeClientsPage from "../pages/office/OfficeClientsPage";
 import OfficeCompanySettingsPage from "../pages/office/OfficeCompanySettingsPage";
 
@@ -96,16 +96,6 @@ export default function RouterApp() {
         <MainLayout>
           <ProtectedRoute allowedRoles={["OFFICE", "ADMIN"]}>
             <OfficeConsultantsPage />
-          </ProtectedRoute>
-        </MainLayout>
-      ),
-    },
-    {
-      path: "/office/invite-batch",
-      element: (
-        <MainLayout>
-          <ProtectedRoute allowedRoles={["OFFICE", "ADMIN"]}>
-            <OfficeBatchInvitePage />
           </ProtectedRoute>
         </MainLayout>
       ),
@@ -259,6 +249,16 @@ export default function RouterApp() {
         <MainLayout>
           <ProtectedRoute allowedRoles={["ADMIN"]}>
             <SpecialistsPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/admin/commissions",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <CommissionsPage />
           </ProtectedRoute>
         </MainLayout>
       ),

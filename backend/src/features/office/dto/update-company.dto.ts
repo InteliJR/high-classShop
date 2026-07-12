@@ -1,13 +1,10 @@
 import {
   ArrayMaxSize,
   IsArray,
-  IsNumber,
   IsOptional,
   IsString,
   Matches,
-  Max,
   MaxLength,
-  Min,
 } from 'class-validator';
 
 const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -16,6 +13,8 @@ const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
  * Campos permitidos para OFFICE editar na própria Company.
  * NUNCA inclui id (que poderia ser usado pra trocar de tenant).
  * Logo é tratado separado pelo endpoint multipart de upload.
+ * `commission_rate` propositalmente NÃO está aqui — só ADMIN pode alterar
+ * a comissão do escritório, via PUT /companies/:id (companies.controller).
  */
 export class OfficeUpdateCompanyDto {
   @IsOptional() @IsString() @MaxLength(200) name?: string;
@@ -31,12 +30,6 @@ export class OfficeUpdateCompanyDto {
   @IsOptional() @IsString() @MaxLength(120) bank?: string;
   @IsOptional() @IsString() @MaxLength(10) agency?: string;
   @IsOptional() @IsString() @MaxLength(20) checking_account?: string;
-
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @Max(100)
-  commission_rate?: number;
 
   @IsOptional()
   @IsArray()

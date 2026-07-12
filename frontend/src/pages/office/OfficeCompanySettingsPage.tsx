@@ -26,7 +26,6 @@ export default function OfficeCompanySettingsPage() {
           bank: c.bank ?? "",
           agency: c.agency ?? "",
           checking_account: c.checking_account ?? "",
-          commission_rate: c.commission_rate ?? undefined,
           color_identity: c.color_identity?.length ? c.color_identity : DEFAULT_COLORS,
         });
       })
@@ -188,17 +187,12 @@ export default function OfficeCompanySettingsPage() {
         </div>
 
         <Field label="Comissão padrão (%)">
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step={0.01}
-            value={form.commission_rate ?? ""}
-            onChange={(e) =>
-              setForm({ ...form, commission_rate: e.target.value ? Number(e.target.value) : undefined })
-            }
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
+          <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-700">
+            {company.commission_rate != null ? `${company.commission_rate}%` : "—"}
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Somente o administrador pode alterar a comissão do escritório.
+          </p>
         </Field>
 
         <Field label="Identidade visual (até 4 cores hex)">
