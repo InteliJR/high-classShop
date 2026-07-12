@@ -137,6 +137,29 @@ describe('OfficeService — tenant isolation', () => {
     expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
 
+  // Admin escopando clientes por empresa (aba "Clientes" na tela de empresa)
+  it('listClients: ADMIN com companyId → filtra por consultant.company_id', async () => {
+    const prisma = mkPrisma();
+    const svc = mkSvc(prisma);
+    await svc.listClients(SCOPE_ADMIN, { companyId: 'companyA' });
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          consultant: { company_id: 'companyA' },
+        }),
+      }),
+    );
+  });
+
+  // Admin sem companyId mantém visão global (comportamento pré-existente)
+  it('listClients: ADMIN sem companyId → sem filtro de empresa', async () => {
+    const prisma = mkPrisma();
+    const svc = mkSvc(prisma);
+    await svc.listClients(SCOPE_ADMIN, {});
+    const call = prisma.user.findMany.mock.calls[0][0];
+    expect(call.where.consultant).toBeUndefined();
+  });
+
   // S6: invite ignora company_id no body — sempre usa scope
   it('inviteConsultant: usa companyId do scope, ignora payload', async () => {
     const prisma = mkPrisma();

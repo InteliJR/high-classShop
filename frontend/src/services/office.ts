@@ -119,8 +119,9 @@ export const officeService = {
     api.post('office/consultants/invite', { email }).then((r) => r.data),
 
   // Clientes (RO)
-  listClients: (params: { consultantId?: string; q?: string } = {}) =>
-    api.get<OfficeClient[]>('office/clients', { params }).then((r) => r.data),
+  listClients: (
+    params: { consultantId?: string; q?: string; companyId?: string } = {},
+  ) => api.get<OfficeClient[]>('office/clients', { params }).then((r) => r.data),
 
   // Company
   getCompany: () => api.get<OfficeCompany>('office/company').then((r) => r.data),
