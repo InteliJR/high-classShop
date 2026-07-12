@@ -325,7 +325,7 @@ export class ContractsService {
             id: specialistData.id,
             name: specialistData.name,
             email: specialistData.email || undefined,
-            cpf: specialistData.cpf || undefined,
+            cnpj: specialistData.cnpj || undefined,
             bank: specialistData.bank || undefined,
             agency: specialistData.agency || undefined,
             checking_account: specialistData.checking_account || undefined,
@@ -333,6 +333,7 @@ export class ContractsService {
             value: Math.round(specialistValue * 100) / 100,
           }
         : undefined,
+      suggested_total_rate: platformRate + officeRate + specialistRate,
     };
   }
 
@@ -352,7 +353,7 @@ export class ContractsService {
       name?: string;
       surname?: string;
       email?: string;
-      cpf?: string;
+      cpf?: string | null;
       company_id?: string | null;
       commission_rate?: any;
       bank?: string | null;
@@ -375,7 +376,7 @@ export class ContractsService {
       id: string;
       name: string;
       email?: string | null;
-      cpf?: string | null;
+      cnpj?: string | null;
       bank?: string | null;
       agency?: string | null;
       checking_account?: string | null;
@@ -405,7 +406,7 @@ export class ContractsService {
           id: specialist.id,
           name: `${specialist.name || ''} ${specialist.surname || ''}`.trim(),
           email: specialist.email,
-          cpf: specialist.cpf,
+          cnpj: specialist.cpf,
           bank: specialist.bank,
           agency: specialist.agency,
           checking_account: specialist.checking_account,
@@ -437,6 +438,81 @@ export class ContractsService {
       officeData,
       specialistRate,
       specialistData,
+    };
+  }
+
+  /**
+   * Deriva o split de comissão a partir do total informado pelo especialista.
+   *
+   * Único valor editável é `totalCommissionRate` (comissão total da venda, em %).
+   * Plataforma e escritório permanecem travados nas taxas já cadastradas
+   * (nunca aceitos do cliente); o corte do especialista é o resíduo:
+   * total - platform - office. Isso garante que os três valores somem
+   * exatamente o valor total, mesmo após arredondamento.
+   *
+   * @throws BadRequestException se o total for menor que platform + office
+   */
+  private async resolveCommissionFromTotal(
+    processId: string,
+    totalCommissionRate: number,
+  ): Promise<{
+    platformRate: number;
+    officeRate: number;
+    specialistRate: number;
+    platformValue: number;
+    officeValue: number;
+    specialistValue: number;
+  }> {
+    const process = await this.prismaService.process.findUnique({
+      where: { id: processId },
+      include: {
+        specialist: true,
+        car: true,
+        boat: true,
+        aircraft: true,
+        accepted_proposal: true,
+      },
+    });
+
+    if (!process) {
+      throw new ProcessNotFoundException(processId);
+    }
+
+    const platformCompany = await this.platformCompanyService.findOne();
+    const { platformRate, officeRate } = await this.calculateCommissionSplit(
+      process.specialist,
+      platformCompany,
+    );
+
+    const lockedFloor = platformRate + officeRate;
+    if (totalCommissionRate < lockedFloor) {
+      throw new BadRequestException(
+        `Comissão total (${totalCommissionRate}%) não pode ser menor que a soma das taxas já travadas de plataforma (${platformRate}%) + escritório (${officeRate}%).`,
+      );
+    }
+
+    const proposalValue = process.accepted_proposal
+      ? Number(process.accepted_proposal.proposed_value)
+      : Number(
+          process.car?.valor ??
+            process.boat?.valor ??
+            process.aircraft?.valor ??
+            0,
+        );
+
+    const platformValue = (proposalValue * platformRate) / 100;
+    const officeValue = (proposalValue * officeRate) / 100;
+    const totalValue = (proposalValue * totalCommissionRate) / 100;
+    // Especialista recebe o resíduo — evita drift de arredondamento na soma dos 3 valores
+    const specialistValue = totalValue - platformValue - officeValue;
+
+    return {
+      platformRate,
+      officeRate,
+      specialistRate: totalCommissionRate - lockedFloor,
+      platformValue: Math.round(platformValue * 100) / 100,
+      officeValue: Math.round(officeValue * 100) / 100,
+      specialistValue: Math.round(specialistValue * 100) / 100,
     };
   }
 
@@ -912,7 +988,7 @@ export class ContractsService {
       specialist_checking_account: dto.specialist_checking_account || '',
       // NOTE: variável do template usa nome em português/inglês misturado
       especialista_name: dto.specialist_name,
-      specialist_document: formatCpf(dto.specialist_document),
+      specialist_document: formatCnpj(dto.specialist_document),
 
       // Testemunhas (opcionais)
       testimonial1_cpf: dto.testimonial1_cpf
@@ -1027,6 +1103,12 @@ export class ContractsService {
 
       this.logger.log('✓ Validações de integridade passaram');
 
+      // 1.4 Travar plataforma/escritório e derivar o corte do especialista a partir do total
+      const commission = await this.resolveCommissionFromTotal(
+        dto.process_id,
+        dto.total_commission_rate,
+      );
+
       // ===== ETAPA 2: FORMATAR DADOS PARA DOCUSIGN =====
       this.logger.log('Preview Etapa 2: Formatando dados para DocuSign...');
 
@@ -1055,20 +1137,20 @@ export class ContractsService {
         vehicle_technical_info: dto.vehicle_technical_info,
         vehicle_price: dto.vehicle_price,
         payment_seller_value: dto.payment_seller_value,
-        platform_value: dto.platform_value,
-        platform_percentage: dto.platform_percentage,
+        platform_value: commission.platformValue,
+        platform_percentage: commission.platformRate,
         platform_name: dto.platform_name,
         platform_cnpj: dto.platform_cnpj,
         platform_bank: dto.platform_bank,
         platform_agency: dto.platform_agency,
         platform_checking_account: dto.platform_checking_account,
-        office_value: dto.office_value,
+        office_value: commission.officeValue,
         office_name: dto.office_name,
         office_cnpj: dto.office_cnpj,
         office_bank: dto.office_bank,
         office_agency: dto.office_agency,
         office_checking_account: dto.office_checking_account,
-        specialist_value: dto.specialist_value,
+        specialist_value: commission.specialistValue,
         specialist_name: dto.specialist_name,
         specialist_email: dto.specialist_email,
         specialist_document: dto.specialist_document,
@@ -1238,6 +1320,12 @@ export class ContractsService {
         dto.specialist_email,
       );
 
+      // Recalcular o split de comissão (nunca confiar em valores vindos do preview)
+      const commission = await this.resolveCommissionFromTotal(
+        dto.process_id,
+        dto.total_commission_rate,
+      );
+
       // ===== ETAPA 2: ENVIAR ENVELOPE NO DOCUSIGN =====
       this.logger.log('Enviando envelope para DocuSign...');
 
@@ -1303,29 +1391,30 @@ export class ContractsService {
                 dto.payment_seller_value,
               ),
 
-              // Dados da Plataforma (Split 1)
-              platform_value: dto.platform_value,
-              platform_value_written: numberToWords(dto.platform_value),
-              platform_percentage: dto.platform_percentage,
+              // Dados da Plataforma (Split 1) — taxa travada, calculada no backend
+              platform_value: commission.platformValue,
+              platform_value_written: numberToWords(commission.platformValue),
+              platform_percentage: commission.platformRate,
               platform_name: dto.platform_name,
               platform_cnpj: dto.platform_cnpj,
               platform_bank: dto.platform_bank,
               platform_agency: dto.platform_agency,
               platform_checking_account: dto.platform_checking_account,
 
-              // Dados do Escritório (Split 2)
-              office_value: dto.office_value,
-              office_value_written: numberToWords(dto.office_value),
+              // Dados do Escritório (Split 2) — taxa travada, calculada no backend
+              office_value: commission.officeValue,
+              office_value_written: numberToWords(commission.officeValue),
               office_name: dto.office_name,
               office_cnpj: dto.office_cnpj,
               office_bank: dto.office_bank || null,
               office_agency: dto.office_agency || null,
               office_checking_account: dto.office_checking_account || null,
 
-              // Dados do Especialista (Split 3)
-              specialist_commission_value: dto.specialist_value,
+              // Dados do Especialista (Split 3) — resíduo do total informado
+              specialist_commission_value: commission.specialistValue,
+              specialist_commission_rate: commission.specialistRate,
               specialist_commission_value_written: numberToWords(
-                dto.specialist_value,
+                commission.specialistValue,
               ),
               specialist_name: dto.specialist_name,
               specialist_document: dto.specialist_document,

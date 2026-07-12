@@ -10,6 +10,7 @@ import {
   Min,
   Max,
 } from 'class-validator';
+import { IsValidCNPJ } from 'src/shared/validators/cnpj.validator';
 
 export enum SpecialityEnum {
   CAR = 'CAR',
@@ -31,10 +32,11 @@ export class CreateSpecialistDto {
   email: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'CPF é obrigatório' })
-  @Length(11, 11, { message: 'CPF deve ter exatamente 11 dígitos' })
-  @Matches(/^\d+$/, { message: 'CPF deve conter apenas números' })
-  cpf: string;
+  @IsNotEmpty({ message: 'CNPJ é obrigatório' })
+  @Length(14, 14, { message: 'CNPJ deve ter exatamente 14 dígitos' })
+  @Matches(/^\d+$/, { message: 'CNPJ deve conter apenas números' })
+  @IsValidCNPJ()
+  cnpj: string;
 
   @IsString()
   @IsNotEmpty({ message: 'RG é obrigatório' })

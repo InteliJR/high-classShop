@@ -50,9 +50,10 @@ interface ContractFormData {
   // Pagamento
   payment_seller_value: number;
 
+  // Comissão total da venda — único valor de comissão editável
+  total_commission_rate: number;
+
   // Dados da Plataforma (Split 1)
-  platform_value: number;
-  platform_percentage: number;
   platform_name: string;
   platform_cnpj: string;
   platform_bank: string;
@@ -60,7 +61,6 @@ interface ContractFormData {
   platform_checking_account: string;
 
   // Dados do Escritório (Split 2)
-  office_value: number;
   office_name: string;
   office_cnpj: string;
   office_bank: string;
@@ -68,7 +68,6 @@ interface ContractFormData {
   office_checking_account: string;
 
   // Dados do Especialista (Split 3)
-  specialist_value: number;
   specialist_name: string;
   specialist_email: string;
   specialist_document: string;
@@ -141,20 +140,17 @@ export default function CreateContractPage() {
       vehicle_technical_info: "",
       vehicle_price: 0,
       payment_seller_value: 0,
-      platform_value: 0,
-      platform_percentage: 0,
+      total_commission_rate: 0,
       platform_name: "",
       platform_cnpj: "",
       platform_bank: "",
       platform_agency: "",
       platform_checking_account: "",
-      office_value: 0,
       office_name: "",
       office_cnpj: "",
       office_bank: "",
       office_agency: "",
       office_checking_account: "",
-      specialist_value: 0,
       specialist_name: "",
       specialist_email: "",
       specialist_document: "",
@@ -190,14 +186,22 @@ export default function CreateContractPage() {
   const [isSendingAfterPreview, setIsSendingAfterPreview] = useState(false);
 
   const vehiclePrice = watch("vehicle_price");
-  const platformValue = watch("platform_value");
-  const officeValue = watch("office_value");
-  const specialistValue = watch("specialist_value");
-  const sellerNetPreviewValue =
-    (vehiclePrice || 0) -
-    (platformValue || 0) -
-    (officeValue || 0) -
-    (specialistValue || 0);
+  const totalCommissionRate = watch("total_commission_rate");
+
+  // Plataforma e escritório vêm travados (pré-preenchidos, somente leitura);
+  // o especialista edita só o total, e o próprio corte é o resíduo.
+  const platformRate = prefillData?.platform?.rate ?? 0;
+  const officeRate = prefillData?.office?.rate ?? 0;
+  const specialistRate = Math.max(
+    0,
+    (totalCommissionRate || 0) - platformRate - officeRate,
+  );
+  const platformValue = ((vehiclePrice || 0) * platformRate) / 100;
+  const officeValue = ((vehiclePrice || 0) * officeRate) / 100;
+  const totalCommissionValue =
+    ((vehiclePrice || 0) * (totalCommissionRate || 0)) / 100;
+  const specialistValue = totalCommissionValue - platformValue - officeValue;
+  const sellerNetPreviewValue = (vehiclePrice || 0) - totalCommissionValue;
 
   // Validate processId exists
   if (!processId) {
@@ -283,14 +287,6 @@ export default function CreateContractPage() {
             "platform_checking_account",
             data.platform.checking_account || "",
           );
-
-          // Taxa e valor da plataforma
-          if (data.platform.rate != null) {
-            setValue("platform_percentage", data.platform.rate);
-          }
-          if (data.platform.value != null) {
-            setValue("platform_value", data.platform.value);
-          }
         }
 
         // Dados do Escritório (Split 2)
@@ -306,11 +302,6 @@ export default function CreateContractPage() {
             "office_checking_account",
             data.office.checking_account || "",
           );
-
-          // Valor do escritório
-          if (data.office.value != null) {
-            setValue("office_value", data.office.value);
-          }
         }
 
         // Dados do Especialista (Split 3)
@@ -319,7 +310,7 @@ export default function CreateContractPage() {
           setValue("specialist_email", data.specialist.email || "");
           setValue(
             "specialist_document",
-            data.specialist.cpf ? applyCpfMask(data.specialist.cpf) : "",
+            data.specialist.cnpj ? applyCnpjMask(data.specialist.cnpj) : "",
           );
           setValue("specialist_bank", data.specialist.bank || "");
           setValue("specialist_agency", data.specialist.agency || "");
@@ -327,11 +318,11 @@ export default function CreateContractPage() {
             "specialist_checking_account",
             data.specialist.checking_account || "",
           );
+        }
 
-          // Valor do especialista
-          if (data.specialist.value != null) {
-            setValue("specialist_value", data.specialist.value);
-          }
+        // Comissão total sugerida (plataforma + escritório + especialista) — editável
+        if (data.suggested_total_rate != null) {
+          setValue("total_commission_rate", data.suggested_total_rate);
         }
       } catch (error: unknown) {
         console.error("Erro ao carregar dados do contrato:", error);
@@ -393,23 +384,21 @@ export default function CreateContractPage() {
     vehicle_technical_info: formData.vehicle_technical_info || undefined,
     vehicle_price: formData.vehicle_price,
     payment_seller_value: formData.payment_seller_value,
+    // Comissão total (único valor editável — plataforma/escritório travados no backend)
+    total_commission_rate: formData.total_commission_rate,
     // Platform split
-    platform_value: formData.platform_value,
-    platform_percentage: formData.platform_percentage,
     platform_name: formData.platform_name,
     platform_cnpj: formData.platform_cnpj,
     platform_bank: formData.platform_bank,
     platform_agency: formData.platform_agency,
     platform_checking_account: formData.platform_checking_account,
     // Office split
-    office_value: formData.office_value,
     office_name: formData.office_name,
     office_cnpj: formData.office_cnpj,
     office_bank: formData.office_bank || undefined,
     office_agency: formData.office_agency || undefined,
     office_checking_account: formData.office_checking_account || undefined,
     // Specialist split
-    specialist_value: formData.specialist_value || undefined,
     specialist_name: formData.specialist_name || undefined,
     specialist_email: formData.specialist_email || undefined,
     specialist_document: formData.specialist_document || undefined,
@@ -569,38 +558,13 @@ export default function CreateContractPage() {
     });
   }, []);
 
-  // Calcular valor do vendedor automaticamente (seller = price - platform - office - specialist)
+  // Calcular valor do vendedor automaticamente (seller = price - comissão total)
   useEffect(() => {
-    if (vehiclePrice && (platformValue || officeValue || specialistValue)) {
-      const sellerValue =
-        vehiclePrice -
-        (platformValue || 0) -
-        (officeValue || 0) -
-        (specialistValue || 0);
+    if (vehiclePrice && totalCommissionValue) {
+      const sellerValue = vehiclePrice - totalCommissionValue;
       setValue("payment_seller_value", sellerValue > 0 ? sellerValue : 0);
     }
-  }, [vehiclePrice, platformValue, officeValue, specialistValue, setValue]);
-
-  // Recalcular valor da plataforma, escritório e especialista quando o preço muda (usa taxas do prefill)
-  useEffect(() => {
-    if (vehiclePrice > 0) {
-      if (prefillData?.platform?.rate != null) {
-        const newPlatformValue =
-          Math.round(vehiclePrice * prefillData.platform.rate) / 100;
-        setValue("platform_value", newPlatformValue);
-      }
-      if (prefillData?.office?.rate != null) {
-        const newOfficeValue =
-          Math.round(vehiclePrice * prefillData.office.rate) / 100;
-        setValue("office_value", newOfficeValue);
-      }
-      if (prefillData?.specialist?.rate != null) {
-        const newSpecialistValue =
-          Math.round(vehiclePrice * prefillData.specialist.rate) / 100;
-        setValue("specialist_value", newSpecialistValue);
-      }
-    }
-  }, [vehiclePrice, prefillData, setValue]);
+  }, [vehiclePrice, totalCommissionValue, setValue]);
 
   const getProductTypeLabel = (type?: string) => {
     switch (type) {
@@ -1168,104 +1132,81 @@ export default function CreateContractPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Comissão da Plataforma *
+                  Comissão Total da Venda (%) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  {...register("total_commission_rate", {
+                    required: "Comissão total é obrigatória",
+                    valueAsNumber: true,
+                    min: { value: 0, message: "Valor deve ser positivo" },
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Único valor editável — plataforma e escritório ficam travados nas
+                  taxas cadastradas; seu corte é o restante.
+                </p>
+                {totalCommissionValue > 0 && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    {formatBRL(totalCommissionValue)}
+                  </p>
+                )}
+                {errors.total_commission_rate && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.total_commission_rate.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Comissão da Plataforma
                   {prefillData?.platform?.rate != null && (
                     <span className="text-xs text-gray-500 ml-1">
                       ({prefillData.platform.rate}%)
                     </span>
                   )}
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register("platform_value", {
-                    required: "Comissão da plataforma é obrigatória",
-                    valueAsNumber: true,
-                    min: { value: 0, message: "Valor deve ser positivo" },
-                  })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
-                />
+                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px] font-medium">
+                  {formatBRL(platformValue)}
+                </div>
                 <p className="text-xs text-gray-400 mt-1">
-                  Calculado automaticamente, edite se necessário.
+                  Taxa travada — não editável neste formulário.
                 </p>
-                {platformValue > 0 && (
-                  <p className="text-sm text-gray-500 mt-1">
-                    {formatBRL(platformValue)}
-                  </p>
-                )}
-                {errors.platform_value && (
-                  <p className="text-red-500 text-sm mt-1">
-                    {errors.platform_value.message}
-                  </p>
-                )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Comissão do Escritório *
+                  Comissão do Escritório
                   {prefillData?.office?.rate != null && (
                     <span className="text-xs text-gray-500 ml-1">
                       ({prefillData.office.rate}%)
                     </span>
                   )}
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register("office_value", {
-                    required: "Comissão do escritório é obrigatória",
-                    valueAsNumber: true,
-                    min: { value: 0, message: "Valor deve ser positivo" },
-                  })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
-                />
+                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px] font-medium">
+                  {formatBRL(officeValue)}
+                </div>
                 <p className="text-xs text-gray-400 mt-1">
-                  Calculado automaticamente, edite se necessário.
+                  Taxa travada — não editável neste formulário.
                 </p>
-                {officeValue > 0 && (
-                  <p className="text-sm text-gray-500 mt-1">
-                    {formatBRL(officeValue)}
-                  </p>
-                )}
-                {errors.office_value && (
-                  <p className="text-red-500 text-sm mt-1">
-                    {errors.office_value.message}
-                  </p>
-                )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Comissão do Especialista *
-                  {prefillData?.specialist?.rate != null && (
-                    <span className="text-xs text-gray-500 ml-1">
-                      ({prefillData.specialist.rate}%)
-                    </span>
-                  )}
+                  Comissão do Especialista
+                  <span className="text-xs text-gray-500 ml-1">
+                    ({specialistRate.toFixed(2)}%)
+                  </span>
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register("specialist_value", {
-                    required: "Comissão do especialista é obrigatória",
-                    valueAsNumber: true,
-                    min: { value: 0, message: "Valor deve ser positivo" },
-                  })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
-                />
+                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px] font-medium">
+                  {formatBRL(specialistValue)}
+                </div>
                 <p className="text-xs text-gray-400 mt-1">
-                  Calculado automaticamente, edite se necessário.
+                  Resíduo do total — plataforma e escritório subtraídos.
                 </p>
-                {specialistValue > 0 && (
-                  <p className="text-sm text-gray-500 mt-1">
-                    {formatBRL(specialistValue)}
-                  </p>
-                )}
-                {errors.specialist_value && (
-                  <p className="text-red-500 text-sm mt-1">
-                    {errors.specialist_value.message}
-                  </p>
-                )}
               </div>
 
               <div>
@@ -1518,13 +1459,13 @@ export default function CreateContractPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  CPF *
+                  CNPJ *
                 </label>
                 <input
                   type="text"
-                  {...register("specialist_document", { required: "CPF do especialista é obrigatório" })}
+                  {...register("specialist_document", { required: "CNPJ do especialista é obrigatório" })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
-                  placeholder="000.000.000-00"
+                  placeholder="00.000.000/0000-00"
                 />
                 {errors.specialist_document && (
                   <p className="text-red-500 text-sm mt-1">
@@ -1606,7 +1547,7 @@ export default function CreateContractPage() {
                   </span>
                   <input
                     type="text"
-                    value={formatBRL(watch("specialist_value"))}
+                    value={formatBRL(specialistValue)}
                     readOnly
                     className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
                   />

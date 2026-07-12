@@ -106,7 +106,7 @@ export class UsersService {
     surname: string;
     email: string;
     role: string;
-    cpf: string;
+    cpf: string | null;
     rg: string;
     civil_state: string | null;
     speciality: string | null;
@@ -154,7 +154,7 @@ export class UsersService {
     surname: string;
     email: string;
     role: string;
-    cpf: string;
+    cpf: string | null;
     rg: string;
     calendly_url: string | null;
   }> {

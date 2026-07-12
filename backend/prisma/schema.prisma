@@ -444,7 +444,8 @@ model User {
   name          String
   surname       String
   email         String   @unique
-  cpf           String   @unique @db.VarChar(11)
+  // CPF (11 dígitos) para a maioria dos papéis; para SPECIALIST, guarda CNPJ (14 dígitos) — especialista é PJ
+  cpf           String?  @unique @db.VarChar(14)
   rg            String   @unique @db.VarChar(10)
   phone         String?  @db.VarChar(20)
   role          UserRole
@@ -1052,7 +1053,7 @@ model Contract {
   specialist_commission_value_written String?  @db.VarChar(500)
   specialist_commission_rate          Decimal? @db.Decimal(5, 2)
   specialist_name                     String?
-  specialist_document                 String?  @db.VarChar(14) // CPF do especialista
+  specialist_document                 String?  @db.VarChar(14) // CNPJ do especialista
   specialist_bank                     String?
   specialist_agency                   String?
   specialist_checking_account         String?

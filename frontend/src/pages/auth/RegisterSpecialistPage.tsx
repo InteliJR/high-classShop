@@ -26,7 +26,7 @@ export default function RegisterSpecialistPage() {
 
   const [name, setName] = useState("");
   const [surname, setSurname] = useState("");
-  const [cpf, setCpf] = useState("");
+  const [cnpj, setCnpj] = useState("");
   const [rg, setRg] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -59,16 +59,16 @@ export default function RegisterSpecialistPage() {
     e.preventDefault();
     setFormError(null);
 
-    const cleanCpf = cpf.replace(/\D/g, "");
+    const cleanCnpj = cnpj.replace(/\D/g, "");
     const cleanRg = rg.replace(/\D/g, "");
     const cleanPhone = phone.replace(/\D/g, "");
 
-    if (!name.trim() || !surname.trim() || !cleanCpf || !cleanRg || !cleanPhone || !password) {
+    if (!name.trim() || !surname.trim() || !cleanCnpj || !cleanRg || !cleanPhone || !password) {
       setFormError("Todos os campos são obrigatórios.");
       return;
     }
-    if (cleanCpf.length !== 11) {
-      setFormError("CPF deve ter 11 dígitos.");
+    if (cleanCnpj.length !== 14) {
+      setFormError("CNPJ deve ter 14 dígitos.");
       return;
     }
     if (cleanRg.length < 7 || cleanRg.length > 10) {
@@ -90,7 +90,7 @@ export default function RegisterSpecialistPage() {
         invite_token: token,
         name: name.trim(),
         surname: surname.trim(),
-        cpf: cleanCpf,
+        cnpj: cleanCnpj,
         rg: cleanRg,
         phone: cleanPhone,
         password,
@@ -196,13 +196,13 @@ export default function RegisterSpecialistPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">CPF (11 dígitos)</label>
+            <label className="block text-sm font-medium text-gray-700">CNPJ (14 dígitos)</label>
             <input
               type="text"
-              value={cpf}
-              onChange={(e) => setCpf(e.target.value)}
-              placeholder="12345678901"
-              maxLength={14}
+              value={cnpj}
+              onChange={(e) => setCnpj(e.target.value)}
+              placeholder="12345678000199"
+              maxLength={18}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
               required
             />

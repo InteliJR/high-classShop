@@ -77,11 +77,15 @@ export class PrefillContractResponseDto {
     id: string;
     name: string;
     email?: string;
-    cpf?: string;
+    cnpj?: string;
     bank?: string;
     agency?: string;
     checking_account?: string;
     rate?: number; // Taxa de comissão em % (ex: 3.00 = 3%)
     value?: number; // Valor calculado da comissão em R$
   };
+
+  // Sugestão de comissão total da venda (plataforma + escritório + especialista),
+  // único valor editável pelo especialista no formulário de contrato.
+  suggested_total_rate?: number;
 }

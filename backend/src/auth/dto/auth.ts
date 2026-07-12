@@ -13,6 +13,7 @@ import {
 import { Transform } from 'class-transformer';
 import { UserEntity } from '../entities/user.entity';
 import { IsValidCPF } from '../../shared/validators/cpf.validator';
+import { IsValidCNPJ } from '../../shared/validators/cnpj.validator';
 
 // Tipos para login e registro de usuários
 export enum UserRole {
@@ -178,9 +179,10 @@ export class RegisterSpecialistDto {
   surname: string;
 
   @IsString()
-  @Length(11, 11, { message: 'CPF deve ter 11 dígitos' })
-  @Matches(/^\d{11}$/, { message: 'CPF deve conter apenas números' })
-  cpf: string;
+  @Length(14, 14, { message: 'CNPJ deve ter 14 dígitos' })
+  @Matches(/^\d{14}$/, { message: 'CNPJ deve conter apenas números' })
+  @IsValidCNPJ()
+  cnpj: string;
 
   @IsString()
   @Length(7, 10, { message: 'RG deve ter entre 7 e 10 dígitos' })

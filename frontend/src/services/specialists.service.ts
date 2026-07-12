@@ -31,7 +31,7 @@ export type CreateSpecialistData = {
   name: string;
   surname: string;
   email: string;
-  cpf: string;
+  cnpj: string;
   rg: string;
   password_hash: string;
   speciality: "CAR" | "BOAT" | "AIRCRAFT";
@@ -152,7 +152,7 @@ export async function registerSpecialist(data: {
   invite_token: string;
   name: string;
   surname: string;
-  cpf: string;
+  cnpj: string;
   rg: string;
   phone: string;
   password: string;

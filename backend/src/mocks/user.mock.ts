@@ -117,7 +117,7 @@ export const mockUsers: UserMock[] = [
     name: 'Carlos',
     surname: 'Mecânico',
     email: 'carlos.car@example.com',
-    cpf: '44455566677',
+    cpf: '44455566000183', // CNPJ (especialista é PJ)
     rg: '44556677',
     role: 'SPECIALIST',
     speciality: 'CAR',
@@ -130,7 +130,7 @@ export const mockUsers: UserMock[] = [
     name: 'Marina',
     surname: 'Navegante',
     email: 'marina.boat@example.com',
-    cpf: '55566677788',
+    cpf: '55566677000183', // CNPJ (especialista é PJ)
     rg: '55667788',
     role: 'SPECIALIST',
     speciality: 'BOAT',
@@ -141,7 +141,7 @@ export const mockUsers: UserMock[] = [
     name: 'Pedro',
     surname: 'Aviador',
     email: 'pedro.aircraft@example.com',
-    cpf: '66677788899',
+    cpf: '66677788000183', // CNPJ (especialista é PJ)
     rg: '66778899',
     role: 'SPECIALIST',
     speciality: 'AIRCRAFT',
