@@ -4,6 +4,9 @@ export interface DashboardStats {
   activeProcesses: number;
   conversionRate: number;
   activeCompanies: number;
+  totalClients: number;
+  totalProducts: number;
+  productsByType: { cars: number; boats: number; aircrafts: number };
   salesByMonth: MonthData[];
   consultantsPerformance: ConsultantPerformanceData[];
 }

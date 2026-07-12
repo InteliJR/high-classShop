@@ -32,6 +32,19 @@ export class DashboardService {
         ? Math.round((completedProcesses / totalProcesses) * 100)
         : 0;
 
+    // 4. Clientes cadastrados na plataforma
+    const totalClients = await this.prisma.user.count({
+      where: { role: 'CUSTOMER' },
+    });
+
+    // 5. Produtos cadastrados (soma de carros, embarcações e aeronaves)
+    const [totalCars, totalBoats, totalAircrafts] = await Promise.all([
+      this.prisma.car.count(),
+      this.prisma.boat.count(),
+      this.prisma.aircraft.count(),
+    ]);
+    const totalProducts = totalCars + totalBoats + totalAircrafts;
+
     const salesByMonth = await this.buildMonthlySalesData({});
     const consultantsPerformance = await this.getConsultantsPerformance();
 
@@ -39,6 +52,13 @@ export class DashboardService {
       activeProcesses,
       conversionRate,
       activeCompanies,
+      totalClients,
+      totalProducts,
+      productsByType: {
+        cars: totalCars,
+        boats: totalBoats,
+        aircrafts: totalAircrafts,
+      },
       salesByMonth,
       consultantsPerformance,
     };

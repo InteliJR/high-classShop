@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import ProductForm from "../../components/specialist/ProductForm";
 import { getCarById, type RawCar } from "../../services/cars.service";
 import { getBoatById, type RawBoat } from "../../services/boats.service";
@@ -9,6 +9,8 @@ type ProductType = "CAR" | "BOAT" | "AIRCRAFT";
 
 export default function ProductFormPage() {
   const { productType, id } = useParams<{ productType?: string; id?: string }>();
+  const [searchParams] = useSearchParams();
+  const processId = searchParams.get("processId") ?? undefined;
   const [productData, setProductData] = useState<RawCar | RawBoat | RawAircraft | undefined>();
   const [loading, setLoading] = useState(false);
 
@@ -66,7 +68,9 @@ export default function ProductFormPage() {
         <h1 className="text-3xl font-bold text-text-primary">{getPageTitle()}</h1>
         <p className="text-gray-600 mt-2">
           {mode === "create"
-            ? "Preencha os campos abaixo para cadastrar um novo produto"
+            ? processId
+              ? "Preencha os campos abaixo — o produto será vinculado automaticamente a este processo"
+              : "Preencha os campos abaixo para cadastrar um novo produto"
             : "Atualize as informações do produto"}
         </p>
       </div>
@@ -81,6 +85,7 @@ export default function ProductFormPage() {
             productType={mode === "edit" ? getProductTypeEnum() : undefined}
             productData={productData}
             productId={id ? Number(id) : undefined}
+            processId={mode === "create" ? processId : undefined}
           />
         )}
       </div>

@@ -150,6 +150,48 @@ export default function DashboardPage() {
             </>
           )}
         </div>
+
+        {/* Card 5: Clientes Cadastrados - DADOS REAIS */}
+        <div className="bg-gray-300 rounded-lg p-6">
+          <p className="text-gray-700 font-semibold mb-2">
+            Clientes Cadastrados
+          </p>
+          {isLoading ? (
+            <p className="text-2xl font-bold text-gray-900 mb-2">
+              Carregando...
+            </p>
+          ) : (
+            <>
+              <p className="text-4xl font-bold text-gray-900 mb-2">
+                {stats?.totalClients || 0}
+              </p>
+              <p className="text-sm text-gray-600">Total na plataforma</p>
+            </>
+          )}
+        </div>
+
+        {/* Card 6: Produtos Cadastrados - DADOS REAIS */}
+        <div className="bg-gray-300 rounded-lg p-6">
+          <p className="text-gray-700 font-semibold mb-2">
+            Produtos Cadastrados
+          </p>
+          {isLoading ? (
+            <p className="text-2xl font-bold text-gray-900 mb-2">
+              Carregando...
+            </p>
+          ) : (
+            <>
+              <p className="text-4xl font-bold text-gray-900 mb-2">
+                {stats?.totalProducts || 0}
+              </p>
+              <p className="text-sm text-gray-600">
+                {stats?.productsByType.cars ?? 0} carros ·{" "}
+                {stats?.productsByType.boats ?? 0} embarcações ·{" "}
+                {stats?.productsByType.aircrafts ?? 0} aeronaves
+              </p>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Gráficos */}
