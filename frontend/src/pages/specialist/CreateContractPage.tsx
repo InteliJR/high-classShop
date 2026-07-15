@@ -203,29 +203,10 @@ export default function CreateContractPage() {
   const specialistValue = totalCommissionValue - platformValue - officeValue;
   const sellerNetPreviewValue = (vehiclePrice || 0) - totalCommissionValue;
 
-  // Validate processId exists
-  if (!processId) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
-          <p className="text-red-600 font-semibold mb-4">
-            Nenhum processo selecionado
-          </p>
-          <button
-            onClick={() => navigate("/specialist/processes")}
-            className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition"
-          >
-            Voltar ao Dashboard
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // Load prefill data on mount
   useEffect(() => {
     const loadPrefillData = async () => {
+      if (!processId) return;
       try {
         setLoading(true);
         const data = await prefillContract(processId);
@@ -605,6 +586,27 @@ export default function CreateContractPage() {
     }
   };
 
+  // processId ausente (todos os hooks já foram declarados acima — Rules of
+  // Hooks exige que este branch condicional venha depois, não no meio deles).
+  if (!processId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
+          <p className="text-red-600 font-semibold mb-4">
+            Nenhum processo selecionado
+          </p>
+          <button
+            onClick={() => navigate("/specialist/processes")}
+            className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition"
+          >
+            Voltar ao Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -612,6 +614,28 @@ export default function CreateContractPage() {
         <span className="ml-2 text-slate-600">
           Carregando dados do contrato...
         </span>
+      </div>
+    );
+  }
+
+  // Carregamento terminou sem dados (erro genérico ao buscar prefill) — não
+  // deixa o formulário abrir em branco/editável sem os dados travados de
+  // plataforma/escritório/especialista.
+  if (!prefillData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
+          <p className="text-red-600 font-semibold mb-4">
+            {submitStatus.message || "Erro ao carregar dados do processo"}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition"
+          >
+            Tentar novamente
+          </button>
+        </div>
       </div>
     );
   }

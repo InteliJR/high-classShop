@@ -241,7 +241,7 @@ export class SpecialistsService {
           }
           if (target.includes('cpf')) {
             throw new ConflictException(
-              'Já existe outro usuário cadastrado com este CPF',
+              'Já existe outro usuário cadastrado com este CNPJ',
             );
           }
         }

@@ -199,6 +199,19 @@ export default function CompaniesPage() {
           delete next[companyId];
           return next;
         });
+        // Limpa o cache de clientes/aba também — reabrir sempre refaz o fetch,
+        // evitando mostrar dados desatualizados (ex: cliente reatribuído a
+        // outro consultor enquanto o painel estava fechado).
+        setExpandedClients((prev) => {
+          const next = { ...prev };
+          delete next[companyId];
+          return next;
+        });
+        setPanelTab((prev) => {
+          const next = { ...prev };
+          delete next[companyId];
+          return next;
+        });
       } else {
         loadConsultants(companyId, 1);
       }

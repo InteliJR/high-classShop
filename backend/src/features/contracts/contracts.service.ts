@@ -400,6 +400,17 @@ export class ContractsService {
       ? Number(specialist.commission_rate)
       : 0;
 
+    // Especialista é PJ — o campo (coluna cpf, reaproveitada) precisa conter
+    // um CNPJ de 14 dígitos. Especialistas cadastrados antes dessa mudança
+    // ainda têm o CPF pessoal de 11 dígitos gravado ali; bloqueia aqui em vez
+    // de deixar esse valor ser rotulado como CNPJ num contrato real.
+    if (specialist.id && specialist.cpf && specialist.cpf.length !== 14) {
+      throw new BadRequestException(
+        `Especialista ${specialist.id} está com documento desatualizado (${specialist.cpf.length} dígitos). ` +
+          'É necessário atualizar o cadastro do especialista com o CNPJ (14 dígitos) antes de gerar um contrato.',
+      );
+    }
+
     // Dados do especialista para comissão
     const specialistData = specialist.id
       ? {
@@ -447,10 +458,13 @@ export class ContractsService {
    * Único valor editável é `totalCommissionRate` (comissão total da venda, em %).
    * Plataforma e escritório permanecem travados nas taxas já cadastradas
    * (nunca aceitos do cliente); o corte do especialista é o resíduo:
-   * total - platform - office. Isso garante que os três valores somem
-   * exatamente o valor total, mesmo após arredondamento.
+   * total_arredondado - platform_arredondado - office_arredondado. Plataforma
+   * e escritório são arredondados PRIMEIRO, e o especialista fica com o que
+   * sobra do total (também arredondado) — só assim a soma dos três valores
+   * persistidos bate exatamente com o total, sem drift de centavos.
    *
-   * @throws BadRequestException se o total for menor que platform + office
+   * @throws BadRequestException se o total for menor que platform + office,
+   * ou se o processo não tiver valor de referência (proposta aceita ou produto)
    */
   private async resolveCommissionFromTotal(
     processId: string,
@@ -484,7 +498,11 @@ export class ContractsService {
       platformCompany,
     );
 
-    const lockedFloor = platformRate + officeRate;
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
+    // Arredonda antes de comparar — evita falso-negativo por erro de ponto
+    // flutuante (ex: 1.00 + 1.03 = 2.0300000000000002 em IEEE-754).
+    const lockedFloor = round2(platformRate + officeRate);
     if (totalCommissionRate < lockedFloor) {
       throw new BadRequestException(
         `Comissão total (${totalCommissionRate}%) não pode ser menor que a soma das taxas já travadas de plataforma (${platformRate}%) + escritório (${officeRate}%).`,
@@ -500,19 +518,26 @@ export class ContractsService {
             0,
         );
 
-    const platformValue = (proposalValue * platformRate) / 100;
-    const officeValue = (proposalValue * officeRate) / 100;
-    const totalValue = (proposalValue * totalCommissionRate) / 100;
-    // Especialista recebe o resíduo — evita drift de arredondamento na soma dos 3 valores
-    const specialistValue = totalValue - platformValue - officeValue;
+    if (proposalValue <= 0) {
+      throw new BadRequestException(
+        'Processo sem proposta aceita e sem produto associado — não é possível calcular a comissão.',
+      );
+    }
+
+    // Plataforma/escritório arredondados primeiro; especialista recebe o
+    // resíduo do TOTAL arredondado — garante soma exata por construção.
+    const platformValue = round2((proposalValue * platformRate) / 100);
+    const officeValue = round2((proposalValue * officeRate) / 100);
+    const totalValue = round2((proposalValue * totalCommissionRate) / 100);
+    const specialistValue = round2(totalValue - platformValue - officeValue);
 
     return {
       platformRate,
       officeRate,
-      specialistRate: totalCommissionRate - lockedFloor,
-      platformValue: Math.round(platformValue * 100) / 100,
-      officeValue: Math.round(officeValue * 100) / 100,
-      specialistValue: Math.round(specialistValue * 100) / 100,
+      specialistRate: round2(totalCommissionRate - lockedFloor),
+      platformValue,
+      officeValue,
+      specialistValue,
     };
   }
 
@@ -646,10 +671,27 @@ export class ContractsService {
 
       this.logger.log('✓ Validações de integridade passaram');
 
+      // Trava plataforma/escritório e deriva o corte do especialista a partir
+      // do total — nunca confia nos campos de comissão vindos do DTO.
+      const commission = await this.resolveCommissionFromTotal(
+        dto.process_id,
+        dto.total_commission_rate,
+      );
+      const dtoWithCommission: GenerateContractDto = {
+        ...dto,
+        platform_value: commission.platformValue,
+        platform_percentage: commission.platformRate,
+        office_value: commission.officeValue,
+        specialist_value: commission.specialistValue,
+      };
+
       // ===== ETAPA 2: FORMATAR DADOS PARA DOCUSIGN =====
       this.logger.log('Etapa 2: Formatando dados para DocuSign...');
 
-      const formFields = this.buildFormFields(dto, processRecord.product_type);
+      const formFields = this.buildFormFields(
+        dtoWithCommission,
+        processRecord.product_type,
+      );
 
       this.logger.debug(
         `Form fields preparados: ${Object.keys(formFields).length} campos`,
@@ -743,29 +785,30 @@ export class ContractsService {
                 dto.payment_seller_value,
               ),
 
-              // Dados da Plataforma (Split 1)
-              platform_value: dto.platform_value,
-              platform_value_written: numberToWords(dto.platform_value),
-              platform_percentage: dto.platform_percentage,
+              // Dados da Plataforma (Split 1) — taxa travada, calculada no backend
+              platform_value: commission.platformValue,
+              platform_value_written: numberToWords(commission.platformValue),
+              platform_percentage: commission.platformRate,
               platform_name: dto.platform_name,
               platform_cnpj: dto.platform_cnpj,
               platform_bank: dto.platform_bank,
               platform_agency: dto.platform_agency,
               platform_checking_account: dto.platform_checking_account,
 
-              // Dados do Escritório (Split 2)
-              office_value: dto.office_value,
-              office_value_written: numberToWords(dto.office_value),
+              // Dados do Escritório (Split 2) — taxa travada, calculada no backend
+              office_value: commission.officeValue,
+              office_value_written: numberToWords(commission.officeValue),
               office_name: dto.office_name,
               office_cnpj: dto.office_cnpj,
               office_bank: dto.office_bank || null,
               office_agency: dto.office_agency || null,
               office_checking_account: dto.office_checking_account || null,
 
-              // Dados do Especialista (Split 3)
-              specialist_commission_value: dto.specialist_value,
+              // Dados do Especialista (Split 3) — resíduo do total informado
+              specialist_commission_value: commission.specialistValue,
+              specialist_commission_rate: commission.specialistRate,
               specialist_commission_value_written: numberToWords(
-                dto.specialist_value,
+                commission.specialistValue,
               ),
               specialist_name: dto.specialist_name,
               specialist_document: dto.specialist_document,
@@ -1115,6 +1158,7 @@ export class ContractsService {
       // Reutilizar buildFormFields criando DTO compatível
       const generateDto: GenerateContractDto = {
         process_id: dto.process_id,
+        total_commission_rate: dto.total_commission_rate,
         seller_name: dto.seller_name,
         seller_email: dto.seller_email,
         seller_cpf: dto.seller_cpf,

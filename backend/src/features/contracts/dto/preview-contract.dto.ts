@@ -6,6 +6,7 @@ import {
   IsString,
   IsUUID,
   IsUrl,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -146,6 +147,7 @@ export class PreviewContractDto {
   @IsNumber({}, { message: 'total_commission_rate deve ser um número' })
   @IsNotEmpty({ message: 'total_commission_rate é obrigatório' })
   @Min(0, { message: 'total_commission_rate deve ser maior ou igual a zero' })
+  @Max(100, { message: 'total_commission_rate deve ser menor ou igual a 100' })
   total_commission_rate: number;
 
   // === DADOS DA PLATAFORMA (SPLIT 1) ===
