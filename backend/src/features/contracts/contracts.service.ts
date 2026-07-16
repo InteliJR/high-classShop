@@ -27,6 +27,7 @@ import {
 import {
   formatCpf,
   formatCnpj,
+  formatDocument,
   formatCep,
   formatRg,
   formatBRL,
@@ -399,17 +400,6 @@ export class ContractsService {
     const specialistRate = specialist.commission_rate
       ? Number(specialist.commission_rate)
       : 0;
-
-    // Especialista é PJ — o campo (coluna cpf, reaproveitada) precisa conter
-    // um CNPJ de 14 dígitos. Especialistas cadastrados antes dessa mudança
-    // ainda têm o CPF pessoal de 11 dígitos gravado ali; bloqueia aqui em vez
-    // de deixar esse valor ser rotulado como CNPJ num contrato real.
-    if (specialist.id && specialist.cpf && specialist.cpf.length !== 14) {
-      throw new BadRequestException(
-        `Especialista ${specialist.id} está com documento desatualizado (${specialist.cpf.length} dígitos). ` +
-          'É necessário atualizar o cadastro do especialista com o CNPJ (14 dígitos) antes de gerar um contrato.',
-      );
-    }
 
     // Dados do especialista para comissão
     const specialistData = specialist.id
@@ -1031,7 +1021,7 @@ export class ContractsService {
       specialist_checking_account: dto.specialist_checking_account || '',
       // NOTE: variável do template usa nome em português/inglês misturado
       especialista_name: dto.specialist_name,
-      specialist_document: formatCnpj(dto.specialist_document),
+      specialist_document: formatDocument(dto.specialist_document),
 
       // Testemunhas (opcionais)
       testimonial1_cpf: dto.testimonial1_cpf
