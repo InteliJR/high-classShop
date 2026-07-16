@@ -9,7 +9,7 @@ import {
   type Company,
   type CompanyConsultant,
 } from "../../services/companies.service";
-import { adminInviteOffice } from "../../services/office";
+import { adminInviteOffice, officeService, type OfficeClient } from "../../services/office";
 import {
   getPlatformCompany,
   type PlatformCompany,
@@ -42,6 +42,15 @@ interface ExpandedCompanyState {
   error: string | null;
 }
 
+// Estado do painel de clientes (aba "Clientes" dentro do painel expandido)
+interface ExpandedClientsState {
+  clients: OfficeClient[];
+  loading: boolean;
+  error: string | null;
+}
+
+type CompanyPanelTab = "consultants" | "clients";
+
 type InviteRole = "CONSULTANT" | "OFFICE";
 
 interface InviteState {
@@ -66,6 +75,10 @@ export default function CompaniesPage() {
 
   // Mapa de empresas expandidas: companyId -> estado dos consultores
   const [expandedCompanies, setExpandedCompanies] = useState<Record<string, ExpandedCompanyState>>({});
+  // Mapa de empresas expandidas: companyId -> estado dos clientes (aba "Clientes")
+  const [expandedClients, setExpandedClients] = useState<Record<string, ExpandedClientsState>>({});
+  // Mapa de empresas expandidas: companyId -> aba ativa no painel
+  const [panelTab, setPanelTab] = useState<Record<string, CompanyPanelTab>>({});
 
   // Estado do modal de convite de consultor
   const [inviteState, setInviteState] = useState<InviteState | null>(null);
@@ -146,11 +159,55 @@ export default function CompaniesPage() {
     [],
   );
 
+  // Busca clientes ligados aos consultores de uma empresa (lazy loading)
+  const loadClients = useCallback(async (companyId: string) => {
+    setExpandedClients((prev) => ({
+      ...prev,
+      [companyId]: { clients: [], loading: true, error: null },
+    }));
+    try {
+      const clients = await officeService.listClients({ companyId });
+      setExpandedClients((prev) => ({
+        ...prev,
+        [companyId]: { clients, loading: false, error: null },
+      }));
+    } catch {
+      setExpandedClients((prev) => ({
+        ...prev,
+        [companyId]: { clients: [], loading: false, error: "Erro ao carregar clientes." },
+      }));
+    }
+  }, []);
+
+  // Troca a aba do painel expandido (Consultores/Clientes), carregando dados sob demanda
+  const switchPanelTab = useCallback(
+    (companyId: string, tab: CompanyPanelTab) => {
+      setPanelTab((prev) => ({ ...prev, [companyId]: tab }));
+      if (tab === "clients" && !expandedClients[companyId]) {
+        loadClients(companyId);
+      }
+    },
+    [expandedClients, loadClients],
+  );
+
   // Toggle expandir/colapsar empresa
   const toggleExpand = useCallback(
     (companyId: string) => {
       if (expandedCompanies[companyId]) {
         setExpandedCompanies((prev) => {
+          const next = { ...prev };
+          delete next[companyId];
+          return next;
+        });
+        // Limpa o cache de clientes/aba também — reabrir sempre refaz o fetch,
+        // evitando mostrar dados desatualizados (ex: cliente reatribuído a
+        // outro consultor enquanto o painel estava fechado).
+        setExpandedClients((prev) => {
+          const next = { ...prev };
+          delete next[companyId];
+          return next;
+        });
+        setPanelTab((prev) => {
           const next = { ...prev };
           delete next[companyId];
           return next;
@@ -292,6 +349,8 @@ export default function CompaniesPage() {
             filteredCompanies.map((company) => {
               const isExpanded = !!expandedCompanies[company.id];
               const expandedState = expandedCompanies[company.id];
+              const activeTab = panelTab[company.id] ?? "consultants";
+              const clientsState = expandedClients[company.id];
 
               return (
                 <div
@@ -402,23 +461,95 @@ export default function CompaniesPage() {
                     </div>
                   </div>
 
-                  {/* Painel expandido: consultores */}
+                  {/* Painel expandido: consultores / clientes */}
                   {isExpanded && (
                     <div className="border-t border-gray-100 bg-gray-50 px-6 py-4">
-                      {/* Header do painel: título + botão convidar */}
+                      {/* Header do painel: abas + botão convidar */}
                       <div className="flex items-center justify-between mb-3">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          Consultores
-                        </p>
-                        <button
-                          onClick={() => openInviteModal(company)}
-                          className="inline-flex items-center gap-1.5 text-xs font-medium bg-black text-white px-3 py-1.5 rounded hover:bg-gray-800 transition-colors"
-                        >
-                          <Link className="w-3.5 h-3.5" />
-                          Convidar Consultor
-                        </button>
+                        <div className="flex items-center gap-4">
+                          <button
+                            onClick={() => switchPanelTab(company.id, "consultants")}
+                            className={`text-xs font-semibold uppercase tracking-wider pb-1 border-b-2 -mb-px ${
+                              activeTab === "consultants"
+                                ? "border-slate-700 text-gray-900"
+                                : "border-transparent text-gray-400 hover:text-gray-600"
+                            }`}
+                          >
+                            Consultores
+                          </button>
+                          <button
+                            onClick={() => switchPanelTab(company.id, "clients")}
+                            className={`text-xs font-semibold uppercase tracking-wider pb-1 border-b-2 -mb-px ${
+                              activeTab === "clients"
+                                ? "border-slate-700 text-gray-900"
+                                : "border-transparent text-gray-400 hover:text-gray-600"
+                            }`}
+                          >
+                            Clientes
+                          </button>
+                        </div>
+                        {activeTab === "consultants" && (
+                          <button
+                            onClick={() => openInviteModal(company)}
+                            className="inline-flex items-center gap-1.5 text-xs font-medium bg-black text-white px-3 py-1.5 rounded hover:bg-gray-800 transition-colors"
+                          >
+                            <Link className="w-3.5 h-3.5" />
+                            Convidar Consultor
+                          </button>
+                        )}
                       </div>
 
+                      {activeTab === "clients" ? (
+                        clientsState?.loading ? (
+                          <div className="flex items-center justify-center py-6 gap-2 text-gray-500">
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span className="text-sm">Carregando clientes...</span>
+                          </div>
+                        ) : clientsState?.error ? (
+                          <p className="text-sm text-red-500 py-4 text-center">
+                            {clientsState.error}
+                          </p>
+                        ) : !clientsState || clientsState.clients.length === 0 ? (
+                          <p className="text-sm text-gray-500 py-4 text-center">
+                            Nenhum cliente ligado a consultores deste escritório.
+                          </p>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                              <div>Cliente</div>
+                              <div>E-mail</div>
+                              <div>Consultor</div>
+                              <div>Cadastro</div>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                              {clientsState.clients.map((client) => (
+                                <div
+                                  key={client.id}
+                                  className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 items-center px-3 py-3 bg-white rounded-lg border border-gray-100"
+                                >
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {client.name} {client.surname}
+                                  </div>
+                                  <div className="text-sm text-gray-600 truncate">
+                                    {client.email}
+                                  </div>
+                                  <div className="text-sm text-gray-700">
+                                    {client.consultant
+                                      ? `${client.consultant.name} ${client.consultant.surname}`
+                                      : "—"}
+                                  </div>
+                                  <div className="text-xs text-gray-400">
+                                    {client.created_at
+                                      ? new Date(client.created_at).toLocaleDateString("pt-BR")
+                                      : "—"}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )
+                      ) : (
+                        <>
                       {expandedState.loading &&
                       expandedState.consultants.length === 0 ? (
                         <div className="flex items-center justify-center py-6 gap-2 text-gray-500">
@@ -518,6 +649,8 @@ export default function CompaniesPage() {
                               </div>
                             </div>
                           )}
+                        </>
+                      )}
                         </>
                       )}
                     </div>

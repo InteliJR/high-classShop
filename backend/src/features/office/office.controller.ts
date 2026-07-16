@@ -161,9 +161,11 @@ export class OfficeController {
     @OfficeScope() scope: OfficeScopeData,
     @Query('consultantId') consultantId?: string,
     @Query('q') q?: string,
+    @Query('companyId') companyId?: string,
   ) {
     if (consultantId) assertUuid(consultantId, 'consultantId');
-    return this.office.listClients(scope, { consultantId, q });
+    if (companyId) assertUuid(companyId, 'companyId');
+    return this.office.listClients(scope, { consultantId, q, companyId });
   }
 
   // ─── Batch invite jobs ─────────────────────────────────────────────────

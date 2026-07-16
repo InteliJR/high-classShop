@@ -287,11 +287,14 @@ export class OfficeService {
   // ─── Clientes (read-only) ──────────────────────────────────────────────
   async listClients(
     scope: Scope,
-    opts: { consultantId?: string; q?: string } = {},
+    opts: { consultantId?: string; q?: string; companyId?: string } = {},
   ) {
     const where: any = { role: UserRole.CUSTOMER };
 
     if (scope.isAdmin) {
+      // ADMIN pode opcionalmente escopar por empresa (ex: aba "Clientes" na
+      // tela de detalhe de escritório); sem companyId, mantém visão global.
+      if (opts.companyId) where.consultant = { company_id: opts.companyId };
       if (opts.consultantId) where.consultant_id = opts.consultantId;
     } else {
       // Escopo: somente clientes ligados a consultores da MESMA Company

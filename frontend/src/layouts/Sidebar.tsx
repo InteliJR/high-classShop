@@ -4,7 +4,6 @@ import {
   Building2,
   Users,
   UserCog,
-  UserPlus,
   Car,
   Ship,
   Plane,
@@ -12,6 +11,7 @@ import {
   Home,
   FilePen,
   Settings,
+  Percent,
 } from "lucide-react";
 import { useContext } from "react";
 import { AppContext } from "../contexts/AppContext";
@@ -139,6 +139,11 @@ export default function Sidebar() {
             icon: <UserCog size={20} />,
           },
           {
+            to: "/admin/commissions",
+            label: "Comissões",
+            icon: <Percent size={20} />,
+          },
+          {
             to: "/admin/settings",
             label: "Configurações",
             icon: <Settings size={20} />,
@@ -166,11 +171,6 @@ export default function Sidebar() {
             to: "/office/clients",
             label: "Clientes",
             icon: <UserCog size={20} />,
-          },
-          {
-            to: "/office/invite-batch",
-            label: "Convites em Lote",
-            icon: <UserPlus size={20} />,
           },
           {
             to: "/office/company",

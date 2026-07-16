@@ -6,6 +6,7 @@ import {
   IsString,
   IsUUID,
   IsUrl,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -139,17 +140,17 @@ export class PreviewContractDto {
   @Min(0, { message: 'payment_seller_value deve ser maior ou igual a zero' })
   payment_seller_value: number;
 
+  // === COMISSÃO TOTAL DA VENDA ===
+  // Único valor de comissão editável pelo especialista. O backend trava as taxas
+  // de plataforma e escritório (já cadastradas) e deriva o corte do especialista
+  // como o resíduo: total_commission_rate - platform_rate - office_rate.
+  @IsNumber({}, { message: 'total_commission_rate deve ser um número' })
+  @IsNotEmpty({ message: 'total_commission_rate é obrigatório' })
+  @Min(0, { message: 'total_commission_rate deve ser maior ou igual a zero' })
+  @Max(100, { message: 'total_commission_rate deve ser menor ou igual a 100' })
+  total_commission_rate: number;
+
   // === DADOS DA PLATAFORMA (SPLIT 1) ===
-
-  @IsNumber({}, { message: 'platform_value deve ser um número' })
-  @IsNotEmpty({ message: 'platform_value é obrigatório' })
-  @Min(0, { message: 'platform_value deve ser maior ou igual a zero' })
-  platform_value: number;
-
-  @IsNumber({}, { message: 'platform_percentage deve ser um número' })
-  @IsNotEmpty({ message: 'platform_percentage é obrigatório' })
-  @Min(0, { message: 'platform_percentage deve ser maior ou igual a zero' })
-  platform_percentage: number;
 
   @IsString({ message: 'platform_name deve ser uma string' })
   @IsNotEmpty({ message: 'platform_name é obrigatório' })
@@ -173,11 +174,6 @@ export class PreviewContractDto {
 
   // === DADOS DO ESCRITÓRIO/EMPRESA PARCEIRA (SPLIT 2) ===
 
-  @IsNumber({}, { message: 'office_value deve ser um número' })
-  @IsNotEmpty({ message: 'office_value é obrigatório' })
-  @Min(0, { message: 'office_value deve ser maior ou igual a zero' })
-  office_value: number;
-
   @IsString({ message: 'office_name deve ser uma string' })
   @IsNotEmpty({ message: 'office_name é obrigatório' })
   office_name: string;
@@ -199,11 +195,6 @@ export class PreviewContractDto {
   office_checking_account?: string;
 
   // === DADOS DO ESPECIALISTA (SPLIT 3) ===
-
-  @IsNumber({}, { message: 'specialist_value deve ser um número' })
-  @IsNotEmpty({ message: 'specialist_value é obrigatório' })
-  @Min(0, { message: 'specialist_value deve ser maior ou igual a zero' })
-  specialist_value: number;
 
   @IsString({ message: 'specialist_name deve ser uma string' })
   @IsNotEmpty({ message: 'specialist_name é obrigatório' })

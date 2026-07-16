@@ -32,8 +32,6 @@ export default function NewCompanyForm({
   const [cnpj, setCnpj] = useState("");
   // Guarda o ficheiro de imagem selecionado pelo utilizador. Começa como nulo.
   const [logo, setLogo] = useState<File | null>(null);
-  // Taxa de comissão do escritório (opcional)
-  const [commissionRate, setCommissionRate] = useState("");
   // Dados bancários opcionais
   const [bank, setBank] = useState("");
   const [agency, setAgency] = useState("");
@@ -59,11 +57,6 @@ export default function NewCompanyForm({
     if (companyToEdit) {
       setName(companyToEdit.name);
       setCnpj(companyToEdit.cnpj);
-      setCommissionRate(
-        companyToEdit.commission_rate != null
-          ? String(companyToEdit.commission_rate)
-          : "",
-      );
       setBank(companyToEdit.bank || "");
       setAgency(companyToEdit.agency || "");
       setCheckingAccount(companyToEdit.checking_account || "");
@@ -82,7 +75,6 @@ export default function NewCompanyForm({
       setName("");
       setCnpj("");
       setLogo(null);
-      setCommissionRate("");
       setBank("");
       setAgency("");
       setCheckingAccount("");
@@ -172,10 +164,6 @@ export default function NewCompanyForm({
       // Remove formatação do CNPJ antes de enviar
       const cleanCNPJ = cnpj.replace(/\D/g, "");
 
-      const parsedRate = commissionRate
-        ? parseFloat(commissionRate)
-        : undefined;
-
       // Converte o ficheiro selecionado para base64 — usado em create e update.
       const logoBase64 = logo ? await fileToBase64(logo) : undefined;
 
@@ -183,7 +171,6 @@ export default function NewCompanyForm({
         await updateCompany(companyToEdit.id, {
           name,
           cnpj: cleanCNPJ,
-          commission_rate: parsedRate,
           bank: bank || undefined,
           agency: agency || undefined,
           checking_account: checkingAccount || undefined,
@@ -195,7 +182,6 @@ export default function NewCompanyForm({
           name,
           cnpj: cleanCNPJ,
           logo: logoBase64,
-          commission_rate: parsedRate,
           bank: bank || undefined,
           agency: agency || undefined,
           checking_account: checkingAccount || undefined,
@@ -260,29 +246,12 @@ export default function NewCompanyForm({
         </p>
       </div>
 
-      <div>
-        {/* --- CAMPO TAXA DE COMISSÃO --- */}
-        <label
-          htmlFor="commission_rate"
-          className="block text-sm font-medium text-text-secondary"
-        >
-          Taxa de Comissão (%)
-        </label>
-        <input
-          id="commission_rate"
-          type="number"
-          step="0.01"
-          min="0"
-          max="100"
-          value={commissionRate}
-          onChange={(e) => setCommissionRate(e.target.value)}
-          placeholder="Ex: 15.00"
-          className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
-        />
-        <p className="text-xs text-gray-500 mt-1">
-          Opcional. Especialistas desta empresa usarão esta taxa.
+      {companyToEdit && (
+        <p className="text-xs text-gray-500">
+          A taxa de comissão deste escritório é gerenciada na aba{" "}
+          <span className="font-medium">Comissões</span>.
         </p>
-      </div>
+      )}
 
       {/* --- DADOS BANCÁRIOS (OPCIONAIS) --- */}
       <div className="border-t pt-4 mt-4">

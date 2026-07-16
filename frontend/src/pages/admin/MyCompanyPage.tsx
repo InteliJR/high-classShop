@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Building2, Save, AlertCircle, Check, Loader } from "lucide-react";
 import {
   getPlatformCompany,
@@ -255,22 +256,17 @@ export default function MyCompanyPage() {
           </h2>
           <div className="max-w-xs">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Taxa Padrão de Comissão (%) *
+              Taxa Padrão de Comissão (%)
             </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              value={defaultCommissionRate}
-              onChange={(e) => setDefaultCommissionRate(e.target.value)}
-              placeholder="Ex: 10.00"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-              required
-            />
+            <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700">
+              {defaultCommissionRate ? `${defaultCommissionRate}%` : "—"}
+            </div>
             <p className="text-xs text-gray-500 mt-1">
-              Usada quando o especialista ou sua empresa não possuem taxa
-              individual definida.
+              Edite na aba{" "}
+              <Link to="/admin/commissions" className="text-slate-700 underline">
+                Comissões
+              </Link>
+              .
             </p>
           </div>
         </section>

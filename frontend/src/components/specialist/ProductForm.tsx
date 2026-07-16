@@ -28,6 +28,7 @@ import {
   importAircraftsCsv,
   getAircraftsCsvTemplate,
 } from "../../services/aircrafts.service";
+import { assignProductToProcess } from "../../services/processes.service";
 import {
   XlsxImporter,
   type CsvImportResponse,
@@ -51,6 +52,9 @@ interface ProductFormProps {
   productType?: ProductType;
   productData?: RawCar | RawBoat | RawAircraft;
   productId?: number;
+  // Quando informado (cadastro disparado a partir de um processo em negociação),
+  // o produto recém-criado é atribuído automaticamente a este processo.
+  processId?: string;
 }
 
 export default function ProductForm({
@@ -58,6 +62,7 @@ export default function ProductForm({
   productType: initialProductType,
   productData,
   productId,
+  processId,
 }: ProductFormProps) {
   const navigate = useNavigate();
   const user = useAuth((state) => state.user);
@@ -249,13 +254,32 @@ export default function ProductForm({
 
       if (mode === "create") {
         // Criar novo produto
+        let createdId: number;
         if (productType === "CAR") {
-          await createCar(formattedData);
+          createdId = (await createCar(formattedData)).id;
         } else if (productType === "BOAT") {
-          await createBoat(formattedData);
-        } else if (productType === "AIRCRAFT") {
-          await createAircraft(formattedData);
+          createdId = (await createBoat(formattedData)).id;
+        } else {
+          createdId = (await createAircraft(formattedData)).id;
         }
+
+        if (processId) {
+          // Cadastro disparado a partir de um processo — vincula automaticamente
+          try {
+            await assignProductToProcess(processId, productType, createdId);
+            window.alert("Produto criado e vinculado ao processo com sucesso!");
+            navigate(`/processes/${processId}/negotiation`);
+            return;
+          } catch (assignError: any) {
+            console.error("Erro ao vincular produto ao processo:", assignError);
+            window.alert(
+              "Produto criado, mas não foi possível vinculá-lo automaticamente ao processo. Use a tela de seleção de produto para vinculá-lo manualmente.",
+            );
+            navigate("/specialist/products");
+            return;
+          }
+        }
+
         window.alert("Produto criado com sucesso!");
       } else {
         // Editar produto existente

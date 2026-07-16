@@ -31,16 +31,19 @@ import { RateLimit } from 'src/shared/decorators/rate-limit.decorator';
  *
  * Responsabilidades:
  * - Fornecer dados para pré-preenchimento do formulário (GET /prefill/:processId)
- * - Receber dados do formulário e gerar contrato no DocuSign (POST /generate)
+ * - Criar preview do contrato no DocuSign (POST /preview)
+ * - Enviar o contrato após confirmação do preview (POST /send/:envelopeId)
+ * - POST /generate é uma rota legada sem uso pelo frontend atual (ver seu Javadoc)
  *
  * Segurança:
  * - AuthGuard: Garante que apenas usuários autenticados podem acessar
+ * - preview/send/generate: apenas SPECIALIST e ADMIN, com rate limit
  *
- * Fluxo:
+ * Fluxo (ativo):
  * 1. Frontend busca dados pré-preenchidos via GET /contracts/prefill/:processId
- * 2. Especialista preenche/edita formulário
- * 3. Frontend envia dados via POST /contracts/generate
- * 4. Backend valida, formata e cria envelope no DocuSign
+ * 2. Especialista preenche/edita formulário e informa a comissão total
+ * 3. Frontend chama POST /contracts/preview para gerar o preview no DocuSign
+ * 4. Após confirmação, frontend chama POST /contracts/send/:envelopeId
  */
 @Controller('contracts')
 export class ContractsController {
@@ -163,8 +166,17 @@ export class ContractsController {
    *     "created_at": "2026-02-05T10:30:00Z"
    *   }
    * }
+   *
+   * ATENÇÃO: rota legada, sem uso pelo frontend atual (o fluxo ativo é
+   * POST /preview seguido de POST /send/:envelopeId, ver PreviewContractDto).
+   * Segue os mesmos guards de role/rate-limit e a mesma trava de comissão
+   * (resolveCommissionFromTotal) do fluxo vivo — não reativar sem essas
+   * proteções.
    */
   @Post('generate')
+  @Roles(UserRole.SPECIALIST, UserRole.ADMIN)
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ windowMs: 60, max: 10 })
   async generateContract(
     @Body() generateContractDto: GenerateContractDto,
     @Request() req: RequestWithUser,

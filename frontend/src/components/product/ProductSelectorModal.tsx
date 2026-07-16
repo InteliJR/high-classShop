@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   X,
   Search,
+  Plus,
   Car,
   Ship,
   Plane,
@@ -66,6 +68,7 @@ export default function ProductSelectorModal({
     null,
   );
   const [errorMessage, setErrorMessage] = useState("");
+  const navigate = useNavigate();
 
   const productTypeConfig: Record<
     SpecialityType,
@@ -169,6 +172,13 @@ export default function ProductSelectorModal({
 
   const handleSelectProduct = (product: ProductItem) => {
     setSelectedProduct(product);
+  };
+
+  // Leva o especialista ao formulário de cadastro, já vinculado a este processo.
+  // Depois de salvar, o produto criado é atribuído automaticamente ao processo.
+  const handleCreateNew = () => {
+    onClose();
+    navigate(`/specialist/products/new?processId=${process.id}`);
   };
 
   const handleConfirmSelection = async () => {
@@ -289,20 +299,31 @@ export default function ProductSelectorModal({
 
           {(modalState === "selecting" || modalState === "assigning") && (
             <>
-              {/* Search */}
-              <div className="relative mb-4">
-                <Search
-                  size={18}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                />
-                <input
-                  type="text"
-                  placeholder="Buscar por marca ou modelo..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+              {/* Search + Cadastrar novo produto */}
+              <div className="flex gap-3 mb-4">
+                <div className="relative flex-1">
+                  <Search
+                    size={18}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Buscar por marca ou modelo..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    disabled={modalState === "assigning"}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCreateNew}
                   disabled={modalState === "assigning"}
-                />
+                  className="flex items-center gap-1.5 px-4 py-2.5 border border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Plus size={18} />
+                  Cadastrar novo
+                </button>
               </div>
 
               {/* Products List */}

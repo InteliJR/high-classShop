@@ -42,8 +42,8 @@ export class SpecialistsController {
   }
 
   // Rota para criar um novo especialista.
-  @Post()
   @Roles(UserRole.ADMIN)
+  @Post()
   create(@Body() body: CreateSpecialistDto) {
     return this.specialistsService.create(body);
   }
@@ -75,16 +75,16 @@ export class SpecialistsController {
     return this.specialistsService.findOne(id);
   }
 
-  // Rota para atualizar os dados de um especialista.
-  @Put(':id')
+  // Rota para atualizar os dados de um especialista (inclui commission_rate — ADMIN only).
   @Roles(UserRole.ADMIN)
+  @Put(':id')
   update(@Param('id') id: string, @Body() body: UpdateSpecialistDto) {
     return this.specialistsService.update(id, body);
   }
 
   // Rota para apagar um especialista.
-  @Delete(':id')
   @Roles(UserRole.ADMIN)
+  @Delete(':id')
   remove(@Param('id') id: string) {
     return this.specialistsService.remove(id);
   }

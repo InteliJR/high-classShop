@@ -37,8 +37,8 @@ export class CompaniesController {
   }
 
   // Rota para criar um novo escritório.
-  @Post()
   @Roles(UserRole.ADMIN)
+  @Post()
   create(@Body() body: CreateCompanyDto) {
     return this.companiesService.create(body);
   }
@@ -63,9 +63,9 @@ export class CompaniesController {
     return this.companiesService.findOne(id);
   }
 
-  // Rota para atualizar os dados de um escritório.
-  @Put(':id')
+  // Rota para atualizar os dados de um escritório (inclui commission_rate — ADMIN only).
   @Roles(UserRole.ADMIN)
+  @Put(':id')
   update(@Param('id') id: string, @Body() body: UpdateCompanyDto) {
     return this.companiesService.update(id, body);
   }
@@ -86,8 +86,8 @@ export class CompaniesController {
   }
 
   // Rota para apagar um escritório.
-  @Delete(':id')
   @Roles(UserRole.ADMIN)
+  @Delete(':id')
   remove(@Param('id') id: string) {
     return this.companiesService.remove(id);
   }

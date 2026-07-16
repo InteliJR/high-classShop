@@ -80,14 +80,14 @@ export class SpecialistsService {
         );
       }
 
-      // Verifica se já existe usuário com o mesmo CPF
-      const existingUserByCpf = await this.prisma.user.findUnique({
-        where: { cpf: data.cpf },
+      // Verifica se já existe usuário com o mesmo CNPJ
+      const existingUserByCnpj = await this.prisma.user.findUnique({
+        where: { cpf: data.cnpj },
       });
 
-      if (existingUserByCpf) {
+      if (existingUserByCnpj) {
         throw new ConflictException(
-          'Já existe um usuário cadastrado com este CPF',
+          'Já existe um usuário cadastrado com este CNPJ',
         );
       }
 
@@ -99,7 +99,7 @@ export class SpecialistsService {
           name: data.name,
           surname: data.surname,
           email: data.email,
-          cpf: data.cpf,
+          cpf: data.cnpj,
           rg: data.rg,
           password_hash: hashedPassword,
           speciality: data.speciality,
@@ -140,7 +140,7 @@ export class SpecialistsService {
           }
           if (target.includes('cpf')) {
             throw new ConflictException(
-              'Já existe um usuário cadastrado com este CPF',
+              'Já existe um usuário cadastrado com este CNPJ',
             );
           }
           throw new ConflictException(
@@ -193,24 +193,28 @@ export class SpecialistsService {
         }
       }
 
-      // Se está atualizando o CPF, verifica se já existe outro usuário com o mesmo CPF
-      if (data.cpf) {
+      // Se está atualizando o CNPJ, verifica se já existe outro usuário com o mesmo CNPJ
+      if (data.cnpj) {
         const existingUser = await this.prisma.user.findFirst({
           where: {
-            cpf: data.cpf,
+            cpf: data.cnpj,
             NOT: { id },
           },
         });
 
         if (existingUser) {
           throw new ConflictException(
-            'Já existe outro usuário cadastrado com este CPF',
+            'Já existe outro usuário cadastrado com este CNPJ',
           );
         }
       }
 
       // Se está atualizando a senha, hashear antes de salvar
-      const updateData = { ...data };
+      const { cnpj, ...rest } = data;
+      const updateData: Prisma.UserUpdateInput = { ...rest };
+      if (cnpj) {
+        updateData.cpf = cnpj;
+      }
       if (data.password_hash) {
         updateData.password_hash = await bcrypt.hash(data.password_hash, 10);
       }
@@ -237,7 +241,7 @@ export class SpecialistsService {
           }
           if (target.includes('cpf')) {
             throw new ConflictException(
-              'Já existe outro usuário cadastrado com este CPF',
+              'Já existe outro usuário cadastrado com este CNPJ',
             );
           }
         }

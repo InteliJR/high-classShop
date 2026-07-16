@@ -62,7 +62,7 @@ export interface PrefillSpecialist {
   id?: string;
   name?: string;
   email?: string;
-  cpf?: string;
+  cnpj?: string;
   bank?: string;
   agency?: string;
   checking_account?: string;
@@ -80,6 +80,7 @@ export interface PrefillContractResponse {
   platform?: PrefillPlatform;
   office?: PrefillOffice;
   specialist?: PrefillSpecialist;
+  suggested_total_rate?: number;
 }
 
 // === TIPOS PARA GERAÇÃO DE CONTRATO ===
@@ -117,9 +118,11 @@ export interface GenerateContractData {
   // Pagamento
   payment_seller_value: number;
 
+  // Comissão total da venda — único valor de comissão editável pelo especialista.
+  // Plataforma e escritório ficam travados no backend nas taxas já cadastradas.
+  total_commission_rate: number;
+
   // Dados da Plataforma (Split 1)
-  platform_value: number;
-  platform_percentage: number;
   platform_name: string;
   platform_cnpj: string;
   platform_bank: string;
@@ -127,7 +130,6 @@ export interface GenerateContractData {
   platform_checking_account: string;
 
   // Dados do Escritório (Split 2)
-  office_value: number;
   office_name: string;
   office_cnpj: string;
   office_bank?: string;
@@ -135,7 +137,6 @@ export interface GenerateContractData {
   office_checking_account?: string;
 
   // Dados do Especialista (Split 3)
-  specialist_value?: number;
   specialist_name?: string;
   specialist_email?: string;
   specialist_document?: string;

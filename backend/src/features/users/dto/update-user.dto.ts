@@ -12,12 +12,13 @@ import {
  * Campos editáveis:
  * - name: nome do usuário
  * - surname: sobrenome
- * - cpf: CPF (11 dígitos) - único no sistema
+ * - cpf: CPF (11 dígitos) para a maioria dos papéis; CNPJ (14 dígitos) para
+ *   SPECIALIST — mesmo campo/coluna reaproveitados - único no sistema
  * - rg: RG (de 9 a 10 dígitos) - único no sistema
  * - calendly_url: link do Calendly (apenas para especialistas)
  *
  * Validações:
- * - CPF: exatamente 11 dígitos numéricos
+ * - CPF/CNPJ: 11 ou 14 dígitos numéricos
  * - RG: de 9 a 10 dígitos numéricos
  * - calendly_url: URL válida do Calendly
  */
@@ -36,8 +37,8 @@ export class UpdateUserDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^\d{11}$/, {
-    message: 'CPF deve conter exatamente 11 dígitos numéricos',
+  @Matches(/^\d{11}$|^\d{14}$/, {
+    message: 'CPF/CNPJ deve conter 11 ou 14 dígitos numéricos',
   })
   cpf?: string;
 

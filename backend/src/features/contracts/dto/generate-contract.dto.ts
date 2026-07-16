@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -126,6 +127,20 @@ export class GenerateContractDto {
   @IsNotEmpty({ message: 'payment_seller_value é obrigatório' })
   @Min(0, { message: 'payment_seller_value deve ser maior ou igual a zero' })
   payment_seller_value: number;
+
+  // === COMISSÃO TOTAL DA VENDA ===
+  // ATENÇÃO: rota legada (POST /contracts/generate não é usada pelo frontend
+  // atual). Os campos platform_value/platform_percentage/office_value/
+  // specialist_value abaixo NUNCA são usados como recebidos do cliente — o
+  // service ignora esses valores e recalcula tudo a partir de
+  // total_commission_rate via resolveCommissionFromTotal(), igual ao fluxo
+  // preview/send. Eles permanecem no DTO só porque buildFormFields() (função
+  // compartilhada com o fluxo vivo) espera esse formato já preenchido.
+  @IsNumber({}, { message: 'total_commission_rate deve ser um número' })
+  @IsNotEmpty({ message: 'total_commission_rate é obrigatório' })
+  @Min(0, { message: 'total_commission_rate deve ser maior ou igual a zero' })
+  @Max(100, { message: 'total_commission_rate deve ser menor ou igual a 100' })
+  total_commission_rate: number;
 
   // === DADOS DA PLATAFORMA (SPLIT 1) ===
 

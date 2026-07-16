@@ -586,17 +586,17 @@ export class AuthService {
   }
 
   async registerSpecialist(dto: RegisterSpecialistDto) {
-    const { invite_token, password, ...rest } = dto;
+    const { invite_token, password, cnpj, ...rest } = dto;
 
     const { email, speciality } =
       await this.validateSpecialistInviteToken(invite_token);
 
-    const existingByCpf = await this.prismaService.user.findUnique({
-      where: { cpf: rest.cpf },
+    const existingByCnpj = await this.prismaService.user.findUnique({
+      where: { cpf: cnpj },
     });
-    if (existingByCpf)
+    if (existingByCnpj)
       throw new UnauthorizedException(
-        'Já existe uma conta cadastrada com este CPF',
+        'Já existe uma conta cadastrada com este CNPJ',
       );
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -604,6 +604,7 @@ export class AuthService {
     const user = await this.prismaService.user.create({
       data: {
         ...rest,
+        cpf: cnpj,
         email,
         password_hash: passwordHash,
         role: UserRole.SPECIALIST,

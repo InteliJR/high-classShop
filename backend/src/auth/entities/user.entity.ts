@@ -38,8 +38,9 @@ export class UserEntity
   @Expose()
   email: string;
 
+  // CPF (11 dígitos) para a maioria dos papéis; CNPJ (14 dígitos) para SPECIALIST
   @Expose()
-  cpf: string;
+  cpf: string | null;
 
   @Expose()
   rg: string;

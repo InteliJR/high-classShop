@@ -45,7 +45,7 @@ export default function OfficeDashboardPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <ActionCard to="/office/consultants" label="Gerenciar consultores" />
-        <ActionCard to="/office/invite-batch" label="Convidar em lote (CSV)" />
+        <ActionCard to="/office/consultants?tab=batch" label="Convidar em lote (CSV)" />
         <ActionCard to="/office/company" label="Configurar escritório" />
       </div>
     </div>
