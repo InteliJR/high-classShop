@@ -226,7 +226,6 @@ export default function ProcessCard({
     try {
       setIsConfirming(true);
       await confirmAppointment(process.id);
-      onStatusUpdated?.();
     } catch (error) {
       console.error("Error confirming appointment:", error);
       alert(
@@ -237,6 +236,10 @@ export default function ProcessCard({
       );
     } finally {
       setIsConfirming(false);
+      // Recarrega a lista mesmo em erro: se o processo já não existe mais
+      // (ex.: cancelado em outra aba/pela outra parte), o card some em vez
+      // de continuar mostrando uma ação que vai sempre falhar.
+      onStatusUpdated?.();
     }
   };
 
@@ -255,7 +258,6 @@ export default function ProcessCard({
     try {
       setIsCancelling(true);
       await cancelAppointment(process.id);
-      onStatusUpdated?.();
     } catch (error) {
       console.error("Error cancelling appointment:", error);
       alert(
@@ -266,6 +268,7 @@ export default function ProcessCard({
       );
     } finally {
       setIsCancelling(false);
+      onStatusUpdated?.();
     }
   };
 
