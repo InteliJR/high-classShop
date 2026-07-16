@@ -37,6 +37,17 @@ export class CreateCompanyDto {
   @Max(100, { message: 'Taxa de comissão deve ser <= 100' })
   commission_rate?: number;
 
+  // Taxa que a plataforma cobra deste escritório especificamente — sobrepõe
+  // a taxa padrão global (PlatformCompany.default_commission_rate) quando definida
+  @IsNumber(
+    {},
+    { message: 'Taxa de comissão da plataforma deve ser um número' },
+  )
+  @IsOptional()
+  @Min(0, { message: 'Taxa de comissão da plataforma deve ser >= 0' })
+  @Max(100, { message: 'Taxa de comissão da plataforma deve ser <= 100' })
+  platform_commission_rate?: number;
+
   // === DADOS BANCÁRIOS (OPCIONAIS) ===
 
   @IsString({ message: 'bank deve ser uma string' })

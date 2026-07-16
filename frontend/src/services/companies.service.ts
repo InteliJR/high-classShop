@@ -11,6 +11,7 @@ export type Company = {
   description?: string | null;
   logoUrl?: string | null;
   commission_rate?: number | null;
+  platform_commission_rate?: number | null;
   bank?: string | null;
   agency?: string | null;
   checking_account?: string | null;
@@ -39,6 +40,7 @@ type CreateCompanyDto = {
   cnpj: string;
   logo?: string;
   commission_rate?: number;
+  platform_commission_rate?: number;
   bank?: string;
   agency?: string;
   checking_account?: string;
