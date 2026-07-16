@@ -40,6 +40,20 @@ export function formatCnpj(value: string): string {
 }
 
 /**
+ * Formata documento (CPF ou CNPJ) para exibição, detectando pelo nº de dígitos
+ * @param value - CPF (11 dígitos) ou CNPJ (14 dígitos), com ou sem formatação
+ * @returns Documento formatado
+ * @example formatDocument('12345678901') => '123.456.789-01'
+ * @example formatDocument('12345678000199') => '12.345.678/0001-99'
+ */
+export function formatDocument(value: string): string {
+  if (!value) return '';
+  const digits = value.replace(/\D/g, '');
+  if (digits.length === 14) return formatCnpj(digits);
+  return formatCpf(digits);
+}
+
+/**
  * Formata CEP para exibição: #####-###
  * @param value - CEP com apenas números (8 dígitos)
  * @returns CEP formatado
