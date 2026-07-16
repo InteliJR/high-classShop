@@ -81,6 +81,9 @@ export class CompaniesService {
         return {
           ...c,
           commission_rate: c.commission_rate ? Number(c.commission_rate) : null,
+          platform_commission_rate: c.platform_commission_rate
+            ? Number(c.platform_commission_rate)
+            : null,
           consultants_count,
           logoUrl,
           _count: undefined,
@@ -151,6 +154,9 @@ export class CompaniesService {
       ...company,
       commission_rate: company.commission_rate
         ? Number(company.commission_rate)
+        : null,
+      platform_commission_rate: company.platform_commission_rate
+        ? Number(company.platform_commission_rate)
         : null,
       logoUrl,
     };

@@ -61,6 +61,11 @@ export default function CommissionsPage() {
     setCompanies((prev) => prev.map((c) => (c.id === id ? updated : c)));
   };
 
+  const savePlatformRateForCompany = async (id: string, rate: number) => {
+    const updated = await updateCompany(id, { platform_commission_rate: rate });
+    setCompanies((prev) => prev.map((c) => (c.id === id ? updated : c)));
+  };
+
   const saveSpecialistRate = async (id: string, rate: number) => {
     const updated = await updateSpecialist(id, { commission_rate: rate });
     setSpecialists((prev) => prev.map((s) => (s.id === id ? updated : s)));
@@ -111,19 +116,36 @@ export default function CommissionsPage() {
       <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-1">Escritórios</h2>
         <p className="text-sm text-gray-500 mb-4">
-          Comissão de cada escritório parceiro.
+          Para cada escritório: quanto a plataforma cobra dele (sobrepõe a taxa
+          padrão global quando definida) e quanto o próprio escritório fica.
         </p>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           {companies.length === 0 ? (
             <p className="text-sm text-gray-400">Nenhum escritório cadastrado.</p>
           ) : (
             companies.map((company) => (
-              <RateRow
+              <div
                 key={company.id}
-                label={company.name}
-                initialRate={company.commission_rate ?? 0}
-                onSave={(rate) => saveCompanyRate(company.id, rate)}
-              />
+                className="border border-gray-200 rounded-lg p-3"
+              >
+                <p className="font-medium text-gray-800 mb-2">{company.name}</p>
+                <div className="flex flex-col gap-2">
+                  <RateRow
+                    label="Plataforma sobre este escritório"
+                    initialRate={
+                      company.platform_commission_rate ??
+                      platform?.default_commission_rate ??
+                      0
+                    }
+                    onSave={(rate) => savePlatformRateForCompany(company.id, rate)}
+                  />
+                  <RateRow
+                    label="Taxa do escritório"
+                    initialRate={company.commission_rate ?? 0}
+                    onSave={(rate) => saveCompanyRate(company.id, rate)}
+                  />
+                </div>
+              </div>
             ))
           )}
         </div>

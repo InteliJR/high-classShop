@@ -621,6 +621,9 @@ model Company {
   logo            String?
   description     String?
   commission_rate Decimal? @db.Decimal(5, 2) // Taxa de comissão do escritório (ex: 15.00 = 15%)
+  // Taxa que a PLATAFORMA cobra especificamente deste escritório — sobrepõe
+  // PlatformCompany.default_commission_rate quando definida (null = usa a taxa padrão global)
+  platform_commission_rate Decimal? @db.Decimal(5, 2)
 
   // Dados bancários (opcionais - se preenchidos, são usados no contrato)
   bank             String?

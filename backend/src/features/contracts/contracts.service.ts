@@ -342,7 +342,8 @@ export class ContractsService {
    * Calcula as taxas de comissão da plataforma, escritório e especialista separadamente
    *
    * Taxas de comissão:
-   * - Plataforma: sempre usa default_commission_rate da PlatformCompany
+   * - Plataforma: usa company.platform_commission_rate quando o escritório tem uma taxa
+   *   própria configurada; senão cai no default_commission_rate da PlatformCompany
    * - Escritório: usa company.commission_rate (se especialista tiver empresa)
    * - Especialista: usa specialist.commission_rate (taxa individual do especialista)
    *
@@ -383,8 +384,9 @@ export class ContractsService {
       checking_account?: string | null;
     } | null;
   }> {
-    // Taxa da plataforma: sempre vem da PlatformCompany
-    const platformRate = platformCompany?.default_commission_rate ?? 0;
+    // Taxa da plataforma: padrão global da PlatformCompany, sobreposta pela
+    // taxa própria do escritório (Company.platform_commission_rate) quando definida
+    let platformRate = platformCompany?.default_commission_rate ?? 0;
 
     // Taxa do escritório: vem da empresa do especialista
     let officeRate = 0;
@@ -430,6 +432,9 @@ export class ContractsService {
         officeRate = company.commission_rate
           ? Number(company.commission_rate)
           : 0;
+        if (company.platform_commission_rate != null) {
+          platformRate = Number(company.platform_commission_rate);
+        }
       }
     }
 

@@ -83,6 +83,33 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
     expect(result.specialistRate).toBe(2);
   });
 
+  it('escritório com platform_commission_rate própria: sobrepõe a taxa padrão global da plataforma', async () => {
+    const prisma = mkPrisma();
+    prisma.process.findUnique.mockResolvedValue({
+      specialist: { id: 's1', commission_rate: null, company_id: 'c1' },
+      car: { valor: 100000 },
+      boat: null,
+      aircraft: null,
+      accepted_proposal: null,
+    });
+    prisma.company.findUnique.mockResolvedValue({
+      name: 'Escritório X',
+      cnpj: '11222333000181',
+      bank: null,
+      agency: null,
+      checking_account: null,
+      commission_rate: 8,
+      platform_commission_rate: 5,
+    });
+    const svc = mkSvc(prisma, mkPlatformCompanyService(10));
+
+    const result = await (svc as any).resolveCommissionFromTotal('p1', 20);
+
+    expect(result.platformRate).toBe(5);
+    expect(result.officeRate).toBe(8);
+    expect(result.specialistRate).toBe(7);
+  });
+
   it('total menor que plataforma + escritório → BadRequestException', async () => {
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue({
