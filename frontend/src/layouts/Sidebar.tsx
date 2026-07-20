@@ -12,6 +12,7 @@ import {
   FilePen,
   Settings,
   Percent,
+  Database,
 } from "lucide-react";
 import { useContext } from "react";
 import { AppContext } from "../contexts/AppContext";
@@ -142,6 +143,11 @@ export default function Sidebar() {
             to: "/admin/commissions",
             label: "Comissões",
             icon: <Percent size={20} />,
+          },
+          {
+            to: "/admin/database",
+            label: "Base de dados",
+            icon: <Database size={20} />,
           },
           {
             to: "/admin/settings",

@@ -30,6 +30,7 @@ import { ProductImportJobsModule } from './features/product-import-jobs/product-
 import { CustomerAdvisorsModule } from './features/customer-advisors/customer-advisors.module';
 import { OfficeModule } from './features/office/office.module';
 import { CommissionsModule } from './features/commissions/commissions.module';
+import { AdminDatabaseModule } from './features/admin-database/admin-database.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { CommissionsModule } from './features/commissions/commissions.module';
     CustomerAdvisorsModule,
     OfficeModule,
     CommissionsModule,
+    AdminDatabaseModule,
   ],
   providers: [
     {
