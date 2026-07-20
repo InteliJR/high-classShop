@@ -13,11 +13,6 @@ import {
   Receipt,
 } from "lucide-react";
 import {
-  getPlatformCompany,
-  updatePlatformCompany,
-  type PlatformCompany,
-} from "../../services/platform-company.service";
-import {
   getCompanies,
   updateCompany,
   type Company,
@@ -43,14 +38,12 @@ export default function CommissionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [platform, setPlatform] = useState<PlatformCompany | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [specialists, setSpecialists] = useState<Specialist[]>([]);
 
   useEffect(() => {
-    Promise.all([getPlatformCompany(), getCompanies(), getSpecialists()])
-      .then(([platformData, companiesData, specialistsData]) => {
-        setPlatform(platformData);
+    Promise.all([getCompanies(), getSpecialists()])
+      .then(([companiesData, specialistsData]) => {
         setCompanies(companiesData);
         setSpecialists(specialistsData);
       })
@@ -60,28 +53,8 @@ export default function CommissionsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const savePlatformRate = async (rate: number) => {
-    if (!platform) return;
-    const updated = await updatePlatformCompany({
-      name: platform.name,
-      cnpj: platform.cnpj,
-      bank: platform.bank,
-      agency: platform.agency,
-      checking_account: platform.checking_account,
-      address: platform.address ?? undefined,
-      cep: platform.cep ?? undefined,
-      default_commission_rate: rate,
-    });
-    setPlatform(updated);
-  };
-
   const saveCompanyRate = async (id: string, rate: number) => {
     const updated = await updateCompany(id, { commission_rate: rate });
-    setCompanies((prev) => prev.map((c) => (c.id === id ? updated : c)));
-  };
-
-  const savePlatformRateForCompany = async (id: string, rate: number) => {
-    const updated = await updateCompany(id, { platform_commission_rate: rate });
     setCompanies((prev) => prev.map((c) => (c.id === id ? updated : c)));
   };
 
@@ -130,31 +103,21 @@ export default function CommissionsPage() {
               </div>
             )}
 
-            <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-1">
-                Plataforma
-              </h2>
-              <p className="text-sm text-gray-500 mb-4">
-                Taxa padrão usada quando especialista/escritório não têm taxa
-                própria.
-              </p>
-              {platform && (
-                <RateRow
-                  label={platform.name}
-                  initialRate={platform.default_commission_rate}
-                  onSave={savePlatformRate}
-                />
-              )}
-            </section>
+            <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600">
+              No modelo aninhado: o <b>especialista</b> leva uma fatia do total da
+              comissão (o “bolo”); o <b>escritório</b> leva uma fatia do{" "}
+              <b>restante</b>; a <b>plataforma</b> fica automaticamente com o que
+              sobra do restante (não é configurada aqui).
+            </div>
 
             <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-1">
                 Escritórios
               </h2>
               <p className="text-sm text-gray-500 mb-4">
-                Para cada escritório: quanto a plataforma cobra dele (sobrepõe a
-                taxa padrão global quando definida) e quanto o próprio escritório
-                fica.
+                Fatia de cada escritório sobre o <b>restante</b> da comissão
+                (depois da fatia do especialista). A plataforma fica com o que
+                sobrar.
               </p>
               <div className="flex flex-col gap-4">
                 {companies.length === 0 ? (
@@ -162,34 +125,28 @@ export default function CommissionsPage() {
                     Nenhum escritório cadastrado.
                   </p>
                 ) : (
-                  companies.map((company) => (
-                    <div
-                      key={company.id}
-                      className="border border-gray-200 rounded-lg p-3"
-                    >
-                      <p className="font-medium text-gray-800 mb-2">
-                        {company.name}
-                      </p>
-                      <div className="flex flex-col gap-2">
+                  companies.map((company) => {
+                    const officeRate = company.commission_rate ?? 0;
+                    return (
+                      <div
+                        key={company.id}
+                        className="border border-gray-200 rounded-lg p-3"
+                      >
+                        <p className="font-medium text-gray-800 mb-2">
+                          {company.name}
+                        </p>
                         <RateRow
-                          label="Plataforma sobre este escritório"
-                          initialRate={
-                            company.platform_commission_rate ??
-                            platform?.default_commission_rate ??
-                            0
-                          }
-                          onSave={(rate) =>
-                            savePlatformRateForCompany(company.id, rate)
-                          }
-                        />
-                        <RateRow
-                          label="Taxa do escritório"
-                          initialRate={company.commission_rate ?? 0}
+                          label="Fatia do escritório (% do restante)"
+                          initialRate={officeRate}
                           onSave={(rate) => saveCompanyRate(company.id, rate)}
                         />
+                        <p className="text-xs text-gray-400 mt-2">
+                          → Plataforma fica com {Math.max(0, 100 - officeRate)}% do
+                          restante
+                        </p>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </section>
@@ -199,9 +156,7 @@ export default function CommissionsPage() {
                 Especialistas
               </h2>
               <p className="text-sm text-gray-500 mb-4">
-                Comissão individual de cada especialista (usada quando não
-                pertence a um escritório, ou sobrepõe a taxa do escritório quando
-                definida).
+                Fatia de cada especialista sobre o total da comissão (o “bolo”).
               </p>
               <div className="flex flex-col gap-3">
                 {specialists.length === 0 ? (
