@@ -11,6 +11,7 @@ import {
   Loader,
   Sliders,
   Receipt,
+  Download,
 } from "lucide-react";
 import {
   getCompanies,
@@ -29,6 +30,52 @@ import {
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+function exportSalesCsv(sales: SaleCommission[]) {
+  const header = [
+    "Produto",
+    "Cliente",
+    "Especialista",
+    "Venda",
+    "Comissao total",
+    "% total",
+    "Especialista (R$)",
+    "Escritorio",
+    "Escritorio (R$)",
+    "Plataforma (R$)",
+    "Assinado em",
+  ];
+  const rows = sales.map((s) => [
+    s.productLabel,
+    s.clientName,
+    s.specialistName,
+    s.saleValue,
+    s.totalCommission,
+    s.totalCommissionRate,
+    s.specialistValue,
+    s.officeName ?? "",
+    s.officeValue,
+    s.platformValue,
+    s.signedAt ? new Date(s.signedAt).toLocaleDateString("pt-BR") : "",
+  ]);
+  const escape = (v: string | number) => {
+    const str = String(v);
+    return /[";\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  };
+  // Separador ";" e BOM UTF-8 para abrir corretamente no Excel pt-BR.
+  const csv = [header, ...rows]
+    .map((r) => r.map(escape).join(";"))
+    .join("\n");
+  const blob = new Blob(["﻿" + csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "comissoes-por-venda.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 type Tab = "config" | "sales";
 
@@ -250,6 +297,16 @@ function SalesCommissionsTab() {
 
   return (
     <div className="flex flex-col gap-5">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => exportSalesCsv(sales)}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+        >
+          <Download className="w-4 h-4" />
+          Exportar CSV
+        </button>
+      </div>
       {sales.map((s) => (
         <SaleCard key={s.processId} sale={s} />
       ))}
