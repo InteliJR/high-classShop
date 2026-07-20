@@ -6,25 +6,34 @@ export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getAdminStats() {
-    // 1. Contar escritórios ativos (total de companies)
-    const activeCompanies = await this.prisma.company.count();
-
-    // 2. Contar processos ativos (apenas SCHEDULING e NEGOTIATION)
-    const activeProcesses = await this.prisma.process.count({
-      where: {
-        status: {
-          in: ['SCHEDULING', 'NEGOTIATION'],
-        },
-      },
-    });
-
-    // 3. Calcular taxa de conversão
-    const totalProcesses = await this.prisma.process.count();
-    const completedProcesses = await this.prisma.process.count({
-      where: {
-        status: 'COMPLETED',
-      },
-    });
+    // Todas as consultas independentes rodam em paralelo (antes eram sequenciais).
+    const [
+      activeCompanies,
+      activeProcesses,
+      totalProcesses,
+      completedProcesses,
+      totalClients,
+      specialistsCount,
+      totalCars,
+      totalBoats,
+      totalAircrafts,
+      salesByMonth,
+      consultantsPerformance,
+    ] = await Promise.all([
+      this.prisma.company.count(),
+      this.prisma.process.count({
+        where: { status: { in: ['SCHEDULING', 'NEGOTIATION'] } },
+      }),
+      this.prisma.process.count(),
+      this.prisma.process.count({ where: { status: 'COMPLETED' } }),
+      this.prisma.user.count({ where: { role: 'CUSTOMER' } }),
+      this.prisma.user.count({ where: { role: 'SPECIALIST' } }),
+      this.prisma.car.count(),
+      this.prisma.boat.count(),
+      this.prisma.aircraft.count(),
+      this.buildMonthlySalesData({}),
+      this.getConsultantsPerformance(),
+    ]);
 
     // Taxa de conversão = (processos completados / total de processos) * 100
     const conversionRate =
@@ -32,27 +41,14 @@ export class DashboardService {
         ? Math.round((completedProcesses / totalProcesses) * 100)
         : 0;
 
-    // 4. Clientes cadastrados na plataforma
-    const totalClients = await this.prisma.user.count({
-      where: { role: 'CUSTOMER' },
-    });
-
-    // 5. Produtos cadastrados (soma de carros, embarcações e aeronaves)
-    const [totalCars, totalBoats, totalAircrafts] = await Promise.all([
-      this.prisma.car.count(),
-      this.prisma.boat.count(),
-      this.prisma.aircraft.count(),
-    ]);
     const totalProducts = totalCars + totalBoats + totalAircrafts;
-
-    const salesByMonth = await this.buildMonthlySalesData({});
-    const consultantsPerformance = await this.getConsultantsPerformance();
 
     return {
       activeProcesses,
       conversionRate,
       activeCompanies,
       totalClients,
+      specialistsCount,
       totalProducts,
       productsByType: {
         cars: totalCars,
@@ -65,71 +61,56 @@ export class DashboardService {
   }
 
   async getSpecialistStats(specialistId: string) {
-    // Buscar o especialista para saber sua especialidade
+    // Buscar o especialista para saber sua especialidade (necessário antes das
+    // contagens de produto).
     const specialist = await this.prisma.user.findUnique({
       where: { id: specialistId },
       select: { speciality: true },
     });
 
-    // 1. Contar produtos cadastrados APENAS do especialista logado
-    let productsListed = 0;
+    // Contagem de produtos do especialista depende da especialidade dele.
+    const productsListedPromise =
+      specialist?.speciality === 'CAR'
+        ? this.prisma.car.count({ where: { specialist_id: specialistId } })
+        : specialist?.speciality === 'BOAT'
+          ? this.prisma.boat.count({ where: { specialist_id: specialistId } })
+          : specialist?.speciality === 'AIRCRAFT'
+            ? this.prisma.aircraft.count({
+                where: { specialist_id: specialistId },
+              })
+            : Promise.resolve(0);
 
-    if (specialist?.speciality === 'CAR') {
-      productsListed = await this.prisma.car.count({
-        where: { specialist_id: specialistId },
-      });
-    } else if (specialist?.speciality === 'BOAT') {
-      productsListed = await this.prisma.boat.count({
-        where: { specialist_id: specialistId },
-      });
-    } else if (specialist?.speciality === 'AIRCRAFT') {
-      productsListed = await this.prisma.aircraft.count({
-        where: { specialist_id: specialistId },
-      });
-    }
-
-    // 2. Contar processos ativos (apenas SCHEDULING e NEGOTIATION)
-    const activeProcesses = await this.prisma.process.count({
-      where: {
-        specialist_id: specialistId,
-        status: {
-          in: ['SCHEDULING', 'NEGOTIATION'],
+    const [
+      productsListed,
+      activeProcesses,
+      completedSales,
+      totalProcesses,
+      monthsData,
+      processesByStatus,
+    ] = await Promise.all([
+      productsListedPromise,
+      this.prisma.process.count({
+        where: {
+          specialist_id: specialistId,
+          status: { in: ['SCHEDULING', 'NEGOTIATION'] },
         },
-      },
-    });
+      }),
+      this.prisma.process.count({
+        where: { specialist_id: specialistId, status: 'COMPLETED' },
+      }),
+      this.prisma.process.count({ where: { specialist_id: specialistId } }),
+      this.buildMonthlySalesData({ specialist_id: specialistId }),
+      this.prisma.process.groupBy({
+        by: ['status'],
+        where: { specialist_id: specialistId },
+        _count: { status: true },
+      }),
+    ]);
 
-    // 3. Contar vendas concluídas
-    const completedSales = await this.prisma.process.count({
-      where: {
-        specialist_id: specialistId,
-        status: 'COMPLETED',
-      },
-    });
-
-    // 4. Calcular taxa de conversão
-    const totalProcesses = await this.prisma.process.count({
-      where: { specialist_id: specialistId },
-    });
     const conversionRate =
       totalProcesses > 0
         ? Math.round((completedSales / totalProcesses) * 100)
         : 0;
-
-    // 5. Dados para gráfico de vendas por mês (últimos 12 meses)
-    const monthsData = await this.buildMonthlySalesData({
-      specialist_id: specialistId,
-    });
-
-    // 6. Dados para gráfico de pizza - processos por status
-    const processesByStatus = await this.prisma.process.groupBy({
-      by: ['status'],
-      where: {
-        specialist_id: specialistId,
-      },
-      _count: {
-        status: true,
-      },
-    });
 
     const statusData = processesByStatus.map((item) => ({
       name: this.translateStatus(item.status),
@@ -159,9 +140,10 @@ export class DashboardService {
 
   private async buildMonthlySalesData(baseWhere: Record<string, any>) {
     const currentDate = new Date();
-    const monthsData = [];
 
-    for (let i = 11; i >= 0; i--) {
+    // Janelas dos últimos 12 meses (mais antigo → mais recente), como antes.
+    const windows = Array.from({ length: 12 }, (_, idx) => {
+      const i = 11 - idx;
       const date = new Date(
         currentDate.getFullYear(),
         currentDate.getMonth() - i,
@@ -172,41 +154,38 @@ export class DashboardService {
         currentDate.getMonth() - i + 1,
         1,
       );
+      return { date, nextMonth };
+    });
 
-      const completed = await this.prisma.process.count({
-        where: {
-          ...baseWhere,
-          status: 'COMPLETED',
-          updated_at: {
-            gte: date,
-            lt: nextMonth,
-          },
-        },
-      });
+    // As 24 contagens (12 meses × 2) rodam em paralelo em vez de sequencialmente.
+    return Promise.all(
+      windows.map(async ({ date, nextMonth }) => {
+        const [completed, notCompleted] = await Promise.all([
+          this.prisma.process.count({
+            where: {
+              ...baseWhere,
+              status: 'COMPLETED',
+              updated_at: { gte: date, lt: nextMonth },
+            },
+          }),
+          this.prisma.process.count({
+            where: {
+              ...baseWhere,
+              status: { not: 'COMPLETED' },
+              created_at: { gte: date, lt: nextMonth },
+            },
+          }),
+        ]);
 
-      const notCompleted = await this.prisma.process.count({
-        where: {
-          ...baseWhere,
-          status: {
-            not: 'COMPLETED',
-          },
-          created_at: {
-            gte: date,
-            lt: nextMonth,
-          },
-        },
-      });
-
-      monthsData.push({
-        month: date
-          .toLocaleDateString('pt-BR', { month: 'short' })
-          .replace('.', ''),
-        vendidos: completed,
-        naoVendidos: notCompleted,
-      });
-    }
-
-    return monthsData;
+        return {
+          month: date
+            .toLocaleDateString('pt-BR', { month: 'short' })
+            .replace('.', ''),
+          vendidos: completed,
+          naoVendidos: notCompleted,
+        };
+      }),
+    );
   }
 
   private async getConsultantsPerformance() {

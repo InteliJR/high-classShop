@@ -31,6 +31,45 @@ export type InviteResponse = ApiResponse<InviteResponseData>;
  * Get all clients for the authenticated consultant
  * Uses JWT authentication via api interceptor
  */
+export type InviteJobItem = {
+  row_number: number;
+  name: string;
+  email: string;
+  status: string;
+  error_message: string | null;
+};
+
+export type InviteJobDetail = {
+  jobId: string;
+  status: string;
+  totalItems: number;
+  processedItems: number;
+  successItems: number;
+  failedItems: number;
+  duplicateItems: number;
+  done: boolean;
+  items: InviteJobItem[];
+};
+
+// Convite de clientes em lote (CSV: colunas name, email)
+export async function createClientInviteJob(
+  file: File,
+): Promise<{ jobId: string; totalItems: number; pollIntervalMs: number }> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const { data } = await api.post("/consultant/invite-jobs", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
+export async function getClientInviteJob(id: string): Promise<InviteJobDetail> {
+  const { data } = await api.get<InviteJobDetail>(
+    `/consultant/invite-jobs/${id}`,
+  );
+  return data;
+}
+
 export async function getClients(): Promise<Client[]> {
   const response = await api.get<ApiResponse<Client[]>>('/consultant/clients', {
     withCredentials: true,

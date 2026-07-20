@@ -36,6 +36,7 @@ import {
 import { ProductType } from '@prisma/client';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { PlatformCompanyService } from 'src/features/platform-company/platform-company.service';
+import { computeNestedCommissionSplit } from './commission-split';
 
 /**
  * Serviço de Contratos - Geração via Formulário
@@ -113,7 +114,7 @@ export class ContractsService {
       where: { id: processId },
       include: {
         client: {
-          include: { address: true },
+          include: { address: true, consultant: true },
         },
         specialist: {
           include: { address: true },
@@ -255,25 +256,19 @@ export class ContractsService {
     } = await this.calculateCommissionSplit(
       processData.specialist,
       platformCompany,
+      processData.client?.consultant?.company_id ?? null,
     );
 
     this.logger.debug(
       `Prefill data loaded successfully for process ${processId}`,
     );
 
-    // Valor da proposta ou do produto
-    const proposalValue = processData.accepted_proposal
-      ? Number(processData.accepted_proposal.proposed_value)
-      : product.price;
-
-    // Calcular valores de comissão com base nas taxas
-    const platformValue = platformRate
-      ? (proposalValue * platformRate) / 100
-      : 0;
-    const officeValue = officeRate ? (proposalValue * officeRate) / 100 : 0;
-    const specialistValue = specialistRate
-      ? (proposalValue * specialistRate) / 100
-      : 0;
+    // No modelo aninhado, os valores dependem da comissão total que o
+    // especialista ainda vai digitar no formulário. As taxas agora são fatias
+    // (do bolo/restante), não % da venda — então o prefill não sugere valores.
+    const platformValue = 0;
+    const officeValue = 0;
+    const specialistValue = 0;
 
     return {
       process_id: processData.id,
@@ -334,7 +329,7 @@ export class ContractsService {
             value: Math.round(specialistValue * 100) / 100,
           }
         : undefined,
-      suggested_total_rate: platformRate + officeRate + specialistRate,
+      suggested_total_rate: 0,
     };
   }
 
@@ -363,6 +358,8 @@ export class ContractsService {
       checking_account?: string | null;
     },
     platformCompany: { default_commission_rate: number } | null,
+    // Escritório da venda = empresa do CONSULTOR do cliente (não do especialista).
+    officeCompanyId: string | null,
   ): Promise<{
     platformRate: number;
     officeRate: number;
@@ -388,7 +385,7 @@ export class ContractsService {
     // taxa própria do escritório (Company.platform_commission_rate) quando definida
     let platformRate = platformCompany?.default_commission_rate ?? 0;
 
-    // Taxa do escritório: vem da empresa do especialista
+    // Taxa do escritório: vem da empresa do consultor do cliente
     let officeRate = 0;
     let officeData: {
       name: string;
@@ -416,10 +413,10 @@ export class ContractsService {
         }
       : null;
 
-    // 1. Verificar se especialista tem empresa associada
-    if (specialist.company_id) {
+    // 1. Escritório da venda: empresa do consultor do cliente (se houver).
+    if (officeCompanyId) {
       const company = await this.prismaService.company.findUnique({
-        where: { id: specialist.company_id },
+        where: { id: officeCompanyId },
       });
       if (company) {
         officeData = {
@@ -476,6 +473,7 @@ export class ContractsService {
       where: { id: processId },
       include: {
         specialist: true,
+        client: { include: { consultant: true } },
         car: true,
         boat: true,
         aircraft: true,
@@ -488,21 +486,17 @@ export class ContractsService {
     }
 
     const platformCompany = await this.platformCompanyService.findOne();
-    const { platformRate, officeRate } = await this.calculateCommissionSplit(
-      process.specialist,
-      platformCompany,
-    );
+    // No modelo aninhado: specialistRate = fatia do especialista sobre o BOLO;
+    // officeRate = fatia do escritório sobre o RESTANTE (reinterpretação dos
+    // cadastros). A plataforma é derivada (o que sobra do restante).
+    const { officeRate, specialistRate: specialistShareRate } =
+      await this.calculateCommissionSplit(
+        process.specialist,
+        platformCompany,
+        process.client?.consultant?.company_id ?? null,
+      );
 
     const round2 = (n: number) => Math.round(n * 100) / 100;
-
-    // Arredonda antes de comparar — evita falso-negativo por erro de ponto
-    // flutuante (ex: 1.00 + 1.03 = 2.0300000000000002 em IEEE-754).
-    const lockedFloor = round2(platformRate + officeRate);
-    if (totalCommissionRate < lockedFloor) {
-      throw new BadRequestException(
-        `Comissão total (${totalCommissionRate}%) não pode ser menor que a soma das taxas já travadas de plataforma (${platformRate}%) + escritório (${officeRate}%).`,
-      );
-    }
 
     const proposalValue = process.accepted_proposal
       ? Number(process.accepted_proposal.proposed_value)
@@ -519,20 +513,25 @@ export class ContractsService {
       );
     }
 
-    // Plataforma/escritório arredondados primeiro; especialista recebe o
-    // resíduo do TOTAL arredondado — garante soma exata por construção.
-    const platformValue = round2((proposalValue * platformRate) / 100);
-    const officeValue = round2((proposalValue * officeRate) / 100);
-    const totalValue = round2((proposalValue * totalCommissionRate) / 100);
-    const specialistValue = round2(totalValue - platformValue - officeValue);
+    // Split aninhado — ver commission-split.ts. Soma exata por construção.
+    const split = computeNestedCommissionSplit({
+      proposalValue,
+      totalCommissionRate,
+      specialistShareRate,
+      officeShareRate: officeRate,
+    });
+
+    // Taxas efetivas sobre a venda (para o documento do contrato).
+    const effectiveRate = (value: number) =>
+      proposalValue > 0 ? round2((value / proposalValue) * 100) : 0;
 
     return {
-      platformRate,
-      officeRate,
-      specialistRate: round2(totalCommissionRate - lockedFloor),
-      platformValue,
-      officeValue,
-      specialistValue,
+      platformRate: effectiveRate(split.platformValue),
+      officeRate: effectiveRate(split.officeValue),
+      specialistRate: effectiveRate(split.specialistValue),
+      platformValue: split.platformValue,
+      officeValue: split.officeValue,
+      specialistValue: split.specialistValue,
     };
   }
 

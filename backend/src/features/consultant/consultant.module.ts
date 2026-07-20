@@ -3,7 +3,9 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ConsultantController } from './consultant.controller';
 import { ConsultantService } from './consultant.service';
+import { ClientInviteJobsService } from './client-invite-jobs.service';
 import { AwsModule } from 'src/aws/aws.module';
+import { XlsxImportService } from 'src/shared/services/xlsx-import.service';
 
 @Module({
   imports: [
@@ -17,6 +19,6 @@ import { AwsModule } from 'src/aws/aws.module';
     }),
   ],
   controllers: [ConsultantController],
-  providers: [ConsultantService],
+  providers: [ConsultantService, ClientInviteJobsService, XlsxImportService],
 })
 export class ConsultantModule {}
