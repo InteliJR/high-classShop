@@ -12,6 +12,7 @@ import {
   Sliders,
   Receipt,
   Download,
+  FileText,
 } from "lucide-react";
 import {
   getCompanies,
@@ -27,6 +28,7 @@ import {
   getSalesCommissions,
   type SaleCommission,
 } from "../../services/commissions.service";
+import { openPrintablePdf } from "../../utils/export";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -75,6 +77,36 @@ function exportSalesCsv(sales: SaleCommission[]) {
   a.download = "comissoes-por-venda.csv";
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function exportSalesPdf(sales: SaleCommission[]) {
+  const header = [
+    "Produto",
+    "Cliente",
+    "Especialista",
+    "Venda",
+    "Comissão total",
+    "% total",
+    "Especialista (R$)",
+    "Escritório",
+    "Escritório (R$)",
+    "Plataforma (R$)",
+    "Assinado em",
+  ];
+  const rows = sales.map((s) => [
+    s.productLabel,
+    s.clientName,
+    s.specialistName,
+    s.saleValue,
+    s.totalCommission,
+    s.totalCommissionRate,
+    s.specialistValue,
+    s.officeName ?? "",
+    s.officeValue,
+    s.platformValue,
+    s.signedAt ? new Date(s.signedAt).toLocaleDateString("pt-BR") : "",
+  ]);
+  openPrintablePdf("Comissões por venda", header, rows);
 }
 
 type Tab = "config" | "sales";
@@ -151,10 +183,10 @@ export default function CommissionsPage() {
             )}
 
             <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600">
-              No modelo aninhado: o <b>especialista</b> leva uma fatia do total da
-              comissão (o “bolo”); o <b>escritório</b> leva uma fatia do{" "}
-              <b>restante</b>; a <b>plataforma</b> fica automaticamente com o que
-              sobra do restante (não é configurada aqui).
+              No modelo aninhado: o <b>especialista</b> leva uma fatia do total
+              da comissão; o <b>escritório</b> leva uma fatia do <b>restante</b>;
+              e a <b>plataforma</b> fica automaticamente com o que sobra do
+              restante (não é configurada aqui).
             </div>
 
             <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
@@ -203,7 +235,7 @@ export default function CommissionsPage() {
                 Especialistas
               </h2>
               <p className="text-sm text-gray-500 mb-4">
-                Fatia de cada especialista sobre o total da comissão (o “bolo”).
+                Fatia de cada especialista sobre o total da comissão.
               </p>
               <div className="flex flex-col gap-3">
                 {specialists.length === 0 ? (
@@ -297,7 +329,7 @@ function SalesCommissionsTab() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
         <button
           type="button"
           onClick={() => exportSalesCsv(sales)}
@@ -305,6 +337,14 @@ function SalesCommissionsTab() {
         >
           <Download className="w-4 h-4" />
           Exportar CSV
+        </button>
+        <button
+          type="button"
+          onClick={() => exportSalesPdf(sales)}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+        >
+          <FileText className="w-4 h-4" />
+          Exportar PDF
         </button>
       </div>
       {sales.map((s) => (
@@ -316,7 +356,7 @@ function SalesCommissionsTab() {
 
 function SaleCard({ sale }: { sale: SaleCommission }) {
   const hasOffice = sale.officeValue > 0 || !!sale.officeName;
-  // Fatia do especialista sobre o "bolo"; escritório/plataforma sobre o restante.
+  // Fatia do especialista sobre o total; escritório/plataforma sobre o restante.
   const specialistShareOfPool =
     sale.totalCommission > 0
       ? (sale.specialistValue / sale.totalCommission) * 100
@@ -349,7 +389,7 @@ function SaleCard({ sale }: { sale: SaleCommission }) {
           </span>
           <span className="text-gray-400">
             {" "}
-            ({sale.totalCommissionRate}% da venda) — o “bolo”
+            ({sale.totalCommissionRate}% da venda)
           </span>
         </div>
       </div>
@@ -359,7 +399,7 @@ function SaleCard({ sale }: { sale: SaleCommission }) {
           label="Especialista"
           value={sale.specialistValue}
           share={specialistShareOfPool}
-          shareLabel="do bolo"
+          shareLabel="do total"
           color="bg-emerald-500"
         />
 

@@ -10,10 +10,6 @@ import {
   type CompanyConsultant,
 } from "../../services/companies.service";
 import { adminInviteOffice, officeService, type OfficeClient } from "../../services/office";
-import {
-  getPlatformCompany,
-  type PlatformCompany,
-} from "../../services/platform-company.service";
 import type { PaginationMeta } from "../../types/types";
 import Button from "../../components/ui/button";
 import EditIcon from "../../assets/icons/edit.svg";
@@ -68,7 +64,6 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [platformData, setPlatformData] = useState<PlatformCompany | null>(null);
   const [isNewCompanyModalOpen, setIsNewCompanyModalOpen] = useState(false);
   const [companyToEdit, setCompanyToEdit] = useState<Company | null>(null);
   const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null);
@@ -99,12 +94,8 @@ export default function CompaniesPage() {
   const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
-      const [companiesData, platform] = await Promise.all([
-        getCompanies(),
-        getPlatformCompany().catch(() => null),
-      ]);
+      const companiesData = await getCompanies();
       setCompanies(companiesData);
-      setPlatformData(platform);
       setError(null);
     } catch (err) {
       setError("Não foi possível carregar os escritórios.");
@@ -309,7 +300,6 @@ export default function CompaniesPage() {
     return <p className="text-red-500">{error}</p>;
   }
 
-  const platformRate = platformData?.default_commission_rate ?? null;
 
   return (
     <div className="text-text-main w-full">
@@ -329,10 +319,9 @@ export default function CompaniesPage() {
         </p>
 
         {/* Cabeçalho da Lista */}
-        <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 px-4 py-2 text-base font-normal text-left text-text-secondary">
+        <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_auto] gap-5 px-4 py-2 text-base font-normal text-left text-text-secondary">
           <div>Empresa</div>
-          <div>% Plataforma</div>
-          <div>% Escritório</div>
+          <div>Escritório (% restante)</div>
           <div>Consultores</div>
           <div className="text-right">Ações</div>
         </div>
@@ -358,7 +347,7 @@ export default function CompaniesPage() {
                   className="rounded-lg shadow-sm bg-white overflow-hidden"
                 >
                   {/* Linha principal da empresa */}
-                  <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-3 md:gap-5 items-start md:items-center bg-brand-card p-4 md:p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_auto] gap-3 md:gap-5 items-start md:items-center bg-brand-card p-4 md:p-6">
                     <div className="flex items-center gap-3">
                       {/* Botão expand/collapse */}
                       <button
@@ -398,18 +387,7 @@ export default function CompaniesPage() {
                       </div>
                     </div>
 
-                    {/* % Plataforma */}
-                    <div>
-                      {platformRate !== null ? (
-                        <span className="inline-flex items-center gap-1 text-sm font-medium text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full">
-                          {platformRate}%
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 text-sm">—</span>
-                      )}
-                    </div>
-
-                    {/* % Escritório */}
+                    {/* % Escritório (fatia do restante) */}
                     <div>
                       {company.commission_rate != null ? (
                         <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
