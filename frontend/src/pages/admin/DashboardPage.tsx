@@ -16,7 +16,6 @@ import {
   getDashboardStats,
   type DashboardStats,
 } from "../../services/dashboard.service";
-import { getSpecialists } from "../../services/specialists.service";
 import { AppContext } from "../../contexts/AppContext";
 
 export default function DashboardPage() {
@@ -25,7 +24,6 @@ export default function DashboardPage() {
   // Estado para armazenar as estatísticas reais
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [specialistsCount, setSpecialistsCount] = useState(0);
 
   // Limpar barra de pesquisa ao entrar no Dashboard
   useEffect(() => {
@@ -47,18 +45,7 @@ export default function DashboardPage() {
     fetchStats();
   }, []);
 
-  // Buscar quantidade de especialistas
-  useEffect(() => {
-    async function fetchSpecialists() {
-      try {
-        const specialists = await getSpecialists();
-        setSpecialistsCount(specialists.length);
-      } catch (error) {
-        console.error("Erro ao carregar especialistas:", error);
-      }
-    }
-    fetchSpecialists();
-  }, []);
+  const specialistsCount = stats?.specialistsCount ?? 0;
   const salesByMonth = stats?.salesByMonth ?? [];
   const consultantsPerformance = stats?.consultantsPerformance ?? [];
 

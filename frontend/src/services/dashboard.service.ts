@@ -5,6 +5,7 @@ export interface DashboardStats {
   conversionRate: number;
   activeCompanies: number;
   totalClients: number;
+  specialistsCount: number;
   totalProducts: number;
   productsByType: { cars: number; boats: number; aircrafts: number };
   salesByMonth: MonthData[];
