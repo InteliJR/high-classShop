@@ -509,6 +509,7 @@ model User {
   advisorRelation          CustomerAdvisor?       @relation("CustomerAdvisors")
   advisorOf                CustomerAdvisor[]      @relation("AdvisorOf")
   consultant_invite_jobs   ConsultantInviteJob[]  @relation("OfficeInviteJobs")
+  client_invite_jobs       ClientInviteJob[]      @relation("ClientInviteJobsByConsultant")
 }
 
 model CalendlyConnection {
@@ -1381,6 +1382,52 @@ model ConsultantInviteJobItem {
   updated_at    DateTime                   @updatedAt
 
   job ConsultantInviteJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+
+  @@index([job_id])
+  @@index([status])
+  @@index([email])
+}
+
+// Job assíncrono criado pelo CONSULTOR para convidar clientes em lote (CSV).
+// Espelha ConsultantInviteJob (reaproveita os mesmos enums de status).
+model ClientInviteJob {
+  id              String                    @id @default(uuid()) @db.Uuid
+  consultant_id   String                    @db.Uuid
+  status          ConsultantInviteJobStatus @default(PENDING)
+  total_items     Int                       @default(0)
+  processed_items Int                       @default(0)
+  success_items   Int                       @default(0)
+  failed_items    Int                       @default(0)
+  duplicate_items Int                       @default(0)
+  started_at      DateTime?
+  finished_at     DateTime?
+  error_message   String?
+  created_at      DateTime                  @default(now())
+  updated_at      DateTime                  @updatedAt
+
+  consultant User                  @relation("ClientInviteJobsByConsultant", fields: [consultant_id], references: [id], onDelete: Cascade)
+  items      ClientInviteJobItem[]
+
+  @@index([consultant_id])
+  @@index([status])
+  @@index([created_at])
+}
+
+model ClientInviteJobItem {
+  id            String                     @id @default(uuid()) @db.Uuid
+  job_id        String                     @db.Uuid
+  row_number    Int
+  name          String
+  email         String
+  status        ConsultantInviteItemStatus @default(PENDING)
+  token         String?                    @unique
+  error_message String?
+  attempts      Int                        @default(0)
+  processed_at  DateTime?
+  created_at    DateTime                   @default(now())
+  updated_at    DateTime                   @updatedAt
+
+  job ClientInviteJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
 
   @@index([job_id])
   @@index([status])

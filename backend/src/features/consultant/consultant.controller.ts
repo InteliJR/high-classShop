@@ -11,7 +11,11 @@ import {
   HttpStatus,
   Request,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ConsultantService } from './consultant.service';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SendInvitationDto } from './dto/send-invitation.dto';
@@ -21,11 +25,15 @@ import { ClientEntity } from './entity/client.entity';
 import * as auth from 'src/auth/dto/auth';
 import { Roles } from 'src/shared/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { ClientInviteJobsService } from './client-invite-jobs.service';
 
 @Controller('consultant')
 @Roles(UserRole.CONSULTANT)
 export class ConsultantController {
-  constructor(private readonly consultantService: ConsultantService) {}
+  constructor(
+    private readonly consultantService: ConsultantService,
+    private readonly inviteJobs: ClientInviteJobsService,
+  ) {}
 
   /**
    * Helper method to validate UUID format
@@ -80,6 +88,30 @@ export class ConsultantController {
         messageId: result.messageId,
       },
     };
+  }
+
+  // ─── Convite de clientes em lote (CSV) ───────────────────────────────────
+  @Post('invite-jobs')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 + 1 } }),
+  )
+  createInviteJob(
+    @Request() req: auth.RequestWithUser,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('CSV obrigatório (campo "file")');
+    return this.inviteJobs.createJobFromCsv(req.user.id, file.buffer);
+  }
+
+  @Get('invite-jobs')
+  listInviteJobs(@Request() req: auth.RequestWithUser) {
+    return this.inviteJobs.listJobs(req.user.id);
+  }
+
+  @Get('invite-jobs/:id')
+  getInviteJob(@Request() req: auth.RequestWithUser, @Param('id') id: string) {
+    return this.inviteJobs.getJobStatus(req.user.id, id);
   }
 
   /**
