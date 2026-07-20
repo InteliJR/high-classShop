@@ -1,9 +1,17 @@
-// Página consolidada de comissões (ADMIN) — plataforma, escritórios e especialistas
-// num só lugar, editável a qualquer momento. Reaproveita os endpoints já
-// existentes (platform-company, companies, specialists); não há endpoint novo.
+// Página consolidada de comissões (ADMIN). Duas abas:
+//  - "Configurar taxas": edição das fatias (plataforma, escritórios, especialistas).
+//  - "Por venda": fluxo de comissão de cada venda fechada (quanto vai para cada parte).
 
-import { useEffect, useState } from "react";
-import { Percent, Save, AlertCircle, Check, Loader } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  Percent,
+  Save,
+  AlertCircle,
+  Check,
+  Loader,
+  Sliders,
+  Receipt,
+} from "lucide-react";
 import {
   getPlatformCompany,
   updatePlatformCompany,
@@ -19,8 +27,19 @@ import {
   updateSpecialist,
   type Specialist,
 } from "../../services/specialists.service";
+import {
+  getSalesCommissions,
+  type SaleCommission,
+} from "../../services/commissions.service";
+
+const brl = (n: number) =>
+  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+type Tab = "config" | "sales";
 
 export default function CommissionsPage() {
+  const [tab, setTab] = useState<Tab>("config");
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,14 +90,6 @@ export default function CommissionsPage() {
     setSpecialists((prev) => prev.map((s) => (s.id === id ? updated : s)));
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader className="w-8 h-8 animate-spin text-gray-400" />
-      </div>
-    );
-  }
-
   return (
     <div className="text-text-main w-full">
       <div className="flex items-center gap-3 mb-6">
@@ -86,92 +97,315 @@ export default function CommissionsPage() {
         <div>
           <h1 className="h1-style">Comissões</h1>
           <p className="text-sm text-gray-500">
-            Comissão de cada especialista, escritório e da plataforma — editável a
-            qualquer momento.
+            Comissão de cada especialista, escritório e da plataforma — e o fluxo
+            de cada venda.
           </p>
         </div>
       </div>
 
-      {error && (
-        <div className="mb-6 flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <p className="text-sm">{error}</p>
-        </div>
-      )}
+      <div className="flex gap-1 border-b border-gray-200 mb-6">
+        <TabButton
+          active={tab === "config"}
+          onClick={() => setTab("config")}
+          icon={<Sliders className="w-4 h-4" />}
+          label="Configurar taxas"
+        />
+        <TabButton
+          active={tab === "sales"}
+          onClick={() => setTab("sales")}
+          icon={<Receipt className="w-4 h-4" />}
+          label="Por venda"
+        />
+      </div>
 
-      <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Plataforma</h2>
-        <p className="text-sm text-gray-500 mb-4">
-          Taxa padrão usada quando especialista/escritório não têm taxa própria.
-        </p>
-        {platform && (
-          <RateRow
-            label={platform.name}
-            initialRate={platform.default_commission_rate}
-            onSave={savePlatformRate}
-          />
-        )}
-      </section>
-
-      <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Escritórios</h2>
-        <p className="text-sm text-gray-500 mb-4">
-          Para cada escritório: quanto a plataforma cobra dele (sobrepõe a taxa
-          padrão global quando definida) e quanto o próprio escritório fica.
-        </p>
-        <div className="flex flex-col gap-4">
-          {companies.length === 0 ? (
-            <p className="text-sm text-gray-400">Nenhum escritório cadastrado.</p>
-          ) : (
-            companies.map((company) => (
-              <div
-                key={company.id}
-                className="border border-gray-200 rounded-lg p-3"
-              >
-                <p className="font-medium text-gray-800 mb-2">{company.name}</p>
-                <div className="flex flex-col gap-2">
-                  <RateRow
-                    label="Plataforma sobre este escritório"
-                    initialRate={
-                      company.platform_commission_rate ??
-                      platform?.default_commission_rate ??
-                      0
-                    }
-                    onSave={(rate) => savePlatformRateForCompany(company.id, rate)}
-                  />
-                  <RateRow
-                    label="Taxa do escritório"
-                    initialRate={company.commission_rate ?? 0}
-                    onSave={(rate) => saveCompanyRate(company.id, rate)}
-                  />
-                </div>
+      {tab === "config" &&
+        (loading ? (
+          <CenterLoader />
+        ) : (
+          <>
+            {error && (
+              <div className="mb-6 flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <p className="text-sm">{error}</p>
               </div>
-            ))
-          )}
-        </div>
-      </section>
+            )}
 
-      <section className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Especialistas</h2>
-        <p className="text-sm text-gray-500 mb-4">
-          Comissão individual de cada especialista (usada quando não pertence a um
-          escritório, ou sobrepõe a taxa do escritório quando definida).
-        </p>
-        <div className="flex flex-col gap-3">
-          {specialists.length === 0 ? (
-            <p className="text-sm text-gray-400">Nenhum especialista cadastrado.</p>
-          ) : (
-            specialists.map((specialist) => (
-              <RateRow
-                key={specialist.id}
-                label={`${specialist.name} ${specialist.surname}`}
-                initialRate={specialist.commission_rate ?? 0}
-                onSave={(rate) => saveSpecialistRate(specialist.id, rate)}
-              />
-            ))
-          )}
+            <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">
+                Plataforma
+              </h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Taxa padrão usada quando especialista/escritório não têm taxa
+                própria.
+              </p>
+              {platform && (
+                <RateRow
+                  label={platform.name}
+                  initialRate={platform.default_commission_rate}
+                  onSave={savePlatformRate}
+                />
+              )}
+            </section>
+
+            <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">
+                Escritórios
+              </h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Para cada escritório: quanto a plataforma cobra dele (sobrepõe a
+                taxa padrão global quando definida) e quanto o próprio escritório
+                fica.
+              </p>
+              <div className="flex flex-col gap-4">
+                {companies.length === 0 ? (
+                  <p className="text-sm text-gray-400">
+                    Nenhum escritório cadastrado.
+                  </p>
+                ) : (
+                  companies.map((company) => (
+                    <div
+                      key={company.id}
+                      className="border border-gray-200 rounded-lg p-3"
+                    >
+                      <p className="font-medium text-gray-800 mb-2">
+                        {company.name}
+                      </p>
+                      <div className="flex flex-col gap-2">
+                        <RateRow
+                          label="Plataforma sobre este escritório"
+                          initialRate={
+                            company.platform_commission_rate ??
+                            platform?.default_commission_rate ??
+                            0
+                          }
+                          onSave={(rate) =>
+                            savePlatformRateForCompany(company.id, rate)
+                          }
+                        />
+                        <RateRow
+                          label="Taxa do escritório"
+                          initialRate={company.commission_rate ?? 0}
+                          onSave={(rate) => saveCompanyRate(company.id, rate)}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="bg-white rounded-lg border border-gray-200 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">
+                Especialistas
+              </h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Comissão individual de cada especialista (usada quando não
+                pertence a um escritório, ou sobrepõe a taxa do escritório quando
+                definida).
+              </p>
+              <div className="flex flex-col gap-3">
+                {specialists.length === 0 ? (
+                  <p className="text-sm text-gray-400">
+                    Nenhum especialista cadastrado.
+                  </p>
+                ) : (
+                  specialists.map((specialist) => (
+                    <RateRow
+                      key={specialist.id}
+                      label={`${specialist.name} ${specialist.surname}`}
+                      initialRate={specialist.commission_rate ?? 0}
+                      onSave={(rate) => saveSpecialistRate(specialist.id, rate)}
+                    />
+                  ))
+                )}
+              </div>
+            </section>
+          </>
+        ))}
+
+      {tab === "sales" && <SalesCommissionsTab />}
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+        active
+          ? "border-slate-700 text-slate-800"
+          : "border-transparent text-gray-500 hover:text-gray-700"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function CenterLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[300px]">
+      <Loader className="w-8 h-8 animate-spin text-gray-400" />
+    </div>
+  );
+}
+
+// ── Aba "Por venda": fluxo de comissão de cada venda fechada ────────────────
+function SalesCommissionsTab() {
+  const [sales, setSales] = useState<SaleCommission[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSalesCommissions()
+      .then(setSales)
+      .catch((err) =>
+        setError((err as Error).message || "Erro ao carregar vendas."),
+      )
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <CenterLoader />;
+  if (error)
+    return (
+      <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <AlertCircle className="w-5 h-5 flex-shrink-0" />
+        <p className="text-sm">{error}</p>
+      </div>
+    );
+  if (sales.length === 0)
+    return (
+      <p className="text-sm text-gray-400 p-4">
+        Nenhuma venda fechada ainda.
+      </p>
+    );
+
+  return (
+    <div className="flex flex-col gap-5">
+      {sales.map((s) => (
+        <SaleCard key={s.processId} sale={s} />
+      ))}
+    </div>
+  );
+}
+
+function SaleCard({ sale }: { sale: SaleCommission }) {
+  const hasOffice = sale.officeValue > 0 || !!sale.officeName;
+  // Fatia do especialista sobre o "bolo"; escritório/plataforma sobre o restante.
+  const specialistShareOfPool =
+    sale.totalCommission > 0
+      ? (sale.specialistValue / sale.totalCommission) * 100
+      : 0;
+  const officeShareOfRest =
+    sale.restante > 0 ? (sale.officeValue / sale.restante) * 100 : 0;
+  const platformShareOfRest =
+    sale.restante > 0 ? (sale.platformValue / sale.restante) * 100 : 0;
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
+        <h3 className="font-semibold text-gray-900">{sale.productLabel}</h3>
+        <span className="text-xs text-gray-400">
+          Cliente {sale.clientName} · Especialista {sale.specialistName}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-x-8 gap-y-1 mb-4 text-sm">
+        <div>
+          <span className="text-gray-500">Venda: </span>
+          <span className="font-semibold text-gray-900">
+            {brl(sale.saleValue)}
+          </span>
         </div>
-      </section>
+        <div>
+          <span className="text-gray-500">Comissão total: </span>
+          <span className="font-semibold text-gray-900">
+            {brl(sale.totalCommission)}
+          </span>
+          <span className="text-gray-400">
+            {" "}
+            ({sale.totalCommissionRate}% da venda) — o “bolo”
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <SplitBar
+          label="Especialista"
+          value={sale.specialistValue}
+          share={specialistShareOfPool}
+          shareLabel="do bolo"
+          color="bg-emerald-500"
+        />
+
+        <div className="pl-3 border-l-2 border-gray-200 ml-1 flex flex-col gap-3">
+          <p className="text-xs text-gray-400">
+            restante {brl(sale.restante)}
+            {!hasOffice && " (sem escritório → 100% plataforma)"}
+          </p>
+          {hasOffice && (
+            <SplitBar
+              label={`Escritório${sale.officeName ? ` (${sale.officeName})` : ""}`}
+              value={sale.officeValue}
+              share={officeShareOfRest}
+              shareLabel="do restante"
+              color="bg-sky-500"
+            />
+          )}
+          <SplitBar
+            label="Plataforma"
+            value={sale.platformValue}
+            share={platformShareOfRest}
+            shareLabel="do restante"
+            color="bg-violet-500"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SplitBar({
+  label,
+  value,
+  share,
+  shareLabel,
+  color,
+}: {
+  label: string;
+  value: number;
+  share: number;
+  shareLabel: string;
+  color: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span className="w-56 min-w-[140px] text-sm text-gray-700">{label}</span>
+      <div className="flex-1 min-w-[120px] h-2.5 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full ${color}`}
+          style={{ width: `${Math.min(100, Math.max(0, share))}%` }}
+        />
+      </div>
+      <span className="w-28 text-right text-sm font-medium text-gray-900">
+        {brl(value)}
+      </span>
+      <span className="w-32 text-right text-xs text-gray-400">
+        {Math.round(share)}% {shareLabel}
+      </span>
     </div>
   );
 }
@@ -212,7 +446,9 @@ function RateRow({
 
   return (
     <div className="flex flex-wrap items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-      <span className="flex-1 min-w-[160px] font-medium text-gray-800">{label}</span>
+      <span className="flex-1 min-w-[160px] font-medium text-gray-800">
+        {label}
+      </span>
       <div className="flex items-center gap-2">
         <input
           type="number"
