@@ -6,6 +6,8 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  Download,
+  FileText,
 } from "lucide-react";
 import {
   getEntities,
@@ -13,6 +15,7 @@ import {
   type EntityInfo,
   type RecordsPage,
 } from "../../services/admin-database.service";
+import { downloadCsv, openPrintablePdf } from "../../utils/export";
 
 const PAGE_SIZE = 20;
 
@@ -64,6 +67,9 @@ export default function DatabasePage() {
   const totalPages = result
     ? Math.max(1, Math.ceil(result.total / result.pageSize))
     : 1;
+  const activeLabel =
+    entities.find((e) => e.key === active)?.label ?? active ?? "";
+  const exportRows = () => rows.map((r) => columns.map((c) => formatCell(r[c])));
 
   return (
     <div className="text-text-main w-full">
@@ -112,9 +118,32 @@ export default function DatabasePage() {
         <p className="text-sm text-gray-400 p-4">Nenhum registro.</p>
       ) : (
         <>
-          <div className="overflow-x-auto border border-gray-200 rounded-lg">
+          <div className="flex justify-end gap-2 mb-3">
+            <button
+              type="button"
+              onClick={() => downloadCsv(`${active}.csv`, columns, exportRows())}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              <Download className="w-4 h-4" /> CSV
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                openPrintablePdf(
+                  `Base de dados — ${activeLabel}`,
+                  columns,
+                  exportRows(),
+                )
+              }
+              className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              <FileText className="w-4 h-4" /> PDF
+            </button>
+          </div>
+
+          <div className="overflow-auto border border-gray-200 rounded-lg max-h-[65vh]">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
                   {columns.map((c) => (
                     <th
