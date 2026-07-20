@@ -9,6 +9,7 @@ import {
 import Button from "../../components/ui/button";
 import Modal from "../../components/ui/Modal";
 import InviteClientForm from "./InviteClientForm";
+import BatchInviteClients from "./BatchInviteClients";
 import EditClientForm from "./EditClientForm";
 import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import TrashIcon from "../../assets/icons/trash.svg";
@@ -57,6 +58,7 @@ export default function ConsultantClientsPage() {
   const [loadingProcesses, setLoadingProcesses] = useState<string | null>(null);
 
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
   const [clientToEdit, setClientToEdit] = useState<Client | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
 
@@ -122,9 +124,14 @@ export default function ConsultantClientsPage() {
     <div className="text-text-main w-full">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="h1-style">Meus Clientes</h1>
-        <Button type="button" onClick={() => setIsInviteModalOpen(true)}>
-          + Convidar Cliente
-        </Button>
+        <div className="flex gap-2">
+          <Button type="button" onClick={() => setIsBatchModalOpen(true)}>
+            Convite em lote
+          </Button>
+          <Button type="button" onClick={() => setIsInviteModalOpen(true)}>
+            + Convidar Cliente
+          </Button>
+        </div>
       </div>
 
       <div className="p-6 rounded-lg shadow bg-white">
@@ -228,6 +235,10 @@ export default function ConsultantClientsPage() {
       {/* Modais */}
       <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)}>
         <InviteClientForm onSuccess={() => { setIsInviteModalOpen(false); fetchClients(); }} />
+      </Modal>
+
+      <Modal isOpen={isBatchModalOpen} onClose={() => setIsBatchModalOpen(false)}>
+        <BatchInviteClients onClose={() => setIsBatchModalOpen(false)} />
       </Modal>
 
       <Modal isOpen={!!clientToEdit} onClose={() => setClientToEdit(null)}>
