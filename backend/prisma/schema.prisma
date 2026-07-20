@@ -510,6 +510,9 @@ model User {
   advisorOf                CustomerAdvisor[]      @relation("AdvisorOf")
   consultant_invite_jobs   ConsultantInviteJob[]  @relation("OfficeInviteJobs")
   client_invite_jobs       ClientInviteJob[]      @relation("ClientInviteJobsByConsultant")
+
+  @@index([role])
+  @@index([consultant_id])
 }
 
 model CalendlyConnection {
@@ -875,6 +878,7 @@ model Process {
   @@index([product_type])
   @@index([product_id])
   @@index([created_at])
+  @@index([status, updated_at])
 }
 
 // MeetingSession: sessão de videoconferência criada na plataforma para um processo
