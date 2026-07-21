@@ -250,19 +250,19 @@ export default function ConsultantClientsPage() {
 
       {/* Modais */}
       <Dialog open={isInviteModalOpen} onOpenChange={setIsInviteModalOpen}>
-        <DialogContent title="Convidar cliente" hideTitle>
+        <DialogContent open={isInviteModalOpen} title="Convidar cliente" hideTitle>
           <InviteClientForm onSuccess={() => { setIsInviteModalOpen(false); fetchClients(); }} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={isBatchModalOpen} onOpenChange={setIsBatchModalOpen}>
-        <DialogContent title="Convite de clientes em lote" hideTitle>
+        <DialogContent open={isBatchModalOpen} title="Convite de clientes em lote" hideTitle>
           <BatchInviteClients onClose={() => setIsBatchModalOpen(false)} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!clientToEdit} onOpenChange={(open) => !open && setClientToEdit(null)}>
-        <DialogContent title="Editar cliente" hideTitle>
+        <DialogContent open={!!clientToEdit} title="Editar cliente" hideTitle>
           {clientToEdit && (
             <EditClientForm client={clientToEdit} onSuccess={() => { setClientToEdit(null); fetchClients(); }} />
           )}
@@ -270,7 +270,7 @@ export default function ConsultantClientsPage() {
       </Dialog>
 
       <Dialog open={!!clientToDelete} onOpenChange={(open) => !open && setClientToDelete(null)}>
-        <DialogContent title="Confirmar remoção">
+        <DialogContent open={!!clientToDelete} title="Confirmar remoção">
           <div>
             <p className="text-muted mb-6">
               Remover <strong className="text-ink">{clientToDelete?.name} {clientToDelete?.surname}</strong>? O cliente não será apagado, apenas desvinculado.

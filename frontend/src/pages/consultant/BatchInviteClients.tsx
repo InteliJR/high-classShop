@@ -118,8 +118,8 @@ export default function BatchInviteClients({
             )}
           </div>
 
-          <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
-            <table className="min-w-full text-sm">
+          <div className="max-h-64 overflow-y-auto overflow-x-auto border border-gray-200 rounded-lg">
+            <table className="min-w-[420px] text-sm">
               <tbody>
                 {job.items.map((it) => (
                   <tr key={it.row_number} className="border-t border-gray-100">

@@ -1,5 +1,6 @@
 import type { HTMLAttributes } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "../../lib/utils";
 
 const alertVariants = cva("flex gap-3 items-start rounded-md border px-4 py-3 text-sm", {
@@ -17,9 +18,19 @@ const alertVariants = cva("flex gap-3 items-start rounded-md border px-4 py-3 te
 });
 
 export interface AlertProps
-  extends HTMLAttributes<HTMLDivElement>,
+  extends Omit<HTMLAttributes<HTMLDivElement>, "onDrag" | "onDragStart" | "onDragEnd" | "onAnimationStart" | "onAnimationEnd">,
     VariantProps<typeof alertVariants> {}
 
 export function Alert({ className, variant, ...props }: AlertProps) {
-  return <div role="alert" className={cn(alertVariants({ variant }), className)} {...props} />;
+  const shouldReduceMotion = useReducedMotion();
+  return (
+    <motion.div
+      role="alert"
+      className={cn(alertVariants({ variant }), className)}
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: shouldReduceMotion ? 0 : 0.15 }}
+      {...props}
+    />
+  );
 }
