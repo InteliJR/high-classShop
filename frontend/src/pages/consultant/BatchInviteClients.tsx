@@ -56,7 +56,7 @@ export default function BatchInviteClients({
   };
 
   return (
-    <div className="w-[min(560px,90vw)]">
+    <div className="w-full">
       <h2 className="h2-style mb-1">Convite de clientes em lote</h2>
       <p className="text-sm text-gray-500 mb-4">
         Envie um CSV com as colunas <b>name</b> e <b>email</b>. Cada cliente
