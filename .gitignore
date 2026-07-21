@@ -137,3 +137,6 @@ Contratodevenda.json
 # Contexto AI
 # A estrutura `ai/` é versionada; conteúdo sensível é protegido
 # por `ai/.gitignore` interno (regra: _private/* + !_private/README.md).
+
+# Git worktrees isolados (superpowers:using-git-worktrees)
+.worktrees/
