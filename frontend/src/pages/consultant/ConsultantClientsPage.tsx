@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   getClients,
@@ -7,13 +7,16 @@ import {
   type Client,
 } from "../../services/consultant.service";
 import Button from "../../components/ui/button";
-import Modal from "../../components/ui/Modal";
+import { Alert } from "../../components/ui/alert";
+import { Card } from "../../components/ui/card";
+import { Dialog, DialogContent } from "../../components/ui/dialog";
+import { PageHeader } from "../../components/patterns/PageHeader";
+import { StatusBadge } from "../../components/patterns/StatusBadge";
+import { EmptyState } from "../../components/patterns/EmptyState";
 import InviteClientForm from "./InviteClientForm";
 import BatchInviteClients from "./BatchInviteClients";
 import EditClientForm from "./EditClientForm";
-import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
-import TrashIcon from "../../assets/icons/trash.svg";
-import EditIcon from "../../assets/icons/edit.svg";
+import { ChevronDown, ChevronUp, Loader2, Pencil, Trash2, Plus, Users } from "lucide-react";
 
 type Process = {
   id: string;
@@ -21,24 +24,6 @@ type Process = {
   product_type: string | null;
   created_at: string;
   specialist?: { name: string; surname: string; speciality: string };
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  SCHEDULING: "Agendamento",
-  NEGOTIATION: "Negociação",
-  PROCESSING_CONTRACT: "Contrato",
-  DOCUMENTATION: "Documentação",
-  COMPLETED: "Concluído",
-  REJECTED: "Rejeitado",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  SCHEDULING: "bg-blue-100 text-blue-700",
-  NEGOTIATION: "bg-yellow-100 text-yellow-700",
-  PROCESSING_CONTRACT: "bg-orange-100 text-orange-700",
-  DOCUMENTATION: "bg-purple-100 text-purple-700",
-  COMPLETED: "bg-green-100 text-green-700",
-  REJECTED: "bg-red-100 text-red-700",
 };
 
 function formatCPF(cpf: string | null): string {
@@ -118,147 +103,185 @@ export default function ConsultantClientsPage() {
     );
   }
 
-  if (error) return <p className="text-red-500">{error}</p>;
-
   return (
     <div className="text-text-main w-full">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="h1-style">Meus Clientes</h1>
-        <div className="flex gap-2">
-          <Button type="button" onClick={() => setIsBatchModalOpen(true)}>
-            Convite em lote
-          </Button>
-          <Button type="button" onClick={() => setIsInviteModalOpen(true)}>
-            + Convidar Cliente
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Meus Clientes"
+        actions={
+          <>
+            <Button type="button" variant="light" onClick={() => setIsBatchModalOpen(true)}>
+              Convite em lote
+            </Button>
+            <Button type="button" onClick={() => setIsInviteModalOpen(true)}>
+              <Plus size={16} />
+              Convidar cliente
+            </Button>
+          </>
+        }
+      />
 
-      <div className="p-6 rounded-lg shadow bg-white">
-        <h2 className="h2-style">Clientes</h2>
-        <p className="text-sm text-gray-500 mt-1 mb-6">
+      {error && (
+        <Alert variant="danger" className="mb-4">
+          {error}
+        </Alert>
+      )}
+
+      <Card>
+        <h2 className="text-h2 font-semibold text-ink mb-1">Clientes</h2>
+        <p className="text-sm text-muted mb-6">
           Expanda um cliente para ver seus processos. Para criar processo, abra o catálogo e clique em "Iniciar processo para cliente" no produto.
         </p>
 
         {clients.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            Nenhum cliente ainda. Clique em "+ Convidar Cliente" para começar.
-          </div>
+          <EmptyState
+            icon={Users}
+            title="Nenhum cliente ainda"
+            description='Clique em "Convidar cliente" para começar.'
+            action={
+              <Button type="button" onClick={() => setIsInviteModalOpen(true)}>
+                <Plus size={16} />
+                Convidar cliente
+              </Button>
+            }
+          />
         ) : (
-          <div className="flex flex-col gap-3">
-            {clients.map((client) => {
-              const isExpanded = expandedClient === client.id;
-              const processes = clientProcesses[client.id] ?? [];
-              const isLoadingProc = loadingProcesses === client.id;
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left text-xs uppercase tracking-wide text-muted font-semibold px-4 py-3">
+                    Cliente
+                  </th>
+                  <th className="text-left text-xs uppercase tracking-wide text-muted font-semibold px-4 py-3">
+                    E-mail
+                  </th>
+                  <th className="text-left text-xs uppercase tracking-wide text-muted font-semibold px-4 py-3">
+                    Cadastro
+                  </th>
+                  <th className="w-24 px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {clients.map((client) => {
+                  const isExpanded = expandedClient === client.id;
+                  const processes = clientProcesses[client.id] ?? [];
+                  const isLoadingProc = loadingProcesses === client.id;
 
-              return (
-                <div key={client.id} className="rounded-lg border border-gray-200 overflow-hidden">
-                  {/* Client row */}
-                  <div className="grid grid-cols-[auto_2fr_1.5fr_1fr_auto] gap-4 items-center px-4 py-4 bg-white">
-                    <button
-                      onClick={() => toggleExpand(client.id)}
-                      className="p-1 hover:bg-gray-100 rounded"
-                    >
-                      {isExpanded
-                        ? <ChevronUp className="w-5 h-5 text-gray-500" />
-                        : <ChevronDown className="w-5 h-5 text-gray-500" />
-                      }
-                    </button>
-
-                    <div>
-                      <p className="font-medium text-gray-900">{client.name} {client.surname}</p>
-                      <p className="text-xs text-gray-400">{formatCPF(client.cpf)}</p>
-                    </div>
-
-                    <p className="text-sm text-gray-600 truncate">{client.email}</p>
-
-                    <p className="text-xs text-gray-400">
-                      {client.created_at ? new Date(client.created_at).toLocaleDateString("pt-BR") : "-"}
-                    </p>
-
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setClientToEdit(client)} className="p-1.5 hover:bg-gray-100 rounded">
-                        <img src={EditIcon} alt="Editar" className="h-4 w-4" />
-                      </button>
-                      <button onClick={() => setClientToDelete(client)} className="p-1.5 hover:bg-red-50 rounded">
-                        <img src={TrashIcon} alt="Remover" className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Expanded: processes */}
-                  {isExpanded && (
-                    <div className="border-t border-gray-100 bg-gray-50 px-6 py-4">
-                      {isLoadingProc ? (
-                        <div className="flex items-center gap-2 text-gray-400 text-sm">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Carregando processos...
-                        </div>
-                      ) : processes.length === 0 ? (
-                        <p className="text-sm text-gray-500">Nenhum processo ainda.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                            Processos ({processes.length})
-                          </p>
-                          {processes.map((proc) => (
-                            <div
-                              key={proc.id}
-                              onClick={() => navigate(`/consultant/processes/${proc.id}`)}
-                              className="flex items-center justify-between bg-white rounded-lg px-4 py-3 border border-gray-100 hover:border-gray-300 cursor-pointer transition-colors"
+                  return (
+                    <Fragment key={client.id}>
+                      <tr className="border-b border-border-soft hover:bg-border-soft/50">
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => toggleExpand(client.id)}
+                            className="inline-flex items-center gap-2 font-medium text-ink"
+                          >
+                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            {client.name} {client.surname}
+                          </button>
+                          <p className="text-xs text-subtle mt-0.5 pl-6">{formatCPF(client.cpf)}</p>
+                        </td>
+                        <td className="px-4 py-3 text-muted truncate">{client.email}</td>
+                        <td className="px-4 py-3 text-muted">
+                          {client.created_at ? new Date(client.created_at).toLocaleDateString("pt-BR") : "-"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1 justify-end">
+                            <button
+                              onClick={() => setClientToEdit(client)}
+                              className="p-1.5 rounded hover:bg-border-soft text-ink-soft"
                             >
-                              <div className="flex items-center gap-3">
-                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[proc.status] ?? "bg-gray-100 text-gray-600"}`}>
-                                  {STATUS_LABELS[proc.status] ?? proc.status}
-                                </span>
-                                <span className="text-sm text-gray-600">
-                                  {proc.product_type ?? "Consultoria"} •{" "}
-                                  {proc.specialist ? `${proc.specialist.name} ${proc.specialist.surname}` : "—"}
-                                </span>
+                              <Pencil size={16} />
+                            </button>
+                            <button
+                              onClick={() => setClientToDelete(client)}
+                              className="p-1.5 rounded hover:bg-status-bad-wash text-status-bad"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={4} className="bg-border-soft/40 px-6 py-4">
+                            {isLoadingProc ? (
+                              <div className="flex items-center gap-2 text-subtle text-sm">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Carregando processos...
                               </div>
-                              <span className="text-xs text-gray-400">
-                                {new Date(proc.created_at).toLocaleDateString("pt-BR")}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                            ) : processes.length === 0 ? (
+                              <p className="text-sm text-muted">Nenhum processo ainda.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
+                                  Processos ({processes.length})
+                                </p>
+                                {processes.map((proc) => (
+                                  <div
+                                    key={proc.id}
+                                    onClick={() => navigate(`/consultant/processes/${proc.id}`)}
+                                    className="flex items-center justify-between bg-surface rounded-lg px-4 py-3 border border-border-soft hover:border-border cursor-pointer transition-colors"
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <StatusBadge status={proc.status} />
+                                      <span className="text-sm text-muted">
+                                        {proc.product_type ?? "Consultoria"} •{" "}
+                                        {proc.specialist ? `${proc.specialist.name} ${proc.specialist.surname}` : "—"}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs text-subtle">
+                                      {new Date(proc.created_at).toLocaleDateString("pt-BR")}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
                       )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Modais */}
-      <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)}>
-        <InviteClientForm onSuccess={() => { setIsInviteModalOpen(false); fetchClients(); }} />
-      </Modal>
+      <Dialog open={isInviteModalOpen} onOpenChange={setIsInviteModalOpen}>
+        <DialogContent title="Convidar cliente">
+          <InviteClientForm onSuccess={() => { setIsInviteModalOpen(false); fetchClients(); }} />
+        </DialogContent>
+      </Dialog>
 
-      <Modal isOpen={isBatchModalOpen} onClose={() => setIsBatchModalOpen(false)}>
-        <BatchInviteClients onClose={() => setIsBatchModalOpen(false)} />
-      </Modal>
+      <Dialog open={isBatchModalOpen} onOpenChange={setIsBatchModalOpen}>
+        <DialogContent title="Convite de clientes em lote">
+          <BatchInviteClients onClose={() => setIsBatchModalOpen(false)} />
+        </DialogContent>
+      </Dialog>
 
-      <Modal isOpen={!!clientToEdit} onClose={() => setClientToEdit(null)}>
-        {clientToEdit && (
-          <EditClientForm client={clientToEdit} onSuccess={() => { setClientToEdit(null); fetchClients(); }} />
-        )}
-      </Modal>
+      <Dialog open={!!clientToEdit} onOpenChange={(open) => !open && setClientToEdit(null)}>
+        <DialogContent title="Editar cliente">
+          {clientToEdit && (
+            <EditClientForm client={clientToEdit} onSuccess={() => { setClientToEdit(null); fetchClients(); }} />
+          )}
+        </DialogContent>
+      </Dialog>
 
-      <Modal isOpen={!!clientToDelete} onClose={() => setClientToDelete(null)}>
-        <div className="text-center">
-          <h2 className="h2-style mb-4">Confirmar Remoção</h2>
-          <p className="text-text-secondary mb-8">
-            Remover <strong>{clientToDelete?.name} {clientToDelete?.surname}</strong>? O cliente não será apagado, apenas desvinculado.
-          </p>
-          <div className="flex justify-center gap-4">
-            <Button onClick={() => setClientToDelete(null)}>Cancelar</Button>
-            <Button onClick={handleDelete}>Confirmar</Button>
+      <Dialog open={!!clientToDelete} onOpenChange={(open) => !open && setClientToDelete(null)}>
+        <DialogContent title="Confirmar remoção">
+          <div>
+            <p className="text-muted mb-6">
+              Remover <strong className="text-ink">{clientToDelete?.name} {clientToDelete?.surname}</strong>? O cliente não será apagado, apenas desvinculado.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="light" onClick={() => setClientToDelete(null)}>Cancelar</Button>
+              <Button variant="danger" onClick={handleDelete}>Confirmar</Button>
+            </div>
           </div>
-        </div>
-      </Modal>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
