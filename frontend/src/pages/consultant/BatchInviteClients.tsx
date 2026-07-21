@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2, Upload, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
 import Button from "../../components/ui/button";
 import {
   createClientInviteJob,
@@ -71,20 +71,18 @@ export default function BatchInviteClients({
           setJob(null);
           setError(null);
         }}
-        className="block w-full text-sm mb-4 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-gray-300 file:bg-gray-50 file:text-sm"
+        className="block w-full text-sm mb-4 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-border file:bg-border-soft file:text-sm"
       />
 
-      {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+      {error && (
+        <p className="text-sm text-status-bad mb-3">{error}</p>
+      )}
 
       {!job && (
         <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50"
-          >
+          <Button type="button" variant="light" onClick={onClose}>
             Cancelar
-          </button>
+          </Button>
           <Button type="button" onClick={upload} disabled={!file || uploading}>
             {uploading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -98,16 +96,25 @@ export default function BatchInviteClients({
 
       {job && (
         <div>
-          <div className="flex flex-wrap gap-4 text-sm mb-3">
-            <span className="text-green-700">✓ {job.successItems} enviados</span>
-            <span className="text-red-600">✗ {job.failedItems} falhas</span>
-            <span className="text-gray-500">
-              ↻ {job.duplicateItems} duplicados
+          <div className="flex flex-wrap items-center gap-4 text-sm mb-3">
+            <span className="flex items-center gap-1 text-status-ok">
+              <CheckCircle2 className="w-4 h-4" /> {job.successItems} enviados
+            </span>
+            <span className="flex items-center gap-1 text-status-bad">
+              <XCircle className="w-4 h-4" /> {job.failedItems} falhas
+            </span>
+            <span className="flex items-center gap-1 text-muted">
+              <RefreshCw className="w-4 h-4" /> {job.duplicateItems} duplicados
             </span>
             {!job.done && (
-              <span className="flex items-center gap-1 text-gray-500">
+              <span className="flex items-center gap-1 text-muted">
                 <Loader2 className="w-4 h-4 animate-spin" /> processando…
               </span>
+            )}
+            {!job.done && (
+              <Button type="button" variant="light" onClick={onClose} className="ml-auto">
+                Fechar (continua em segundo plano)
+              </Button>
             )}
           </div>
 
@@ -123,7 +130,7 @@ export default function BatchInviteClients({
                     <td className="px-2 py-1 whitespace-nowrap">
                       {STATUS_LABEL[it.status] ?? it.status}
                     </td>
-                    <td className="px-2 py-1 text-xs text-red-500">
+                    <td className="px-2 py-1 text-xs text-status-bad">
                       {it.error_message ?? ""}
                     </td>
                   </tr>
