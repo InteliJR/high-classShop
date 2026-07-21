@@ -113,7 +113,7 @@ Inventário completo do `components/ui/` (gerado via shadcn sobre Radix):
 
 | Componente | Situação hoje | Ação |
 |---|---|---|
-| `Button` | existe (`button.tsx`), hardcoda cores fora do token | reescrever com CVA, variantes: solid/light/muted/ghost/danger |
+| `Button` | existe (`button.tsx`), hardcoda cores fora do token | reescrever com CVA, variantes: solid/light/muted/brand/ghost/danger |
 | `StatusBadge` | não existe — 4 mapas de cor duplicados ad hoc | criar: pílula neutra + ponto de cor (ver [Status](#status)), prop única `status` |
 | `Input`/`Select` | reimplementado por página | criar, anel de foco único |
 | `Modal`/`Dialog` | **dois** componentes concorrentes (`ui/Modal.tsx`, `shared/Modal.tsx`) + ~10 modais hand-rolled | consolidar num só, sobre `Dialog` do Radix (título, X, ESC, clique-fora, Cancelar sempre visíveis) |

@@ -145,7 +145,7 @@ export default function ContractPreviewCallback() {
             <p className="text-sm text-slate-500 mb-4">
               Esta janela será fechada automaticamente...
             </p>
-            <Button variant="light" onClick={() => navigate("/specialist/processes")}>
+            <Button type="button" variant="light" onClick={() => navigate("/specialist/processes")}>
               Voltar para processos
             </Button>
           </>
@@ -158,7 +158,7 @@ export default function ContractPreviewCallback() {
               Cancelado
             </h1>
             <p className="text-slate-600 mb-6">{message}</p>
-            <Button onClick={handleClose}>Fechar</Button>
+            <Button type="button" onClick={handleClose}>Fechar</Button>
           </>
         )}
 
@@ -167,7 +167,7 @@ export default function ContractPreviewCallback() {
             <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
             <h1 className="text-xl font-semibold text-slate-800 mb-2">Erro</h1>
             <p className="text-slate-600 mb-6">{message}</p>
-            <Button onClick={handleClose}>Fechar</Button>
+            <Button type="button" onClick={handleClose}>Fechar</Button>
           </>
         )}
       </div>

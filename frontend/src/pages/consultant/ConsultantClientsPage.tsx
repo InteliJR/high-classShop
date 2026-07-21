@@ -96,8 +96,8 @@ export default function ConsultantClientsPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-3 border-gray-200 border-t-primary rounded-full animate-spin" />
-          <p className="text-gray-600">Carregando clientes...</p>
+          <div className="w-12 h-12 border-3 border-border-soft border-t-primary rounded-full animate-spin" />
+          <p className="text-muted">Carregando clientes...</p>
         </div>
       </div>
     );
@@ -250,19 +250,19 @@ export default function ConsultantClientsPage() {
 
       {/* Modais */}
       <Dialog open={isInviteModalOpen} onOpenChange={setIsInviteModalOpen}>
-        <DialogContent title="Convidar cliente">
+        <DialogContent title="Convidar cliente" hideTitle>
           <InviteClientForm onSuccess={() => { setIsInviteModalOpen(false); fetchClients(); }} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={isBatchModalOpen} onOpenChange={setIsBatchModalOpen}>
-        <DialogContent title="Convite de clientes em lote">
+        <DialogContent title="Convite de clientes em lote" hideTitle>
           <BatchInviteClients onClose={() => setIsBatchModalOpen(false)} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!clientToEdit} onOpenChange={(open) => !open && setClientToEdit(null)}>
-        <DialogContent title="Editar cliente">
+        <DialogContent title="Editar cliente" hideTitle>
           {clientToEdit && (
             <EditClientForm client={clientToEdit} onSuccess={() => { setClientToEdit(null); fetchClients(); }} />
           )}
@@ -276,8 +276,8 @@ export default function ConsultantClientsPage() {
               Remover <strong className="text-ink">{clientToDelete?.name} {clientToDelete?.surname}</strong>? O cliente não será apagado, apenas desvinculado.
             </p>
             <div className="flex justify-end gap-2">
-              <Button variant="light" onClick={() => setClientToDelete(null)}>Cancelar</Button>
-              <Button variant="danger" onClick={handleDelete}>Confirmar</Button>
+              <Button type="button" variant="light" onClick={() => setClientToDelete(null)}>Cancelar</Button>
+              <Button type="button" variant="danger" onClick={handleDelete}>Confirmar</Button>
             </div>
           </div>
         </DialogContent>
