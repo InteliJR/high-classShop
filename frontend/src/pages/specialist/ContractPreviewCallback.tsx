@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { CheckCircle, XCircle, AlertTriangle, Loader } from "lucide-react";
+import Button from "../../components/ui/button";
 
 /**
  * Página de callback para o DocuSign Sender View
@@ -108,10 +109,16 @@ export default function ContractPreviewCallback() {
     }
   }, [searchParams]);
 
-  // Tentar fechar a janela/tab se aberta em popup
+  const navigate = useNavigate();
+
+  // Tentar fechar a janela/tab se aberta em popup; se não for popup
+  // (acesso direto à URL, ou postMessage/iframe falhou), navega de volta
+  // em vez de deixar a tela sem nenhuma saída.
   const handleClose = () => {
     if (window.opener) {
       window.close();
+    } else {
+      navigate("/specialist/processes");
     }
   };
 
@@ -135,9 +142,12 @@ export default function ContractPreviewCallback() {
               Sucesso!
             </h1>
             <p className="text-slate-600 mb-6">{message}</p>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-500 mb-4">
               Esta janela será fechada automaticamente...
             </p>
+            <Button variant="light" onClick={() => navigate("/specialist/processes")}>
+              Voltar para processos
+            </Button>
           </>
         )}
 
@@ -148,12 +158,7 @@ export default function ContractPreviewCallback() {
               Cancelado
             </h1>
             <p className="text-slate-600 mb-6">{message}</p>
-            <button
-              onClick={handleClose}
-              className="px-6 py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition"
-            >
-              Fechar
-            </button>
+            <Button onClick={handleClose}>Fechar</Button>
           </>
         )}
 
@@ -162,12 +167,7 @@ export default function ContractPreviewCallback() {
             <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
             <h1 className="text-xl font-semibold text-slate-800 mb-2">Erro</h1>
             <p className="text-slate-600 mb-6">{message}</p>
-            <button
-              onClick={handleClose}
-              className="px-6 py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition"
-            >
-              Fechar
-            </button>
+            <Button onClick={handleClose}>Fechar</Button>
           </>
         )}
       </div>
