@@ -68,7 +68,7 @@ Global setup in `main.ts` + `app.module.ts`:
 
 Feature modules live in `backend/src/features/` — one folder per domain:
 - **Products**: `cars/`, `boats/`, `aircrafts/` — CRUD, CSV import (async job), Google Drive image import
-- **Actors**: `users/`, `consultants/` (admin CRUD), `consultant/` (advisor wallet), `specialists/`, `companies/`
+- **Actors**: `users/`, `consultants/` (admin CRUD), `consultant/` (carteira de clientes do consultor — convite individual/em lote, CRUD de clientes vinculados; **consultor não recebe comissão nesta plataforma**, não confundir com o especialista, que recebe via `Contract.specialist_commission_value`), `specialists/`, `companies/`
 - **Sales flow**: `processes/` → `appointments/` → `proposals/` → `contracts/` → `meetings/`
 - **Support**: `dashboard/`, `settings/`, `platform-company/`, `notifications/`, `product-import-jobs/`
 
@@ -119,6 +119,7 @@ Entry: `main.tsx` → `RouterProvider` wraps everything; `AuthProvider` + `Cooki
 
 - Supabase production DB has schema drift vs migrations — use `prisma db push` for additive changes in prod; never `migrate deploy` against prod without verifying
 - `CustomerAdvisor.customer_id` is `@unique` — one advisor/invite per customer; re-invite uses `upsert`
+- **Consultor não recebe comissão nesta plataforma** — regra de negócio, não lacuna a preencher. Só o especialista é remunerado por venda (`Contract.specialist_commission_value`); não existe `commission_rate`/`consultant_id` em `Process`/`Contract` para o consultor, e não deve ser adicionado sem alinhar antes — já foi mapeado por engano como "feature faltando" em auditoria anterior.
 
 ## Environment setup
 
