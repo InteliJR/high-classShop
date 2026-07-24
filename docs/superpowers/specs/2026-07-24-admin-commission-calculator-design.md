@@ -8,16 +8,21 @@ Dar ao ADMIN uma ferramenta de simulação: escolher um escritório e um especia
 
 ## Onde vive
 
-Nova 3ª aba **"Calculadora"** dentro da página já existente `/admin/commissions` (`frontend/src/pages/admin/CommissionsPage.tsx`), ao lado de "Configurar taxas" e "Por venda".
+**Página nova e independente**, não uma aba de "Comissões" — a calculadora é uma ferramenta de simulação avulsa, não um relatório/configuração de comissão real, então não faz sentido acoplar às abas existentes de `/admin/commissions`.
 
-**Sidebar**: nenhuma mudança necessária. `/admin/commissions` já está no menu ADMIN (`frontend/src/layouts/Sidebar.tsx:142-146`, label "Comissões", ícone `Percent`). Como a calculadora é uma aba dentro dessa mesma página, ela já fica acessível pelo link existente — adicionar uma segunda entrada de sidebar apontando pro mesmo lugar seria redundante.
+- Nova página `frontend/src/pages/admin/CalculatorPage.tsx`, rota `/admin/calculator`.
+- Nova entrada na sidebar ADMIN (`frontend/src/layouts/Sidebar.tsx`), label **"Calculadora"**, ícone `Calculator` (lucide-react), logo depois de "Comissões" e antes de "Base de dados":
+  ```
+  Dashboard → Escritórios → Especialistas → Comissões → Calculadora → Base de dados → Configurações → Minha Empresa
+  ```
+- Nova rota registrada em `frontend/src/routes/routes.tsx` (mesmo padrão das demais páginas ADMIN: import + entry em `path: "/admin/calculator"`).
 
 ## O que já existe e será reaproveitado
 
 - **Modelo de dados** (sem alteração): `Company.commission_rate` (taxa do escritório), `User.commission_rate` (taxa do especialista, role `SPECIALIST`). Ambos já são eixos independentes no modelo real — o "escritório da venda" e o "especialista" nunca foram acoplados um ao outro.
 - **Fórmula de split**: `computeNestedCommissionSplit()` em `backend/src/features/contracts/commission-split.ts`, já testada (`commission-split.spec.ts`). `bolo = venda × total%`; `especialista = bolo × fatiaEspecialista%`; `restante = bolo − especialista`; `escritório = restante × fatiaEscritório%`; `plataforma = restante − escritório`.
-- **Listas já carregadas**: `CommissionsPage` já busca `getCompanies()` e `getSpecialists()` pra aba "Configurar taxas" — a calculadora reaproveita esse mesmo estado, sem novo fetch de listas.
-- **Componente visual**: `SplitBar` (função local, não exportada, dentro de `CommissionsPage.tsx`, usada hoje em "Por venda") é reaproveitado tal qual para desenhar as barras do resultado — mesmas cores, mesma terminologia ("Comissão total", "Especialista", "Escritório", "Plataforma", "restante"). Sem usar a palavra "bolo" em nenhum texto de UI (convenção que a tela já segue hoje).
+- **Serviços de dados já existentes**: `getCompanies()` e `getSpecialists()` (`frontend/src/services/companies.service.ts` / `specialists.service.ts`) já são usados por `CommissionsPage`. `CalculatorPage`, sendo uma página separada, faz seu próprio fetch dessas mesmas duas funções (sem estado compartilhado entre páginas — cada página busca o que precisa, como as demais páginas ADMIN já fazem).
+- **Componente visual**: `SplitBar` existe hoje como função local não-exportada dentro de `CommissionsPage.tsx` (usada em "Por venda"). Como agora duas páginas distintas precisam dele, ele é **extraído** para `frontend/src/components/commissions/SplitBar.tsx` (mesma implementação, só movida) e importado nos dois lugares — evita duplicar as barras/cores/terminologia em vez de copiar o componente. Terminologia mantida: "Comissão total", "Especialista", "Escritório", "Plataforma", "restante" — sem a palavra "bolo" em nenhum texto de UI (convenção que a tela já segue hoje).
 
 ## O que é novo
 
@@ -35,14 +40,16 @@ Nova 3ª aba **"Calculadora"** dentro da página já existente `/admin/commissio
 ### Frontend
 
 - `simulateCommission(params)` em `frontend/src/services/commissions.service.ts` — GET com query params, mesmo padrão de `getSalesCommissions()`.
-- Aba "Calculadora" em `CommissionsPage.tsx` (ícone `Calculator` do `lucide-react`):
+- `SplitBar` extraído de `CommissionsPage.tsx` para `frontend/src/components/commissions/SplitBar.tsx` (ver acima); `CommissionsPage.tsx` passa a importar de lá em vez de declarar localmente.
+- Nova página `CalculatorPage.tsx`:
+  - Fetch próprio de `getCompanies()` + `getSpecialists()` ao montar (mesmo padrão de loading/erro das outras páginas ADMIN).
   - Dropdown Escritório (opções: lista de `companies` + "Nenhum").
   - Dropdown Especialista (opções: lista de `specialists` + "Nenhum").
   - Input Valor da venda (R$).
   - Input % Comissão total.
   - Debounce nativo (`setTimeout`/cleanup, sem lib) de ~250ms após qualquer mudança, chamando `simulateCommission()`.
-  - Resultado renderizado com `SplitBar` (3 barras: Especialista, Escritório — só se houver escritório selecionado —, Plataforma), igual ao layout de `SaleCard` na aba "Por venda", sem o cabeçalho de produto/cliente (que não existe aqui).
-- Sem botão salvar, sem histórico — ferramenta "e se" efêmera, estado perdido ao trocar de aba ou recarregar (nada disso foi pedido).
+  - Resultado renderizado com `SplitBar` (3 barras: Especialista, Escritório — só se houver escritório selecionado —, Plataforma), no mesmo estilo visual de `SaleCard` em "Por venda", sem o cabeçalho de produto/cliente (que não existe aqui).
+- Sem botão salvar, sem histórico — ferramenta "e se" efêmera, estado perdido ao sair da página ou recarregar (nada disso foi pedido).
 
 ## Erros / edge cases
 
