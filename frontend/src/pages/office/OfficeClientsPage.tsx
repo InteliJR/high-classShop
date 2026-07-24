@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
+import { Users } from "lucide-react";
 import { officeService, type OfficeClient } from "../../services/office";
+import { PageHeader } from "../../components/patterns/PageHeader";
+import { EmptyState } from "../../components/patterns/EmptyState";
 
 export default function OfficeClientsPage() {
   const [clients, setClients] = useState<OfficeClient[]>([]);
@@ -25,8 +28,7 @@ export default function OfficeClientsPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-4">Clientes do escritório</h1>
-      <p className="text-sm text-gray-500 mb-4">Visualização somente leitura.</p>
+      <PageHeader title="Clientes do escritório" />
 
       <div className="flex gap-2 mb-4">
         <input
@@ -35,34 +37,32 @@ export default function OfficeClientsPage() {
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load()}
           placeholder="Buscar por nome ou email..."
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+          className="flex-1 px-3 py-2 border border-border rounded-md"
         />
       </div>
 
-      {loading && <p className="text-gray-500">Carregando...</p>}
-      {error && <p className="text-red-600">{error}</p>}
+      {loading && <p className="text-muted">Carregando...</p>}
+      {error && <p className="text-status-bad">{error}</p>}
       {!loading && clients.length === 0 && (
-        <div className="bg-white p-8 rounded-lg shadow text-center text-gray-500">
-          Nenhum cliente ainda.
-        </div>
+        <EmptyState icon={Users} title="Nenhum cliente ainda." />
       )}
 
       {clients.length > 0 && (
-        <div className="bg-white rounded-lg shadow overflow-x-auto">
+        <div className="bg-surface rounded-lg shadow overflow-x-auto">
           <table className="w-full min-w-[640px]">
-            <thead className="bg-gray-50 border-b">
+            <thead className="bg-border-soft border-b border-border">
               <tr>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Cliente</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">E-mail</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Consultor</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Cadastrado</th>
+                <th className="text-left text-xs font-medium text-muted uppercase px-4 py-3">Cliente</th>
+                <th className="text-left text-xs font-medium text-muted uppercase px-4 py-3">E-mail</th>
+                <th className="text-left text-xs font-medium text-muted uppercase px-4 py-3">Consultor</th>
+                <th className="text-left text-xs font-medium text-muted uppercase px-4 py-3">Cadastrado</th>
               </tr>
             </thead>
             <tbody>
               {clients.map((c) => (
-                <tr key={c.id} className="border-b">
+                <tr key={c.id} className="border-b border-border-soft">
                   <td className="px-4 py-3 text-sm">{c.name} {c.surname}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{c.email}</td>
+                  <td className="px-4 py-3 text-sm text-muted">{c.email}</td>
                   <td className="px-4 py-3 text-sm">
                     {c.consultant ? `${c.consultant.name} ${c.consultant.surname}` : "—"}
                   </td>
