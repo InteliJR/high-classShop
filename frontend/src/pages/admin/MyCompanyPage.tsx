@@ -6,6 +6,8 @@ import {
   updatePlatformCompany,
 } from "../../services/platform-company.service";
 import Button from "../../components/ui/button";
+import { Alert } from "../../components/ui/alert";
+import { Card } from "../../components/ui/card";
 
 /**
  * Página "Minha Empresa" - Admin
@@ -101,7 +103,7 @@ export default function MyCompanyPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader className="w-8 h-8 animate-spin text-gray-400" />
+        <Loader className="w-8 h-8 animate-spin text-subtle" />
       </div>
     );
   }
@@ -110,10 +112,10 @@ export default function MyCompanyPage() {
     <div className="max-w-3xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="flex items-center gap-3 mb-8">
-        <Building2 className="w-8 h-8 text-slate-700" />
+        <Building2 className="w-8 h-8 text-ink-soft" />
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Minha Empresa</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-ink">Minha Empresa</h1>
+          <p className="text-sm text-muted">
             Dados da empresa dona da plataforma. Usados automaticamente nos
             contratos.
           </p>
@@ -122,41 +124,41 @@ export default function MyCompanyPage() {
 
       {/* Messages */}
       {error && (
-        <div className="mb-6 flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <Alert variant="danger" className="mb-6">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <p className="text-sm">{error}</p>
-        </div>
+          <p>{error}</p>
+        </Alert>
       )}
 
       {successMessage && (
-        <div className="mb-6 flex items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
+        <Alert variant="success" className="mb-6">
           <Check className="w-5 h-5 flex-shrink-0" />
-          <p className="text-sm">{successMessage}</p>
-        </div>
+          <p>{successMessage}</p>
+        </Alert>
       )}
 
       {/* Form */}
       <form onSubmit={handleSubmit}>
-        <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">
+        <Card className="mb-6">
+          <h2 className="text-h2 font-semibold text-ink border-b border-border-soft pb-2 mb-4">
             Dados Gerais
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-ink-soft mb-1">
                 Razão Social *
               </label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-ink-soft mb-1">
                 CNPJ *
               </label>
               <input
@@ -165,13 +167,13 @@ export default function MyCompanyPage() {
                 onChange={(e) => setCnpj(e.target.value)}
                 maxLength={18}
                 placeholder="00.000.000/0000-00"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-ink-soft mb-1">
                 Endereço
               </label>
               <input
@@ -179,12 +181,12 @@ export default function MyCompanyPage() {
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 placeholder="Av. Paulista, 1000 - São Paulo/SP"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-ink-soft mb-1">
                 CEP
               </label>
               <input
@@ -193,19 +195,19 @@ export default function MyCompanyPage() {
                 onChange={(e) => setCep(e.target.value)}
                 maxLength={9}
                 placeholder="00000-000"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
               />
             </div>
           </div>
-        </section>
+        </Card>
 
-        <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">
+        <Card className="mb-6">
+          <h2 className="text-h2 font-semibold text-ink border-b border-border-soft pb-2 mb-4">
             Dados Bancários
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-ink-soft mb-1">
                 Banco *
               </label>
               <input
@@ -213,13 +215,13 @@ export default function MyCompanyPage() {
                 value={bank}
                 onChange={(e) => setBank(e.target.value)}
                 placeholder="Ex: Banco do Brasil"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-ink-soft mb-1">
                 Agência *
               </label>
               <input
@@ -228,13 +230,13 @@ export default function MyCompanyPage() {
                 onChange={(e) => setAgency(e.target.value)}
                 maxLength={10}
                 placeholder="Ex: 0001"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-ink-soft mb-1">
                 Conta Corrente *
               </label>
               <input
@@ -243,33 +245,33 @@ export default function MyCompanyPage() {
                 onChange={(e) => setCheckingAccount(e.target.value)}
                 maxLength={20}
                 placeholder="Ex: 12345-6"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
                 required
               />
             </div>
           </div>
-        </section>
+        </Card>
 
-        <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">
+        <Card className="mb-6">
+          <h2 className="text-h2 font-semibold text-ink border-b border-border-soft pb-2 mb-4">
             Comissão Padrão
           </h2>
           <div className="max-w-xs">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-ink-soft mb-1">
               Taxa Padrão de Comissão (%)
             </label>
-            <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700">
+            <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft">
               {defaultCommissionRate ? `${defaultCommissionRate}%` : "—"}
             </div>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-muted mt-1">
               Edite na aba{" "}
-              <Link to="/admin/commissions" className="text-slate-700 underline">
+              <Link to="/admin/commissions" className="text-ink-soft underline">
                 Comissões
               </Link>
               .
             </p>
           </div>
-        </section>
+        </Card>
 
         <div className="flex justify-end">
           <Button type="submit" disabled={isSaving}>
