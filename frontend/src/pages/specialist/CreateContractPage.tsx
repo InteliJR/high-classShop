@@ -18,6 +18,8 @@ import {
   formatBRL,
 } from "../../services/contracts.service";
 import DocuSignPreviewModal from "../../components/contracts/DocuSignPreviewModal";
+import Button from "../../components/ui/button";
+import { Alert } from "../../components/ui/alert";
 
 interface ContractFormData {
   // Vendedor
@@ -592,16 +594,13 @@ export default function CreateContractPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
-          <p className="text-red-600 font-semibold mb-4">
+          <AlertCircle className="w-12 h-12 text-status-bad mx-auto mb-4" />
+          <p className="text-status-bad font-semibold mb-4">
             Nenhum processo selecionado
           </p>
-          <button
-            onClick={() => navigate("/specialist/processes")}
-            className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition"
-          >
+          <Button onClick={() => navigate("/specialist/processes")}>
             Voltar ao Dashboard
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -625,16 +624,13 @@ export default function CreateContractPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
-          <p className="text-red-600 font-semibold mb-4">
+          <AlertCircle className="w-12 h-12 text-status-bad mx-auto mb-4" />
+          <p className="text-status-bad font-semibold mb-4">
             {submitStatus.message || "Erro ao carregar dados do processo"}
           </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition"
-          >
+          <Button onClick={() => window.location.reload()}>
             Tentar novamente
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -646,7 +642,7 @@ export default function CreateContractPage() {
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
-            <FileText className="w-8 h-8 text-slate-700" />
+            <FileText className="w-8 h-8 text-ink" />
             <h1
               className={`${isMobile ? "text-2xl" : "text-4xl"} font-bold text-gray-900`}
             >
@@ -667,28 +663,17 @@ export default function CreateContractPage() {
 
         {/* Status Messages */}
         {submitStatus.type && (
-          <div
-            className={`mb-6 p-4 rounded-lg flex items-start gap-3 ${
-              submitStatus.type === "success"
-                ? "bg-green-50 border border-green-200"
-                : "bg-red-50 border border-red-200"
-            }`}
+          <Alert
+            variant={submitStatus.type === "success" ? "success" : "danger"}
+            className="mb-6"
           >
             {submitStatus.type === "success" ? (
-              <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+              <CheckCircle className="w-5 h-5 mt-0.5" />
             ) : (
-              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+              <AlertCircle className="w-5 h-5 mt-0.5" />
             )}
-            <p
-              className={`text-sm ${
-                submitStatus.type === "success"
-                  ? "text-green-800"
-                  : "text-red-800"
-              }`}
-            >
-              {submitStatus.message}
-            </p>
-          </div>
+            <p className="text-sm">{submitStatus.message}</p>
+          </Alert>
         )}
 
         {/* Form */}
@@ -1736,9 +1721,9 @@ export default function CreateContractPage() {
           <div className="flex flex-col gap-3 pt-2 pb-8">
             {/* Resumo de erros de validação (campos obrigatórios faltando) */}
             {Object.keys(errors).length > 0 && (
-              <div className="flex items-start gap-2 p-4 rounded-lg bg-red-50 border border-red-200">
-                <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                <div className="text-sm text-red-700">
+              <Alert variant="danger">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                <div className="text-sm">
                   <p className="font-semibold mb-1">
                     Corrija os campos abaixo antes de pré-visualizar:
                   </p>
@@ -1750,43 +1735,25 @@ export default function CreateContractPage() {
                     ))}
                   </ul>
                 </div>
-              </div>
+              </Alert>
             )}
             {/* Mensagem de erro/sucesso próximo aos botões */}
             {submitStatus.type && (
-              <div
-                className={`flex items-start gap-2 p-4 rounded-lg ${
-                  submitStatus.type === "success"
-                    ? "bg-green-50 border border-green-200"
-                    : "bg-red-50 border border-red-200"
-                }`}
-              >
+              <Alert variant={submitStatus.type === "success" ? "success" : "danger"}>
                 {submitStatus.type === "success" ? (
-                  <CheckCircle className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
+                  <CheckCircle className="w-5 h-5 shrink-0 mt-0.5" />
                 ) : (
-                  <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                  <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
                 )}
-                <p
-                  className={`text-sm ${
-                    submitStatus.type === "success"
-                      ? "text-green-700"
-                      : "text-red-700"
-                  }`}
-                >
-                  {submitStatus.message}
-                </p>
-              </div>
+                <p className="text-sm">{submitStatus.message}</p>
+              </Alert>
             )}
 
             <div className="flex flex-col sm:flex-row gap-3">
-              <button
+              <Button
                 type="submit"
                 disabled={isSubmitting || submitStatus.type === "success"}
-                className={`flex-1 px-8 py-4 rounded-lg font-semibold text-white text-base transition shadow-sm ${
-                  isSubmitting || submitStatus.type === "success"
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-slate-700 hover:bg-slate-800 active:bg-slate-900"
-                }`}
+                className="flex-1 px-8 py-4 text-base shadow-sm"
               >
                 {isSubmitting ? (
                   <span className="flex items-center justify-center gap-2">
@@ -1804,15 +1771,16 @@ export default function CreateContractPage() {
                     Pré-visualizar e Enviar Contrato
                   </span>
                 )}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="light"
                 onClick={() => navigate(-1)}
                 disabled={isSubmitting}
-                className="sm:w-auto px-8 py-4 rounded-lg font-medium text-gray-700 bg-gray-100 border border-gray-300 hover:bg-gray-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="sm:w-auto px-8 py-4"
               >
                 Cancelar
-              </button>
+              </Button>
             </div>
           </div>
         </form>
