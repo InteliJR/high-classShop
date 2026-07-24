@@ -462,7 +462,7 @@ export default function ConsultantProcessDetailPage() {
 
           {process.appointment_datetime ? (
             <div className="flex items-center gap-2 text-sm text-ink-soft mb-4">
-              <Calendar size={16} className="text-gray-400" />
+              <Calendar size={16} className="text-subtle" />
               Reunião marcada para {formatDate(process.appointment_datetime)}
             </div>
           ) : (
@@ -555,7 +555,7 @@ export default function ConsultantProcessDetailPage() {
                 </div>
                 <div className="flex items-center gap-2 mb-1">
                   <DollarSign size={16} className="text-green-600" />
-                  <span className="text-lg font-bold text-gray-900">
+                  <span className="text-lg font-bold text-ink">
                     {formatCurrency(proposal.proposed_value)}
                   </span>
                 </div>
@@ -604,7 +604,7 @@ export default function ConsultantProcessDetailPage() {
 
         {showCreateForm && (
           <div className="mt-6 pt-4 border-t border-border">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+            <h3 className="text-sm font-semibold text-ink mb-3">
               Enviar nova proposta
             </h3>
             {formError && (
@@ -620,7 +620,7 @@ export default function ConsultantProcessDetailPage() {
               <div className="flex-1 flex flex-col md:flex-row gap-3">
                 <div className="relative flex-1 min-w-0">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500">R$</span>
+                    <span className="text-muted">R$</span>
                   </div>
                   <input
                     type="text"
