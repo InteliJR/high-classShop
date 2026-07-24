@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Mail, CheckCircle, ExternalLink } from "lucide-react";
-import { PopupModal, useCalendlyEventListener } from "react-calendly";
+import { PopupModal } from "react-calendly";
 import { getCarById, type RawCar } from "../../services/cars.service";
 import { getBoatById, type RawBoat } from "../../services/boats.service";
 import {
@@ -12,17 +12,20 @@ import { getUserById } from "../../services/users.service";
 import {
   checkExistingAppointment,
   createPendingAppointment,
-  getCalendlySyncStatus,
-  registerCalendlyScheduledEvent,
   type Appointment,
 } from "../../services/appointments.service";
 import { getProcessesByClient } from "../../services/processes.service";
 import ProductDetails from "../../components/product/ProductDetails";
 import Loading from "../../components/ui/Loading";
-import Modal from "../../components/ui/Modal";
+import Button from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
+import { Alert } from "../../components/ui/alert";
+import { Dialog, DialogContent } from "../../components/ui/dialog";
+import { PageHeader } from "../../components/patterns/PageHeader";
 import StartProcessForClientModal from "../consultant/StartProcessForClientModal";
 import { useAuth } from "../../store/authStateManager";
 import { useCheckAppointment } from "../../hooks/useCheckAppointment";
+import { useCalendlyScheduling } from "../../hooks/useCalendlyScheduling";
 import type { Product } from "../../types/types";
 
 interface Specialist {
@@ -62,18 +65,43 @@ export default function ProductPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCreatingPending, setIsCreatingPending] = useState(false);
-  const [isCalendlyModalOpen, setIsCalendlyModalOpen] = useState(false);
-  const [calendlyModalUrl, setCalendlyModalUrl] = useState<string | null>(null);
-  const [pendingAppointmentId, setPendingAppointmentId] = useState<
-    string | null
-  >(null);
   const [lockedAppointment, setLockedAppointment] =
     useState<Appointment | null>(null);
-  const [calendlySyncState, setCalendlySyncState] = useState<
-    "idle" | "waiting_event" | "syncing" | "done" | "error"
-  >("idle");
-  const [calendlySyncMessage, setCalendlySyncMessage] = useState<string>("");
   const [isStartProcessModalOpen, setIsStartProcessModalOpen] = useState(false);
+  // Aviso de resultado da tentativa de criação do agendamento PENDING, antes
+  // de o popup do Calendly sequer abrir (conflito 409 / falha de rede). A
+  // partir do momento que o popup abre, quem governa o aviso é o hook
+  // (calendlySyncState / calendlySyncMessage).
+  const [creationNotice, setCreationNotice] = useState<{
+    variant: "success" | "danger";
+    message: string;
+  } | null>(null);
+
+  const {
+    isModalOpen: isCalendlyModalOpen,
+    modalUrl: calendlyModalUrl,
+    syncState: calendlySyncState,
+    syncMessage: calendlySyncMessage,
+    openPopup,
+    closePopup,
+  } = useCalendlyScheduling({
+    successRedirectMessage:
+      "Solicitação de agendamento registrada com sucesso! Verifique seus processos.",
+    onSynced: (syncStatus) => {
+      setLockedAppointment((prev) =>
+        prev
+          ? {
+              ...prev,
+              status:
+                syncStatus.status === "PENDING" ? prev.status : syncStatus.status,
+              appointment_datetime:
+                syncStatus.appointment_datetime ?? prev.appointment_datetime,
+              calendly_sync_status: syncStatus.calendly_sync_status,
+            }
+          : prev,
+      );
+    },
+  });
 
   // Hook para verificar agendamentos existentes
   // APENAS dispara verificação após specialist ser carregado com sucesso
@@ -212,84 +240,6 @@ export default function ProductPage() {
     loadProduct();
   }, [productType, id]);
 
-  useCalendlyEventListener({
-    onEventScheduled: async (event) => {
-      if (!pendingAppointmentId) {
-        return;
-      }
-
-      const payload = (event as any)?.data?.payload;
-      const eventUri = payload?.event?.uri;
-      const inviteeUri = payload?.invitee?.uri;
-
-      if (!eventUri || !inviteeUri) {
-        setCalendlySyncState("error");
-        setCalendlySyncMessage(
-          "Não foi possível capturar os dados do agendamento. Verifique seus processos para confirmar.",
-        );
-        return;
-      }
-
-      try {
-        setCalendlySyncState("syncing");
-        setCalendlySyncMessage("Sincronizando seu agendamento...");
-
-        await registerCalendlyScheduledEvent(pendingAppointmentId, {
-          event_uri: eventUri,
-          invitee_uri: inviteeUri,
-          client_event: "calendly.event_scheduled",
-          client_observed_at: new Date().toISOString(),
-        });
-
-        setIsCalendlyModalOpen(false);
-
-        try {
-          const syncStatus = await getCalendlySyncStatus(pendingAppointmentId);
-          setLockedAppointment((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  status:
-                    syncStatus.status === "PENDING"
-                      ? prev.status
-                      : syncStatus.status,
-                  appointment_datetime:
-                    syncStatus.appointment_datetime ??
-                    prev.appointment_datetime,
-                  calendly_sync_status: syncStatus.calendly_sync_status,
-                }
-              : prev,
-          );
-        } catch (statusErr) {
-          console.warn(
-            "Não foi possível consultar status pós-sync:",
-            statusErr,
-          );
-        }
-
-        setCalendlySyncState("done");
-        setCalendlySyncMessage(
-          "Solicitação registrada com sucesso! Redirecionando para Meus Processos...",
-        );
-        redirectToProcesses(
-          "Solicitação de agendamento registrada com sucesso! Verifique seus processos.",
-          700,
-        );
-      } catch (err) {
-        console.error("Erro ao sincronizar evento do Calendly:", err);
-        setCalendlySyncState("error");
-        setCalendlySyncMessage(
-          "Agendamento criado, mas houve falha na sincronização automática. Redirecionando para Meus Processos...",
-        );
-        setIsCalendlyModalOpen(false);
-        redirectToProcesses(
-          "Solicitação criada! Se o horário não aparecer imediatamente, atualize a página de processos em instantes.",
-          1000,
-        );
-      }
-    },
-  });
-
   /**
    * Cria agendamento PENDING e abre Calendly em modal
    */
@@ -306,8 +256,7 @@ export default function ProductPage() {
     }
 
     setIsCreatingPending(true);
-    setCalendlySyncState("idle");
-    setCalendlySyncMessage("");
+    setCreationNotice(null);
     try {
       const clientProcesses = await getProcessesByClient(user.id, 1, 100);
       const activeProcess = clientProcesses.find(
@@ -336,15 +285,8 @@ export default function ProductPage() {
         notes: "Cliente abriu agendamento via popup da plataforma",
       });
 
-      setPendingAppointmentId(pendingAppointment.id);
       setLockedAppointment(pendingAppointment);
-      setCalendlySyncState("waiting_event");
-      setCalendlySyncMessage(
-        "Conclua seu agendamento no Calendly para sincronizar automaticamente com a plataforma.",
-      );
-
-      setCalendlyModalUrl(formattedUrl);
-      setIsCalendlyModalOpen(true);
+      openPopup(pendingAppointment.id, formattedUrl);
     } catch (err: any) {
       if (err.response?.status === 409) {
         try {
@@ -362,17 +304,19 @@ export default function ProductPage() {
         } catch (checkError) {
           console.error("Erro ao recuperar agendamento existente:", checkError);
         }
-        setCalendlySyncState("done");
-        setCalendlySyncMessage(
-          "Você já possui uma solicitação de agendamento para este produto.",
-        );
+        setCreationNotice({
+          variant: "success",
+          message: "Você já possui uma solicitação de agendamento para este produto.",
+        });
         redirectToProcesses(
           "Você já possui uma solicitação de agendamento para este produto.",
         );
       } else {
         console.error("Erro ao criar agendamento pendente:", err);
-        setCalendlySyncState("error");
-        setCalendlySyncMessage("Erro ao criar solicitação de agendamento.");
+        setCreationNotice({
+          variant: "danger",
+          message: "Erro ao criar solicitação de agendamento.",
+        });
       }
     } finally {
       setIsCreatingPending(false);
@@ -463,58 +407,43 @@ export default function ProductPage() {
   if (error || !product) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
-        <p className="text-xl text-gray-600 mb-4">
+        <p className="text-xl text-muted mb-4">
           {error || "Produto não encontrado"}
         </p>
-        <button
-          onClick={handleBackToCatalog}
-          className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg"
-        >
+        <Button onClick={handleBackToCatalog}>
           <ArrowLeft size={18} />
           Voltar ao catálogo
-        </button>
+        </Button>
       </div>
     );
   }
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
-      {/* Header com botão voltar */}
-      <div className="flex items-center gap-4 mb-6">
-        <button
-          onClick={handleBackToCatalog}
-          className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-          aria-label="Voltar ao catálogo"
-        >
-          <ArrowLeft size={24} />
-        </button>
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
-          {product.marca} {product.modelo}
-        </h1>
-      </div>
+      <PageHeader showBack title={`${product.marca} ${product.modelo}`} />
 
       {/* Detalhes do produto */}
-      <div className="bg-white rounded-lg shadow-lg p-4 md:p-6 mb-6">
+      <Card className="p-4 md:p-6 mb-6">
         <ProductDetails product={product} />
-      </div>
+      </Card>
 
       {/* Seção de agendamento - só aparece se houver especialista */}
       {specialist && (
-        <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
+        <Card className="p-4 md:p-6">
+          <h2 className="text-xl font-semibold text-ink mb-4">
             Agendar Reunião
           </h2>
 
           {/* Informações do especialista */}
-          <div className="bg-gray-50 rounded-lg p-4 mb-6">
-            <p className="text-sm text-gray-600 mb-1">
+          <div className="bg-border-soft rounded-lg p-4 mb-6">
+            <p className="text-sm text-muted mb-1">
               Especialista responsável
             </p>
-            <p className="font-semibold text-gray-900">
+            <p className="font-semibold text-ink">
               {specialist.name} {specialist.surname}
             </p>
             {specialist.speciality && (
-              <p className="text-sm text-gray-500 capitalize">
+              <p className="text-sm text-muted capitalize">
                 Especialista em {specialist.speciality.toLowerCase()}s
               </p>
             )}
@@ -524,14 +453,14 @@ export default function ProductPage() {
           {!user ? (
             /* Usuário não logado - mostrar botão para cadastro */
             <div className="space-y-4">
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <p className="text-sm text-amber-800">
+              <Alert variant="warning">
+                <p className="text-sm">
                   <strong>Atenção:</strong> Para agendar uma reunião com o
                   especialista, você precisa criar uma conta ou fazer login.
                 </p>
-              </div>
+              </Alert>
 
-              <button
+              <Button
                 onClick={() =>
                   navigate("/register", {
                     state: {
@@ -540,12 +469,12 @@ export default function ProductPage() {
                     },
                   })
                 }
-                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                className="w-full"
               >
                 Criar Conta para Agendar
-              </button>
+              </Button>
 
-              <p className="text-sm text-center text-gray-500">
+              <p className="text-sm text-center text-muted">
                 Já tem uma conta?{" "}
                 <button
                   onClick={() =>
@@ -562,52 +491,47 @@ export default function ProductPage() {
           ) : user.role === "CONSULTANT" ? (
             /* Consultor - não agenda em nome próprio; inicia processo para um cliente */
             <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800">
+              <Alert variant="info">
+                <p className="text-sm">
                   <strong>Modo Consultor:</strong> Você não pode agendar uma reunião em seu próprio nome. Selecione qual cliente terá o processo criado para este produto.
                 </p>
-              </div>
+              </Alert>
 
-              <button
+              <Button
                 onClick={() => setIsStartProcessModalOpen(true)}
-                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                className="w-full"
               >
                 Iniciar processo para cliente
-              </button>
+              </Button>
             </div>
           ) : user.role !== "CUSTOMER" ? (
             /* SPECIALIST / ADMIN — apenas clientes podem agendar */
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <p className="text-sm text-gray-700">
+            <div className="bg-border-soft border border-border rounded-lg p-4">
+              <p className="text-sm text-ink-soft">
                 Apenas clientes podem agendar reuniões a partir do catálogo.
               </p>
             </div>
           ) : isCheckingAppointment ? (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
-                Verificando agendamentos...
-              </p>
-            </div>
+            <Alert variant="info">
+              <p className="text-sm">Verificando agendamentos...</p>
+            </Alert>
           ) : checkAppointmentError ? (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-              <p className="text-sm text-amber-800">
+            <Alert variant="warning">
+              <p className="text-sm">
                 Não foi possível validar seus agendamentos agora. Para evitar
                 duplicidade, atualize a página e tente novamente em instantes.
               </p>
-            </div>
+            </Alert>
           ) : currentAppointment ? (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
-              <CheckCircle
-                size={20}
-                className="text-green-600 flex-shrink-0 mt-0.5"
-              />
+            <Alert variant="success">
+              <CheckCircle size={20} className="flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold text-green-900">
+                <p className="font-semibold">
                   {currentAppointment.status === "PENDING"
                     ? "Aguardando confirmação do especialista"
                     : "Agendamento já realizado"}
                 </p>
-                <p className="text-sm text-green-800 mt-1">
+                <p className="text-sm mt-1">
                   {currentAppointment.status === "PENDING"
                     ? "Você já demonstrou interesse neste produto. O especialista irá confirmar seu agendamento em breve."
                     : "Você já possui um agendamento marcado com este especialista para este produto."}
@@ -629,36 +553,43 @@ export default function ProductPage() {
                   )}
                 </p>
               </div>
-            </div>
+            </Alert>
           ) : specialist.calendly_url?.trim() ? (
             /* Com Calendly URL - Botão para acessar e criar PENDING */
             <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800">
+              <Alert variant="info">
+                <p className="text-sm">
                   <strong>Dica:</strong> Clique no botão abaixo para agendar
                   uma reunião no popup. Assim que concluir, a plataforma tenta
                   sincronizar automaticamente seu agendamento.
                 </p>
-              </div>
+              </Alert>
 
-              {calendlySyncState !== "idle" && calendlySyncMessage && (
-                <div
-                  className={`rounded-lg border p-4 text-sm ${
-                    calendlySyncState === "error"
-                      ? "bg-red-50 border-red-200 text-red-800"
-                      : calendlySyncState === "done"
-                        ? "bg-green-50 border-green-200 text-green-800"
-                        : "bg-amber-50 border-amber-200 text-amber-800"
-                  }`}
-                >
-                  {calendlySyncMessage}
-                </div>
+              {creationNotice ? (
+                <Alert variant={creationNotice.variant}>
+                  {creationNotice.message}
+                </Alert>
+              ) : (
+                calendlySyncState !== "idle" &&
+                calendlySyncMessage && (
+                  <Alert
+                    variant={
+                      calendlySyncState === "error"
+                        ? "danger"
+                        : calendlySyncState === "done"
+                          ? "success"
+                          : "warning"
+                    }
+                  >
+                    {calendlySyncMessage}
+                  </Alert>
+                )
               )}
 
-              <button
+              <Button
                 onClick={handleCalendlyClick}
                 disabled={isCreatingPending}
-                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-3"
               >
                 {isCreatingPending ? (
                   <>
@@ -671,19 +602,19 @@ export default function ProductPage() {
                     Agendar reunião com o especialista
                   </>
                 )}
-              </button>
+              </Button>
             </div>
           ) : (
             /* Sem Calendly URL - fallback email */
             <div className="space-y-4">
-              <p className="text-gray-600">
+              <p className="text-muted">
                 Este especialista não possui agenda online. Entre em contato por
                 e-mail para agendar uma reunião.
               </p>
-              <button
+              <Button
                 onClick={handleEmailClick}
                 disabled={isCreatingPending}
-                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-3"
               >
                 {isCreatingPending ? (
                   <>
@@ -696,17 +627,17 @@ export default function ProductPage() {
                     Enviar E-mail para o Especialista
                   </>
                 )}
-              </button>
+              </Button>
             </div>
           )}
-        </div>
+        </Card>
       )}
 
       {calendlyModalUrl && isCalendlyModalOpen && (
         <PopupModal
           url={calendlyModalUrl}
           open={isCalendlyModalOpen}
-          onModalClose={() => setIsCalendlyModalOpen(false)}
+          onModalClose={closePopup}
           rootElement={document.getElementById("root") ?? document.body}
           prefill={{
             name: user ? `${user.name} ${user.surname}`.trim() : undefined,
@@ -717,26 +648,32 @@ export default function ProductPage() {
 
       {/* Modal do Consultor: iniciar processo para cliente */}
       {specialist && product && productType && id && (
-        <Modal
-          isOpen={isStartProcessModalOpen}
-          onClose={() => setIsStartProcessModalOpen(false)}
+        <Dialog
+          open={isStartProcessModalOpen}
+          onOpenChange={setIsStartProcessModalOpen}
         >
-          <StartProcessForClientModal
-            productType={
-              (productType.toUpperCase() === "CARS"
-                ? "CAR"
-                : productType.toUpperCase() === "BOATS"
-                  ? "BOAT"
-                  : productType.toUpperCase() === "AIRCRAFTS"
-                    ? "AIRCRAFT"
-                    : (productType.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT"))
-            }
-            productId={Number(id)}
-            specialistId={specialist.id}
-            productLabel={`${product.marca} ${product.modelo}`.trim()}
-            onClose={() => setIsStartProcessModalOpen(false)}
-          />
-        </Modal>
+          <DialogContent
+            open={isStartProcessModalOpen}
+            title="Iniciar processo para cliente"
+            hideTitle
+          >
+            <StartProcessForClientModal
+              productType={
+                (productType.toUpperCase() === "CARS"
+                  ? "CAR"
+                  : productType.toUpperCase() === "BOATS"
+                    ? "BOAT"
+                    : productType.toUpperCase() === "AIRCRAFTS"
+                      ? "AIRCRAFT"
+                      : (productType.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT"))
+              }
+              productId={Number(id)}
+              specialistId={specialist.id}
+              productLabel={`${product.marca} ${product.modelo}`.trim()}
+              onClose={() => setIsStartProcessModalOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
