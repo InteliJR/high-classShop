@@ -58,6 +58,12 @@ Regras derivadas:
   aparecem. Nenhuma tela sob medida por papel.
 - Export CSV/PDF (já implementado em `012fa67`) continua igual — exporta só
   as linhas que o `where` já filtrou.
+- **Headers de coluna traduzidos e amigáveis.** Hoje `DatabasePage.tsx` usa
+  `Object.keys(rows[0])` direto como header (`company_id`, `consultant_id`,
+  `created_at`...) — nomes de campo do Prisma, sem tradução. Isso muda pra
+  **todos os papéis**, inclusive ADMIN (não vale manter dois modos de
+  header), e vale também nos headers do export CSV/PDF (hoje usam a mesma
+  lista crua de `columns`).
 
 ## 4. Impacto técnico / decisões pra fase de plano
 
@@ -76,6 +82,16 @@ Regras derivadas:
   visíveis dinamicamente (hoje é uma lista estática).
 - Reaproveitar o padrão de `where` aninhado já usado em `office.service.ts`
   — não inventar filtro novo.
+- **Labels de coluna:** `EntityConfig` ganha um dicionário
+  `columnLabels: Record<string, string>` (campo Prisma → rótulo em
+  português). Campos repetidos entre entidades (`id`, `created_at`,
+  `updated_at`, `company_id`, `consultant_id`, `specialist_id`, `status`...)
+  usam um dicionário base compartilhado; campos específicos de cada entidade
+  entram como override. `DatabasePage.tsx` usa o label na render do `<th>` e
+  no header passado pro `downloadCsv`/export PDF, com fallback pro nome cru
+  se o campo não estiver mapeado (evita quebrar se a whitelist ganhar campo
+  novo sem o label ser atualizado junto). Lista exata campo→label é detalhe
+  de implementação, fica pra fase de plano.
 
 ## 5. Relação com o spec de comissões (2026-07-20)
 
