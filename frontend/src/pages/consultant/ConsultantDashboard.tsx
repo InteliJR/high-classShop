@@ -45,7 +45,8 @@ export default function ConsultantDashboard() {
       setClients(clientsData);
       setProcesses(processesData);
       setError(null);
-    } catch {
+    } catch (err) {
+      console.error(err);
       setError("Não foi possível carregar os dados do dashboard.");
     } finally {
       setIsLoading(false);
@@ -218,25 +219,33 @@ export default function ConsultantDashboard() {
         <div className="flex flex-col gap-4">
           <Card>
             <h2 className="text-h2 font-semibold text-ink mb-4">Distribuição por status</h2>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={statusDistribution} layout="vertical" margin={{ left: 8, right: 16 }}>
-                <XAxis type="number" hide allowDecimals={false} />
-                <YAxis
-                  type="category"
-                  dataKey="label"
-                  width={100}
-                  tick={{ fontSize: 12, fill: "#6b6b6b" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip cursor={{ fill: "#e9e9e9" }} />
-                <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={16}>
-                  {statusDistribution.map((entry) => (
-                    <Cell key={entry.value} fill={entry.hex} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            {processes.length === 0 ? (
+              <EmptyState
+                icon={TrendingUp}
+                title="Sem dados ainda"
+                description="A distribuição por status aparece aqui quando houver processos."
+              />
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={statusDistribution} layout="vertical" margin={{ left: 8, right: 16 }}>
+                  <XAxis type="number" hide allowDecimals={false} />
+                  <YAxis
+                    type="category"
+                    dataKey="label"
+                    width={100}
+                    tick={{ fontSize: 12, fill: "#6b6b6b" }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip cursor={{ fill: "#e9e9e9" }} />
+                  <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={16}>
+                    {statusDistribution.map((entry) => (
+                      <Cell key={entry.value} fill={entry.hex} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </Card>
 
           <Card>
@@ -287,7 +296,12 @@ export default function ConsultantDashboard() {
 
       <Dialog open={isBatchModalOpen} onOpenChange={setIsBatchModalOpen}>
         <DialogContent open={isBatchModalOpen} title="Convite de clientes em lote" hideTitle>
-          <BatchInviteClients onClose={() => setIsBatchModalOpen(false)} />
+          <BatchInviteClients
+            onClose={() => {
+              setIsBatchModalOpen(false);
+              fetchData();
+            }}
+          />
         </DialogContent>
       </Dialog>
     </div>
