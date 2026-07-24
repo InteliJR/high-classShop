@@ -161,6 +161,7 @@ export type ConsultantProcess = {
   status: string;
   product_type: string | null;
   created_at: string;
+  updated_at: string;
   client_id: string;
   client: { id: string; name: string; surname: string } | null;
   specialist: { id: string; name: string; surname: string; speciality: string } | null;

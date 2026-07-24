@@ -1,13 +1,22 @@
 import { cn } from "../../lib/utils";
 
-const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
-  SCHEDULING: { label: "Agendamento", dot: "bg-status-sched" },
-  NEGOTIATION: { label: "Negociação", dot: "bg-status-neg" },
-  PROCESSING_CONTRACT: { label: "Contrato", dot: "bg-status-proc" },
-  DOCUMENTATION: { label: "Documentação", dot: "bg-status-doc" },
-  COMPLETED: { label: "Concluído", dot: "bg-status-ok" },
-  REJECTED: { label: "Rejeitado", dot: "bg-status-bad" },
-};
+// Um único lugar pra label + cor de cada status de processo — StatusBadge,
+// o gráfico do dashboard (Task 3) e os filtros de ConsultantProcessesPage/
+// ConsultantProcessDetailPage (Tasks 4/5) consomem isto em vez de duplicar
+// o mapa. `hex` deve ficar em sincronia com os tokens --color-status-* em
+// frontend/src/index.css — existe só porque bibliotecas de gráfico (SVG)
+// não conseguem ler classes Tailwind, precisam do valor de cor literal.
+export const PROCESS_STATUS_META = [
+  { value: "SCHEDULING", label: "Agendamento", dot: "bg-status-sched", hex: "#1d4ed8" },
+  { value: "NEGOTIATION", label: "Negociação", dot: "bg-status-neg", hex: "#b45309" },
+  { value: "PROCESSING_CONTRACT", label: "Contrato", dot: "bg-status-proc", hex: "#c2410c" },
+  { value: "DOCUMENTATION", label: "Documentação", dot: "bg-status-doc", hex: "#7e22ce" },
+  { value: "COMPLETED", label: "Concluído", dot: "bg-status-ok", hex: "#15803d" },
+  { value: "REJECTED", label: "Rejeitado", dot: "bg-status-bad", hex: "#b91c1c" },
+] as const;
+
+const STATUS_CONFIG: Record<string, (typeof PROCESS_STATUS_META)[number]> =
+  Object.fromEntries(PROCESS_STATUS_META.map((meta) => [meta.value, meta]));
 
 export function StatusBadge({
   status,
