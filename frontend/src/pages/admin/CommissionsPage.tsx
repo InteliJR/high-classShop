@@ -6,7 +6,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   Percent,
   Save,
-  AlertCircle,
   Check,
   Loader,
   Sliders,
@@ -29,6 +28,9 @@ import {
   type SaleCommission,
 } from "../../services/commissions.service";
 import { openPrintablePdf } from "../../utils/export";
+import Button from "../../components/ui/button";
+import { Alert } from "../../components/ui/alert";
+import { Card } from "../../components/ui/card";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -145,17 +147,17 @@ export default function CommissionsPage() {
   return (
     <div className="text-text-main w-full">
       <div className="flex items-center gap-3 mb-6">
-        <Percent className="w-7 h-7 text-slate-700" />
+        <Percent className="w-7 h-7 text-ink-soft" />
         <div>
-          <h1 className="h1-style">Comissões</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-h1 font-bold text-ink">Comissões</h1>
+          <p className="text-sm text-muted">
             Comissão de cada especialista, escritório e da plataforma — e o fluxo
             de cada venda.
           </p>
         </div>
       </div>
 
-      <div className="flex gap-1 border-b border-gray-200 mb-6">
+      <div className="flex gap-1 border-b border-border mb-6">
         <TabButton
           active={tab === "config"}
           onClick={() => setTab("config")}
@@ -176,31 +178,30 @@ export default function CommissionsPage() {
         ) : (
           <>
             {error && (
-              <div className="mb-6 flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-                <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                <p className="text-sm">{error}</p>
-              </div>
+              <Alert variant="danger" className="mb-6">
+                {error}
+              </Alert>
             )}
 
-            <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600">
+            <Alert variant="info" className="mb-6">
               No modelo aninhado: o <b>especialista</b> leva uma fatia do total
               da comissão; o <b>escritório</b> leva uma fatia do <b>restante</b>;
               e a <b>plataforma</b> fica automaticamente com o que sobra do
               restante (não é configurada aqui).
-            </div>
+            </Alert>
 
-            <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-1">
+            <Card className="mb-6">
+              <h2 className="text-lg font-semibold text-ink mb-1">
                 Escritórios
               </h2>
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="text-sm text-muted mb-4">
                 Fatia de cada escritório sobre o <b>restante</b> da comissão
                 (depois da fatia do especialista). A plataforma fica com o que
                 sobrar.
               </p>
               <div className="flex flex-col gap-4">
                 {companies.length === 0 ? (
-                  <p className="text-sm text-gray-400">
+                  <p className="text-sm text-subtle">
                     Nenhum escritório cadastrado.
                   </p>
                 ) : (
@@ -209,9 +210,9 @@ export default function CommissionsPage() {
                     return (
                       <div
                         key={company.id}
-                        className="border border-gray-200 rounded-lg p-3"
+                        className="border border-border rounded-lg p-3"
                       >
-                        <p className="font-medium text-gray-800 mb-2">
+                        <p className="font-medium text-ink-soft mb-2">
                           {company.name}
                         </p>
                         <RateRow
@@ -219,7 +220,7 @@ export default function CommissionsPage() {
                           initialRate={officeRate}
                           onSave={(rate) => saveCompanyRate(company.id, rate)}
                         />
-                        <p className="text-xs text-gray-400 mt-2">
+                        <p className="text-xs text-subtle mt-2">
                           → Plataforma fica com {Math.max(0, 100 - officeRate)}% do
                           restante
                         </p>
@@ -228,18 +229,18 @@ export default function CommissionsPage() {
                   })
                 )}
               </div>
-            </section>
+            </Card>
 
-            <section className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-1">
+            <Card>
+              <h2 className="text-lg font-semibold text-ink mb-1">
                 Especialistas
               </h2>
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="text-sm text-muted mb-4">
                 Fatia de cada especialista sobre o total da comissão.
               </p>
               <div className="flex flex-col gap-3">
                 {specialists.length === 0 ? (
-                  <p className="text-sm text-gray-400">
+                  <p className="text-sm text-subtle">
                     Nenhum especialista cadastrado.
                   </p>
                 ) : (
@@ -253,7 +254,7 @@ export default function CommissionsPage() {
                   ))
                 )}
               </div>
-            </section>
+            </Card>
           </>
         ))}
 
@@ -279,8 +280,8 @@ function TabButton({
       onClick={onClick}
       className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
         active
-          ? "border-slate-700 text-slate-800"
-          : "border-transparent text-gray-500 hover:text-gray-700"
+          ? "border-ink text-ink"
+          : "border-transparent text-muted hover:text-ink-soft"
       }`}
     >
       {icon}
@@ -292,7 +293,7 @@ function TabButton({
 function CenterLoader() {
   return (
     <div className="flex items-center justify-center min-h-[300px]">
-      <Loader className="w-8 h-8 animate-spin text-gray-400" />
+      <Loader className="w-8 h-8 animate-spin text-subtle" />
     </div>
   );
 }
@@ -313,16 +314,10 @@ function SalesCommissionsTab() {
   }, []);
 
   if (loading) return <CenterLoader />;
-  if (error)
-    return (
-      <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-        <AlertCircle className="w-5 h-5 flex-shrink-0" />
-        <p className="text-sm">{error}</p>
-      </div>
-    );
+  if (error) return <Alert variant="danger">{error}</Alert>;
   if (sales.length === 0)
     return (
-      <p className="text-sm text-gray-400 p-4">
+      <p className="text-sm text-subtle p-4">
         Nenhuma venda fechada ainda.
       </p>
     );
@@ -330,22 +325,14 @@ function SalesCommissionsTab() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => exportSalesCsv(sales)}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-        >
+        <Button type="button" variant="light" onClick={() => exportSalesCsv(sales)}>
           <Download className="w-4 h-4" />
           Exportar CSV
-        </button>
-        <button
-          type="button"
-          onClick={() => exportSalesPdf(sales)}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-        >
+        </Button>
+        <Button type="button" variant="light" onClick={() => exportSalesPdf(sales)}>
           <FileText className="w-4 h-4" />
           Exportar PDF
-        </button>
+        </Button>
       </div>
       {sales.map((s) => (
         <SaleCard key={s.processId} sale={s} />
@@ -367,27 +354,27 @@ function SaleCard({ sale }: { sale: SaleCommission }) {
     sale.restante > 0 ? (sale.platformValue / sale.restante) * 100 : 0;
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-5">
+    <Card className="p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
-        <h3 className="font-semibold text-gray-900">{sale.productLabel}</h3>
-        <span className="text-xs text-gray-400">
+        <h3 className="font-semibold text-ink">{sale.productLabel}</h3>
+        <span className="text-xs text-subtle">
           Cliente {sale.clientName} · Especialista {sale.specialistName}
         </span>
       </div>
 
       <div className="flex flex-wrap gap-x-8 gap-y-1 mb-4 text-sm">
         <div>
-          <span className="text-gray-500">Venda: </span>
-          <span className="font-semibold text-gray-900">
+          <span className="text-muted">Venda: </span>
+          <span className="font-semibold text-ink">
             {brl(sale.saleValue)}
           </span>
         </div>
         <div>
-          <span className="text-gray-500">Comissão total: </span>
-          <span className="font-semibold text-gray-900">
+          <span className="text-muted">Comissão total: </span>
+          <span className="font-semibold text-ink">
             {brl(sale.totalCommission)}
           </span>
-          <span className="text-gray-400">
+          <span className="text-subtle">
             {" "}
             ({sale.totalCommissionRate}% da venda)
           </span>
@@ -403,8 +390,8 @@ function SaleCard({ sale }: { sale: SaleCommission }) {
           color="bg-emerald-500"
         />
 
-        <div className="pl-3 border-l-2 border-gray-200 ml-1 flex flex-col gap-3">
-          <p className="text-xs text-gray-400">
+        <div className="pl-3 border-l-2 border-border ml-1 flex flex-col gap-3">
+          <p className="text-xs text-subtle">
             restante {brl(sale.restante)}
             {!hasOffice && " (sem escritório → 100% plataforma)"}
           </p>
@@ -426,7 +413,7 @@ function SaleCard({ sale }: { sale: SaleCommission }) {
           />
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -445,17 +432,17 @@ function SplitBar({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <span className="w-56 min-w-[140px] text-sm text-gray-700">{label}</span>
-      <div className="flex-1 min-w-[120px] h-2.5 bg-gray-100 rounded-full overflow-hidden">
+      <span className="w-56 min-w-[140px] text-sm text-ink-soft">{label}</span>
+      <div className="flex-1 min-w-[120px] h-2.5 bg-border-soft rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full ${color}`}
           style={{ width: `${Math.min(100, Math.max(0, share))}%` }}
         />
       </div>
-      <span className="w-28 text-right text-sm font-medium text-gray-900">
+      <span className="w-28 text-right text-sm font-medium text-ink">
         {brl(value)}
       </span>
-      <span className="w-32 text-right text-xs text-gray-400">
+      <span className="w-32 text-right text-xs text-subtle">
         {Math.round(share)}% {shareLabel}
       </span>
     </div>
@@ -497,8 +484,8 @@ function RateRow({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-      <span className="flex-1 min-w-[160px] font-medium text-gray-800">
+    <div className="flex flex-wrap items-center gap-3 bg-border-soft border border-border rounded-lg px-4 py-3">
+      <span className="flex-1 min-w-[160px] font-medium text-ink-soft">
         {label}
       </span>
       <div className="flex items-center gap-2">
@@ -509,28 +496,23 @@ function RateRow({
           max={100}
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          className="w-24 px-2 py-1 border border-gray-300 rounded-md text-right"
+          className="w-24 px-2 py-1 border border-border rounded-md text-right"
         />
-        <span className="text-gray-500 text-sm">%</span>
+        <span className="text-muted text-sm">%</span>
       </div>
-      <button
-        type="button"
-        onClick={handleSave}
-        disabled={!dirty || saving}
-        className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-md bg-slate-700 text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800"
-      >
+      <Button type="button" onClick={handleSave} disabled={!dirty || saving}>
         {saving ? (
           <Loader className="w-4 h-4 animate-spin" />
         ) : (
           <Save className="w-4 h-4" />
         )}
         Salvar
-      </button>
+      </Button>
       {status === "saved" && (
-        <Check className="w-4 h-4 text-green-600" aria-label="Salvo" />
+        <Check className="w-4 h-4 text-status-ok" aria-label="Salvo" />
       )}
       {status === "error" && (
-        <span className="text-xs text-red-600">Erro ao salvar</span>
+        <span className="text-xs text-status-bad">Erro ao salvar</span>
       )}
     </div>
   );
