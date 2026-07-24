@@ -77,7 +77,7 @@ export default function RequireGoogleMeetModal() {
             conecte uma conta Google Workspace à plataforma.
           </p>
 
-          <p className="text-sm text-muted">
+          <p className="text-sm text-ink-soft">
             Sem uma conta conectada, as reuniões não geram link do Google Meet.
             A conta precisa ser Google Workspace (contas @gmail.com comuns não
             criam reunião via API).

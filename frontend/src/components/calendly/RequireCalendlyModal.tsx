@@ -72,7 +72,7 @@ export default function RequireCalendlyModal() {
             conta do Calendly à plataforma.
           </p>
 
-          <p className="text-sm text-muted">
+          <p className="text-sm text-ink-soft">
             Sem a conexão ativa, clientes não conseguem marcar agendamentos com
             você e seu fluxo de negociação fica bloqueado.
           </p>
