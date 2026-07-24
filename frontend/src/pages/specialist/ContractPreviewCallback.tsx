@@ -123,26 +123,26 @@ export default function ContractPreviewCallback() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center">
+    <div className="min-h-screen flex items-center justify-center bg-bg p-4">
+      <div className="max-w-md w-full bg-surface rounded-xl shadow-lg p-8 text-center">
         {status === "loading" && (
           <>
             <Loader className="w-16 h-16 text-blue-500 animate-spin mx-auto mb-4" />
-            <h1 className="text-xl font-semibold text-slate-800 mb-2">
+            <h1 className="text-xl font-semibold text-ink mb-2">
               Processando...
             </h1>
-            <p className="text-slate-600">{message}</p>
+            <p className="text-muted">{message}</p>
           </>
         )}
 
         {status === "success" && (
           <>
             <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h1 className="text-xl font-semibold text-slate-800 mb-2">
+            <h1 className="text-xl font-semibold text-ink mb-2">
               Sucesso!
             </h1>
-            <p className="text-slate-600 mb-6">{message}</p>
-            <p className="text-sm text-slate-500 mb-4">
+            <p className="text-muted mb-6">{message}</p>
+            <p className="text-sm text-muted mb-4">
               Esta janela será fechada automaticamente...
             </p>
             <Button type="button" variant="light" onClick={() => navigate("/specialist/processes")}>
@@ -153,11 +153,11 @@ export default function ContractPreviewCallback() {
 
         {status === "cancelled" && (
           <>
-            <XCircle className="w-16 h-16 text-slate-400 mx-auto mb-4" />
-            <h1 className="text-xl font-semibold text-slate-800 mb-2">
+            <XCircle className="w-16 h-16 text-subtle mx-auto mb-4" />
+            <h1 className="text-xl font-semibold text-ink mb-2">
               Cancelado
             </h1>
-            <p className="text-slate-600 mb-6">{message}</p>
+            <p className="text-muted mb-6">{message}</p>
             <Button type="button" onClick={handleClose}>Fechar</Button>
           </>
         )}
@@ -165,8 +165,8 @@ export default function ContractPreviewCallback() {
         {status === "error" && (
           <>
             <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h1 className="text-xl font-semibold text-slate-800 mb-2">Erro</h1>
-            <p className="text-slate-600 mb-6">{message}</p>
+            <h1 className="text-xl font-semibold text-ink mb-2">Erro</h1>
+            <p className="text-muted mb-6">{message}</p>
             <Button type="button" onClick={handleClose}>Fechar</Button>
           </>
         )}
