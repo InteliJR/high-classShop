@@ -395,7 +395,7 @@ export default function ProcessesPage() {
         {isLoading && (
           <div className="flex items-center justify-center py-8 sm:py-12">
             <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-border"></div>
+              <div className="inline-block animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-ink"></div>
               <p className="mt-3 sm:mt-4 text-sm sm:text-base text-muted">
                 Carregando processos...
               </p>
