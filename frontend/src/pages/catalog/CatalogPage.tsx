@@ -56,6 +56,17 @@ export default function Catalog() {
   // Rascunho do formulário do modal — só vira o filtro aplicado ao clicar "Aplicar"
   const [filterDraft, setFilterDraft] = useState<ProductFilters>(EMPTY_FILTERS);
 
+  // Reseta filtro e página ao trocar de categoria. A rota é um único
+  // `/catalog/:category` sem `key`, então o React Router não remonta este
+  // componente quando só o param `category` muda (troca via <Link> na
+  // sidebar) — sem isso, um filtro aplicado em "Carros" (ex: marca Ferrari)
+  // continuava ativo ao trocar pra "Embarcações", derrubando a busca por
+  // engano ("Nenhum produto encontrado" sem o cliente saber por quê).
+  useEffect(() => {
+    setFilter(null);
+    setPage(1);
+  }, [category]);
+
   //Consumir a api
   useEffect(() => {
     const fetchData = async () => {
