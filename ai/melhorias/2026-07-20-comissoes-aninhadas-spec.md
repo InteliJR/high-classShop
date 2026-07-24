@@ -77,7 +77,9 @@ fixo no início — é decidido pós-reunião. Amarra no fluxo `meetings`/`appoi
 - **"Escadinha"**: visão em degraus do repasse de um processo (especialista → restante →
   escritório/plataforma).
 - **Base analítica** estilo planilha, com todos os processos, **filtrada por papel**:
-  especialista vê só o dele, escritório só o dele, ADMIN vê tudo.
+  especialista vê só o dele, escritório só o dele, ADMIN vê tudo. Detalhado (com
+  CONSULTANT incluso e escopo estendido a toda a Base de Dados, não só
+  `processes`) em [`2026-07-24-database-scoped-por-role-spec.md`](./2026-07-24-database-scoped-por-role-spec.md).
 - **Export CSV e PDF** (comissões e informações da plataforma).
 
 ## 6. Demais melhorias (itens 3, 5, 6, 9)
