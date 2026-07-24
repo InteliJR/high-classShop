@@ -100,6 +100,14 @@ export function useCalendlyScheduling({
         return;
       }
 
+      // Calendly já disparou `event_scheduled` com um payload válido — isso É
+      // a fonte da verdade de que o usuário concluiu o agendamento. Marcar
+      // como confirmado AQUI (síncrono, antes do await de rede abaixo) evita
+      // a janela de corrida em que o usuário fecha o popup entre o evento do
+      // Calendly e a resposta do nosso backend — nesse intervalo o registro
+      // NÃO pode ser tratado como abandono e cancelado.
+      confirmedRef.current = true;
+
       try {
         setSyncState("syncing");
         setSyncMessage("Sincronizando seu agendamento...");
@@ -111,15 +119,28 @@ export function useCalendlyScheduling({
           client_observed_at: new Date().toISOString(),
         });
 
-        confirmedRef.current = true;
         setIsModalOpen(false);
         await pollCalendlySyncStatus(pendingAppointmentId);
       } catch (err) {
+        // O agendamento já aconteceu de verdade no Calendly (confirmedRef já
+        // é true) — só a nossa sincronização falhou. Não deixar o usuário
+        // preso num popup fechado/stale: fecha e manda pra Meus Processos,
+        // igual ao fluxo de sucesso, só que com aviso de que pode faltar
+        // atualizar a página.
         console.error("Erro ao sincronizar evento do Calendly:", err);
         setSyncState("error");
         setSyncMessage(
-          "Agendamento criado, mas houve falha na sincronização automática. Você pode seguir em Meus Processos.",
+          "Agendamento confirmado no Calendly, mas houve falha ao sincronizar com a plataforma. Redirecionando para Meus Processos...",
         );
+        setIsModalOpen(false);
+        setTimeout(() => {
+          navigate("/customer/processes", {
+            state: {
+              message:
+                "Agendamento confirmado no Calendly! Se o horário não aparecer imediatamente em Meus Processos, atualize a página em instantes.",
+            },
+          });
+        }, 1000);
       }
     },
   });
