@@ -14,7 +14,7 @@ export function DialogContent({
   hideTitle,
 }: {
   open: boolean;
-  title: string;
+  title: ReactNode;
   children: ReactNode;
   className?: string;
   hideTitle?: boolean;
