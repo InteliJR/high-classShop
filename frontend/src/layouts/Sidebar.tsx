@@ -141,6 +141,11 @@ export default function Sidebar() {
             icon: <UserCog size={20} />,
           },
           {
+            to: "/office/consultants",
+            label: "Consultores",
+            icon: <Users size={20} />,
+          },
+          {
             to: "/admin/commissions",
             label: "Comissões",
             icon: <Percent size={20} />,
