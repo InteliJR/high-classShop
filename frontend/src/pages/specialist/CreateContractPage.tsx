@@ -8,10 +8,12 @@ import {
   previewContract,
   sendContractAfterPreview,
   cancelContractPreview,
+  listContractTemplates,
   type GenerateContractData,
   type PrefillContractResponse,
   type PreviewContractData,
   type PreviewContractResponse,
+  type ContractTemplate,
   applyCpfMask,
   applyCnpjMask,
   applyCepMask,
@@ -187,6 +189,9 @@ export default function CreateContractPage() {
     useState<PreviewContractData | null>(null);
   const [isSendingAfterPreview, setIsSendingAfterPreview] = useState(false);
 
+  const [templates, setTemplates] = useState<ContractTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+
   const vehiclePrice = watch("vehicle_price");
   const totalCommissionRate = watch("total_commission_rate");
 
@@ -340,11 +345,36 @@ export default function CreateContractPage() {
     }
   }, [processId, setValue]);
 
+  // Carregar templates disponíveis + auto-seleção pelo tipo do produto
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const list = await listContractTemplates();
+        setTemplates(list);
+        // auto-seleção pelo tipo do produto (casa por nome do template)
+        const key =
+          prefillData?.product_type === "CAR"
+            ? "carro"
+            : prefillData?.product_type === "BOAT"
+              ? "embarca"
+              : prefillData?.product_type === "AIRCRAFT"
+                ? "aeronave"
+                : "";
+        const match = list.find((t) => t.name.toLowerCase().includes(key));
+        if (match) setSelectedTemplateId(match.templateId);
+      } catch (e) {
+        console.error("Erro ao carregar templates:", e);
+      }
+    };
+    if (prefillData) load();
+  }, [prefillData]);
+
   // Build contract data from form
   const buildContractData = (
     formData: ContractFormData,
   ): GenerateContractData => ({
     process_id: processId!,
+    template_id: selectedTemplateId || undefined,
     seller_name: formData.seller_name,
     seller_email: formData.seller_email,
     seller_cpf: formData.seller_cpf,
@@ -678,6 +708,29 @@ export default function CreateContractPage() {
 
         {/* Form */}
         <form onSubmit={handleSubmit(onPreview)} className="space-y-8">
+
+          {/* Seção: Modelo de contrato */}
+          <section className="bg-surface rounded-lg border border-border p-6">
+            <h2 className="text-base font-semibold text-ink mb-2 border-b pb-2">
+              Modelo de contrato
+            </h2>
+            <p className="text-sm text-muted mb-3">
+              Selecionado automaticamente pelo tipo do produto — troque se
+              necessário.
+            </p>
+            <select
+              value={selectedTemplateId}
+              onChange={(e) => setSelectedTemplateId(e.target.value)}
+              className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
+            >
+              <option value="">Selecione um modelo…</option>
+              {templates.map((t) => (
+                <option key={t.templateId} value={t.templateId}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </section>
 
           {/* ── Grupo: Dados das partes ── */}
           <div>
@@ -1139,7 +1192,7 @@ export default function CreateContractPage() {
                 )}
               </div>
 
-              <div>
+              <div className="hidden">
                 <label className="block text-sm font-medium text-ink-soft mb-1">
                   Comissão Total da Venda (%) *
                 </label>
@@ -1147,7 +1200,6 @@ export default function CreateContractPage() {
                   type="number"
                   step="0.01"
                   {...register("total_commission_rate", {
-                    required: "Comissão total é obrigatória",
                     valueAsNumber: true,
                     min: { value: 0, message: "Valor deve ser positivo" },
                   })}
@@ -1169,7 +1221,7 @@ export default function CreateContractPage() {
                 )}
               </div>
 
-              <div>
+              <div className="hidden">
                 <label className="block text-sm font-medium text-ink-soft mb-1">
                   Comissão da Plataforma
                   {prefillData?.platform?.rate != null && (
@@ -1186,7 +1238,7 @@ export default function CreateContractPage() {
                 </p>
               </div>
 
-              <div>
+              <div className="hidden">
                 <label className="block text-sm font-medium text-ink-soft mb-1">
                   Comissão do Escritório
                   {prefillData?.office?.rate != null && (
@@ -1203,7 +1255,7 @@ export default function CreateContractPage() {
                 </p>
               </div>
 
-              <div>
+              <div className="hidden">
                 <label className="block text-sm font-medium text-ink-soft mb-1">
                   Comissão do Especialista
                   <span className="text-xs text-muted ml-1">
@@ -1241,7 +1293,7 @@ export default function CreateContractPage() {
           </section>
 
           {/* Seção: Dados da Plataforma */}
-          <section className="bg-surface rounded-lg border border-border p-6 mb-6">
+          <section className="hidden bg-surface rounded-lg border border-border p-6 mb-6">
             <div className="flex items-center justify-between border-b pb-2 mb-4">
               <h3 className="text-base font-semibold text-ink">
                 Dados da Plataforma
@@ -1257,7 +1309,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("platform_name", { required: "Razão social é obrigatória" })}
+                  {...register("platform_name")}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Razão social da plataforma"
                 />
@@ -1274,7 +1326,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("platform_cnpj", { required: "CNPJ é obrigatório" })}
+                  {...register("platform_cnpj")}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="00.000.000/0000-00"
                 />
@@ -1291,7 +1343,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("platform_bank", { required: "Banco é obrigatório" })}
+                  {...register("platform_bank")}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Banco"
                 />
@@ -1308,7 +1360,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("platform_agency", { required: "Agência é obrigatória" })}
+                  {...register("platform_agency")}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Agência"
                 />
@@ -1325,7 +1377,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("platform_checking_account", { required: "Conta é obrigatória" })}
+                  {...register("platform_checking_account")}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Conta corrente"
                 />
@@ -1339,7 +1391,7 @@ export default function CreateContractPage() {
           </section>
 
           {/* Seção: Dados do Escritório */}
-          <section className="bg-surface rounded-lg border border-border p-6 mb-6">
+          <section className="hidden bg-surface rounded-lg border border-border p-6 mb-6">
             <div className="flex items-center justify-between border-b pb-2 mb-4">
               <h3 className="text-base font-semibold text-ink">
                 Dados do Escritório
@@ -1355,7 +1407,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("office_name", { required: "Razão social é obrigatória" })}
+                  {...register("office_name")}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Razão social do escritório"
                 />
@@ -1372,7 +1424,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("office_cnpj", { required: "CNPJ é obrigatório" })}
+                  {...register("office_cnpj")}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="00.000.000/0000-00"
                 />
@@ -1422,7 +1474,7 @@ export default function CreateContractPage() {
           </section>
 
           {/* Seção: Dados do Especialista */}
-          <section className="bg-surface rounded-lg border border-border p-6">
+          <section className="hidden bg-surface rounded-lg border border-border p-6">
             <div className="flex items-center justify-between border-b pb-2 mb-4">
               <h3 className="text-base font-semibold text-ink">
                 Dados do Especialista
@@ -1438,7 +1490,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("specialist_name", { required: "Nome do especialista é obrigatório" })}
+                  {...register("specialist_name")}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Nome completo"
                 />
@@ -1455,7 +1507,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="email"
-                  {...register("specialist_email", { required: "E-mail do especialista é obrigatório" })}
+                  {...register("specialist_email")}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="email@exemplo.com"
                 />
@@ -1472,7 +1524,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("specialist_document", { required: "CNPJ do especialista é obrigatório" })}
+                  {...register("specialist_document")}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="00.000.000/0000-00"
                 />
@@ -1495,9 +1547,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("specialist_bank", {
-                    required: "Banco do especialista é obrigatório",
-                  })}
+                  {...register("specialist_bank")}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                   placeholder="Banco do especialista"
                 />
@@ -1514,9 +1564,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("specialist_agency", {
-                    required: "Agência do especialista é obrigatória",
-                  })}
+                  {...register("specialist_agency")}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                   placeholder="Agência"
                 />
@@ -1533,9 +1581,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("specialist_checking_account", {
-                    required: "Conta corrente do especialista é obrigatória",
-                  })}
+                  {...register("specialist_checking_account")}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                   placeholder="Conta corrente"
                 />
@@ -1752,7 +1798,11 @@ export default function CreateContractPage() {
             <div className="flex flex-col sm:flex-row gap-3">
               <Button
                 type="submit"
-                disabled={isSubmitting || submitStatus.type === "success"}
+                disabled={
+                  isSubmitting ||
+                  submitStatus.type === "success" ||
+                  !selectedTemplateId
+                }
                 className="flex-1 px-8 py-4 text-base shadow-sm"
               >
                 {isSubmitting ? (
