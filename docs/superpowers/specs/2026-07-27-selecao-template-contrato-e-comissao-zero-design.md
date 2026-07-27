@@ -145,13 +145,15 @@ iteração.
 - Backend: `npm run lint`, `npm run build`, `npm test -- contracts` e
   `npm test -- docusign` (com `--maxWorkers=2`).
 - Frontend: `npm run lint`, `npm run build`.
-- QA visual: como o dev-server do Nest não pode subir nesta máquina, validar o
-  fluxo do especialista via frontend + mock da API (Playwright), cobrindo:
-  dropdown auto-selecionado por tipo, troca de template, seção de comissão
-  oculta, submit funcionando.
 - Prova de ponta com credenciais demo (script leve, sem Nest): gerar um preview
   real via template escolhido e confirmar `docGenFormFields` de comissão = `0`
   (ou ausentes se o template já foi editado).
+- **QA visual final: feito pelo usuário.** No fim, o assistente sobe o ambiente
+  para ele validar. **Não** usar `nest start --watch` (já causou OOM/travamento
+  nesta máquina — 15GB RAM). Subir o backend **compilado**: `npm run build` +
+  `npm run start:prod` (sem watch, sem transpile on-the-fly) e o frontend
+  `npm run dev` (Vite). Escalonar (backend primeiro, depois frontend) e checar
+  `free -h` antes de cada um.
 
 ## Riscos / notas
 
