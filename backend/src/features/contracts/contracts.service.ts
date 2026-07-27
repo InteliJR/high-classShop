@@ -992,29 +992,31 @@ export class ContractsService {
       commission_value: formatBRL(0),
       // ATENÇÃO: typo no template antigo - "commision" com apenas 1 'm'
       commision_value_written: numberToWords(0),
-      commission_name: dto.platform_name,
+      commission_name: dto.platform_name || '',
       // ATENÇÃO: typo no template antigo - "commision_cpf" com apenas 1 'm'
-      commision_cpf: formatCnpj(dto.platform_cnpj),
-      commission_bank: dto.platform_bank,
-      commission_agency: dto.platform_agency,
-      commission_checking_account: dto.platform_checking_account,
+      commision_cpf: formatCnpj(dto.platform_cnpj || ''),
+      commission_bank: dto.platform_bank || '',
+      commission_agency: dto.platform_agency || '',
+      commission_checking_account: dto.platform_checking_account || '',
 
       // === Campos do template NOVO (split 3 vias) — valores de comissão zerados; dados das partes mantidos ===
       // Dados da Plataforma (Split 1)
+      // ponytail: dados da plataforma são opcionais — nem todo ambiente tem
+      // banco/agência/conta cadastrados; sem eles vai vazio, nunca bloqueia o envio
       platform_value: formatBRL(0),
       platform_value_written: numberToWords(0),
       platform_percentage: '0',
-      platform_name: dto.platform_name,
-      platform_cnpj: formatCnpj(dto.platform_cnpj),
-      platform_bank: dto.platform_bank,
-      platform_agency: dto.platform_agency,
-      platform_checking_account: dto.platform_checking_account,
+      platform_name: dto.platform_name || '',
+      platform_cnpj: formatCnpj(dto.platform_cnpj || ''),
+      platform_bank: dto.platform_bank || '',
+      platform_agency: dto.platform_agency || '',
+      platform_checking_account: dto.platform_checking_account || '',
 
       // Dados do Escritório (Split 2)
       commission_office_value: formatBRL(0),
       commission_office_written: numberToWords(0),
-      office_name: dto.office_name,
-      office_cnpj: formatCnpj(dto.office_cnpj),
+      office_name: dto.office_name || '',
+      office_cnpj: formatCnpj(dto.office_cnpj || ''),
       office_bank: dto.office_bank || '',
       office_agency: dto.office_agency || '',
       office_checking_account: dto.office_checking_account || '',
@@ -1026,8 +1028,8 @@ export class ContractsService {
       specialist_agency: dto.specialist_agency || '',
       specialist_checking_account: dto.specialist_checking_account || '',
       // NOTE: variável do template usa nome em português/inglês misturado
-      especialista_name: dto.specialist_name,
-      specialist_document: formatDocument(dto.specialist_document),
+      especialista_name: dto.specialist_name || '',
+      specialist_document: formatDocument(dto.specialist_document || ''),
 
       // Testemunhas (opcionais)
       testimonial1_cpf: dto.testimonial1_cpf

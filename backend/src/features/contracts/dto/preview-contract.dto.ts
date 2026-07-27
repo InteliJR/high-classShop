@@ -161,34 +161,34 @@ export class PreviewContractDto {
   // === DADOS DA PLATAFORMA (SPLIT 1) ===
 
   @IsString({ message: 'platform_name deve ser uma string' })
-  @IsNotEmpty({ message: 'platform_name é obrigatório' })
-  platform_name: string;
+  @IsOptional()
+  platform_name?: string;
 
   @IsString({ message: 'platform_cnpj deve ser uma string' })
-  @IsNotEmpty({ message: 'platform_cnpj é obrigatório' })
-  platform_cnpj: string;
+  @IsOptional()
+  platform_cnpj?: string;
 
   @IsString({ message: 'platform_bank deve ser uma string' })
-  @IsNotEmpty({ message: 'platform_bank é obrigatório' })
-  platform_bank: string;
+  @IsOptional()
+  platform_bank?: string;
 
   @IsString({ message: 'platform_agency deve ser uma string' })
-  @IsNotEmpty({ message: 'platform_agency é obrigatório' })
-  platform_agency: string;
+  @IsOptional()
+  platform_agency?: string;
 
   @IsString({ message: 'platform_checking_account deve ser uma string' })
-  @IsNotEmpty({ message: 'platform_checking_account é obrigatório' })
-  platform_checking_account: string;
+  @IsOptional()
+  platform_checking_account?: string;
 
   // === DADOS DO ESCRITÓRIO/EMPRESA PARCEIRA (SPLIT 2) ===
 
   @IsString({ message: 'office_name deve ser uma string' })
-  @IsNotEmpty({ message: 'office_name é obrigatório' })
-  office_name: string;
+  @IsOptional()
+  office_name?: string;
 
   @IsString({ message: 'office_cnpj deve ser uma string' })
-  @IsNotEmpty({ message: 'office_cnpj é obrigatório' })
-  office_cnpj: string;
+  @IsOptional()
+  office_cnpj?: string;
 
   @IsString({ message: 'office_bank deve ser uma string' })
   @IsOptional()
@@ -205,16 +205,16 @@ export class PreviewContractDto {
   // === DADOS DO ESPECIALISTA (SPLIT 3) ===
 
   @IsString({ message: 'specialist_name deve ser uma string' })
-  @IsNotEmpty({ message: 'specialist_name é obrigatório' })
-  specialist_name: string;
+  @IsOptional()
+  specialist_name?: string;
 
   @IsEmail({}, { message: 'specialist_email deve ser um email válido' })
-  @IsNotEmpty({ message: 'specialist_email é obrigatório' })
-  specialist_email: string;
+  @IsOptional()
+  specialist_email?: string;
 
   @IsString({ message: 'specialist_document deve ser uma string' })
-  @IsNotEmpty({ message: 'specialist_document é obrigatório' })
-  specialist_document: string;
+  @IsOptional()
+  specialist_document?: string;
 
   @IsString({ message: 'specialist_bank deve ser uma string' })
   @IsOptional()

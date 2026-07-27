@@ -429,15 +429,16 @@ export default function CreateContractPage() {
     payment_seller_value: formData.payment_seller_value,
     // Comissão total (único valor editável — plataforma/escritório travados no backend)
     total_commission_rate: formData.total_commission_rate,
-    // Platform split
-    platform_name: formData.platform_name,
-    platform_cnpj: formData.platform_cnpj,
-    platform_bank: formData.platform_bank,
-    platform_agency: formData.platform_agency,
-    platform_checking_account: formData.platform_checking_account,
+    // Platform split (opcional — nem todo ambiente tem esses dados cadastrados)
+    platform_name: formData.platform_name || undefined,
+    platform_cnpj: formData.platform_cnpj || undefined,
+    platform_bank: formData.platform_bank || undefined,
+    platform_agency: formData.platform_agency || undefined,
+    platform_checking_account:
+      formData.platform_checking_account || undefined,
     // Office split
-    office_name: formData.office_name,
-    office_cnpj: formData.office_cnpj,
+    office_name: formData.office_name || undefined,
+    office_cnpj: formData.office_cnpj || undefined,
     office_bank: formData.office_bank || undefined,
     office_agency: formData.office_agency || undefined,
     office_checking_account: formData.office_checking_account || undefined,

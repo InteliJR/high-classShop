@@ -125,16 +125,16 @@ export interface GenerateContractData {
   // Plataforma e escritório ficam travados no backend nas taxas já cadastradas.
   total_commission_rate: number;
 
-  // Dados da Plataforma (Split 1)
-  platform_name: string;
-  platform_cnpj: string;
-  platform_bank: string;
-  platform_agency: string;
-  platform_checking_account: string;
+  // Dados da Plataforma (Split 1) — opcional, nem todo ambiente tem cadastro completo
+  platform_name?: string;
+  platform_cnpj?: string;
+  platform_bank?: string;
+  platform_agency?: string;
+  platform_checking_account?: string;
 
   // Dados do Escritório (Split 2)
-  office_name: string;
-  office_cnpj: string;
+  office_name?: string;
+  office_cnpj?: string;
   office_bank?: string;
   office_agency?: string;
   office_checking_account?: string;
@@ -245,8 +245,10 @@ export async function generateContract(
     buyer_cpf: stripFormatting(data.buyer_cpf),
     buyer_rg: data.buyer_rg ? stripFormatting(data.buyer_rg) : undefined,
     buyer_cep: stripFormatting(data.buyer_cep),
-    platform_cnpj: stripFormatting(data.platform_cnpj),
-    office_cnpj: stripFormatting(data.office_cnpj),
+    platform_cnpj: data.platform_cnpj
+      ? stripFormatting(data.platform_cnpj)
+      : undefined,
+    office_cnpj: data.office_cnpj ? stripFormatting(data.office_cnpj) : undefined,
     specialist_document: data.specialist_document
       ? stripFormatting(data.specialist_document)
       : undefined,
@@ -291,8 +293,10 @@ export async function previewContract(
     buyer_cpf: stripFormatting(data.buyer_cpf),
     buyer_rg: data.buyer_rg ? stripFormatting(data.buyer_rg) : undefined,
     buyer_cep: stripFormatting(data.buyer_cep),
-    platform_cnpj: stripFormatting(data.platform_cnpj),
-    office_cnpj: stripFormatting(data.office_cnpj),
+    platform_cnpj: data.platform_cnpj
+      ? stripFormatting(data.platform_cnpj)
+      : undefined,
+    office_cnpj: data.office_cnpj ? stripFormatting(data.office_cnpj) : undefined,
     specialist_document: data.specialist_document
       ? stripFormatting(data.specialist_document)
       : undefined,
@@ -337,8 +341,10 @@ export async function sendContractAfterPreview(
     buyer_cpf: stripFormatting(data.buyer_cpf),
     buyer_rg: data.buyer_rg ? stripFormatting(data.buyer_rg) : undefined,
     buyer_cep: stripFormatting(data.buyer_cep),
-    platform_cnpj: stripFormatting(data.platform_cnpj),
-    office_cnpj: stripFormatting(data.office_cnpj),
+    platform_cnpj: data.platform_cnpj
+      ? stripFormatting(data.platform_cnpj)
+      : undefined,
+    office_cnpj: data.office_cnpj ? stripFormatting(data.office_cnpj) : undefined,
     specialist_document: data.specialist_document
       ? stripFormatting(data.specialist_document)
       : undefined,
