@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../store/authStateManager";
 import { Search, BookOpen, Car, Ship, Plane } from "lucide-react";
+import Button from "../../components/ui/button";
 import ProductTypePreferenceModal, {
   type PreferredProductType,
 } from "../../components/product/ProductTypePreferenceModal";
@@ -38,10 +39,10 @@ export default function CustomerHomePage() {
     <div className="flex flex-col w-full max-w-6xl mx-auto py-8 px-4">
       {/* Welcome Section */}
       <div className="text-center space-y-2">
-        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">
+        <h1 className="text-3xl sm:text-4xl font-bold text-ink">
           Bem-vindo{user?.name ? `, ${user.name}` : ''}!
         </h1>
-        <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+        <p className="text-lg text-muted max-w-2xl mx-auto">
           O que você gostaria de fazer hoje? Escolha uma das opções abaixo para começar.
         </p>
       </div>
@@ -49,102 +50,105 @@ export default function CustomerHomePage() {
       {/* Main Options Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
         {/* Explorar Catálogo Card */}
-        <div 
+        <div
           onClick={() => handleOpenInterestModal("catalog")}
-          className="bg-white border-2 border-gray-200 rounded-2xl p-8 cursor-pointer hover:border-primary hover:shadow-xl transition-all duration-300 group"
+          className="bg-surface border-2 border-border rounded-2xl p-8 cursor-pointer hover:border-ink hover:shadow-xl transition-all duration-300 group"
         >
           <div className="flex flex-col items-center text-center space-y-6">
-            <div className="p-4 bg-primary/10 rounded-full group-hover:bg-primary/20 transition-colors">
-              <Search size={48} className="text-primary" />
+            <div className="p-4 bg-ink/10 rounded-full group-hover:bg-ink/20 transition-colors">
+              <Search size={48} className="text-ink" />
             </div>
             <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-gray-900">Explorar o Catálogo</h2>
-              <p className="text-gray-600">
+              <h2 className="text-2xl font-bold text-ink">Explorar o Catálogo</h2>
+              <p className="text-muted">
                 Navegue por nossa coleção exclusiva de produtos de luxo.
                 Encontre carros, embarcações ou aeronaves perfeitos para você.
               </p>
             </div>
-            
+
             {/* Category Icons */}
             <div className="flex gap-6 pt-4">
-              <div className="flex flex-col items-center gap-2 text-gray-500">
+              <div className="flex flex-col items-center gap-2 text-muted">
                 <Car size={24} />
                 <span className="text-xs">Carros</span>
               </div>
-              <div className="flex flex-col items-center gap-2 text-gray-500">
+              <div className="flex flex-col items-center gap-2 text-muted">
                 <Ship size={24} />
                 <span className="text-xs">Embarcações</span>
               </div>
-              <div className="flex flex-col items-center gap-2 text-gray-500">
+              <div className="flex flex-col items-center gap-2 text-muted">
                 <Plane size={24} />
                 <span className="text-xs">Aeronaves</span>
               </div>
             </div>
-            
-            <button className="mt-4 px-6 py-3 bg-brand-primary text-brand-primary-fg font-semibold rounded-lg hover:opacity-90 transition-colors">
+
+            <Button variant="brand" className="mt-4">
               Explorar Agora
-            </button>
+            </Button>
           </div>
         </div>
 
         {/* Pedir Consultoria Card */}
-        <div 
+        <div
           onClick={() => handleOpenInterestModal("consultoria")}
-          className="bg-white border-2 border-gray-200 rounded-2xl p-8 cursor-pointer hover:border-primary hover:shadow-xl transition-all duration-300 group"
+          className="bg-surface border-2 border-border rounded-2xl p-8 cursor-pointer hover:border-ink hover:shadow-xl transition-all duration-300 group"
         >
           <div className="flex flex-col items-center text-center space-y-6">
-            <div className="p-4 bg-primary/10 rounded-full group-hover:bg-primary/20 transition-colors">
-              <BookOpen size={48} className="text-primary" />
+            <div className="p-4 bg-ink/10 rounded-full group-hover:bg-ink/20 transition-colors">
+              <BookOpen size={48} className="text-ink" />
             </div>
             <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-gray-900">Pedir Consultoria</h2>
-              <p className="text-gray-600">
-                Agende uma consulta com nossos especialistas. 
+              <h2 className="text-2xl font-bold text-ink">Pedir Consultoria</h2>
+              <p className="text-muted">
+                Agende uma consulta com nossos especialistas.
                 Receba orientação personalizada para sua compra.
               </p>
             </div>
-            
+
             {/* Features */}
-            <div className="flex flex-col gap-2 pt-4 text-sm text-gray-500">
+            <div className="flex flex-col gap-2 pt-4 text-sm text-muted">
               <p>✓ Especialistas em cada categoria</p>
               <p>✓ Consultoria personalizada</p>
               <p>✓ Agendamento flexível</p>
             </div>
-            
-            <button className="mt-4 px-6 py-3 bg-brand-primary text-brand-primary-fg font-semibold rounded-lg hover:opacity-90 transition-colors">
+
+            <Button variant="brand" className="mt-4">
               Agendar Consultoria
-            </button>
+            </Button>
           </div>
         </div>
       </div>
 
       {/* Quick Access to Categories */}
       <div className="mt-12">
-        <h3 className="text-xl font-semibold text-gray-900 mb-6 text-center">
+        <h3 className="text-xl font-semibold text-ink mb-6 text-center">
           Acesso Rápido às Categorias
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <button
+          <Button
             onClick={() => navigate("/catalog/cars")}
-            className="flex items-center justify-center gap-3 p-4 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+            variant="light"
+            className="justify-center gap-3 p-4 rounded-xl"
           >
-            <Car size={24} className="text-primary" />
+            <Car size={24} className="text-ink" />
             <span className="font-medium">Carros</span>
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => navigate("/catalog/boats")}
-            className="flex items-center justify-center gap-3 p-4 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+            variant="light"
+            className="justify-center gap-3 p-4 rounded-xl"
           >
-            <Ship size={24} className="text-primary" />
+            <Ship size={24} className="text-ink" />
             <span className="font-medium">Embarcações</span>
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => navigate("/catalog/aircrafts")}
-            className="flex items-center justify-center gap-3 p-4 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+            variant="light"
+            className="justify-center gap-3 p-4 rounded-xl"
           >
-            <Plane size={24} className="text-primary" />
+            <Plane size={24} className="text-ink" />
             <span className="font-medium">Aeronaves</span>
-          </button>
+          </Button>
         </div>
       </div>
 

@@ -13,6 +13,7 @@ import {
   Settings,
   Percent,
   Database,
+  UserCheck,
 } from "lucide-react";
 import { useContext } from "react";
 import { AppContext } from "../contexts/AppContext";
@@ -140,6 +141,11 @@ export default function Sidebar() {
             icon: <UserCog size={20} />,
           },
           {
+            to: "/office/consultants",
+            label: "Consultores",
+            icon: <Users size={20} />,
+          },
+          {
             to: "/admin/commissions",
             label: "Comissões",
             icon: <Percent size={20} />,
@@ -185,6 +191,14 @@ export default function Sidebar() {
           },
         );
         break;
+    }
+
+    if (user.role !== "OFFICE") {
+      links.push({
+        to: "/advisor/dashboard",
+        label: "Meus Assessorados",
+        icon: <UserCheck size={20} />,
+      });
     }
   }
 

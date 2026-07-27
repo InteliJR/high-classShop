@@ -4,6 +4,10 @@ import { useAuth } from "../../store/authStateManager";
 import Loading from "../../components/ui/Loading";
 import ProcessCard from "../../components/processes/ProcessCard";
 import api from "../../services/api";
+import Button from "../../components/ui/button";
+import { Alert } from "../../components/ui/alert";
+import { PageHeader } from "../../components/patterns/PageHeader";
+import { EmptyState } from "../../components/patterns/EmptyState";
 
 interface ProcessClient {
   id: string;
@@ -160,87 +164,71 @@ export default function CustomerProcessesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 py-6">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
-            Meus Processos
-          </h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Acompanhe o andamento das suas negociações
-          </p>
+    <div className="w-full">
+      <PageHeader title="Meus Processos" />
+
+      {/* Error */}
+      {error && (
+        <Alert variant="danger" className="mb-6">
+          <AlertCircle size={20} />
+          <p>{error}</p>
+        </Alert>
+      )}
+
+      {/* Empty State */}
+      {processes.length === 0 && !error && (
+        <EmptyState
+          icon={FileText}
+          title="Nenhum processo encontrado"
+          description="Você ainda não possui processos de negociação. Explore o catálogo e agende uma reunião com um especialista!"
+        />
+      )}
+
+      {/* Processes List */}
+      {processes.length > 0 && (
+        <div className="space-y-4">
+          {processes.map((process) => (
+            <ProcessCard
+              key={process.id}
+              process={process as any}
+              product={process.product}
+              isClientView={true}
+            />
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* Content */}
-      <div className="max-w-5xl mx-auto px-4 py-6">
-        {/* Error */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
-            <AlertCircle size={20} className="text-red-600" />
-            <p className="text-sm text-red-700">{error}</p>
+      {/* Pagination */}
+      {processes.length > 0 && totalPages > 1 && (
+        <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted">
+            Página <span className="font-semibold">{currentPage}</span> de{" "}
+            <span className="font-semibold">{totalPages}</span>
+          </p>
+
+          <div className="flex gap-2 justify-center">
+            <Button
+              onClick={handlePreviousPage}
+              disabled={!hasPreviousPage}
+              variant="light"
+              className="text-sm"
+            >
+              <ChevronLeft size={18} />
+              Anterior
+            </Button>
+
+            <Button
+              onClick={handleNextPage}
+              disabled={!hasNextPage}
+              variant="light"
+              className="text-sm"
+            >
+              Próximo
+              <ChevronRight size={18} />
+            </Button>
           </div>
-        )}
-
-        {/* Empty State */}
-        {processes.length === 0 && !error && (
-          <div className="text-center py-12">
-            <FileText size={48} className="mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Nenhum processo encontrado
-            </h3>
-            <p className="text-sm text-gray-600">
-              Você ainda não possui processos de negociação. Explore o catálogo
-              e agende uma reunião com um especialista!
-            </p>
-          </div>
-        )}
-
-        {/* Processes List */}
-        {processes.length > 0 && (
-          <div className="space-y-4">
-            {processes.map((process) => (
-              <ProcessCard
-                key={process.id}
-                process={process as any}
-                product={process.product}
-                isClientView={true}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Pagination */}
-        {processes.length > 0 && totalPages > 1 && (
-          <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-gray-600">
-              Página <span className="font-semibold">{currentPage}</span> de{" "}
-              <span className="font-semibold">{totalPages}</span>
-            </p>
-
-            <div className="flex gap-2 justify-center">
-              <button
-                onClick={handlePreviousPage}
-                disabled={!hasPreviousPage}
-                className="inline-flex items-center gap-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-              >
-                <ChevronLeft size={18} />
-                Anterior
-              </button>
-
-              <button
-                onClick={handleNextPage}
-                disabled={!hasNextPage}
-                className="inline-flex items-center gap-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-              >
-                Próximo
-                <ChevronRight size={18} />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

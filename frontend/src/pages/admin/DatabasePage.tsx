@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import {
   Database,
   Loader,
-  AlertCircle,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -16,6 +15,9 @@ import {
   type RecordsPage,
 } from "../../services/admin-database.service";
 import { downloadCsv, openPrintablePdf } from "../../utils/export";
+import Button from "../../components/ui/button";
+import { Alert } from "../../components/ui/alert";
+import { EmptyState } from "../../components/patterns/EmptyState";
 
 const PAGE_SIZE = 20;
 
@@ -74,16 +76,16 @@ export default function DatabasePage() {
   return (
     <div className="text-text-main w-full">
       <div className="flex items-center gap-3 mb-6">
-        <Database className="w-7 h-7 text-slate-700" />
+        <Database className="w-7 h-7 text-ink-soft" />
         <div>
-          <h1 className="h1-style">Base de dados</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-h1 font-bold text-ink">Base de dados</h1>
+          <p className="text-sm text-muted">
             Visão consolidada — navegue por todas as tabelas da plataforma.
           </p>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-gray-200 mb-4">
+      <div className="flex flex-wrap gap-1 border-b border-border mb-4">
         {entities.map((e) => (
           <button
             key={e.key}
@@ -94,8 +96,8 @@ export default function DatabasePage() {
             }}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               active === e.key
-                ? "border-slate-700 text-slate-800"
-                : "border-transparent text-gray-500 hover:text-gray-700"
+                ? "border-ink text-ink"
+                : "border-transparent text-muted hover:text-ink-soft"
             }`}
           >
             {e.label}
@@ -104,30 +106,30 @@ export default function DatabasePage() {
       </div>
 
       {error && (
-        <div className="mb-4 flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <p className="text-sm">{error}</p>
-        </div>
+        <Alert variant="danger" className="mb-4">
+          {error}
+        </Alert>
       )}
 
       {loading ? (
         <div className="flex items-center justify-center min-h-[300px]">
-          <Loader className="w-8 h-8 animate-spin text-gray-400" />
+          <Loader className="w-8 h-8 animate-spin text-subtle" />
         </div>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-gray-400 p-4">Nenhum registro.</p>
+        <EmptyState icon={Database} title="Nenhum registro." />
       ) : (
         <>
           <div className="flex justify-end gap-2 mb-3">
-            <button
+            <Button
               type="button"
+              variant="light"
               onClick={() => downloadCsv(`${active}.csv`, columns, exportRows())}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
             >
               <Download className="w-4 h-4" /> CSV
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="light"
               onClick={() =>
                 openPrintablePdf(
                   `Base de dados — ${activeLabel}`,
@@ -135,20 +137,19 @@ export default function DatabasePage() {
                   exportRows(),
                 )
               }
-              className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
             >
               <FileText className="w-4 h-4" /> PDF
-            </button>
+            </Button>
           </div>
 
-          <div className="overflow-auto border border-gray-200 rounded-lg max-h-[65vh]">
+          <div className="overflow-auto border border-border rounded-lg max-h-[65vh]">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 sticky top-0 z-10">
+              <thead className="bg-border-soft sticky top-0 z-10">
                 <tr>
                   {columns.map((c) => (
                     <th
                       key={c}
-                      className="px-3 py-2 text-left font-medium text-gray-600 whitespace-nowrap"
+                      className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap"
                     >
                       {c}
                     </th>
@@ -157,13 +158,13 @@ export default function DatabasePage() {
               </thead>
               <tbody>
                 {rows.map((row, i) => (
-                  <tr key={i} className="border-t border-gray-100">
+                  <tr key={i} className="border-t border-border-soft">
                     {columns.map((c) => {
                       const text = formatCell(row[c]);
                       return (
                         <td
                           key={c}
-                          className="px-3 py-2 whitespace-nowrap text-gray-700 max-w-[280px] truncate"
+                          className="px-3 py-2 whitespace-nowrap text-ink-soft max-w-[280px] truncate"
                           title={text}
                         >
                           {text}
@@ -176,28 +177,28 @@ export default function DatabasePage() {
             </table>
           </div>
 
-          <div className="flex items-center justify-between mt-3 text-sm text-gray-500">
+          <div className="flex items-center justify-between mt-3 text-sm text-muted">
             <span>{result?.total ?? 0} registros</span>
             <div className="flex items-center gap-2">
-              <button
+              <Button
                 type="button"
+                variant="light"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
-                className="flex items-center gap-1 px-2 py-1 border border-gray-300 rounded disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="w-4 h-4" /> Anterior
-              </button>
+              </Button>
               <span>
                 Página {page} de {totalPages}
               </span>
-              <button
+              <Button
                 type="button"
+                variant="light"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
-                className="flex items-center gap-1 px-2 py-1 border border-gray-300 rounded disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Próxima <ChevronRight className="w-4 h-4" />
-              </button>
+              </Button>
             </div>
           </div>
         </>

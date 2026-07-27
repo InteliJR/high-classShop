@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Settings, Check, AlertCircle, Save, Video } from "lucide-react";
+import { Settings, Check, AlertCircle, Save, Video, X } from "lucide-react";
 import { getSettings, updateSetting } from "../../services/settings.service";
 import {
   getGoogleMeetStatus,
@@ -7,6 +7,8 @@ import {
   disconnectGoogleMeet,
   type GoogleMeetStatus,
 } from "../../services/googleMeet.service";
+import Button from "../../components/ui/button";
+import { Alert } from "../../components/ui/alert";
 
 /**
  * Admin Settings Page
@@ -172,67 +174,60 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-slate-100 rounded-lg">
-              <Settings size={24} className="text-slate-700" />
-            </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
-                Configurações do Sistema
-              </h1>
-              <p className="text-sm text-gray-600 mt-1">
-                Gerencie as configurações gerais da plataforma
-              </p>
-            </div>
+    <div className="text-text-main w-full">
+      <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-6">
+          <Settings size={24} className="text-ink-soft" />
+          <div>
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-ink">
+              Configurações do Sistema
+            </h1>
+            <p className="text-sm text-muted mt-1">
+              Gerencie as configurações gerais da plataforma
+            </p>
           </div>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
         {/* Success Message */}
         {successMessage && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
-            <Check size={20} className="text-green-600" />
-            <p className="text-sm text-green-700">{successMessage}</p>
-          </div>
+          <Alert variant="success" className="mb-6">
+            <Check size={20} />
+            <p>{successMessage}</p>
+          </Alert>
         )}
 
         {/* Error Alert */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
-            <AlertCircle size={20} className="text-red-600" />
-            <p className="text-sm text-red-700">{error}</p>
+          <Alert variant="danger" className="mb-6">
+            <AlertCircle size={20} />
+            <p className="flex-1">{error}</p>
             <button
               onClick={() => setError(null)}
-              className="ml-auto text-red-600 hover:text-red-800"
+              className="text-status-bad hover:opacity-70"
             >
-              ✕
+              <X size={16} />
             </button>
-          </div>
+          </Alert>
         )}
 
         {/* Loading State */}
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-slate-700"></div>
-              <p className="mt-4 text-gray-600">Carregando configurações...</p>
+              <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-ink"></div>
+              <p className="mt-4 text-muted">Carregando configurações...</p>
             </div>
           </div>
         ) : (
           <div className="space-y-6">
             {/* Proposals Settings Section */}
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
-                <h2 className="text-lg font-semibold text-gray-900">
+            <div className="bg-surface rounded-lg border border-border shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-border-soft bg-border-soft">
+                <h2 className="text-lg font-semibold text-ink">
                   Configurações de Propostas
                 </h2>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-muted mt-1">
                   Configure regras para propostas de negociação
                 </p>
               </div>
@@ -243,11 +238,11 @@ export default function SettingsPage() {
                   <div className="flex-1">
                     <label
                       htmlFor="minimumProposalEnabled"
-                      className="text-sm font-medium text-gray-900"
+                      className="text-sm font-medium text-ink"
                     >
                       Habilitar valor mínimo de proposta
                     </label>
-                    <p className="text-sm text-gray-500 mt-1">
+                    <p className="text-sm text-muted mt-1">
                       Quando ativado, propostas devem ter no mínimo a
                       porcentagem definida abaixo do valor original do produto.
                     </p>
@@ -255,8 +250,8 @@ export default function SettingsPage() {
                   <button
                     onClick={handleToggleMinimumProposal}
                     disabled={isSaving === "minimum_proposal_enabled"}
-                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 ${
-                      minimumProposalEnabled ? "bg-slate-700" : "bg-gray-200"
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-2 ${
+                      minimumProposalEnabled ? "bg-action" : "bg-border"
                     } ${
                       isSaving === "minimum_proposal_enabled"
                         ? "opacity-50"
@@ -275,14 +270,14 @@ export default function SettingsPage() {
 
                 {/* Minimum Proposal Percentage */}
                 {minimumProposalEnabled && (
-                  <div className="pt-4 border-t border-gray-100">
+                  <div className="pt-4 border-t border-border-soft">
                     <label
                       htmlFor="minimumProposalPercentage"
-                      className="block text-sm font-medium text-gray-900 mb-1"
+                      className="block text-sm font-medium text-ink mb-1"
                     >
                       Porcentagem mínima do valor original
                     </label>
-                    <p className="text-sm text-gray-500 mb-3">
+                    <p className="text-sm text-muted mb-3">
                       Propostas devem ser no mínimo este percentual do valor do
                       produto. Por exemplo: 80% significa que uma proposta para
                       um produto de R$ 100.000 deve ser no mínimo R$ 80.000.
@@ -298,16 +293,15 @@ export default function SettingsPage() {
                           }
                           min="0"
                           max="100"
-                          className="w-full px-4 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                          className="w-full px-4 py-2 pr-8 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted">
                           %
                         </span>
                       </div>
-                      <button
+                      <Button
                         onClick={handleSavePercentage}
                         disabled={isSaving === "minimum_proposal_percentage"}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg font-medium hover:bg-slate-800 transition disabled:opacity-50"
                       >
                         {isSaving === "minimum_proposal_percentage" ? (
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
@@ -315,7 +309,7 @@ export default function SettingsPage() {
                           <Save size={16} />
                         )}
                         Salvar
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -323,13 +317,13 @@ export default function SettingsPage() {
             </div>
 
             {/* Google Meet Connection Section */}
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
-                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                  <Video size={18} className="text-slate-700" />
+            <div className="bg-surface rounded-lg border border-border shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-border-soft bg-border-soft">
+                <h2 className="text-lg font-semibold text-ink flex items-center gap-2">
+                  <Video size={18} className="text-ink-soft" />
                   Reuniões — Conta Google Meet
                 </h2>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-muted mt-1">
                   Conecte uma conta Google Workspace para gerar as salas de
                   reunião. A conta precisa ser Workspace (contas @gmail.com
                   comuns não geram link do Meet via API).
@@ -341,20 +335,20 @@ export default function SettingsPage() {
                   <div className="flex-1">
                     {meetStatus?.connected ? (
                       <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-status-ok-wash text-status-ok">
                           <Check size={12} /> Conectado
                         </span>
-                        <span className="text-sm text-gray-700">
+                        <span className="text-sm text-ink-soft">
                           {meetStatus.google_email}
                         </span>
                       </div>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-border-soft text-ink-soft">
                         Nenhuma conta conectada
                       </span>
                     )}
                     {meetStatus?.last_error && (
-                      <p className="text-sm text-red-600 mt-2">
+                      <p className="text-sm text-status-bad mt-2">
                         Erro na conexão ({meetStatus.last_error}). Reconecte a
                         conta.
                       </p>
@@ -362,50 +356,41 @@ export default function SettingsPage() {
                   </div>
 
                   {meetStatus?.connected ? (
-                    <button
+                    <Button
+                      variant="light"
                       onClick={handleDisconnectMeet}
                       disabled={meetBusy}
-                      className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition disabled:opacity-50"
                     >
                       Desconectar
-                    </button>
+                    </Button>
                   ) : (
-                    <button
-                      onClick={handleConnectMeet}
-                      disabled={meetBusy}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg font-medium hover:bg-slate-800 transition disabled:opacity-50"
-                    >
+                    <Button onClick={handleConnectMeet} disabled={meetBusy}>
                       {meetBusy ? (
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                       ) : (
                         <Video size={16} />
                       )}
                       Conectar conta Google
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
             </div>
 
             {/* Info Box */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <AlertCircle
-                  size={20}
-                  className="text-blue-600 flex-shrink-0 mt-0.5"
-                />
-                <div>
-                  <h4 className="text-sm font-medium text-blue-900">
-                    Sobre as configurações
-                  </h4>
-                  <p className="text-sm text-blue-700 mt-1">
-                    As alterações nas configurações são aplicadas imediatamente
-                    para todas as novas negociações. Processos em andamento não
-                    são afetados retroativamente.
-                  </p>
-                </div>
+            <Alert variant="info">
+              <AlertCircle size={20} className="flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-medium">
+                  Sobre as configurações
+                </h4>
+                <p className="text-sm mt-1">
+                  As alterações nas configurações são aplicadas imediatamente
+                  para todas as novas negociações. Processos em andamento não
+                  são afetados retroativamente.
+                </p>
               </div>
-            </div>
+            </Alert>
           </div>
         )}
       </div>

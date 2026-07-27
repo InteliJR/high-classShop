@@ -110,6 +110,9 @@ export default function RegisterOfficePage() {
         <div className="max-w-md w-full bg-white rounded-lg shadow p-8 text-center">
           <h1 className="text-xl font-bold text-red-600 mb-2">Convite inválido</h1>
           <p className="text-gray-600">{tokenError}</p>
+          <Button onClick={() => navigate("/login")} className="mt-4">
+            Ir para Login
+          </Button>
         </div>
       </div>
     );
