@@ -40,6 +40,14 @@ export class PreviewContractDto {
   @IsNotEmpty({ message: 'process_id é obrigatório' })
   process_id: string;
 
+  /**
+   * ID do template DocuSign escolhido pelo especialista.
+   * Opcional: se ausente, o backend usa DOCUSIGN_TEMPLATE_ID do env.
+   */
+  @IsString({ message: 'template_id deve ser uma string' })
+  @IsOptional()
+  template_id?: string;
+
   // === VENDEDOR (SELLER) ===
 
   @IsString({ message: 'seller_name deve ser uma string' })

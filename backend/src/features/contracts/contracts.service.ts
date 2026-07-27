@@ -694,10 +694,11 @@ export class ContractsService {
       // ===== ETAPA 3: CRIAR ENVELOPE NO DOCUSIGN =====
       this.logger.log('Etapa 3: Criando envelope no DocuSign via template...');
 
-      const templateId = globalThis.process.env.DOCUSIGN_TEMPLATE_ID;
+      const templateId =
+        dto.template_id || globalThis.process.env.DOCUSIGN_TEMPLATE_ID;
       if (!templateId) {
         throw new InternalServerErrorException(
-          'DOCUSIGN_TEMPLATE_ID não configurado',
+          'Nenhum template informado e DOCUSIGN_TEMPLATE_ID não configurado',
         );
       }
 
@@ -1215,10 +1216,11 @@ export class ContractsService {
       // ===== ETAPA 3: CRIAR PREVIEW NO DOCUSIGN =====
       this.logger.log('Preview Etapa 3: Criando preview no DocuSign...');
 
-      const templateId = globalThis.process.env.DOCUSIGN_TEMPLATE_ID;
+      const templateId =
+        dto.template_id || globalThis.process.env.DOCUSIGN_TEMPLATE_ID;
       if (!templateId) {
         throw new InternalServerErrorException(
-          'DOCUSIGN_TEMPLATE_ID não configurado',
+          'Nenhum template informado e DOCUSIGN_TEMPLATE_ID não configurado',
         );
       }
 
@@ -1375,7 +1377,8 @@ export class ContractsService {
       // ===== ETAPA 3: SALVAR NO BANCO =====
       this.logger.log('Salvando contrato no banco...');
 
-      const templateId = globalThis.process.env.DOCUSIGN_TEMPLATE_ID || '';
+      const templateId =
+        dto.template_id || globalThis.process.env.DOCUSIGN_TEMPLATE_ID || '';
 
       const createdContract = await this.prismaService.$transaction(
         async (tx) => {
