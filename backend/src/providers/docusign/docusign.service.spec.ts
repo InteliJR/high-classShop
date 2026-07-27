@@ -28,7 +28,9 @@ describe('DocuSignService — mapFormFieldsToDocGen é removal-safe', () => {
     const templateDocs = [
       {
         documentId: '1',
-        docGenFormFieldList: [{ name: 'buyer_name', label: 'buyer_name', value: '' }],
+        docGenFormFieldList: [
+          { name: 'buyer_name', label: 'buyer_name', value: '' },
+        ],
       },
     ];
     const formFields = {

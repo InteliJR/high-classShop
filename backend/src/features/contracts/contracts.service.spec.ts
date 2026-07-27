@@ -245,7 +245,12 @@ describe('ContractsService — buildFormFields zera comissão no DocuSign', () =
   };
 
   it('valores monetários de comissão vão zerados; dados das partes intactos', () => {
-    const svc = new ContractsService({} as any, {} as any, {} as any, {} as any);
+    const svc = new ContractsService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
     const fields = (svc as any).buildFormFields(dto, 'CAR');
 
     // comissão zerada (split + flat legado)
