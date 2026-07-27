@@ -987,10 +987,11 @@ export class ContractsService {
       payment_seller_value: formatBRL(dto.payment_seller_value),
       payment_seller_value_written: numberToWords(dto.payment_seller_value),
 
-      // === Campos do template ANTIGO (compatibilidade) ===
-      commission_value: formatBRL(dto.platform_value),
+      // === Campos do template ANTIGO (compatibilidade) — comissão zerada no contrato ===
+      // ponytail: comissão zerada só no payload DocuSign; DB/cálculo intactos (resolveCommissionFromTotal segue igual)
+      commission_value: formatBRL(0),
       // ATENÇÃO: typo no template antigo - "commision" com apenas 1 'm'
-      commision_value_written: numberToWords(dto.platform_value),
+      commision_value_written: numberToWords(0),
       commission_name: dto.platform_name,
       // ATENÇÃO: typo no template antigo - "commision_cpf" com apenas 1 'm'
       commision_cpf: formatCnpj(dto.platform_cnpj),
@@ -998,11 +999,11 @@ export class ContractsService {
       commission_agency: dto.platform_agency,
       commission_checking_account: dto.platform_checking_account,
 
-      // === Campos do template NOVO (split 3 vias) ===
+      // === Campos do template NOVO (split 3 vias) — valores de comissão zerados; dados das partes mantidos ===
       // Dados da Plataforma (Split 1)
-      platform_value: formatBRL(dto.platform_value),
-      platform_value_written: numberToWords(dto.platform_value),
-      platform_percentage: String(dto.platform_percentage),
+      platform_value: formatBRL(0),
+      platform_value_written: numberToWords(0),
+      platform_percentage: '0',
       platform_name: dto.platform_name,
       platform_cnpj: formatCnpj(dto.platform_cnpj),
       platform_bank: dto.platform_bank,
@@ -1010,8 +1011,8 @@ export class ContractsService {
       platform_checking_account: dto.platform_checking_account,
 
       // Dados do Escritório (Split 2)
-      commission_office_value: formatBRL(dto.office_value),
-      commission_office_written: numberToWords(dto.office_value),
+      commission_office_value: formatBRL(0),
+      commission_office_written: numberToWords(0),
       office_name: dto.office_name,
       office_cnpj: formatCnpj(dto.office_cnpj),
       office_bank: dto.office_bank || '',
@@ -1019,8 +1020,8 @@ export class ContractsService {
       office_checking_account: dto.office_checking_account || '',
 
       // Dados do Especialista (Split 3)
-      specialist_value: formatBRL(dto.specialist_value),
-      specialist_value_written: numberToWords(dto.specialist_value),
+      specialist_value: formatBRL(0),
+      specialist_value_written: numberToWords(0),
       specialist_bank: dto.specialist_bank || '',
       specialist_agency: dto.specialist_agency || '',
       specialist_checking_account: dto.specialist_checking_account || '',

@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { ContractsService } from './contracts.service';
+import { formatBRL, numberToWords } from '../../shared/utils/format.utils';
 
 function mkPrisma(overrides: Partial<Record<string, any>> = {}) {
   return {
@@ -203,5 +204,64 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
     await expect(
       (svc as any).resolveCommissionFromTotal('p1', 15),
     ).rejects.toThrow(BadRequestException);
+  });
+});
+
+describe('ContractsService — buildFormFields zera comissão no DocuSign', () => {
+  const dto: any = {
+    seller_name: 'Vendedor',
+    seller_cpf: '12345678901',
+    seller_address: 'Rua 1',
+    seller_cep: '01234567',
+    seller_bank: 'Itau',
+    seller_agency: '1',
+    seller_checking_account: '2',
+    buyer_name: 'Comprador',
+    buyer_cpf: '98765432100',
+    buyer_address: 'Rua 2',
+    buyer_cep: '01234000',
+    vehicle_model: 'Carro X',
+    vehicle_year: '2020',
+    vehicle_registration_id: 'ABC1234',
+    vehicle_serial_number: 'CHASSI',
+    vehicle_price: 100000,
+    payment_seller_value: 90000,
+    total_commission_rate: 10,
+    platform_value: 4000,
+    platform_percentage: 4,
+    platform_name: 'Plat',
+    platform_cnpj: '11111111000111',
+    platform_bank: 'B',
+    platform_agency: 'A',
+    platform_checking_account: 'C',
+    office_value: 2000,
+    office_name: 'Escr',
+    office_cnpj: '22222222000122',
+    specialist_value: 4000,
+    specialist_name: 'Esp',
+    specialist_email: 'e@e.com',
+    specialist_document: '33333333000133',
+    city: 'São Paulo',
+  };
+
+  it('valores monetários de comissão vão zerados; dados das partes intactos', () => {
+    const svc = new ContractsService({} as any, {} as any, {} as any, {} as any);
+    const fields = (svc as any).buildFormFields(dto, 'CAR');
+
+    // comissão zerada (split + flat legado)
+    expect(fields.platform_value).toBe(formatBRL(0));
+    expect(fields.platform_value_written).toBe(numberToWords(0));
+    expect(fields.platform_percentage).toBe('0');
+    expect(fields.commission_office_value).toBe(formatBRL(0));
+    expect(fields.commission_office_written).toBe(numberToWords(0));
+    expect(fields.specialist_value).toBe(formatBRL(0));
+    expect(fields.specialist_value_written).toBe(numberToWords(0));
+    expect(fields.commission_value).toBe(formatBRL(0));
+    expect(fields.commision_value_written).toBe(numberToWords(0));
+
+    // dados que NÃO são comissão seguem normais
+    expect(fields.buyer_name).toBe('Comprador');
+    expect(fields.vehicle_model).toBe('Carro X');
+    expect(fields.platform_name).toBe('Plat');
   });
 });
