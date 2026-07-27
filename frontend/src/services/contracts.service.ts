@@ -88,6 +88,9 @@ export interface PrefillContractResponse {
 export interface GenerateContractData {
   process_id: string;
 
+  // Template DocuSign escolhido (opcional; backend faz fallback pro env)
+  template_id?: string;
+
   // Vendedor
   seller_name: string;
   seller_email: string;
@@ -204,6 +207,17 @@ export interface ApiResponse<T> {
  * @param processId - ID do processo
  * @returns Dados do comprador, vendedor, produto e proposta
  */
+export interface ContractTemplate {
+  templateId: string;
+  name: string;
+}
+
+export async function listContractTemplates(): Promise<ContractTemplate[]> {
+  const response =
+    await api.get<ApiResponse<ContractTemplate[]>>("/contracts/templates");
+  return response.data.data;
+}
+
 export async function prefillContract(
   processId: string,
 ): Promise<PrefillContractResponse> {
