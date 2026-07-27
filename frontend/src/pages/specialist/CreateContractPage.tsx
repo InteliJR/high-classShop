@@ -1,7 +1,15 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { AlertCircle, CheckCircle, Loader, FileText, Eye } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle,
+  Loader,
+  FileText,
+  Eye,
+  ChevronDown,
+  Check,
+} from "lucide-react";
 import { useIsMobile } from "../../hooks/use-is-mobile";
 import {
   prefillContract,
@@ -191,6 +199,8 @@ export default function CreateContractPage() {
 
   const [templates, setTemplates] = useState<ContractTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [isTemplateDropdownOpen, setIsTemplateDropdownOpen] = useState(false);
+  const templateDropdownRef = useRef<HTMLDivElement>(null);
 
   const vehiclePrice = watch("vehicle_price");
   const totalCommissionRate = watch("total_commission_rate");
@@ -368,6 +378,26 @@ export default function CreateContractPage() {
     };
     if (prefillData) load();
   }, [prefillData]);
+
+  // Fecha o dropdown de template ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        templateDropdownRef.current &&
+        !templateDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsTemplateDropdownOpen(false);
+      }
+    };
+    if (isTemplateDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isTemplateDropdownOpen]);
+
+  const selectedTemplate = templates.find(
+    (t) => t.templateId === selectedTemplateId,
+  );
 
   // Build contract data from form
   const buildContractData = (
@@ -711,25 +741,70 @@ export default function CreateContractPage() {
 
           {/* Seção: Modelo de contrato */}
           <section className="bg-surface rounded-lg border border-border p-6">
-            <h2 className="text-base font-semibold text-ink mb-2 border-b pb-2">
-              Modelo de contrato
-            </h2>
+            <div className="flex items-center gap-2 border-b pb-2 mb-2">
+              <FileText className="w-4 h-4 text-brand-primary" />
+              <h2 className="text-base font-semibold text-ink">
+                Modelo de contrato
+              </h2>
+            </div>
             <p className="text-sm text-muted mb-3">
               Selecionado automaticamente pelo tipo do produto — troque se
               necessário.
             </p>
-            <select
-              value={selectedTemplateId}
-              onChange={(e) => setSelectedTemplateId(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
-            >
-              <option value="">Selecione um modelo…</option>
-              {templates.map((t) => (
-                <option key={t.templateId} value={t.templateId}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
+            <div className="relative" ref={templateDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsTemplateDropdownOpen((v) => !v)}
+                className="w-full flex items-center justify-between gap-2 px-3 py-2.5 border border-border rounded-lg bg-surface text-sm hover:border-brand-primary focus:outline-none focus:ring-2 focus:ring-focus-ring transition-colors"
+              >
+                <span
+                  className={
+                    selectedTemplate
+                      ? "font-medium text-ink"
+                      : "text-subtle"
+                  }
+                >
+                  {selectedTemplate ? selectedTemplate.name : "Selecione um modelo…"}
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 shrink-0 text-muted transition-transform ${
+                    isTemplateDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {isTemplateDropdownOpen && (
+                <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-surface border border-border rounded-lg shadow-ds-floating overflow-hidden py-1">
+                  {templates.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-subtle">
+                      Nenhum modelo disponível.
+                    </p>
+                  ) : (
+                    templates.map((t) => {
+                      const isSelected = t.templateId === selectedTemplateId;
+                      return (
+                        <button
+                          key={t.templateId}
+                          type="button"
+                          onClick={() => {
+                            setSelectedTemplateId(t.templateId);
+                            setIsTemplateDropdownOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                            isSelected
+                              ? "bg-brand-primary/10 text-brand-primary font-medium"
+                              : "text-ink hover:bg-border-soft"
+                          }`}
+                        >
+                          {t.name}
+                          {isSelected && <Check className="w-4 h-4 shrink-0" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
           </section>
 
           {/* ── Grupo: Dados das partes ── */}
