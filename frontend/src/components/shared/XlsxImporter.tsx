@@ -583,7 +583,7 @@ export function XlsxImporter({
                   <p className="text-sm font-semibold text-red-700 mb-2">
                     Detalhes dos erros ({importResult.errorRows.length})
                   </p>
-                  <div className="max-h-48 overflow-y-auto rounded-lg border border-red-200">
+                  <div className="max-h-48 overflow-auto rounded-lg border border-red-200">
                     <table className="w-full text-sm">
                       <thead className="bg-red-100 sticky top-0">
                         <tr>
@@ -624,7 +624,7 @@ export function XlsxImporter({
                     <p className="text-sm font-semibold text-yellow-700 mb-2">
                       Avisos de imagem ({importResult.warningRows.length})
                     </p>
-                    <div className="max-h-48 overflow-y-auto rounded-lg border border-yellow-200">
+                    <div className="max-h-48 overflow-auto rounded-lg border border-yellow-200">
                       <table className="w-full text-sm">
                         <thead className="bg-yellow-100 sticky top-0">
                           <tr>

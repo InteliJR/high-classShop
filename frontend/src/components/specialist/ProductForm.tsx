@@ -33,7 +33,7 @@ import {
   XlsxImporter,
   type CsvImportResponse,
 } from "../../components/shared/XlsxImporter";
-import { Modal } from "../../components/shared/Modal";
+import { Dialog, DialogContent } from "../../components/ui/dialog";
 import type { SpecialityType, UserRole } from "../../types/types";
 
 type ProductType = "CAR" | "BOAT" | "AIRCRAFT";
@@ -397,20 +397,21 @@ export default function ProductForm({
       )}
 
       {/* Modal de importacao XLSX */}
-      <Modal
-        isOpen={isCsvModalOpen}
-        onClose={() => setIsCsvModalOpen(false)}
-        title={`Importar ${productType === "CAR" ? "Carros" : productType === "BOAT" ? "Lanchas" : "Aeronaves"} via CSV`}
-        size="lg"
-      >
-        <XlsxImporter
-          productType={productType}
-          onImport={handleCsvImport}
-          onDownloadTemplate={handleDownloadXlsxTemplate}
-          disabled={!isAuthorized || isSubmitting}
-          onSuccess={() => setIsCsvModalOpen(false)}
-        />
-      </Modal>
+      <Dialog open={isCsvModalOpen} onOpenChange={setIsCsvModalOpen}>
+        <DialogContent
+          open={isCsvModalOpen}
+          title={`Importar ${productType === "CAR" ? "Carros" : productType === "BOAT" ? "Lanchas" : "Aeronaves"} via CSV`}
+          className="w-[min(672px,92vw)]"
+        >
+          <XlsxImporter
+            productType={productType}
+            onImport={handleCsvImport}
+            onDownloadTemplate={handleDownloadXlsxTemplate}
+            disabled={!isAuthorized || isSubmitting}
+            onSuccess={() => setIsCsvModalOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Campos Comuns */}
       <div className="grid grid-cols-2 gap-4">
