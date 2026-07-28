@@ -75,7 +75,7 @@ export default function Login() {
       </div>
 
       {/* Informações */}
-      <div className="sm:relative sm:left-8 flex flex-col gap-7 mx-13 sm:mx-0 sm:rounded-4xl sm:flex-col sm:w-1/2 sm:h-full sm:justify-center sm:gap-12 sm:px-24 xl:px-32 sm:inset-y-0 sm:z-10 bg-background">
+      <div className="sm:relative sm:left-8 flex flex-col gap-7 mx-13 sm:mx-0 sm:rounded-4xl sm:flex-col sm:w-1/2 sm:h-full sm:justify-center sm:gap-12 sm:px-24 xl:px-32 sm:inset-y-0 sm:z-10 bg-bg">
         {/* Título da página */}
         <div className="sm:relative sm:right-8 pt-8 flex flex-col justify-center items-center gap-3 sm:items-center sm:gap-4">
           <h1 className="text-2xl font-semibold sm:text-center sm:text-5xl">
@@ -97,7 +97,7 @@ export default function Login() {
                 alt="Campo para inserir o e-mail"
                 type="email"
                 placeholder="Insira seu e-mail"
-                className="text-xs p-2 sm:p-3 bg bg-color-input rounded-md sm:rounded-xl sm:text-lg"
+                className="text-xs p-2 sm:p-3 bg-border rounded-md sm:rounded-xl sm:text-lg focus:outline-none focus:ring-2 focus:ring-focus-ring"
                 {...register("email", { required: true })}
               />
             </div>
@@ -108,20 +108,20 @@ export default function Login() {
                 alt="Campo para inserir a senha"
                 type="password"
                 placeholder="Insira sua senha"
-                className="text-xs p-2 sm:p-3 bg bg-color-input rounded-md sm:rounded-xl sm:text-lg"
+                className="text-xs p-2 sm:p-3 bg-border rounded-md sm:rounded-xl sm:text-lg focus:outline-none focus:ring-2 focus:ring-focus-ring"
                 {...register("password", { required: true })}
               />
             </div>
           </div>
           {/* Campo de ações */}
-          <div className="flex flex-col justify-center items-center gap-4 text-color-a sm:gap-5 sm:pt-6 pt-4">
-            <Link to="/forgot-password" className="text-xs text-color-a sm:text-base hover:underline">
+          <div className="flex flex-col justify-center items-center gap-4 text-muted sm:gap-5 sm:pt-6 pt-4">
+            <Link to="/forgot-password" className="text-xs text-muted sm:text-base hover:underline">
               Esqueceu sua senha?
             </Link>
             <input
               type="submit"
               value="Entrar"
-              className="text-sm bg-background-secondary p-2 w-full text-color-text-secondary rounded-md sm:text-xl sm:rounded-lg hover:bg-gray-500"
+              className="text-sm bg-ink-soft p-2 w-full text-border-soft rounded-md sm:text-xl sm:rounded-lg hover:bg-ink"
             />
             <Link
               to="/register"
@@ -133,7 +133,7 @@ export default function Login() {
                     }
                   : undefined
               }
-              className="text-xs text-color-a sm:text-base hover:underline"
+              className="text-xs text-muted sm:text-base hover:underline"
             >
               Cadastre-se
             </Link>
