@@ -152,6 +152,34 @@ Pequeno ajuste: ler `?tab=` da URL (`useSearchParams`) para inicializar o estado
 assim o link vindo do dashboard (`?tab=sales`) abre direto na aba "Por venda" em vez da
 aba de configuração de taxas.
 
+## Animações
+
+Levantamento: `framer-motion` já é dependência do frontend (`^12.34.2`) e já está em uso
+em `components/ui/dialog.tsx` e `components/ui/alert.tsx` (fade + scale sutil, 150ms,
+respeitando `useReducedMotion()`) e nas landing pages (`HeroSection.tsx`, `Product.tsx`).
+`ProductCard.tsx` tem uma animação mais expressiva ("balatro-styled", commit `c7bdab3`) —
+tratada como exceção pontual de uma página de catálogo/marketing, não como padrão geral.
+O guia (`docs/docs/design.md`): "Animações sutis (fade/slide 150–250ms) — sem motion
+excessivo." Fora de Dialog/Alert/landing/ProductCard, as telas administrativas (incluindo
+o dashboard atual) não têm nenhuma animação deliberada hoje — só `transition-colors`
+padrão do Tailwind em hovers de botão/link, que já existe e não muda.
+
+Para este redesign, aplicar o mesmo padrão já estabelecido em `dialog.tsx`, em vez de
+introduzir um estilo novo:
+
+- **Entrada dos cards**: cada `Card` da página (KPIs, Comissão por processo, Base de
+  dados, gráficos, atalhos) usa `motion.div` com `initial={{ opacity: 0, y: 8 }}`,
+  `animate={{ opacity: 1, y: 0 }}`, `transition={{ duration, delay }}` — mesma constante
+  `duration = useReducedMotion() ? 0 : 0.2` usada no Dialog. `delay` é um stagger pequeno
+  por índice do card (`index * 0.03`, teto de ~6 cards visíveis por vez — sem stagger
+  perceptível em listas longas tipo `recentSales`).
+- **Hover em card clicável** (tiles de "Base de dados", atalhos rápidos): só CSS —
+  `transition-shadow hover:shadow-ds-floating` (token que já existe, sem JS/framer-motion
+  necessário pra um hover).
+- **Não fazer**: sem contador numérico animado nos KPIs, sem animação nas barras de
+  split de comissão, sem reprodução do estilo "balatro" do `ProductCard` — motion
+  excessivo é exatamente o que o guia pede pra evitar num painel administrativo.
+
 ## Erros e estados de carregamento
 
 Mesmo padrão que a página já usa hoje: um `isLoading` cobre a página inteira (já é assim
