@@ -53,6 +53,16 @@ export class AdminDatabaseService {
     }));
   }
 
+  async countAll(): Promise<{ key: string; label: string; count: number }[]> {
+    return Promise.all(
+      Object.entries(ENTITIES).map(async ([key, cfg]) => ({
+        key,
+        label: cfg.label,
+        count: await (this.prisma as any)[cfg.model].count(),
+      })),
+    );
+  }
+
   async list(entity: string, page: number, pageSize: number) {
     const cfg = ENTITIES[entity];
     if (!cfg) {
