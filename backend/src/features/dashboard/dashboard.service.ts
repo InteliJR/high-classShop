@@ -1,17 +1,25 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import {
+  CommissionsService,
+  SaleCommission,
+  round2,
+} from '../commissions/commissions.service';
+import { AdminDatabaseService } from '../admin-database/admin-database.service';
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly commissionsService: CommissionsService,
+    private readonly adminDatabaseService: AdminDatabaseService,
+  ) {}
 
   async getAdminStats() {
     // Todas as consultas independentes rodam em paralelo (antes eram sequenciais).
     const [
       activeCompanies,
       activeProcesses,
-      totalProcesses,
-      completedProcesses,
       totalClients,
       specialistsCount,
       totalCars,
@@ -19,13 +27,13 @@ export class DashboardService {
       totalAircrafts,
       salesByMonth,
       consultantsPerformance,
+      sales,
+      databaseCounts,
     ] = await Promise.all([
       this.prisma.company.count(),
       this.prisma.process.count({
         where: { status: { in: ['SCHEDULING', 'NEGOTIATION'] } },
       }),
-      this.prisma.process.count(),
-      this.prisma.process.count({ where: { status: 'COMPLETED' } }),
       this.prisma.user.count({ where: { role: 'CUSTOMER' } }),
       this.prisma.user.count({ where: { role: 'SPECIALIST' } }),
       this.prisma.car.count(),
@@ -33,19 +41,14 @@ export class DashboardService {
       this.prisma.aircraft.count(),
       this.buildMonthlySalesData({}),
       this.getConsultantsPerformance(),
+      this.commissionsService.listSales(),
+      this.adminDatabaseService.countAll(),
     ]);
-
-    // Taxa de conversão = (processos completados / total de processos) * 100
-    const conversionRate =
-      totalProcesses > 0
-        ? Math.round((completedProcesses / totalProcesses) * 100)
-        : 0;
 
     const totalProducts = totalCars + totalBoats + totalAircrafts;
 
     return {
       activeProcesses,
-      conversionRate,
       activeCompanies,
       totalClients,
       specialistsCount,
@@ -57,6 +60,33 @@ export class DashboardService {
       },
       salesByMonth,
       consultantsPerformance,
+      commissionSummary: this.buildCommissionSummary(sales),
+      databaseCounts,
+    };
+  }
+
+  private buildCommissionSummary(sales: SaleCommission[]) {
+    const now = new Date();
+    const totalPaid = round2(
+      sales.reduce((sum, s) => sum + s.totalCommission, 0),
+    );
+    const thisMonth = round2(
+      sales
+        .filter(
+          (s) =>
+            s.signedAt &&
+            s.signedAt.getFullYear() === now.getFullYear() &&
+            s.signedAt.getMonth() === now.getMonth(),
+        )
+        .reduce((sum, s) => sum + s.totalCommission, 0),
+    );
+    const avgTicket = sales.length > 0 ? round2(totalPaid / sales.length) : 0;
+
+    return {
+      totalPaid,
+      thisMonth,
+      avgTicket,
+      recentSales: sales.slice(0, 5),
     };
   }
 

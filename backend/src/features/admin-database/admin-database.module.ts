@@ -5,5 +5,6 @@ import { AdminDatabaseController } from './admin-database.controller';
 @Module({
   controllers: [AdminDatabaseController],
   providers: [AdminDatabaseService],
+  exports: [AdminDatabaseService],
 })
 export class AdminDatabaseModule {}

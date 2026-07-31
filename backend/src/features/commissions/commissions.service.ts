@@ -18,7 +18,7 @@ export interface SaleCommission {
   signedAt: Date | null;
 }
 
-const round2 = (n: number): number => Math.round(n * 100) / 100;
+export const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 @Injectable()
 export class CommissionsService {
