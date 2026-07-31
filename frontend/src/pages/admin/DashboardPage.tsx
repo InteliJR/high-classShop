@@ -196,50 +196,56 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div>
-                <p className="text-xs text-muted mb-1">Total pago</p>
-                <p className="text-xl font-bold text-ink">
-                  {brl(commissionSummary.totalPaid)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted mb-1">Este mês</p>
-                <p className="text-xl font-bold text-ink">
-                  {brl(commissionSummary.thisMonth)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted mb-1">Ticket médio</p>
-                <p className="text-xl font-bold text-ink">
-                  {brl(commissionSummary.avgTicket)}
-                </p>
-              </div>
-            </div>
-
-            {commissionSummary.recentSales.length === 0 ? (
-              <p className="text-sm text-subtle">
-                Nenhuma venda fechada ainda.
-              </p>
+            {isLoading ? (
+              <p className="text-sm text-muted">Carregando...</p>
             ) : (
-              <div className="flex flex-col gap-3 border-t border-border pt-4">
-                {commissionSummary.recentSales.map((sale) => (
-                  <div
-                    key={sale.processId}
-                    className="flex items-center gap-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-ink truncate">
-                        {sale.productLabel} · {sale.clientName}
-                      </p>
-                      <CommissionSplitBar sale={sale} />
-                    </div>
-                    <p className="text-sm font-semibold text-ink shrink-0">
-                      {brl(sale.totalCommission)}
+              <>
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <p className="text-xs text-muted mb-1">Total pago</p>
+                    <p className="text-xl font-bold text-ink">
+                      {brl(commissionSummary.totalPaid)}
                     </p>
                   </div>
-                ))}
-              </div>
+                  <div>
+                    <p className="text-xs text-muted mb-1">Este mês</p>
+                    <p className="text-xl font-bold text-ink">
+                      {brl(commissionSummary.thisMonth)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted mb-1">Ticket médio</p>
+                    <p className="text-xl font-bold text-ink">
+                      {brl(commissionSummary.avgTicket)}
+                    </p>
+                  </div>
+                </div>
+
+                {commissionSummary.recentSales.length === 0 ? (
+                  <p className="text-sm text-subtle">
+                    Nenhuma venda fechada ainda.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-3 border-t border-border pt-4">
+                    {commissionSummary.recentSales.map((sale) => (
+                      <div
+                        key={sale.processId}
+                        className="flex items-center gap-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-ink truncate">
+                            {sale.productLabel} · {sale.clientName}
+                          </p>
+                          <CommissionSplitBar sale={sale} />
+                        </div>
+                        <p className="text-sm font-semibold text-ink shrink-0">
+                          {brl(sale.totalCommission)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </Card>
         </motion.div>
@@ -265,20 +271,24 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {databaseCounts.map((entity) => (
-                <Link
-                  key={entity.key}
-                  to="/admin/database"
-                  className="border border-border rounded-lg p-3 transition-shadow hover:shadow-ds-floating"
-                >
-                  <p className="text-sm text-muted mb-1">{entity.label}</p>
-                  <p className="text-2xl font-bold text-ink">
-                    {entity.count}
-                  </p>
-                </Link>
-              ))}
-            </div>
+            {isLoading ? (
+              <p className="text-sm text-muted">Carregando...</p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {databaseCounts.map((entity) => (
+                  <Link
+                    key={entity.key}
+                    to="/admin/database"
+                    className="border border-border rounded-lg p-3 transition-shadow hover:shadow-ds-floating"
+                  >
+                    <p className="text-sm text-muted mb-1">{entity.label}</p>
+                    <p className="text-2xl font-bold text-ink">
+                      {entity.count}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            )}
           </Card>
         </motion.div>
       </div>
