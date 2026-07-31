@@ -3,6 +3,7 @@
 //  - "Por venda": fluxo de comissão de cada venda fechada (quanto vai para cada parte).
 
 import { useEffect, useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Percent,
   Save,
@@ -114,7 +115,10 @@ function exportSalesPdf(sales: SaleCommission[]) {
 type Tab = "config" | "sales";
 
 export default function CommissionsPage() {
-  const [tab, setTab] = useState<Tab>("config");
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(
+    searchParams.get("tab") === "sales" ? "sales" : "config",
+  );
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
