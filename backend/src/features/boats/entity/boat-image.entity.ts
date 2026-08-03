@@ -7,6 +7,6 @@ export class BoatImage {
   is_primary: boolean;
   created_at: Date;
 
-  boat_id?: number | null;
+  boat_id?: string | null;
   boat?: Boat;
 }

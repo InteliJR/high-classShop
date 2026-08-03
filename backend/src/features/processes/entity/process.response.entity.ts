@@ -6,7 +6,7 @@ export class ProcessResponse {
   appointment_status?: $Enums.StatusAgendamento | null;
   appointment_datetime?: Date | null;
   product_type: $Enums.ProductType | null; // Null para processos de consultoria
-  product_id?: number | null; // ID do produto (car_id, boat_id, ou aircraft_id)
+  product_id?: string | null; // ID do produto (car_id, boat_id, ou aircraft_id)
   client: {
     id: string;
     name: string;
@@ -27,9 +27,8 @@ export class ProcessResponse {
   updated_at?: Date;
 }
 
-// TODO: trocar para string quando for trocado para UUID
 export class Product {
-  id: number;
+  id: string;
   marca: string;
   modelo: string;
 }

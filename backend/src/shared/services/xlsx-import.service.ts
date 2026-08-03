@@ -407,10 +407,10 @@ export class XlsxImportService {
    * Cria resposta de importação
    */
   createResponse(
-    insertedIds: number[],
+    insertedIds: string[],
     errorRows: ImportErrorRow[],
     warningRows: ImportErrorRow[] = [],
-    updatedIds: number[] = [],
+    updatedIds: string[] = [],
   ): ImportResponseDto {
     const insertedCount = insertedIds.length;
     const updatedCount = updatedIds.length;

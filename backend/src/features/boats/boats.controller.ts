@@ -141,7 +141,7 @@ export class BoatsController {
   @Get(':id')
   @Public()
   findOne(@Param('id') id: string) {
-    return this.boatsService.findOne(+id);
+    return this.boatsService.findOne(id);
   }
 
   @Patch(':id')
@@ -152,17 +152,17 @@ export class BoatsController {
     @CurrentUser() user: UserEntity,
   ) {
     assertSpecialistCanModify('BOAT', user);
-    const existing = await this.boatsService.findOne(+id);
+    const existing = await this.boatsService.findOne(id);
     assertSpecialistOwnsProduct(user, existing?.specialist_id);
-    return this.boatsService.update(+id, updateBoatDto);
+    return this.boatsService.update(id, updateBoatDto);
   }
 
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   async remove(@Param('id') id: string, @CurrentUser() user: UserEntity) {
     assertSpecialistCanModify('BOAT', user);
-    const existing = await this.boatsService.findOne(+id);
+    const existing = await this.boatsService.findOne(id);
     assertSpecialistOwnsProduct(user, existing?.specialist_id);
-    return this.boatsService.remove(+id);
+    return this.boatsService.remove(id);
   }
 }

@@ -1126,7 +1126,7 @@ model Appointment {
   client_id     String       @db.Uuid
   specialist_id String       @db.Uuid
   product_type  ProductType? // Opcional: null para consultoria sem produto específico
-  product_id    Int? // Opcional: null para consultoria sem produto específico
+  product_id    String?       @db.Uuid // Opcional: null para consultoria sem produto específico
 
   // Data e hora do agendamento em UTC (ISO 8601)
   // Exemplo: "2024-10-10T14:00:00Z"
@@ -1320,7 +1320,7 @@ model ProductImportJobItem {
   status        ProductImportItemStatus @default(PENDING)
   payload       Json
   folder_url    String?
-  product_id    Int?
+  product_id    String?                 @db.Uuid
   action        String?
   attempts      Int                     @default(0)
   error_message String?

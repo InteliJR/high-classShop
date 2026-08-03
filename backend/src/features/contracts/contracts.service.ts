@@ -133,7 +133,7 @@ export class ContractsService {
 
     // Determinar produto baseado no tipo
     let product: {
-      id: number;
+      id: string;
       brand: string;
       model: string;
       year: number;

@@ -3,8 +3,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsInt,
-  Min,
   ValidateIf,
   IsEnum,
 } from 'class-validator';
@@ -29,9 +27,8 @@ export class CreateProcessDTO {
    */
   @IsOptional()
   @ValidateIf((o) => o.product_type !== undefined)
-  @IsInt({ message: 'product_id deve ser um número inteiro' })
-  @Min(1, { message: 'product_id deve ser no mínimo 1' })
-  product_id?: number;
+  @IsUUID('4', { message: 'product_id deve ser um UUID válido' })
+  product_id?: string;
 
   /**
    * Tipo do produto: CAR, BOAT ou AIRCRAFT

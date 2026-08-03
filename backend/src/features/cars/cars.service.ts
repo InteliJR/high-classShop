@@ -215,7 +215,7 @@ export class CarsService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(id: string) {
     this.logger.log(`[findOne] Buscando carro - ID: ${id}`);
     const car = await this.prismaService.car.findUnique({
       where: { id },
@@ -241,7 +241,7 @@ export class CarsService {
     return { ...car };
   }
 
-  async update(id: number, updateCarDto: UpdateCarDto) {
+  async update(id: string, updateCarDto: UpdateCarDto) {
     await this.findOne(id);
 
     const { images, ...carData } = updateCarDto;
@@ -290,7 +290,7 @@ export class CarsService {
     }
   }
 
-  async remove(id: number) {
+  async remove(id: string) {
     await this.findOne(id);
 
     try {
@@ -399,8 +399,8 @@ export class CarsService {
       });
     }
 
-    const insertedIds: number[] = [];
-    const updatedIds: number[] = [];
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -507,8 +507,8 @@ export class CarsService {
       });
     }
 
-    const insertedIds: number[] = [];
-    const updatedIds: number[] = [];
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
     const warningRows: ImportErrorRow[] = [];
 

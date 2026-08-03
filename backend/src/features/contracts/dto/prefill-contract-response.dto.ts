@@ -34,7 +34,7 @@ export class PrefillContractResponseDto {
 
   // Dados do produto
   product: {
-    id: number;
+    id: string;
     brand: string;
     model: string;
     year: number;

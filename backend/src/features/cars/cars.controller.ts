@@ -137,14 +137,14 @@ export class CarsController {
 
   @Get(':id')
   @Public()
-  findOne(@Param('id') id: number) {
-    return this.carsService.findOne(+id);
+  findOne(@Param('id') id: string) {
+    return this.carsService.findOne(id);
   }
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   async update(
-    @Param('id') id: number,
+    @Param('id') id: string,
     @Body() updateCarDto: UpdateCarDto,
     @CurrentUser() user: UserEntity,
   ) {
@@ -153,17 +153,17 @@ export class CarsController {
     }
 
     assertSpecialistCanModify('CAR', user);
-    const existing = await this.carsService.findOne(+id);
+    const existing = await this.carsService.findOne(id);
     assertSpecialistOwnsProduct(user, existing?.specialist_id);
-    return this.carsService.update(+id, updateCarDto);
+    return this.carsService.update(id, updateCarDto);
   }
 
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   async remove(@Param('id') id: string, @CurrentUser() user: UserEntity) {
     assertSpecialistCanModify('CAR', user);
-    const existing = await this.carsService.findOne(+id);
+    const existing = await this.carsService.findOne(id);
     assertSpecialistOwnsProduct(user, existing?.specialist_id);
-    return this.carsService.remove(+id);
+    return this.carsService.remove(id);
   }
 }

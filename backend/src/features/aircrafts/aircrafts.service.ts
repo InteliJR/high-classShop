@@ -256,7 +256,7 @@ export class AircraftsService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(id: string) {
     this.logger.log(`[findOne] Buscando aeronave - ID: ${id}`);
     const aircraft = await this.prismaService.aircraft.findUnique({
       where: { id },
@@ -282,11 +282,11 @@ export class AircraftsService {
     return { ...aircraft };
   }
 
-  // update(id: number, updateAircraftDto: UpdateAircraftDto) {
+  // update(id: string, updateAircraftDto: UpdateAircraftDto) {
   //   return `This action updates a #${id} aircraft`;
   // }
 
-  async update(id: number, updateAircraftDto: UpdateAircraftDto) {
+  async update(id: string, updateAircraftDto: UpdateAircraftDto) {
     await this.findOne(id);
 
     const { specialist_id, images, ...aircraftData } = updateAircraftDto;
@@ -373,7 +373,7 @@ export class AircraftsService {
     }
   }
 
-  async remove(id: number) {
+  async remove(id: string) {
     await this.findOne(id);
 
     try {
@@ -476,8 +476,8 @@ export class AircraftsService {
       });
     }
 
-    const insertedIds: number[] = [];
-    const updatedIds: number[] = [];
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -604,8 +604,8 @@ export class AircraftsService {
       });
     }
 
-    const insertedIds: number[] = [];
-    const updatedIds: number[] = [];
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
     const warningRows: ImportErrorRow[] = [];
 

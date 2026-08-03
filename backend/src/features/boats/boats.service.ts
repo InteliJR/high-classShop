@@ -238,7 +238,7 @@ export class BoatsService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(id: string) {
     this.logger.log(`[findOne] Buscando barco - ID: ${id}`);
     const boat = await this.prismaService.boat.findUnique({
       where: { id },
@@ -264,7 +264,7 @@ export class BoatsService {
     return { ...boat };
   }
 
-  async update(id: number, updateBoatDto: UpdateBoatDto) {
+  async update(id: string, updateBoatDto: UpdateBoatDto) {
     await this.findOne(id);
 
     const { images, ...boatData } = updateBoatDto;
@@ -313,7 +313,7 @@ export class BoatsService {
     }
   }
 
-  async remove(id: number) {
+  async remove(id: string) {
     await this.findOne(id);
 
     try {
@@ -431,8 +431,8 @@ export class BoatsService {
       });
     }
 
-    const insertedIds: number[] = [];
-    const updatedIds: number[] = [];
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -543,8 +543,8 @@ export class BoatsService {
       });
     }
 
-    const insertedIds: number[] = [];
-    const updatedIds: number[] = [];
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
     const warningRows: ImportErrorRow[] = [];
 
