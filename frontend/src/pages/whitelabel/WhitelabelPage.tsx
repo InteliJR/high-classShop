@@ -21,7 +21,10 @@ export default function WhitelabelPage() {
         if (!ignore) setCompany(c);
       })
       .catch(() => {
-        if (!ignore) setError("Escritório não encontrado.");
+        if (!ignore) {
+          setCompany(null);
+          setError("Escritório não encontrado.");
+        }
       });
     return () => {
       ignore = true;

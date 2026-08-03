@@ -92,7 +92,7 @@ export default function OfficeDashboardPage() {
                 <code className="block break-all rounded bg-gray-100 p-3 text-sm">{siteUrl}</code>
                 <div className="mt-4 flex gap-2">
                   <button
-                    onClick={() => navigator.clipboard.writeText(siteUrl)}
+                    onClick={() => navigator.clipboard.writeText(siteUrl).catch(() => {})}
                     style={{ backgroundColor: DEFAULT_BRAND_PRIMARY, color: "#fff" }}
                     className="rounded-md px-4 py-2 text-sm"
                   >
