@@ -25,6 +25,8 @@ const CATEGORY_LABEL: Record<ProductCategory, string> = {
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+const numericValue = (value: string) => Number(value) || 0;
+
 async function fetchProductsByCategory(
   category: ProductCategory,
 ): Promise<Product[]> {
@@ -38,10 +40,10 @@ const selectClass =
 const labelClass = "block text-sm font-medium text-ink-soft mb-1";
 
 export default function CommissionCalculatorPage() {
-  const [saleValue, setSaleValue] = useState(0);
-  const [totalCommissionRate, setTotalCommissionRate] = useState(10);
-  const [specialistShareRate, setSpecialistShareRate] = useState(0);
-  const [officeShareRate, setOfficeShareRate] = useState(0);
+  const [saleValue, setSaleValue] = useState("0");
+  const [totalCommissionRate, setTotalCommissionRate] = useState("10");
+  const [specialistShareRate, setSpecialistShareRate] = useState("0");
+  const [officeShareRate, setOfficeShareRate] = useState("0");
 
   const [specialists, setSpecialists] = useState<Specialist[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -57,22 +59,35 @@ export default function CommissionCalculatorPage() {
   useEffect(() => {
     if (!category) {
       setProducts([]);
+      setIsLoadingProducts(false);
       return;
     }
+
+    let isCurrentRequest = true;
     setIsLoadingProducts(true);
     fetchProductsByCategory(category)
-      .then(setProducts)
-      .catch(() => setProducts([]))
-      .finally(() => setIsLoadingProducts(false));
+      .then((nextProducts) => {
+        if (isCurrentRequest) setProducts(nextProducts);
+      })
+      .catch(() => {
+        if (isCurrentRequest) setProducts([]);
+      })
+      .finally(() => {
+        if (isCurrentRequest) setIsLoadingProducts(false);
+      });
+
+    return () => {
+      isCurrentRequest = false;
+    };
   }, [category]);
 
   const split = useMemo(
     () =>
       computeNestedCommissionSplit({
-        proposalValue: saleValue,
-        totalCommissionRate,
-        specialistShareRate,
-        officeShareRate,
+        proposalValue: numericValue(saleValue),
+        totalCommissionRate: numericValue(totalCommissionRate),
+        specialistShareRate: numericValue(specialistShareRate),
+        officeShareRate: numericValue(officeShareRate),
       }),
     [saleValue, totalCommissionRate, specialistShareRate, officeShareRate],
   );
@@ -88,10 +103,11 @@ export default function CommissionCalculatorPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>
+                <label htmlFor="calculator-category" className={labelClass}>
                   Categoria do produto (opcional)
                 </label>
                 <select
+                  id="calculator-category"
                   value={category}
                   onChange={(e) =>
                     setCategory(e.target.value as ProductCategory | "")
@@ -106,16 +122,17 @@ export default function CommissionCalculatorPage() {
               </div>
 
               <div>
-                <label className={labelClass}>
+                <label htmlFor="calculator-product" className={labelClass}>
                   Produto {category && `(${CATEGORY_LABEL[category]})`}
                 </label>
                 <select
+                  id="calculator-product"
                   disabled={!category || isLoadingProducts}
                   onChange={(e) => {
                     const product = products.find(
                       (p) => String(p.id) === e.target.value,
                     );
-                    if (product) setSaleValue(product.valor);
+                    if (product) setSaleValue(String(product.valor));
                   }}
                   className={selectClass}
                 >
@@ -132,27 +149,34 @@ export default function CommissionCalculatorPage() {
             </div>
 
             <div>
-              <label className={labelClass}>Valor de venda (R$)</label>
+              <label htmlFor="calculator-sale-value" className={labelClass}>
+                Valor de venda (R$)
+              </label>
               <Input
+                id="calculator-sale-value"
                 type="number"
                 min={0}
                 step="0.01"
                 value={saleValue}
-                onChange={(e) => setSaleValue(Number(e.target.value) || 0)}
+                onChange={(e) => setSaleValue(e.target.value)}
               />
             </div>
 
             <div>
-              <label className={labelClass}>Comissão total da venda (%)</label>
+              <label
+                htmlFor="calculator-total-commission-rate"
+                className={labelClass}
+              >
+                Comissão total da venda (%)
+              </label>
               <Input
+                id="calculator-total-commission-rate"
                 type="number"
                 min={0}
                 max={100}
                 step="0.01"
                 value={totalCommissionRate}
-                onChange={(e) =>
-                  setTotalCommissionRate(Number(e.target.value) || 0)
-                }
+                onChange={(e) => setTotalCommissionRate(e.target.value)}
               />
             </div>
           </Card>
@@ -164,13 +188,20 @@ export default function CommissionCalculatorPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Especialista (opcional)</label>
+                <label htmlFor="calculator-specialist" className={labelClass}>
+                  Especialista (opcional)
+                </label>
                 <select
+                  id="calculator-specialist"
                   onChange={(e) => {
                     const specialist = specialists.find(
                       (s) => s.id === e.target.value,
                     );
-                    setSpecialistShareRate(specialist?.commission_rate ?? 0);
+                    if (specialist) {
+                      setSpecialistShareRate(
+                        String(specialist.commission_rate ?? 0),
+                      );
+                    }
                   }}
                   className={selectClass}
                 >
@@ -184,29 +215,36 @@ export default function CommissionCalculatorPage() {
               </div>
 
               <div>
-                <label className={labelClass}>
+                <label
+                  htmlFor="calculator-specialist-share-rate"
+                  className={labelClass}
+                >
                   Fatia do especialista sobre o bolo (%)
                 </label>
                 <Input
+                  id="calculator-specialist-share-rate"
                   type="number"
                   min={0}
                   max={100}
                   step="0.01"
                   value={specialistShareRate}
-                  onChange={(e) =>
-                    setSpecialistShareRate(Number(e.target.value) || 0)
-                  }
+                  onChange={(e) => setSpecialistShareRate(e.target.value)}
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Escritório (opcional)</label>
+                <label htmlFor="calculator-office" className={labelClass}>
+                  Escritório (opcional)
+                </label>
                 <select
+                  id="calculator-office"
                   onChange={(e) => {
                     const company = companies.find((c) => c.id === e.target.value);
-                    setOfficeShareRate(company?.commission_rate ?? 0);
+                    if (company) {
+                      setOfficeShareRate(String(company.commission_rate ?? 0));
+                    }
                   }}
                   className={selectClass}
                 >
@@ -220,18 +258,20 @@ export default function CommissionCalculatorPage() {
               </div>
 
               <div>
-                <label className={labelClass}>
+                <label
+                  htmlFor="calculator-office-share-rate"
+                  className={labelClass}
+                >
                   Fatia do escritório sobre o restante (%)
                 </label>
                 <Input
+                  id="calculator-office-share-rate"
                   type="number"
                   min={0}
                   max={100}
                   step="0.01"
                   value={officeShareRate}
-                  onChange={(e) =>
-                    setOfficeShareRate(Number(e.target.value) || 0)
-                  }
+                  onChange={(e) => setOfficeShareRate(e.target.value)}
                 />
               </div>
             </div>
@@ -241,7 +281,10 @@ export default function CommissionCalculatorPage() {
         <div className="lg:sticky lg:top-6 h-fit">
           <Card>
             <h2 className="text-lg font-semibold text-ink mb-4">Resultado</h2>
-            <CommissionSplitResult saleValue={saleValue} split={split} />
+            <CommissionSplitResult
+              saleValue={numericValue(saleValue)}
+              split={split}
+            />
           </Card>
         </div>
       </div>
