@@ -24,3 +24,4 @@
 - `ConfirmAppointmentModal` e `useCreateAppointment` agora aceitam somente `productId`/`product_id` como `string`.
 - Os contratos de listagem e detalhe em `select-options.service.ts` usam identificadores de produto como `string`.
 - Os objetos `product` aninhados de processos (`processes.service.ts`, `ProcessCard` e `CustomerProcessesPage`) foram alinhados a UUIDs como `string`.
+- `ProductOption` agora substitui o `id: string | number` herdado de `SelectOption` por `id: string`, mantendo o contrato genérico dos demais selects inalterado.

@@ -13,7 +13,8 @@ export interface ClientOption extends SelectOption {
   role: UserRole;
 }
 
-export interface ProductOption extends SelectOption {
+export interface ProductOption extends Omit<SelectOption, "id"> {
+  id: string;
   marca: string;
   modelo: string;
   ano: number;
