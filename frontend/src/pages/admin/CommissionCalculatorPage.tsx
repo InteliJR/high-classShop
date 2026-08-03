@@ -1,0 +1,250 @@
+import { useEffect, useMemo, useState } from "react";
+import { PageHeader } from "../../components/patterns/PageHeader";
+import { Card } from "../../components/ui/card";
+import { Input } from "../../components/ui/input";
+import { CommissionSplitResult } from "../../components/commission/CommissionSplitResult";
+import { computeNestedCommissionSplit } from "../../lib/commission-split";
+import {
+  getSpecialists,
+  type Specialist,
+} from "../../services/specialists.service";
+import { getCompanies, type Company } from "../../services/companies.service";
+import { getCars } from "../../services/cars.service";
+import { getBoats } from "../../services/boats.service";
+import { getAircrafts } from "../../services/aircrafts.service";
+import type { Product } from "../../types/types";
+
+type ProductCategory = "CAR" | "BOAT" | "AIRCRAFT";
+
+const CATEGORY_LABEL: Record<ProductCategory, string> = {
+  CAR: "Carro",
+  BOAT: "Embarcação",
+  AIRCRAFT: "Aeronave",
+};
+
+const brl = (n: number) =>
+  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+async function fetchProductsByCategory(
+  category: ProductCategory,
+): Promise<Product[]> {
+  if (category === "CAR") return (await getCars(1, 100)).cars;
+  if (category === "BOAT") return (await getBoats(1, 100)).boats;
+  return (await getAircrafts(1, 100)).aircrafts;
+}
+
+const selectClass =
+  "w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-focus-ring";
+const labelClass = "block text-sm font-medium text-ink-soft mb-1";
+
+export default function CommissionCalculatorPage() {
+  const [saleValue, setSaleValue] = useState(0);
+  const [totalCommissionRate, setTotalCommissionRate] = useState(10);
+  const [specialistShareRate, setSpecialistShareRate] = useState(0);
+  const [officeShareRate, setOfficeShareRate] = useState(0);
+
+  const [specialists, setSpecialists] = useState<Specialist[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [category, setCategory] = useState<ProductCategory | "">("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+
+  useEffect(() => {
+    getSpecialists().then(setSpecialists).catch(() => setSpecialists([]));
+    getCompanies().then(setCompanies).catch(() => setCompanies([]));
+  }, []);
+
+  useEffect(() => {
+    if (!category) {
+      setProducts([]);
+      return;
+    }
+    setIsLoadingProducts(true);
+    fetchProductsByCategory(category)
+      .then(setProducts)
+      .catch(() => setProducts([]))
+      .finally(() => setIsLoadingProducts(false));
+  }, [category]);
+
+  const split = useMemo(
+    () =>
+      computeNestedCommissionSplit({
+        proposalValue: saleValue,
+        totalCommissionRate,
+        specialistShareRate,
+        officeShareRate,
+      }),
+    [saleValue, totalCommissionRate, specialistShareRate, officeShareRate],
+  );
+
+  return (
+    <div className="w-full">
+      <PageHeader title="Calculadora de comissões" />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 flex flex-col gap-6">
+          <Card className="flex flex-col gap-4">
+            <h2 className="text-lg font-semibold text-ink">Venda</h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>
+                  Categoria do produto (opcional)
+                </label>
+                <select
+                  value={category}
+                  onChange={(e) =>
+                    setCategory(e.target.value as ProductCategory | "")
+                  }
+                  className={selectClass}
+                >
+                  <option value="">Nenhuma — valor manual</option>
+                  <option value="CAR">Carro</option>
+                  <option value="BOAT">Embarcação</option>
+                  <option value="AIRCRAFT">Aeronave</option>
+                </select>
+              </div>
+
+              <div>
+                <label className={labelClass}>
+                  Produto {category && `(${CATEGORY_LABEL[category]})`}
+                </label>
+                <select
+                  disabled={!category || isLoadingProducts}
+                  onChange={(e) => {
+                    const product = products.find(
+                      (p) => String(p.id) === e.target.value,
+                    );
+                    if (product) setSaleValue(product.valor);
+                  }}
+                  className={selectClass}
+                >
+                  <option value="">
+                    {isLoadingProducts ? "Carregando..." : "Selecionar produto"}
+                  </option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.marca} {p.modelo} — {brl(p.valor)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className={labelClass}>Valor de venda (R$)</label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={saleValue}
+                onChange={(e) => setSaleValue(Number(e.target.value) || 0)}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>Comissão total da venda (%)</label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                value={totalCommissionRate}
+                onChange={(e) =>
+                  setTotalCommissionRate(Number(e.target.value) || 0)
+                }
+              />
+            </div>
+          </Card>
+
+          <Card className="flex flex-col gap-4">
+            <h2 className="text-lg font-semibold text-ink">
+              Especialista e escritório
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Especialista (opcional)</label>
+                <select
+                  onChange={(e) => {
+                    const specialist = specialists.find(
+                      (s) => s.id === e.target.value,
+                    );
+                    setSpecialistShareRate(specialist?.commission_rate ?? 0);
+                  }}
+                  className={selectClass}
+                >
+                  <option value="">Nenhum — fatia manual</option>
+                  {specialists.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} {s.surname}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className={labelClass}>
+                  Fatia do especialista sobre o bolo (%)
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  value={specialistShareRate}
+                  onChange={(e) =>
+                    setSpecialistShareRate(Number(e.target.value) || 0)
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Escritório (opcional)</label>
+                <select
+                  onChange={(e) => {
+                    const company = companies.find((c) => c.id === e.target.value);
+                    setOfficeShareRate(company?.commission_rate ?? 0);
+                  }}
+                  className={selectClass}
+                >
+                  <option value="">Nenhum</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className={labelClass}>
+                  Fatia do escritório sobre o restante (%)
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  value={officeShareRate}
+                  onChange={(e) =>
+                    setOfficeShareRate(Number(e.target.value) || 0)
+                  }
+                />
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        <div className="lg:sticky lg:top-6 h-fit">
+          <Card>
+            <h2 className="text-lg font-semibold text-ink mb-4">Resultado</h2>
+            <CommissionSplitResult saleValue={saleValue} split={split} />
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

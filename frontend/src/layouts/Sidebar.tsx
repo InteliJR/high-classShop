@@ -14,6 +14,7 @@ import {
   Percent,
   Database,
   UserCheck,
+  Calculator,
 } from "lucide-react";
 import { useContext } from "react";
 import { AppContext } from "../contexts/AppContext";
@@ -149,6 +150,11 @@ export default function Sidebar() {
             to: "/admin/commissions",
             label: "Comissões",
             icon: <Percent size={20} />,
+          },
+          {
+            to: "/admin/calculator",
+            label: "Calculadora",
+            icon: <Calculator size={20} />,
           },
           {
             to: "/admin/database",
