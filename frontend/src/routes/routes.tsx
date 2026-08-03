@@ -40,10 +40,12 @@ import OfficeDashboardPage from "../pages/office/OfficeDashboardPage";
 import OfficeConsultantsPage from "../pages/office/OfficeConsultantsPage";
 import OfficeClientsPage from "../pages/office/OfficeClientsPage";
 import OfficeCompanySettingsPage from "../pages/office/OfficeCompanySettingsPage";
+import WhitelabelPage from "../pages/whitelabel/WhitelabelPage";
 
 export default function RouterApp() {
   const routerApp = createBrowserRouter([
     { path: "/", element: <LandingPage /> },
+    { path: "/i/:slug", element: <WhitelabelPage /> },
     {
       path: "/catalog/:category",
       element: (

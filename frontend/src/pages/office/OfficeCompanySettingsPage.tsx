@@ -29,6 +29,7 @@ export default function OfficeCompanySettingsPage() {
           agency: c.agency ?? "",
           checking_account: c.checking_account ?? "",
           color_identity: c.color_identity?.length ? c.color_identity : DEFAULT_COLORS,
+          slug: c.slug ?? "",
         });
       })
       .catch(() => setMsg({ ok: false, text: "Erro ao carregar escritório" }))
@@ -188,6 +189,21 @@ export default function OfficeCompanySettingsPage() {
               />
             </Field>
           </div>
+
+          <Field label="Endereço do site (slug)">
+            <input
+              type="text"
+              value={form.slug ?? ""}
+              onChange={(e) =>
+                setForm({ ...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") })
+              }
+              placeholder="meu-escritorio"
+              className="w-full px-3 py-2 border border-border rounded-md"
+            />
+            <p className="text-xs text-muted mt-1">
+              Seu site: {window.location.origin}/i/{form.slug || "meu-escritorio"}
+            </p>
+          </Field>
 
           <Field label="Comissão padrão (%)">
             <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-md text-ink-soft">

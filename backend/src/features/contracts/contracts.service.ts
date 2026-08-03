@@ -256,7 +256,9 @@ export class ContractsService {
     } = await this.calculateCommissionSplit(
       processData.specialist,
       platformCompany,
-      processData.client?.consultant?.company_id ?? null,
+      processData.client?.consultant?.company_id ??
+        processData.client?.company_id ??
+        null,
     );
 
     this.logger.debug(
@@ -493,7 +495,9 @@ export class ContractsService {
       await this.calculateCommissionSplit(
         process.specialist,
         platformCompany,
-        process.client?.consultant?.company_id ?? null,
+        process.client?.consultant?.company_id ??
+          process.client?.company_id ??
+          null,
       );
 
     const round2 = (n: number) => Math.round(n * 100) / 100;

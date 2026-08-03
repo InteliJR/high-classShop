@@ -9,6 +9,7 @@ import { useContext, useEffect, useState } from "react";
 import type { RegisterValues } from "../../types/types";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/button";
+import { useWhitelabel } from "../../store/whitelabelStore";
 
 type RegistrationMode = 'referral' | 'public';
 
@@ -17,6 +18,7 @@ export default function RegisterPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const whitelabelCompany = useWhitelabel((s) => s.company);
   const redirectPathFromState = (location.state as { from?: string } | null)
     ?.from;
   const [registrationMode, setRegistrationMode] = useState<RegistrationMode>('public');
@@ -116,7 +118,11 @@ export default function RegisterPage() {
       if (registrationMode === 'referral' && consultantId) {
         registerData.consultant_id = consultantId;
       }
-      
+
+      if (whitelabelCompany?.slug) {
+        registerData.company_slug = whitelabelCompany.slug;
+      }
+
       await auth.register(registerData);
       
       alert("Cadastro realizado com sucesso! Faça login para continuar.");
