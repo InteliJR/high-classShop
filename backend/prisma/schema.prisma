@@ -679,6 +679,7 @@ model Car {
   deactivated_by_sync_job_id String?   @db.Uuid
   marca                      String
   modelo                     String
+  identificador              String
   valor                      Decimal
   estado                     String
   ano                        Int
@@ -697,6 +698,7 @@ model Car {
 
   @@index([specialist_id])
   @@index([specialist_id, is_active])
+  @@unique([specialist_id, identificador])
 }
 
 // Car_image: imagens associadas aos anúncios de Car
@@ -723,6 +725,7 @@ model Boat {
   deactivated_by_sync_job_id String?   @db.Uuid
   marca                      String
   modelo                     String
+  identificador              String
   valor                      Decimal
   ano                        Int
   fabricante                 String?
@@ -744,6 +747,7 @@ model Boat {
 
   @@index([specialist_id])
   @@index([specialist_id, is_active])
+  @@unique([specialist_id, identificador])
 }
 
 // Boat_image: imagens associadas aos anúncios de Boat
@@ -772,6 +776,7 @@ model Aircraft {
   ano                        Int
   marca                      String
   modelo                     String
+  identificador              String
   assentos                   Int?
   estado                     String
   descricao                  String?
@@ -786,6 +791,7 @@ model Aircraft {
 
   @@index([specialist_id])
   @@index([specialist_id, is_active])
+  @@unique([specialist_id, identificador])
 }
 
 // Aircraft_image: imagens associadas aos anúncios de Aircraft
