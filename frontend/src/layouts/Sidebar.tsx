@@ -13,7 +13,6 @@ import {
   Settings,
   Percent,
   Database,
-  UserCheck,
   Calculator,
 } from "lucide-react";
 import { useContext } from "react";
@@ -199,13 +198,6 @@ export default function Sidebar() {
         break;
     }
 
-    if (user.role !== "OFFICE") {
-      links.push({
-        to: "/advisor/dashboard",
-        label: "Meus Assessorados",
-        icon: <UserCheck size={20} />,
-      });
-    }
   }
 
   return (
