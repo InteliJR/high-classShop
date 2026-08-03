@@ -35,7 +35,7 @@ interface ProcessClient {
     name?: string;
   };
   product?: {
-    id: number | string;
+    id: string;
     marca?: string;
     modelo?: string;
   };

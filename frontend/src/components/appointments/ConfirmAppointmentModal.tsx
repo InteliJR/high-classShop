@@ -8,7 +8,7 @@ interface ConfirmAppointmentModalProps {
   specialistId: string;
   clientId: string;
   productType: "CAR" | "BOAT" | "AIRCRAFT";
-  productId: string | number;
+  productId: string;
   specialistName?: string;
   isEmailOnly?: boolean; // Se true, mostra fluxo para agendamento por email
 }

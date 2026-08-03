@@ -89,7 +89,7 @@ export async function fetchAvailableProducts(
 
     return products.map(
       (product: {
-        id: number | string;
+        id: string;
         marca: string;
         modelo: string;
         ano: number;
@@ -127,7 +127,7 @@ export async function fetchAvailableProducts(
  * @param productType - Type of product (CAR, BOAT, AIRCRAFT)
  */
 export async function fetchProductDetails(
-  productId: string | number,
+  productId: string,
   productType: "CAR" | "BOAT" | "AIRCRAFT"
 ): Promise<Product> {
   try {
