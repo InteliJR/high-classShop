@@ -4,6 +4,7 @@ import { Card } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { CommissionSplitResult } from "../../components/commission/CommissionSplitResult";
 import { computeNestedCommissionSplit } from "../../lib/commission-split";
+import { normalizeCommissionCalculatorInput } from "../../lib/commission-calculator-input";
 import {
   getSpecialists,
   type Specialist,
@@ -24,8 +25,6 @@ const CATEGORY_LABEL: Record<ProductCategory, string> = {
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-const numericValue = (value: string) => Number(value) || 0;
 
 async function fetchProductsByCategory(
   category: ProductCategory,
@@ -49,6 +48,7 @@ export default function CommissionCalculatorPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [category, setCategory] = useState<ProductCategory | "">("");
   const [products, setProducts] = useState<Product[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState("");
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
 
   useEffect(() => {
@@ -81,15 +81,26 @@ export default function CommissionCalculatorPage() {
     };
   }, [category]);
 
+  const calculationInput = useMemo(
+    () =>
+      normalizeCommissionCalculatorInput({
+        saleValue,
+        totalCommissionRate,
+        specialistShareRate,
+        officeShareRate,
+      }),
+    [saleValue, totalCommissionRate, specialistShareRate, officeShareRate],
+  );
+
   const split = useMemo(
     () =>
       computeNestedCommissionSplit({
-        proposalValue: numericValue(saleValue),
-        totalCommissionRate: numericValue(totalCommissionRate),
-        specialistShareRate: numericValue(specialistShareRate),
-        officeShareRate: numericValue(officeShareRate),
+        proposalValue: calculationInput.saleValue,
+        totalCommissionRate: calculationInput.totalCommissionRate,
+        specialistShareRate: calculationInput.specialistShareRate,
+        officeShareRate: calculationInput.officeShareRate,
       }),
-    [saleValue, totalCommissionRate, specialistShareRate, officeShareRate],
+    [calculationInput],
   );
 
   return (
@@ -109,9 +120,12 @@ export default function CommissionCalculatorPage() {
                 <select
                   id="calculator-category"
                   value={category}
-                  onChange={(e) =>
-                    setCategory(e.target.value as ProductCategory | "")
-                  }
+                  onChange={(e) => {
+                    setCategory(e.target.value as ProductCategory | "");
+                    setSelectedProductId("");
+                    setProducts([]);
+                    setSaleValue("0");
+                  }}
                   className={selectClass}
                 >
                   <option value="">Nenhuma — valor manual</option>
@@ -128,7 +142,9 @@ export default function CommissionCalculatorPage() {
                 <select
                   id="calculator-product"
                   disabled={!category || isLoadingProducts}
+                  value={selectedProductId}
                   onChange={(e) => {
+                    setSelectedProductId(e.target.value);
                     const product = products.find(
                       (p) => String(p.id) === e.target.value,
                     );
@@ -282,7 +298,7 @@ export default function CommissionCalculatorPage() {
           <Card>
             <h2 className="text-lg font-semibold text-ink mb-4">Resultado</h2>
             <CommissionSplitResult
-              saleValue={numericValue(saleValue)}
+              saleValue={calculationInput.saleValue}
               split={split}
             />
           </Card>

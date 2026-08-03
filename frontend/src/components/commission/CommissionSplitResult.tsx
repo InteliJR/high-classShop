@@ -54,6 +54,11 @@ export function CommissionSplitResult({
   const bodyRows = [
     { label: "Comissão total (bolo)", value: split.bolo, dot: null as string | null },
     { label: "Especialista", value: split.specialistValue, dot: DOT.specialist },
+    {
+      label: "Restante",
+      value: split.bolo - split.specialistValue,
+      dot: null as string | null,
+    },
     { label: "Escritório", value: split.officeValue, dot: DOT.office },
   ];
 

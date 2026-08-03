@@ -5,12 +5,11 @@ import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { CommissionSplitResult } from "./CommissionSplitResult";
 import { computeNestedCommissionSplit } from "../../lib/commission-split";
+import { normalizeCommissionCalculatorInput } from "../../lib/commission-calculator-input";
 import {
   getSpecialists,
   type Specialist,
 } from "../../services/specialists.service";
-
-const numericValue = (value: string) => Number(value) || 0;
 
 export function CommissionMiniCalculator() {
   const [saleValue, setSaleValue] = useState("0");
@@ -22,15 +21,26 @@ export function CommissionMiniCalculator() {
     getSpecialists().then(setSpecialists).catch(() => setSpecialists([]));
   }, []);
 
+  const calculationInput = useMemo(
+    () =>
+      normalizeCommissionCalculatorInput({
+        saleValue,
+        totalCommissionRate,
+        specialistShareRate,
+        officeShareRate: "0",
+      }),
+    [saleValue, totalCommissionRate, specialistShareRate],
+  );
+
   const split = useMemo(
     () =>
       computeNestedCommissionSplit({
-        proposalValue: numericValue(saleValue),
-        totalCommissionRate: numericValue(totalCommissionRate),
-        specialistShareRate: numericValue(specialistShareRate),
-        officeShareRate: 0,
+        proposalValue: calculationInput.saleValue,
+        totalCommissionRate: calculationInput.totalCommissionRate,
+        specialistShareRate: calculationInput.specialistShareRate,
+        officeShareRate: calculationInput.officeShareRate,
       }),
-    [saleValue, totalCommissionRate, specialistShareRate],
+    [calculationInput],
   );
 
   return (
@@ -102,7 +112,11 @@ export function CommissionMiniCalculator() {
       </div>
 
       <div className="border-t border-border pt-4">
-        <CommissionSplitResult saleValue={numericValue(saleValue)} split={split} compact />
+        <CommissionSplitResult
+          saleValue={calculationInput.saleValue}
+          split={split}
+          compact
+        />
       </div>
     </Card>
   );
