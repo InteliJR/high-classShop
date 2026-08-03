@@ -516,13 +516,14 @@ export class CarsService {
     for (let i = 0; i < rows.length; i++) {
       const rowNumber = i + 2; // +2 porque linha 1 é header e arrays começam em 0
       const row = rows[i];
+      const identificador = row.identificador?.trim();
 
       try {
         // Preparar DTO
         const carData: any = {
           marca: row.marca,
           modelo: row.modelo,
-          identificador: row.identificador,
+          identificador,
           valor: Number(row.valor),
           estado: row.estado,
           ano: Number(row.ano),
@@ -557,11 +558,11 @@ export class CarsService {
           continue;
         }
 
-        // Verificar se já existe um produto com mesma marca + modelo para este especialista
+        // Verificar se já existe um produto com mesmo identificador para este especialista
         const existingCar = await this.prismaService.car.findFirst({
           where: {
             specialist_id: user.id,
-            identificador: row.identificador?.trim(),
+            identificador,
           },
         });
 
