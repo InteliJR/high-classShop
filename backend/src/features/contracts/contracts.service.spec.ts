@@ -205,6 +205,65 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
       (svc as any).resolveCommissionFromTotal('p1', 15),
     ).rejects.toThrow(BadRequestException);
   });
+
+  it('cliente vinculado direto ao escritório (sem consultor) gera comissão de escritório', async () => {
+    const prisma = mkPrisma();
+    prisma.process.findUnique.mockResolvedValue({
+      specialist: { id: 's1', commission_rate: null, company_id: null },
+      client: { consultant: null, company_id: 'c1' },
+      car: { valor: 100000 },
+      boat: null,
+      aircraft: null,
+      accepted_proposal: null,
+    });
+    prisma.company.findUnique.mockResolvedValue({
+      name: 'Escritório Whitelabel',
+      cnpj: '11222333000181',
+      bank: null,
+      agency: null,
+      checking_account: null,
+      commission_rate: 8,
+    });
+    const svc = mkSvc(prisma, mkPlatformCompanyService(10));
+
+    const result = await (svc as any).resolveCommissionFromTotal('p1', 20);
+
+    // officeRate aqui é a taxa EFETIVA sobre a venda (modelo aninhado):
+    // bolo = 100000 * 20% = 20000; restante = 20000 (specialistShareRate=0);
+    // officeValue = 20000 * 8% = 1600 → efetivo = 1600/100000*100 = 1.6.
+    // O que importa pro fallback é: office != 0 e a company certa foi buscada.
+    expect(result.officeRate).toBe(1.6);
+    expect(prisma.company.findUnique).toHaveBeenCalledWith({
+      where: { id: 'c1' },
+    });
+  });
+
+  it('consultor tem prioridade sobre o company_id direto do cliente', async () => {
+    const prisma = mkPrisma();
+    prisma.process.findUnique.mockResolvedValue({
+      specialist: { id: 's1', commission_rate: null, company_id: null },
+      client: { consultant: { company_id: 'consultantCo' }, company_id: 'directCo' },
+      car: { valor: 100000 },
+      boat: null,
+      aircraft: null,
+      accepted_proposal: null,
+    });
+    prisma.company.findUnique.mockResolvedValue({
+      name: 'Escritório do Consultor',
+      cnpj: '11222333000181',
+      bank: null,
+      agency: null,
+      checking_account: null,
+      commission_rate: 8,
+    });
+    const svc = mkSvc(prisma, mkPlatformCompanyService(10));
+
+    await (svc as any).resolveCommissionFromTotal('p1', 20);
+
+    expect(prisma.company.findUnique).toHaveBeenCalledWith({
+      where: { id: 'consultantCo' },
+    });
+  });
 });
 
 describe('ContractsService — buildFormFields zera comissão no DocuSign', () => {
