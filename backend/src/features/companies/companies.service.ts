@@ -13,6 +13,7 @@ import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { SesService } from 'src/aws/ses.service';
 import { S3Service } from 'src/aws/s3.service';
 import { LogoSanitizerService } from 'src/shared/services/logo-sanitizer.service';
+import { generateUniqueSlug } from './slug.util';
 
 @Injectable()
 export class CompaniesService {
@@ -110,7 +111,15 @@ export class CompaniesService {
       }
 
       const { logo: logoBase64, ...rest } = data;
-      const created = await this.prisma.company.create({ data: rest });
+      const slug = await generateUniqueSlug(
+        rest.name,
+        async (s) =>
+          (await this.prisma.company.findUnique({ where: { slug: s } })) !==
+          null,
+      );
+      const created = await this.prisma.company.create({
+        data: { ...rest, slug },
+      });
 
       if (logoBase64) {
         const key = await this.processLogoUpload(created.id, logoBase64, null);

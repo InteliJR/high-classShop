@@ -629,6 +629,10 @@ model Company {
   // PlatformCompany.default_commission_rate quando definida (null = usa a taxa padrão global)
   platform_commission_rate Decimal? @db.Decimal(5, 2)
 
+  // Identificador do site whitelabel do escritório (/i/:slug).
+  // Auto-gerado do nome no create; editável no settings. null = sem whitelabel.
+  slug String? @unique
+
   // Dados bancários (opcionais - se preenchidos, são usados no contrato)
   bank             String?
   agency           String? @db.VarChar(10)
