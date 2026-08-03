@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeCommissionCalculatorInput } from "./commission-calculator-input";
+import { computeNestedCommissionSplit } from "./commission-split";
 
 describe("normalizeCommissionCalculatorInput", () => {
   it("normaliza valores fora do domínio antes de calcular o split", () => {
@@ -32,5 +33,23 @@ describe("normalizeCommissionCalculatorInput", () => {
       specialistShareRate: 0,
       officeShareRate: 0,
     });
+  });
+
+  it("limita a venda máxima para manter cada etapa do split finita", () => {
+    const input = normalizeCommissionCalculatorInput({
+      saleValue: String(Number.MAX_VALUE),
+      totalCommissionRate: "100",
+      specialistShareRate: "50",
+      officeShareRate: "100",
+    });
+    const split = computeNestedCommissionSplit({
+      proposalValue: input.saleValue,
+      totalCommissionRate: input.totalCommissionRate,
+      specialistShareRate: input.specialistShareRate,
+      officeShareRate: input.officeShareRate,
+    });
+
+    expect(input.saleValue).toBe(Number.MAX_VALUE / 100);
+    expect(Object.values(split).every(Number.isFinite)).toBe(true);
   });
 });

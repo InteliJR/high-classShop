@@ -27,3 +27,12 @@ Data: 2026-08-03
 ## Commit
 
 As correções e este relatório estão no commit desta alteração.
+
+## Correção residual de overflow
+
+- A venda normalizada agora tem teto de `Number.MAX_VALUE / 100`. Com taxas de
+  até 100% e `round2` multiplicando por 100, esse limite mantém todos os
+  intermediários do split finitos.
+- O teste focado reproduz `Number.MAX_VALUE` com comissão total de 100% e
+  confirma que o split normalizado não contém `Infinity`.
+- Verificação: `npm run test -- src/lib/commission-calculator-input.test.ts --maxWorkers=2 --no-file-parallelism` — 3 testes aprovados.
