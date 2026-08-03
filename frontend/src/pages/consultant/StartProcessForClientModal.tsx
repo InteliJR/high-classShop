@@ -12,7 +12,7 @@ import { Loader2, Search } from "lucide-react";
 
 interface Props {
   productType: "CAR" | "BOAT" | "AIRCRAFT";
-  productId: number;
+  productId: string;
   specialistId: string;
   productLabel?: string;
   onClose: () => void;

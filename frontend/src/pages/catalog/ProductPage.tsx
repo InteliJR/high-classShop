@@ -147,13 +147,13 @@ export default function ProductPage() {
 
         switch (productType) {
           case "car":
-            rawProduct = await getCarById(Number(id));
+            rawProduct = await getCarById(id);
             break;
           case "boat":
-            rawProduct = await getBoatById(Number(id));
+            rawProduct = await getBoatById(id);
             break;
           case "aircraft":
-            rawProduct = await getAircraftById(Number(id));
+            rawProduct = await getAircraftById(id);
             break;
           default:
             throw new Error("Tipo de produto desconhecido");
@@ -295,7 +295,7 @@ export default function ProductPage() {
               user.id,
               specialist.id,
               productType.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT",
-              Number(product.id),
+              product.id,
             );
             if (existing) {
               setLockedAppointment(existing);
@@ -365,7 +365,7 @@ export default function ProductPage() {
               user.id,
               specialist.id,
               productType.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT",
-              Number(product.id),
+              product.id,
             );
             if (existing) {
               setLockedAppointment(existing);
@@ -667,7 +667,7 @@ export default function ProductPage() {
                       ? "AIRCRAFT"
                       : (productType.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT"))
               }
-              productId={Number(id)}
+              productId={id}
               specialistId={specialist.id}
               productLabel={`${product.marca} ${product.modelo}`.trim()}
               onClose={() => setIsStartProcessModalOpen(false)}

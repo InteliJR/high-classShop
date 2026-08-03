@@ -51,7 +51,7 @@ interface ProductFormProps {
   mode: "create" | "edit";
   productType?: ProductType;
   productData?: RawCar | RawBoat | RawAircraft;
-  productId?: number;
+  productId?: string;
   // Quando informado (cadastro disparado a partir de um processo em negociação),
   // o produto recém-criado é atribuído automaticamente a este processo.
   processId?: string;
@@ -254,7 +254,7 @@ export default function ProductForm({
 
       if (mode === "create") {
         // Criar novo produto
-        let createdId: number;
+        let createdId: string;
         if (productType === "CAR") {
           createdId = (await createCar(formattedData)).id;
         } else if (productType === "BOAT") {

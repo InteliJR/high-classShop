@@ -13,7 +13,7 @@ import {
 } from "./product-import-jobs.service";
 
 export interface RawCar {
-  id: number;
+  id: string;
   marca: string;
   modelo: string;
   valor: number;
@@ -119,7 +119,7 @@ export async function getCars(
 }
 
 // Get /cars/:id
-export async function getCarById(id: number): Promise<RawCar> {
+export async function getCarById(id: string): Promise<RawCar> {
   try {
     const response = await api.get<RawCar>(`/cars/${id}`);
     return response.data;
@@ -142,7 +142,7 @@ export async function createCar(data: CreateCarDto): Promise<RawCar> {
 
 // Patch /cars/:id
 export async function updateCar(
-  id: number,
+  id: string,
   data: UpdateCarDto,
 ): Promise<RawCar> {
   try {
@@ -155,7 +155,7 @@ export async function updateCar(
 }
 
 // Delete /cars/:id
-export async function deleteCar(id: number): Promise<void> {
+export async function deleteCar(id: string): Promise<void> {
   try {
     await api.delete(`/cars/${id}`);
   } catch (error) {

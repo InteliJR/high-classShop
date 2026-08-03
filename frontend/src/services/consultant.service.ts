@@ -122,7 +122,7 @@ export type CreateConsultantProcessData = {
   client_id: string;
   specialist_id: string;
   product_type: 'CAR' | 'BOAT' | 'AIRCRAFT';
-  product_id?: number;
+  product_id?: string;
 };
 
 export type ConsultantProcessResult = {
@@ -212,4 +212,3 @@ export async function registerConsultant(data: {
   const response = await api.post('/auth/register-consultant', data);
   return response.data;
 }
-

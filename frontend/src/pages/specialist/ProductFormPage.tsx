@@ -28,7 +28,7 @@ export default function ProductFormPage() {
 
     setLoading(true);
     try {
-      const productId = Number(id);
+      const productId = id;
 
       if (productType === "cars") {
         const data = await getCarById(productId);
@@ -84,7 +84,7 @@ export default function ProductFormPage() {
             mode={mode}
             productType={mode === "edit" ? getProductTypeEnum() : undefined}
             productData={productData}
-            productId={id ? Number(id) : undefined}
+            productId={id}
             processId={mode === "create" ? processId : undefined}
           />
         )}
@@ -92,4 +92,3 @@ export default function ProductFormPage() {
     </div>
   );
 }
-
