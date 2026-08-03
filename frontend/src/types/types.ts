@@ -140,6 +140,7 @@ export interface CompanyBranding {
   color_identity?: string[];
   primary_color?: string | null;
   secondary_color?: string | null;
+  slug?: string | null;
 }
 
 export interface UserProps {
@@ -193,6 +194,7 @@ export interface RegisterValues {
   password: string;
   civil_state?: CivilState;
   consultant_id?: string;
+  company_slug?: string;
 }
 
 // Payload decodificado do token de referral

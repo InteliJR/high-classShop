@@ -1,7 +1,7 @@
 // frontend/src/services/companies.service.ts
 import api from "./api";
 import axios from "axios";
-import type { PaginationMeta } from "../types/types";
+import type { CompanyBranding, PaginationMeta } from "../types/types";
 
 export type Company = {
   id: string;
@@ -129,6 +129,12 @@ export async function getCompanyConsultants(
   } catch (error) {
     throw new Error(getErrorMessage(error));
   }
+}
+
+// Busca os dados de branding de uma empresa pelo slug (whitelabel público, /i/:slug).
+export async function getCompanyBySlug(slug: string): Promise<CompanyBranding> {
+  const { data } = await api.get<CompanyBranding>(`/companies/by-slug/${slug}`);
+  return data;
 }
 
 // Convida um consultor para se cadastrar vinculado a uma empresa.
