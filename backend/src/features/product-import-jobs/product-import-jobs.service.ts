@@ -582,6 +582,12 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     row: ImportParsedRow,
     specialistId: string,
   ): Promise<UpsertResult> {
+    if (!row.identificador || !row.identificador.trim()) {
+      throw new BadRequestException(
+        'identificador é obrigatório e não pode ser vazio',
+      );
+    }
+
     if (productType === ProductType.CAR) {
       const data = {
         marca: row.marca,

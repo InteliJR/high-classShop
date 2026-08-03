@@ -1,6 +1,27 @@
 import { ProductImportJobsService } from './product-import-jobs.service';
 
 describe('ProductImportJobsService', () => {
+  it('lanca erro quando identificador vem vazio', async () => {
+    const prisma = { car: { findFirst: jest.fn(), create: jest.fn() } } as any;
+    const service = new ProductImportJobsService(prisma, {} as any, {} as any);
+
+    await expect(
+      (service as any).upsertProductFromRow(
+        'CAR',
+        {
+          marca: 'Ferrari',
+          modelo: 'X',
+          identificador: '  ',
+          valor: '100',
+          estado: 'SP',
+          ano: '2020',
+        },
+        'spec-1',
+      ),
+    ).rejects.toThrow(/identificador/i);
+    expect(prisma.car.create).not.toHaveBeenCalled();
+  });
+
   it('busca produto existente por (specialist_id, identificador), nao por modelo', async () => {
     const findFirst = jest.fn().mockResolvedValue(null);
     const create = jest.fn().mockResolvedValue({ id: 'uuid-1' });
