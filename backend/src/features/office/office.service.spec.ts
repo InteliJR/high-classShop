@@ -138,14 +138,22 @@ describe('OfficeService — tenant isolation', () => {
   });
 
   // Admin escopando clientes por empresa (aba "Clientes" na tela de empresa)
-  it('listClients: ADMIN com companyId → filtra por consultant.company_id', async () => {
+  // — inclui clientes vinculados direto à Company (sem consultor)
+  it('listClients: ADMIN com companyId → filtra por consultant.company_id ou vínculo direto', async () => {
     const prisma = mkPrisma();
     const svc = mkSvc(prisma);
     await svc.listClients(SCOPE_ADMIN, { companyId: 'companyA' });
     expect(prisma.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          consultant: { company_id: 'companyA' },
+          AND: [
+            {
+              OR: [
+                { consultant: { company_id: 'companyA' } },
+                { company_id: 'companyA' },
+              ],
+            },
+          ],
         }),
       }),
     );
@@ -225,6 +233,22 @@ describe('OfficeService — tenant isolation', () => {
     await expect(svc.dashboard(SCOPE_ADMIN)).rejects.toThrow(
       BadRequestException,
     );
+  });
+
+  // Task 6: clientes/processos vinculados DIRETO ao escritório (sem consultor)
+  it('dashboard conta clientes vinculados direto ao escritório (sem consultor)', async () => {
+    const prisma = mkPrisma();
+    const svc = mkSvc(prisma);
+    await svc.dashboard(SCOPE_OFFICE_A);
+    // Promise.all order: active, inactive, clients (3rd user.count)
+    expect(prisma.user.count.mock.calls[2][0].where.OR).toEqual([
+      { consultant: { company_id: 'companyA' } },
+      { company_id: 'companyA' },
+    ]);
+    expect(prisma.process.count.mock.calls[0][0].where.client.OR).toEqual([
+      { consultant: { company_id: 'companyA' } },
+      { company_id: 'companyA' },
+    ]);
   });
 
   // Comprovar isolamento entre OFFICE A e OFFICE B (não confunde tenants)
