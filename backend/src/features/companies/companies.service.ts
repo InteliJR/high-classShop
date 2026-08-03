@@ -162,6 +162,22 @@ export class CompaniesService {
     };
   }
 
+  // Branding público do whitelabel — consumido pela página /i/:slug (sem auth).
+  async findBySlug(slug: string) {
+    const company = await this.prisma.company.findUnique({ where: { slug } });
+    if (!company) {
+      throw new NotFoundException('Escritório não encontrado');
+    }
+    const logoUrl = await this.resolveLogoUrl(company.logo);
+    return {
+      id: company.id,
+      name: company.name,
+      slug: company.slug,
+      logoUrl,
+      color_identity: company.color_identity,
+    };
+  }
+
   // Atualiza os dados de uma empresa existente.
   // Se `logo` (base64) vier no payload, faz upload pro S3 e remove o anterior.
   async update(id: string, data: UpdateCompanyDto) {
