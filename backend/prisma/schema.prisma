@@ -666,13 +666,11 @@ model PlatformCompany {
 // ─────────────────────────────────────────────────────────────────────────────
 // Car / Boat / Aircraft: inventário de veículos, embarcações e aeronaves de luxo
 // [Type]_image: imagens específicas por tipo de produto
-// Nota: ids Int com TODO para futura migração a UUID
 
 // === Products & Images ===
 // Car: inventário de automóveis de luxo
-// TODO: converter id Int para UUID em migração futura
 model Car {
-  id                         Int       @id @default(autoincrement())
+  id                         String    @id @default(uuid()) @db.Uuid
   specialist_id              String?   @db.Uuid
   is_active                  Boolean   @default(true)
   deactivated_at             DateTime?
@@ -709,16 +707,15 @@ model Car_image {
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
 
-  car_id Int?
-  car    Car? @relation(fields: [car_id], references: [id])
+  car_id String? @db.Uuid
+  car    Car?    @relation(fields: [car_id], references: [id])
 
   @@index([car_id])
 }
 
 // Boat: inventário de iates/embarcações de luxo
-// TODO: converter id Int para UUID em migração futura
 model Boat {
-  id                         Int       @id @default(autoincrement())
+  id                         String    @id @default(uuid()) @db.Uuid
   specialist_id              String?   @db.Uuid
   is_active                  Boolean   @default(true)
   deactivated_at             DateTime?
@@ -758,16 +755,15 @@ model Boat_image {
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
 
-  boat_id Int?
-  boat    Boat? @relation(fields: [boat_id], references: [id])
+  boat_id String? @db.Uuid
+  boat    Boat?  @relation(fields: [boat_id], references: [id])
 
   @@index([boat_id])
 }
 
 // Aircraft: inventário de aeronaves de luxo
-// TODO: converter id Int para UUID em migração futura
 model Aircraft {
-  id                         Int       @id @default(autoincrement())
+  id                         String    @id @default(uuid()) @db.Uuid
   specialist_id              String?   @db.Uuid
   is_active                  Boolean   @default(true)
   deactivated_at             DateTime?
@@ -802,20 +798,19 @@ model Aircraft_image {
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
 
-  aircraft_id Int?
-  aircraft    Aircraft? @relation(fields: [aircraft_id], references: [id])
+  aircraft_id String? @db.Uuid
+  aircraft    Aircraft?  @relation(fields: [aircraft_id], references: [id])
 
   @@index([aircraft_id])
 }
 
 // Product: camada de abstração para entidades de produto (Car, Boat, Aircraft)
-// TODO: converter car_id, boat_id, aircraft_id para UUID quando IDs de produto migrarem
 model Product {
   id          String      @id @default(uuid()) @db.Uuid
   type        ProductType
-  car_id      Int?
-  boat_id     Int?
-  aircraft_id Int?
+  car_id      String?     @db.Uuid
+  boat_id     String?     @db.Uuid
+  aircraft_id String?     @db.Uuid
 
   process   Process? @relation(fields: [processId], references: [id])
   processId String?  @db.Uuid
@@ -834,14 +829,13 @@ model Product {
 // Process: fluxo de negociação/venda vinculando cliente, especialista e produto
 // Suporta fluxo de consultoria: product_type e car_id/boat_id/aircraft_id opcionais
 // Se product_type for null, é um processo de consultoria sem produto definido
-// TODO: converter car_id, boat_id, aircraft_id para UUID em migração futura
 model Process {
   id            String @id @default(uuid()) @db.Uuid
   client_id     String @db.Uuid
   specialist_id String @db.Uuid
-  car_id        Int?
-  aircraft_id   Int?
-  boat_id       Int?
+  car_id        String? @db.Uuid
+  aircraft_id   String? @db.Uuid
+  boat_id       String? @db.Uuid
 
   product_id         String?       @db.Uuid
   product_type       ProductType? // Opcional para consultoria (null = consultoria sem produto)
