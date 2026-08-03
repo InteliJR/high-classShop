@@ -63,6 +63,7 @@ export class AircraftsService {
       ano: aircraftData.ano,
       marca: aircraftData.marca,
       modelo: aircraftData.modelo,
+      identificador: aircraftData.identificador,
       assentos: aircraftData.assentos,
       estado: aircraftData.estado,
       descricao: aircraftData.descricao,
@@ -303,6 +304,9 @@ export class AircraftsService {
     if (aircraftData.modelo !== undefined) {
       payload.modelo = aircraftData.modelo;
     }
+    if (aircraftData.identificador !== undefined) {
+      payload.identificador = aircraftData.identificador;
+    }
     if (aircraftData.assentos !== undefined) {
       payload.assentos = aircraftData.assentos;
     }
@@ -484,6 +488,7 @@ export class AircraftsService {
         const aircraftData: any = {
           marca: row.marca,
           modelo: row.modelo,
+          identificador: row.identificador,
           valor: Number(row.valor),
           estado: row.estado,
           ano: Number(row.ano),
@@ -530,6 +535,7 @@ export class AircraftsService {
               ano: aircraftData.ano,
               marca: aircraftData.marca,
               modelo: aircraftData.modelo,
+              identificador: aircraftData.identificador,
               assentos: aircraftData.assentos,
               estado: aircraftData.estado,
               descricao: aircraftData.descricao,
@@ -545,6 +551,7 @@ export class AircraftsService {
               ano: aircraftData.ano,
               marca: aircraftData.marca,
               modelo: aircraftData.modelo,
+              identificador: aircraftData.identificador,
               assentos: aircraftData.assentos,
               estado: aircraftData.estado,
               descricao: aircraftData.descricao,
@@ -613,6 +620,7 @@ export class AircraftsService {
         const aircraftData: any = {
           marca: row.marca,
           modelo: row.modelo,
+          identificador: row.identificador,
           valor: Number(row.valor),
           estado: row.estado,
           ano: Number(row.ano),
@@ -666,6 +674,7 @@ export class AircraftsService {
               ano: aircraftData.ano,
               marca: aircraftData.marca,
               modelo: aircraftData.modelo,
+              identificador: aircraftData.identificador,
               assentos: aircraftData.assentos,
               estado: aircraftData.estado,
               descricao: aircraftData.descricao,
@@ -682,6 +691,7 @@ export class AircraftsService {
               ano: aircraftData.ano,
               marca: aircraftData.marca,
               modelo: aircraftData.modelo,
+              identificador: aircraftData.identificador,
               assentos: aircraftData.assentos,
               estado: aircraftData.estado,
               descricao: aircraftData.descricao,

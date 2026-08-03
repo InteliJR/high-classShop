@@ -443,6 +443,7 @@ export class BoatsService {
         const boatData: any = {
           marca: row.marca,
           modelo: row.modelo,
+          identificador: row.identificador,
           valor: Number(row.valor),
           estado: row.estado,
           ano: Number(row.ano),
@@ -558,6 +559,7 @@ export class BoatsService {
         const boatData: any = {
           marca: row.marca,
           modelo: row.modelo,
+          identificador: row.identificador,
           valor: Number(row.valor),
           estado: row.estado,
           ano: Number(row.ano),

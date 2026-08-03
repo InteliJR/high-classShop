@@ -191,6 +191,7 @@ async function main() {
       data: {
         marca: carMock.marca,
         modelo: carMock.modelo,
+        identificador: `${carMock.marca}-${carMock.modelo}`,
         valor: carMock.valor,
         estado: carMock.estado,
         ano: carMock.ano,
@@ -234,6 +235,7 @@ async function main() {
       data: {
         marca: boatMock.marca,
         modelo: boatMock.modelo,
+        identificador: `${boatMock.marca}-${boatMock.modelo}`,
         valor: boatMock.valor,
         ano: boatMock.ano,
         fabricante: boatMock.fabricante,
@@ -281,6 +283,7 @@ async function main() {
         ano: aircraftMock.ano,
         marca: aircraftMock.marca,
         modelo: aircraftMock.modelo,
+        identificador: `${aircraftMock.marca}-${aircraftMock.modelo}`,
         assentos: aircraftMock.capacidade_passageiros,
         estado: aircraftMock.estado,
         descricao: aircraftMock.descricao,

@@ -24,6 +24,9 @@ export class CreateCarDto {
   @IsString()
   modelo: string;
 
+  @IsString()
+  identificador: string;
+
   @IsNumber()
   valor: number;
 
