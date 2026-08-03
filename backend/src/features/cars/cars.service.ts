@@ -446,9 +446,8 @@ export class CarsService {
 
         const existingCar = await this.prismaService.car.findFirst({
           where: {
-            marca: row.marca?.trim(),
-            modelo: row.modelo?.trim(),
             specialist_id: user.id,
+            identificador: row.identificador?.trim(),
           },
         });
 
@@ -561,9 +560,8 @@ export class CarsService {
         // Verificar se já existe um produto com mesma marca + modelo para este especialista
         const existingCar = await this.prismaService.car.findFirst({
           where: {
-            marca: row.marca?.trim(),
-            modelo: row.modelo?.trim(),
             specialist_id: user.id,
+            identificador: row.identificador?.trim(),
           },
         });
 

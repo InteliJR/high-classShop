@@ -482,9 +482,8 @@ export class BoatsService {
 
         const existingBoat = await this.prismaService.boat.findFirst({
           where: {
-            marca: row.marca?.trim(),
-            modelo: row.modelo?.trim(),
             specialist_id: user.id,
+            identificador: row.identificador?.trim(),
           },
         });
 
@@ -601,9 +600,8 @@ export class BoatsService {
         // Verificar se já existe um produto com mesma marca + modelo para este especialista
         const existingBoat = await this.prismaService.boat.findFirst({
           where: {
-            marca: row.marca?.trim(),
-            modelo: row.modelo?.trim(),
             specialist_id: user.id,
+            identificador: row.identificador?.trim(),
           },
         });
 

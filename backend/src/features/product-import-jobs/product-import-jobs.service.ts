@@ -603,9 +603,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
       const existing = await this.prisma.car.findFirst({
         where: {
-          marca: row.marca?.trim(),
-          modelo: row.modelo?.trim(),
           specialist_id: specialistId,
+          identificador: row.identificador?.trim(),
         },
       });
 
@@ -653,9 +652,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
       const existing = await this.prisma.boat.findFirst({
         where: {
-          marca: row.marca?.trim(),
-          modelo: row.modelo?.trim(),
           specialist_id: specialistId,
+          identificador: row.identificador?.trim(),
         },
       });
 
@@ -697,9 +695,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
     const existing = await this.prisma.aircraft.findFirst({
       where: {
-        marca: row.marca?.trim(),
-        modelo: row.modelo?.trim(),
         specialist_id: specialistId,
+        identificador: row.identificador?.trim(),
       },
     });
 
