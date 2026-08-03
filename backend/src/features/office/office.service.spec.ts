@@ -218,6 +218,19 @@ describe('OfficeService — tenant isolation', () => {
     ).rejects.toThrow(ConflictException);
   });
 
+  // slug duplicado → 409
+  it('updateCompany: slug já usado por outro escritório → ConflictException', async () => {
+    const prisma = mkPrisma();
+    prisma.company.findFirst.mockResolvedValue({ id: 'other' });
+    const svc = mkSvc(prisma);
+    await expect(
+      svc.updateCompany(SCOPE_OFFICE_A, { slug: 'taken' }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.company.findFirst).toHaveBeenCalledWith({
+      where: { slug: 'taken', NOT: { id: 'companyA' } },
+    });
+  });
+
   // CNPJ inválido → 400
   it('updateCompany: CNPJ não-14 dígitos → BadRequest', async () => {
     const prisma = mkPrisma();

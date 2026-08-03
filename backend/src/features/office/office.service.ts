@@ -402,6 +402,15 @@ export class OfficeService {
       dto.cnpj = normalizedCnpj;
     }
 
+    if (dto.slug) {
+      const dup = await this.prisma.company.findFirst({
+        where: { slug: dto.slug, NOT: { id: companyId } },
+      });
+      if (dup) {
+        throw new ConflictException('Este endereço de site já está em uso');
+      }
+    }
+
     const before = await this.prisma.company.findUnique({
       where: { id: companyId },
       select: { bank: true, agency: true, checking_account: true },

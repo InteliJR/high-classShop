@@ -32,6 +32,14 @@ export class OfficeUpdateCompanyDto {
   @IsOptional() @IsString() @MaxLength(20) checking_account?: string;
 
   @IsOptional()
+  @IsString()
+  @Matches(/^[a-z0-9-]+$/, {
+    message: 'slug deve conter apenas letras minúsculas, números e hífens',
+  })
+  @MaxLength(80)
+  slug?: string;
+
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(4, {
     message: 'Máximo 4 cores (primary, secondary, accent, neutral)',

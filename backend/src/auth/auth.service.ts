@@ -237,6 +237,7 @@ export class AuthService {
           select: {
             id: true,
             name: true,
+            slug: true,
             logo: true,
             color_identity: true,
           },
@@ -248,6 +249,7 @@ export class AuthService {
               select: {
                 id: true,
                 name: true,
+                slug: true,
                 logo: true,
                 color_identity: true,
               },
