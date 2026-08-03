@@ -39,6 +39,7 @@ export interface OfficeCompany {
   agency: string | null;
   checking_account: string | null;
   color_identity: string[];
+  slug?: string | null;
 }
 
 export interface InviteJobSummary {
