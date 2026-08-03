@@ -49,15 +49,30 @@ export class AuthService {
     // Criar o role para registrar o usuário padrão
     const registerRole = UserRole.CUSTOMER;
 
-    // Separação da req
-    const { password, ...dataSave } = data;
+    // Separação da req — company_slug é resolvido no servidor, não persistido cru
+    const { password, company_slug, ...dataSave } = data;
+
+    // Resolve o escritório do whitelabel (se veio). Slug inválido/ausente →
+    // cadastra sem vínculo (não quebra o signup).
+    let companyId: string | undefined;
+    if (company_slug) {
+      const company = await this.prismaService.company.findUnique({
+        where: { slug: company_slug },
+      });
+      companyId = company?.id;
+    }
 
     // Criar o hash da senha
     const passwordHash = await bcrypt.hash(data.password, 10);
 
     // Cria o usuário
     const user = await this.prismaService.user.create({
-      data: { ...dataSave, password_hash: passwordHash, role: registerRole },
+      data: {
+        ...dataSave,
+        password_hash: passwordHash,
+        role: registerRole,
+        ...(companyId ? { company_id: companyId } : {}),
+      },
     });
 
     this.queueWelcomeEmail(user);
