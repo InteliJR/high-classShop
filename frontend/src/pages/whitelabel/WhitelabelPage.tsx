@@ -14,9 +14,18 @@ export default function WhitelabelPage() {
 
   useEffect(() => {
     if (!slug) return;
+    let ignore = false; // ponytail: evita resposta antiga sobrescrever a mais nova ao trocar de slug
+    setError(null);
     getCompanyBySlug(slug)
-      .then(setCompany)
-      .catch(() => setError("Escritório não encontrado."));
+      .then((c) => {
+        if (!ignore) setCompany(c);
+      })
+      .catch(() => {
+        if (!ignore) setError("Escritório não encontrado.");
+      });
+    return () => {
+      ignore = true;
+    };
   }, [slug, setCompany]);
 
   if (error) return <div className="p-8 text-status-bad">{error}</div>;
