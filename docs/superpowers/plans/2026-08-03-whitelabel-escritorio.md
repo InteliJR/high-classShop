@@ -1213,4 +1213,5 @@ git commit -m "feat(office-front): edição do slug do site whitelabel no settin
 - [ ] Backend: `cd backend && npx tsc --noEmit` — sem erros de tipo.
 - [ ] Frontend: `cd frontend && npm run build && npm run lint` — sem erros.
 - [ ] Fluxo end-to-end (Playwright, API mockada): `/i/:slug` pinta o brand → cadastro envia `company_slug` → (mock) usuário logado com `company_id` → dashboard OFFICE mostra o link. Nunca subir o backend real nesta máquina.
-- [ ] Rodar `/adversarial-review` antes do merge (skill do projeto para features novas).
+- [ ] Rodar `/code-review --level=high` sobre o diff final (single-pass, cobre lógica de negócio/edge cases/reuso — mais barato em tokens que `/adversarial-review`, que dispara N agentes em paralelo).
+- [ ] Rodar `/security-review` focado nas duas superfícies novas que tocam confiança: endpoint público `GET /companies/by-slug/:slug` (dado sem auth) e `company_slug` no `register` (input não confiável decidindo vínculo de dados).
