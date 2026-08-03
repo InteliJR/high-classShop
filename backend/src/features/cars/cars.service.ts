@@ -36,6 +36,7 @@ export class CarsService {
   private readonly xlsxColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
+    { name: 'identificador', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
     { name: 'estado', required: true, type: 'string' },
     { name: 'ano', required: true, type: 'number' },
@@ -314,6 +315,7 @@ export class CarsService {
     const instructions: Record<string, string> = {
       marca: 'Nome da marca do carro (texto)',
       modelo: 'Nome do modelo (texto)',
+      identificador: 'Identificador único do produto (texto)',
       valor: 'Preço em reais (número inteiro, sem pontos ou vírgulas)',
       estado: 'Estado onde o carro está localizado (texto)',
       ano: 'Ano de fabricação (número)',
@@ -331,6 +333,7 @@ export class CarsService {
     const example: Record<string, any> = {
       marca: 'BMW',
       modelo: 'X5',
+      identificador: 'BMW-X5-1',
       valor: 450000,
       estado: 'São Paulo',
       ano: 2023,
@@ -355,6 +358,7 @@ export class CarsService {
     const exampleValues = [
       'BMW',
       'X5',
+      'BMW-X5-1',
       '450000',
       'São Paulo',
       '2023',

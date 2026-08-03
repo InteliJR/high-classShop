@@ -47,6 +47,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   private readonly carColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
+    { name: 'identificador', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
     { name: 'estado', required: true, type: 'string' },
     { name: 'ano', required: true, type: 'number' },
@@ -62,6 +63,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   private readonly boatColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
+    { name: 'identificador', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
     { name: 'estado', required: true, type: 'string' },
     { name: 'ano', required: true, type: 'number' },
@@ -80,6 +82,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   private readonly aircraftColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
+    { name: 'identificador', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
     { name: 'estado', required: true, type: 'string' },
     { name: 'ano', required: true, type: 'number' },

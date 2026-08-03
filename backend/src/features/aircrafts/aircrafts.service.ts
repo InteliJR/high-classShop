@@ -37,6 +37,7 @@ export class AircraftsService {
   private readonly xlsxColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
+    { name: 'identificador', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
     { name: 'estado', required: true, type: 'string' },
     { name: 'ano', required: true, type: 'number' },
@@ -393,6 +394,7 @@ export class AircraftsService {
     const instructions: Record<string, string> = {
       marca: 'Nome da marca da aeronave (texto)',
       modelo: 'Nome do modelo (texto)',
+      identificador: 'Identificador único do produto (texto)',
       valor: 'Preço em reais (número inteiro, sem pontos ou vírgulas)',
       estado: 'Estado onde a aeronave está localizada (texto)',
       ano: 'Ano de fabricação (número)',
@@ -408,6 +410,7 @@ export class AircraftsService {
     const example: Record<string, any> = {
       marca: 'Embraer',
       modelo: 'Phenom 300',
+      identificador: 'Embraer-Phenom 300-1',
       valor: 15000000,
       estado: 'São Paulo',
       ano: 2021,
@@ -430,6 +433,7 @@ export class AircraftsService {
     const exampleValues = [
       'Embraer',
       'Phenom 300',
+      'Embraer-Phenom 300-1',
       '15000000',
       'São Paulo',
       '2021',

@@ -36,6 +36,7 @@ export class BoatsService {
   private readonly xlsxColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
+    { name: 'identificador', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
     { name: 'estado', required: true, type: 'string' },
     { name: 'ano', required: true, type: 'number' },
@@ -337,6 +338,7 @@ export class BoatsService {
     const instructions: Record<string, string> = {
       marca: 'Nome da marca da embarcação (texto)',
       modelo: 'Nome do modelo (texto)',
+      identificador: 'Identificador único do produto (texto)',
       valor: 'Preço em reais (número inteiro, sem pontos ou vírgulas)',
       estado: 'Estado onde a embarcação está localizada (texto)',
       ano: 'Ano de fabricação (número)',
@@ -356,6 +358,7 @@ export class BoatsService {
     const example: Record<string, any> = {
       marca: 'Azimut',
       modelo: '55 Fly',
+      identificador: 'Azimut-55 Fly-1',
       valor: 3500000,
       estado: 'São Paulo',
       ano: 2022,
@@ -384,6 +387,7 @@ export class BoatsService {
     const exampleValues = [
       'Azimut',
       '55 Fly',
+      'Azimut-55 Fly-1',
       '3500000',
       'São Paulo',
       '2022',
