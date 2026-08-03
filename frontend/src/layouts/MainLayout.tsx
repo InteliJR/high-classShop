@@ -42,8 +42,8 @@ import RequireGoogleMeetModal from "../components/meetings/RequireGoogleMeetModa
                   /* Respiro quando não tem sidebar */
                   ${user ? "" : `${isMobile ? mobilePadding : desktopPadding}`}
                   
-                  /* Espaço quando sidebar está expandida */
-                  ${user && !isMobile && !isSidebarCollapsed ? "pl-94 pr-30" : ""}
+                  /* Espaço quando sidebar está expandida (w-64 = 256px) */
+                  ${user && !isMobile && !isSidebarCollapsed ? "pl-72" : ""}
                 `}
               >
                 {children}

@@ -187,13 +187,6 @@ export default function CommissionsPage() {
               </Alert>
             )}
 
-            <Alert variant="info" className="mb-6">
-              No modelo aninhado: o <b>especialista</b> leva uma fatia do total
-              da comissão; o <b>escritório</b> leva uma fatia do <b>restante</b>;
-              e a <b>plataforma</b> fica automaticamente com o que sobra do
-              restante (não é configurada aqui).
-            </Alert>
-
             <Card className="mb-6">
               <h2 className="text-lg font-semibold text-ink mb-1">
                 Escritórios
@@ -262,7 +255,9 @@ export default function CommissionsPage() {
           </>
         ))}
 
-      {tab === "sales" && <SalesCommissionsTab />}
+      {tab === "sales" && (
+        <SalesCommissionsTab focusProcessId={searchParams.get("processId")} />
+      )}
     </div>
   );
 }
@@ -303,7 +298,11 @@ function CenterLoader() {
 }
 
 // ── Aba "Por venda": fluxo de comissão de cada venda fechada ────────────────
-function SalesCommissionsTab() {
+function SalesCommissionsTab({
+  focusProcessId,
+}: {
+  focusProcessId: string | null;
+}) {
   const [sales, setSales] = useState<SaleCommission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -316,6 +315,13 @@ function SalesCommissionsTab() {
       )
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (loading || !focusProcessId) return;
+    document
+      .getElementById(`sale-${focusProcessId}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [loading, focusProcessId]);
 
   if (loading) return <CenterLoader />;
   if (error) return <Alert variant="danger">{error}</Alert>;
@@ -339,13 +345,23 @@ function SalesCommissionsTab() {
         </Button>
       </div>
       {sales.map((s) => (
-        <SaleCard key={s.processId} sale={s} />
+        <SaleCard
+          key={s.processId}
+          sale={s}
+          focused={s.processId === focusProcessId}
+        />
       ))}
     </div>
   );
 }
 
-function SaleCard({ sale }: { sale: SaleCommission }) {
+function SaleCard({
+  sale,
+  focused,
+}: {
+  sale: SaleCommission;
+  focused?: boolean;
+}) {
   const hasOffice = sale.officeValue > 0 || !!sale.officeName;
   // Fatia do especialista sobre o total; escritório/plataforma sobre o restante.
   const specialistShareOfPool =
@@ -358,7 +374,10 @@ function SaleCard({ sale }: { sale: SaleCommission }) {
     sale.restante > 0 ? (sale.platformValue / sale.restante) * 100 : 0;
 
   return (
-    <Card className="p-5">
+    <Card
+      id={`sale-${sale.processId}`}
+      className={`p-5 ${focused ? "ring-2 ring-amber-400 ring-offset-2" : ""}`}
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
         <h3 className="font-semibold text-ink">{sale.productLabel}</h3>
         <span className="text-xs text-subtle">
