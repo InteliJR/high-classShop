@@ -56,7 +56,7 @@ const COLUMN_DEFINITIONS: Record<
   { required: string[]; optional: string[] }
 > = {
   CAR: {
-    required: ["marca", "modelo", "valor", "estado", "ano"],
+    required: ["marca", "modelo", "identificador", "valor", "estado", "ano"],
     optional: [
       "cor",
       "km",
@@ -68,7 +68,7 @@ const COLUMN_DEFINITIONS: Record<
     ],
   },
   BOAT: {
-    required: ["marca", "modelo", "valor", "estado", "ano"],
+    required: ["marca", "modelo", "identificador", "valor", "estado", "ano"],
     optional: [
       "fabricante",
       "tamanho",
@@ -83,7 +83,7 @@ const COLUMN_DEFINITIONS: Record<
     ],
   },
   AIRCRAFT: {
-    required: ["marca", "modelo", "valor", "estado", "ano"],
+    required: ["marca", "modelo", "identificador", "valor", "estado", "ano"],
     optional: [
       "categoria",
       "assentos",
@@ -336,9 +336,10 @@ export function XlsxImporter({
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
-                Produtos com mesma{" "}
-                <strong className="text-gray-900">marca + modelo</strong> serao
-                atualizados ao inves de duplicados.
+                Produtos com mesmo{" "}
+                <strong className="text-gray-900">identificador</strong> serao
+                atualizados ao inves de duplicados (marca e modelo podem se
+                repetir entre produtos diferentes).
               </li>
             </ul>
           </div>
