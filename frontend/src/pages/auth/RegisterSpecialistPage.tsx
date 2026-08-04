@@ -4,6 +4,7 @@ import {
   validateSpecialistInvite,
   registerSpecialist,
 } from "../../services/specialists.service";
+import { applyCnpjMask, applyRgMask, applyPhoneMask } from "../../utils/mask";
 import Button from "../../components/ui/button";
 
 type SpecialityType = "CAR" | "BOAT" | "AIRCRAFT";
@@ -71,8 +72,8 @@ export default function RegisterSpecialistPage() {
       setFormError("CNPJ deve ter 14 dígitos.");
       return;
     }
-    if (cleanRg.length < 7 || cleanRg.length > 10) {
-      setFormError("RG deve ter entre 7 e 10 dígitos.");
+    if (cleanRg.length < 7 || cleanRg.length > 11) {
+      setFormError("RG deve ter entre 7 e 11 dígitos.");
       return;
     }
     if (cleanPhone.length < 10 || cleanPhone.length > 11) {
@@ -203,7 +204,7 @@ export default function RegisterSpecialistPage() {
             <input
               type="text"
               value={cnpj}
-              onChange={(e) => setCnpj(e.target.value)}
+              onChange={(e) => setCnpj(applyCnpjMask(e.target.value))}
               placeholder="12345678000199"
               maxLength={18}
               className="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-focus-ring"
@@ -212,13 +213,13 @@ export default function RegisterSpecialistPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-ink-soft">RG (7-10 dígitos)</label>
+            <label className="block text-sm font-medium text-ink-soft">RG (7-11 dígitos, aceita CPF)</label>
             <input
               type="text"
               value={rg}
-              onChange={(e) => setRg(e.target.value)}
+              onChange={(e) => setRg(applyRgMask(e.target.value))}
               placeholder="1234567"
-              maxLength={10}
+              maxLength={14}
               className="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-focus-ring"
               required
             />
@@ -229,7 +230,7 @@ export default function RegisterSpecialistPage() {
             <input
               type="text"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(applyPhoneMask(e.target.value))}
               placeholder="(11) 99999-9999"
               maxLength={16}
               className="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-focus-ring"

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { validateConsultantInvite, registerConsultant } from "../../services/consultant.service";
+import { applyCpfMask, applyRgMask, applyPhoneMask } from "../../utils/mask";
 import Button from "../../components/ui/button";
 
 export default function RegisterConsultantPage() {
@@ -58,8 +59,8 @@ export default function RegisterConsultantPage() {
       setFormError("CPF deve ter 11 dígitos.");
       return;
     }
-    if (cleanRg.length < 7 || cleanRg.length > 10) {
-      setFormError("RG deve ter entre 7 e 10 dígitos.");
+    if (cleanRg.length < 7 || cleanRg.length > 11) {
+      setFormError("RG deve ter entre 7 e 11 dígitos.");
       return;
     }
     if (cleanPhone.length < 10 || cleanPhone.length > 11) {
@@ -174,7 +175,7 @@ export default function RegisterConsultantPage() {
             <input
               type="text"
               value={cpf}
-              onChange={(e) => setCpf(e.target.value)}
+              onChange={(e) => setCpf(applyCpfMask(e.target.value))}
               placeholder="12345678901"
               maxLength={14}
               className="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-focus-ring"
@@ -183,13 +184,13 @@ export default function RegisterConsultantPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-ink-soft">RG (7-10 dígitos)</label>
+            <label className="block text-sm font-medium text-ink-soft">RG (7-11 dígitos, aceita CPF)</label>
             <input
               type="text"
               value={rg}
-              onChange={(e) => setRg(e.target.value)}
+              onChange={(e) => setRg(applyRgMask(e.target.value))}
               placeholder="1234567"
-              maxLength={10}
+              maxLength={14}
               className="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-focus-ring"
               required
             />
@@ -200,7 +201,7 @@ export default function RegisterConsultantPage() {
             <input
               type="text"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(applyPhoneMask(e.target.value))}
               placeholder="(11) 99999-9999"
               maxLength={16}
               className="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-focus-ring"
