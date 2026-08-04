@@ -15,7 +15,7 @@ import { PageHeader } from "../../components/patterns/PageHeader";
 type ProductType = "cars" | "boats" | "aircrafts";
 
 interface Product {
-  id: number;
+  id: string;
   marca: string;
   modelo: string;
   ano?: number;
@@ -85,7 +85,7 @@ export default function ProductsPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!window.confirm("Tem certeza que deseja excluir este produto?")) {
       return;
     }
@@ -106,7 +106,7 @@ export default function ProductsPage() {
     }
   };
 
-  const handleEdit = (id: number) => {
+  const handleEdit = (id: string) => {
     navigate(`/specialist/products/edit/${productType}/${id}`);
   };
 

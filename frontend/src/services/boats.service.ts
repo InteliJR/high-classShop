@@ -13,9 +13,10 @@ import {
 } from "./product-import-jobs.service";
 
 export interface RawBoat {
-  id: number;
+  id: string;
   marca: string;
   modelo: string;
+  identificador: string;
   valor: number;
   estado: string;
   ano: number;
@@ -52,6 +53,7 @@ export interface ImageDto {
 export interface CreateBoatDto {
   marca: string;
   modelo: string;
+  identificador: string;
   valor: number;
   estado: string;
   ano: number;
@@ -130,7 +132,7 @@ export async function getBoats(
 }
 
 // Get /boats/:id
-export async function getBoatById(id: number): Promise<RawBoat> {
+export async function getBoatById(id: string): Promise<RawBoat> {
   try {
     const response = await api.get<RawBoat>(`/boats/${id}`);
     return response.data;
@@ -153,7 +155,7 @@ export async function createBoat(data: CreateBoatDto): Promise<RawBoat> {
 
 // Patch /boats/:id
 export async function updateBoat(
-  id: number,
+  id: string,
   data: UpdateBoatDto,
 ): Promise<RawBoat> {
   try {
@@ -166,7 +168,7 @@ export async function updateBoat(
 }
 
 // Delete /boats/:id
-export async function deleteBoat(id: number): Promise<void> {
+export async function deleteBoat(id: string): Promise<void> {
   try {
     await api.delete(`/boats/${id}`);
   } catch (error) {

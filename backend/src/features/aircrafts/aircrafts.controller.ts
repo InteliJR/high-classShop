@@ -141,7 +141,7 @@ export class AircraftsController {
   @Get(':id')
   @Public()
   findOne(@Param('id') id: string) {
-    return this.aircraftsService.findOne(+id);
+    return this.aircraftsService.findOne(id);
   }
 
   @Patch(':id')
@@ -152,17 +152,17 @@ export class AircraftsController {
     @CurrentUser() user: UserEntity,
   ) {
     assertSpecialistCanModify('AIRCRAFT', user);
-    const existing = await this.aircraftsService.findOne(+id);
+    const existing = await this.aircraftsService.findOne(id);
     assertSpecialistOwnsProduct(user, existing?.specialist_id);
-    return this.aircraftsService.update(+id, updateAircraftDto);
+    return this.aircraftsService.update(id, updateAircraftDto);
   }
 
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   async remove(@Param('id') id: string, @CurrentUser() user: UserEntity) {
     assertSpecialistCanModify('AIRCRAFT', user);
-    const existing = await this.aircraftsService.findOne(+id);
+    const existing = await this.aircraftsService.findOne(id);
     assertSpecialistOwnsProduct(user, existing?.specialist_id);
-    return this.aircraftsService.remove(+id);
+    return this.aircraftsService.remove(id);
   }
 }

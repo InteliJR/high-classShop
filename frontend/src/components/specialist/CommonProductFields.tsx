@@ -19,6 +19,11 @@ export default function CommonProductFields({ register, errors, productType }: C
       BOAT: "Ex: S6, Flybridge 68, Manhattan 55",
       AIRCRAFT: "Ex: Phenom 300, G650, Citation X",
     },
+    identificador: {
+      CAR: "Ex: BMW-X5-1",
+      BOAT: "Ex: AZIMUT-S6-1",
+      AIRCRAFT: "Ex: EMBRAER-PHENOM300-1",
+    },
     ano: {
       CAR: "Ex: 2024",
       BOAT: "Ex: 2023",
@@ -63,6 +68,26 @@ export default function CommonProductFields({ register, errors, productType }: C
         />
         {errors.modelo && (
           <span className="text-sm text-red-500">{errors.modelo.message as string}</span>
+        )}
+      </div>
+
+      {/* Identificador */}
+      <div className="flex flex-col gap-2">
+        <label htmlFor="identificador" className="text-sm font-medium text-text-primary">
+          Identificador *
+        </label>
+        <input
+          id="identificador"
+          type="text"
+          {...register("identificador", {
+            required: "Identificador é obrigatório",
+            setValueAs: (v) => (typeof v === "string" ? v.trim() : v),
+          })}
+          className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder={productType ? placeholders.identificador[productType] : "Ex: BMW-X5-1"}
+        />
+        {errors.identificador && (
+          <span className="text-sm text-red-500">{errors.identificador.message as string}</span>
         )}
       </div>
 

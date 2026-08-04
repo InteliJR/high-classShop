@@ -24,6 +24,9 @@ export class CreateAircraftDto {
   @IsString()
   modelo: string;
 
+  @IsString()
+  identificador: string;
+
   @IsNumber()
   valor: number;
 

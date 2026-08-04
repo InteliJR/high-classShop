@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -36,6 +37,7 @@ export class CarsService {
   private readonly xlsxColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
+    { name: 'identificador', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
     { name: 'estado', required: true, type: 'string' },
     { name: 'ano', required: true, type: 'number' },
@@ -94,6 +96,9 @@ export class CarsService {
         include: { images: true },
       });
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        throw error;
+      }
       throw new Error(`Erro ao criar carro: ${error.message}`);
     }
   }
@@ -214,7 +219,7 @@ export class CarsService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(id: string) {
     this.logger.log(`[findOne] Buscando carro - ID: ${id}`);
     const car = await this.prismaService.car.findUnique({
       where: { id },
@@ -240,7 +245,7 @@ export class CarsService {
     return { ...car };
   }
 
-  async update(id: number, updateCarDto: UpdateCarDto) {
+  async update(id: string, updateCarDto: UpdateCarDto) {
     await this.findOne(id);
 
     const { images, ...carData } = updateCarDto;
@@ -285,11 +290,14 @@ export class CarsService {
         include: { images: true },
       });
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        throw error;
+      }
       throw new Error(`Erro ao atualizar carro: ${error.message}`);
     }
   }
 
-  async remove(id: number) {
+  async remove(id: string) {
     await this.findOne(id);
 
     try {
@@ -314,6 +322,7 @@ export class CarsService {
     const instructions: Record<string, string> = {
       marca: 'Nome da marca do carro (texto)',
       modelo: 'Nome do modelo (texto)',
+      identificador: 'Identificador único do produto (texto)',
       valor: 'Preço em reais (número inteiro, sem pontos ou vírgulas)',
       estado: 'Estado onde o carro está localizado (texto)',
       ano: 'Ano de fabricação (número)',
@@ -331,6 +340,7 @@ export class CarsService {
     const example: Record<string, any> = {
       marca: 'BMW',
       modelo: 'X5',
+      identificador: 'BMW-X5-1',
       valor: 450000,
       estado: 'São Paulo',
       ano: 2023,
@@ -355,6 +365,7 @@ export class CarsService {
     const exampleValues = [
       'BMW',
       'X5',
+      'BMW-X5-1',
       '450000',
       'São Paulo',
       '2023',
@@ -395,8 +406,8 @@ export class CarsService {
       });
     }
 
-    const insertedIds: number[] = [];
-    const updatedIds: number[] = [];
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -407,6 +418,7 @@ export class CarsService {
         const carData: any = {
           marca: row.marca,
           modelo: row.modelo,
+          identificador: row.identificador,
           valor: Number(row.valor),
           estado: row.estado,
           ano: Number(row.ano),
@@ -441,9 +453,8 @@ export class CarsService {
 
         const existingCar = await this.prismaService.car.findFirst({
           where: {
-            marca: row.marca?.trim(),
-            modelo: row.modelo?.trim(),
             specialist_id: user.id,
+            identificador: row.identificador?.trim(),
           },
         });
 
@@ -503,8 +514,8 @@ export class CarsService {
       });
     }
 
-    const insertedIds: number[] = [];
-    const updatedIds: number[] = [];
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
     const warningRows: ImportErrorRow[] = [];
 
@@ -512,12 +523,14 @@ export class CarsService {
     for (let i = 0; i < rows.length; i++) {
       const rowNumber = i + 2; // +2 porque linha 1 é header e arrays começam em 0
       const row = rows[i];
+      const identificador = row.identificador?.trim();
 
       try {
         // Preparar DTO
         const carData: any = {
           marca: row.marca,
           modelo: row.modelo,
+          identificador,
           valor: Number(row.valor),
           estado: row.estado,
           ano: Number(row.ano),
@@ -552,12 +565,11 @@ export class CarsService {
           continue;
         }
 
-        // Verificar se já existe um produto com mesma marca + modelo para este especialista
+        // Verificar se já existe um produto com mesmo identificador para este especialista
         const existingCar = await this.prismaService.car.findFirst({
           where: {
-            marca: row.marca?.trim(),
-            modelo: row.modelo?.trim(),
             specialist_id: user.id,
+            identificador,
           },
         });
 

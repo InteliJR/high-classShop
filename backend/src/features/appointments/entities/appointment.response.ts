@@ -81,7 +81,7 @@ export class ProductResponseDto {
    * Usado junto com product_type para identificar único
    */
   @Expose()
-  id: number;
+  id: string;
 
   /**
    * Tipo de produto

@@ -35,7 +35,7 @@ export function useCheckAppointment(
   clientId: string | undefined,
   specialistId: string | undefined,
   productType: "CAR" | "BOAT" | "AIRCRAFT" | undefined,
-  productId: number | undefined
+  productId: string | undefined
 ): UseCheckAppointmentResult {
   const [existingAppointment, setExistingAppointment] =
     useState<Appointment | null>(null);

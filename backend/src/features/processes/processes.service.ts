@@ -67,9 +67,9 @@ export class ProcessesService {
    * Helper: Retorna o product_id (car_id, boat_id ou aircraft_id) do processo
    *
    * @param {ProcessWithProducts} process - processo com os produtos includos
-   * @returns {number | null} - ID do produto ou null se for consultoria
+   * @returns {string | null} - ID do produto ou null se for consultoria
    */
-  private getProductId(process: ProcessWithProducts | any): number | null {
+  private getProductId(process: ProcessWithProducts | any): string | null {
     if (!process.product_type) return null;
 
     // Retorna o ID específico baseado no tipo de produto
@@ -204,14 +204,14 @@ export class ProcessesService {
       const whereClause: {
         client_id: string;
         specialist_id: string;
-        aircraft_id?: number;
-        boat_id?: number;
-        car_id?: number;
+        aircraft_id?: string;
+        boat_id?: string;
+        car_id?: string;
         status?: { in: ProcessStatus[] };
       } = {
         client_id,
         specialist_id,
-        [`${fieldName}_id`]: Number(createProcessDto.product_id),
+        [`${fieldName}_id`]: createProcessDto.product_id,
         // Só bloqueia se houver processo ATIVO; processos encerrados
         // (COMPLETED/REJECTED) permitem novo processo para o mesmo produto.
         status: { in: activeStatuses },
@@ -257,11 +257,10 @@ export class ProcessesService {
       car: false,
       boat: false,
     };
-    // TODO: trocar para string quando for trocado para UUID
     const finalProduct: {
-      aircraft_id: number | null;
-      boat_id: number | null;
-      car_id: number | null;
+      aircraft_id: string | null;
+      boat_id: string | null;
+      car_id: string | null;
     } = {
       aircraft_id: null,
       boat_id: null,
@@ -271,15 +270,15 @@ export class ProcessesService {
     // Preenchimento do id e o include do produto de acordo com o tipo dele
     switch (createProcessDto.product_type) {
       case 'AIRCRAFT':
-        finalProduct.aircraft_id = Number(createProcessDto.product_id);
+        finalProduct.aircraft_id = createProcessDto.product_id ?? null;
         include.aircraft = true;
         break;
       case 'CAR':
-        finalProduct.car_id = Number(createProcessDto.product_id);
+        finalProduct.car_id = createProcessDto.product_id ?? null;
         include.car = true;
         break;
       case 'BOAT':
-        finalProduct.boat_id = Number(createProcessDto.product_id);
+        finalProduct.boat_id = createProcessDto.product_id ?? null;
         include.boat = true;
         break;
     }
@@ -880,7 +879,7 @@ export class ProcessesService {
    */
   async assignProduct(
     processId: string,
-    dto: { product_type: string; product_id: number },
+    dto: { product_type: string; product_id: string },
     userId: string,
     userRole: string,
   ): Promise<ProcessResponse> {

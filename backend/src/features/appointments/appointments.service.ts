@@ -831,7 +831,7 @@ export class AppointmentsService {
    */
   private async getProductByType(
     productType: ProductType | null,
-    productId: number | null,
+    productId: string | null,
   ): Promise<Car | Boat | Aircraft | null> {
     // Para consultoria, não há produto ainda
     if (!productType || !productId) {
@@ -928,28 +928,17 @@ export class AppointmentsService {
    * @param clientId ID do cliente (UUID)
    * @param specialistId ID do especialista (UUID)
    * @param productType Tipo de produto (CAR, BOAT, AIRCRAFT)
-   * @param productId ID do produto (convertido para number)
+   * @param productId UUID do produto
    * @returns Appointment se encontrado e status = SCHEDULED, caso contrário null
    */
   async findScheduledAppointment(
     clientId: string,
     specialistId: string,
     productType: ProductType,
-    productId: number | string,
+    productId: string,
   ): Promise<AppointmentResponseEntity | null> {
-    // Converter productId para number (pode vir como string da query param)
-    const productIdNum =
-      typeof productId === 'string' ? parseInt(productId, 10) : productId;
-
-    if (isNaN(productIdNum)) {
-      this.logger.warn(
-        `[findScheduledAppointment] productId inválido: ${productId}`,
-      );
-      return null;
-    }
-
     this.logger.log(
-      `[findScheduledAppointment] Buscando agendamento existente: cliente=${clientId}, especialista=${specialistId}, produto=${productType}/${productIdNum}`,
+      `[findScheduledAppointment] Buscando agendamento existente: cliente=${clientId}, especialista=${specialistId}, produto=${productType}/${productId}`,
     );
 
     const appointment = await this.prisma.appointment.findFirst({
@@ -957,7 +946,7 @@ export class AppointmentsService {
         client_id: clientId,
         specialist_id: specialistId,
         product_type: productType,
-        product_id: productIdNum,
+        product_id: productId,
         status: 'SCHEDULED',
       },
       include: {
@@ -1649,28 +1638,21 @@ export class AppointmentsService {
    * @param clientId ID do cliente (UUID)
    * @param specialistId ID do especialista (UUID)
    * @param productType Tipo de produto (CAR, BOAT, AIRCRAFT)
-   * @param productId ID do produto (convertido para number)
+   * @param productId UUID do produto
    * @returns Appointment se encontrado, caso contrário null
    */
   async findExistingAppointment(
     clientId: string,
     specialistId: string,
     productType: ProductType,
-    productId: number | string,
+    productId: string,
   ): Promise<AppointmentResponseEntity | null> {
-    const productIdNum =
-      typeof productId === 'string' ? parseInt(productId, 10) : productId;
-
-    if (isNaN(productIdNum)) {
-      return null;
-    }
-
     const appointment = await this.prisma.appointment.findFirst({
       where: {
         client_id: clientId,
         specialist_id: specialistId,
         product_type: productType,
-        product_id: productIdNum,
+        product_id: productId,
         status: {
           in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
         },

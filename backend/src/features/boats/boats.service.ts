@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -36,6 +37,7 @@ export class BoatsService {
   private readonly xlsxColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
+    { name: 'identificador', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
     { name: 'estado', required: true, type: 'string' },
     { name: 'ano', required: true, type: 'number' },
@@ -116,6 +118,9 @@ export class BoatsService {
       );
       return boatWithImages;
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        throw error;
+      }
       this.logger.error(
         `[create] Erro ao criar barco: ${error.message}`,
         error.stack,
@@ -237,7 +242,7 @@ export class BoatsService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(id: string) {
     this.logger.log(`[findOne] Buscando barco - ID: ${id}`);
     const boat = await this.prismaService.boat.findUnique({
       where: { id },
@@ -263,7 +268,7 @@ export class BoatsService {
     return { ...boat };
   }
 
-  async update(id: number, updateBoatDto: UpdateBoatDto) {
+  async update(id: string, updateBoatDto: UpdateBoatDto) {
     await this.findOne(id);
 
     const { images, ...boatData } = updateBoatDto;
@@ -308,11 +313,14 @@ export class BoatsService {
         include: { images: true },
       });
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        throw error;
+      }
       throw new Error(`Erro ao atualizar lancha: ${error.message}`);
     }
   }
 
-  async remove(id: number) {
+  async remove(id: string) {
     await this.findOne(id);
 
     try {
@@ -337,6 +345,7 @@ export class BoatsService {
     const instructions: Record<string, string> = {
       marca: 'Nome da marca da embarcação (texto)',
       modelo: 'Nome do modelo (texto)',
+      identificador: 'Identificador único do produto (texto)',
       valor: 'Preço em reais (número inteiro, sem pontos ou vírgulas)',
       estado: 'Estado onde a embarcação está localizada (texto)',
       ano: 'Ano de fabricação (número)',
@@ -356,6 +365,7 @@ export class BoatsService {
     const example: Record<string, any> = {
       marca: 'Azimut',
       modelo: '55 Fly',
+      identificador: 'Azimut-55 Fly-1',
       valor: 3500000,
       estado: 'São Paulo',
       ano: 2022,
@@ -384,6 +394,7 @@ export class BoatsService {
     const exampleValues = [
       'Azimut',
       '55 Fly',
+      'Azimut-55 Fly-1',
       '3500000',
       'São Paulo',
       '2022',
@@ -427,8 +438,8 @@ export class BoatsService {
       });
     }
 
-    const insertedIds: number[] = [];
-    const updatedIds: number[] = [];
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -439,6 +450,7 @@ export class BoatsService {
         const boatData: any = {
           marca: row.marca,
           modelo: row.modelo,
+          identificador: row.identificador,
           valor: Number(row.valor),
           estado: row.estado,
           ano: Number(row.ano),
@@ -477,9 +489,8 @@ export class BoatsService {
 
         const existingBoat = await this.prismaService.boat.findFirst({
           where: {
-            marca: row.marca?.trim(),
-            modelo: row.modelo?.trim(),
             specialist_id: user.id,
+            identificador: row.identificador?.trim(),
           },
         });
 
@@ -539,8 +550,8 @@ export class BoatsService {
       });
     }
 
-    const insertedIds: number[] = [];
-    const updatedIds: number[] = [];
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
     const warningRows: ImportErrorRow[] = [];
 
@@ -548,12 +559,14 @@ export class BoatsService {
     for (let i = 0; i < rows.length; i++) {
       const rowNumber = i + 2; // +2 porque linha 1 é header e arrays começam em 0
       const row = rows[i];
+      const identificador = row.identificador?.trim();
 
       try {
         // Preparar DTO
         const boatData: any = {
           marca: row.marca,
           modelo: row.modelo,
+          identificador,
           valor: Number(row.valor),
           estado: row.estado,
           ano: Number(row.ano),
@@ -592,12 +605,11 @@ export class BoatsService {
           continue;
         }
 
-        // Verificar se já existe um produto com mesma marca + modelo para este especialista
+        // Verificar se já existe um produto com mesmo identificador para este especialista
         const existingBoat = await this.prismaService.boat.findFirst({
           where: {
-            marca: row.marca?.trim(),
-            modelo: row.modelo?.trim(),
             specialist_id: user.id,
+            identificador,
           },
         });
 

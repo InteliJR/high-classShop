@@ -2,7 +2,7 @@ import { AircraftImage } from './aircraft-image.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 
 export class Aircraft {
-  id: number;
+  id: string;
   is_active: boolean;
   deactivated_at: Date | null;
   deactivated_by_sync_job_id: string | null;

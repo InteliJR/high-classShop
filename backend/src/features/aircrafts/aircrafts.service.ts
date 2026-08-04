@@ -37,6 +37,7 @@ export class AircraftsService {
   private readonly xlsxColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
+    { name: 'identificador', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
     { name: 'estado', required: true, type: 'string' },
     { name: 'ano', required: true, type: 'number' },
@@ -62,6 +63,7 @@ export class AircraftsService {
       ano: aircraftData.ano,
       marca: aircraftData.marca,
       modelo: aircraftData.modelo,
+      identificador: aircraftData.identificador,
       assentos: aircraftData.assentos,
       estado: aircraftData.estado,
       descricao: aircraftData.descricao,
@@ -129,6 +131,9 @@ export class AircraftsService {
       );
       return aircraftWithImages;
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        throw error;
+      }
       this.logger.error(
         `[create] Erro ao criar aeronave: ${error.message}`,
         error.stack,
@@ -254,7 +259,7 @@ export class AircraftsService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(id: string) {
     this.logger.log(`[findOne] Buscando aeronave - ID: ${id}`);
     const aircraft = await this.prismaService.aircraft.findUnique({
       where: { id },
@@ -280,11 +285,11 @@ export class AircraftsService {
     return { ...aircraft };
   }
 
-  // update(id: number, updateAircraftDto: UpdateAircraftDto) {
+  // update(id: string, updateAircraftDto: UpdateAircraftDto) {
   //   return `This action updates a #${id} aircraft`;
   // }
 
-  async update(id: number, updateAircraftDto: UpdateAircraftDto) {
+  async update(id: string, updateAircraftDto: UpdateAircraftDto) {
     await this.findOne(id);
 
     const { specialist_id, images, ...aircraftData } = updateAircraftDto;
@@ -301,6 +306,9 @@ export class AircraftsService {
     }
     if (aircraftData.modelo !== undefined) {
       payload.modelo = aircraftData.modelo;
+    }
+    if (aircraftData.identificador !== undefined) {
+      payload.identificador = aircraftData.identificador;
     }
     if (aircraftData.assentos !== undefined) {
       payload.assentos = aircraftData.assentos;
@@ -364,11 +372,14 @@ export class AircraftsService {
         include: { images: true },
       });
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        throw error;
+      }
       throw new Error(`Erro ao atualizar aeronave: ${error.message}`);
     }
   }
 
-  async remove(id: number) {
+  async remove(id: string) {
     await this.findOne(id);
 
     try {
@@ -393,6 +404,7 @@ export class AircraftsService {
     const instructions: Record<string, string> = {
       marca: 'Nome da marca da aeronave (texto)',
       modelo: 'Nome do modelo (texto)',
+      identificador: 'Identificador único do produto (texto)',
       valor: 'Preço em reais (número inteiro, sem pontos ou vírgulas)',
       estado: 'Estado onde a aeronave está localizada (texto)',
       ano: 'Ano de fabricação (número)',
@@ -408,6 +420,7 @@ export class AircraftsService {
     const example: Record<string, any> = {
       marca: 'Embraer',
       modelo: 'Phenom 300',
+      identificador: 'Embraer-Phenom 300-1',
       valor: 15000000,
       estado: 'São Paulo',
       ano: 2021,
@@ -430,6 +443,7 @@ export class AircraftsService {
     const exampleValues = [
       'Embraer',
       'Phenom 300',
+      'Embraer-Phenom 300-1',
       '15000000',
       'São Paulo',
       '2021',
@@ -468,8 +482,8 @@ export class AircraftsService {
       });
     }
 
-    const insertedIds: number[] = [];
-    const updatedIds: number[] = [];
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -480,6 +494,7 @@ export class AircraftsService {
         const aircraftData: any = {
           marca: row.marca,
           modelo: row.modelo,
+          identificador: row.identificador,
           valor: Number(row.valor),
           estado: row.estado,
           ano: Number(row.ano),
@@ -512,9 +527,8 @@ export class AircraftsService {
 
         const existingAircraft = await this.prismaService.aircraft.findFirst({
           where: {
-            marca: row.marca?.trim(),
-            modelo: row.modelo?.trim(),
             specialist_id: user.id,
+            identificador: row.identificador?.trim(),
           },
         });
 
@@ -526,6 +540,7 @@ export class AircraftsService {
               ano: aircraftData.ano,
               marca: aircraftData.marca,
               modelo: aircraftData.modelo,
+              identificador: aircraftData.identificador,
               assentos: aircraftData.assentos,
               estado: aircraftData.estado,
               descricao: aircraftData.descricao,
@@ -541,6 +556,7 @@ export class AircraftsService {
               ano: aircraftData.ano,
               marca: aircraftData.marca,
               modelo: aircraftData.modelo,
+              identificador: aircraftData.identificador,
               assentos: aircraftData.assentos,
               estado: aircraftData.estado,
               descricao: aircraftData.descricao,
@@ -594,8 +610,8 @@ export class AircraftsService {
       });
     }
 
-    const insertedIds: number[] = [];
-    const updatedIds: number[] = [];
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
     const warningRows: ImportErrorRow[] = [];
 
@@ -603,12 +619,14 @@ export class AircraftsService {
     for (let i = 0; i < rows.length; i++) {
       const rowNumber = i + 2; // +2 porque linha 1 é header e arrays começam em 0
       const row = rows[i];
+      const identificador = row.identificador?.trim();
 
       try {
         // Preparar DTO
         const aircraftData: any = {
           marca: row.marca,
           modelo: row.modelo,
+          identificador,
           valor: Number(row.valor),
           estado: row.estado,
           ano: Number(row.ano),
@@ -641,12 +659,11 @@ export class AircraftsService {
           continue;
         }
 
-        // Verificar se já existe um produto com mesma marca + modelo para este especialista
+        // Verificar se já existe um produto com mesmo identificador para este especialista
         const existingAircraft = await this.prismaService.aircraft.findFirst({
           where: {
-            marca: row.marca?.trim(),
-            modelo: row.modelo?.trim(),
             specialist_id: user.id,
+            identificador,
           },
         });
 
@@ -662,6 +679,7 @@ export class AircraftsService {
               ano: aircraftData.ano,
               marca: aircraftData.marca,
               modelo: aircraftData.modelo,
+              identificador: aircraftData.identificador,
               assentos: aircraftData.assentos,
               estado: aircraftData.estado,
               descricao: aircraftData.descricao,
@@ -678,6 +696,7 @@ export class AircraftsService {
               ano: aircraftData.ano,
               marca: aircraftData.marca,
               modelo: aircraftData.modelo,
+              identificador: aircraftData.identificador,
               assentos: aircraftData.assentos,
               estado: aircraftData.estado,
               descricao: aircraftData.descricao,

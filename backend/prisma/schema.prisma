@@ -670,19 +670,18 @@ model PlatformCompany {
 // ─────────────────────────────────────────────────────────────────────────────
 // Car / Boat / Aircraft: inventário de veículos, embarcações e aeronaves de luxo
 // [Type]_image: imagens específicas por tipo de produto
-// Nota: ids Int com TODO para futura migração a UUID
 
 // === Products & Images ===
 // Car: inventário de automóveis de luxo
-// TODO: converter id Int para UUID em migração futura
 model Car {
-  id                         Int       @id @default(autoincrement())
+  id                         String    @id @default(uuid()) @db.Uuid
   specialist_id              String?   @db.Uuid
   is_active                  Boolean   @default(true)
   deactivated_at             DateTime?
   deactivated_by_sync_job_id String?   @db.Uuid
   marca                      String
   modelo                     String
+  identificador              String
   valor                      Decimal
   estado                     String
   ano                        Int
@@ -701,6 +700,7 @@ model Car {
 
   @@index([specialist_id])
   @@index([specialist_id, is_active])
+  @@unique([specialist_id, identificador])
 }
 
 // Car_image: imagens associadas aos anúncios de Car
@@ -711,22 +711,22 @@ model Car_image {
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
 
-  car_id Int?
-  car    Car? @relation(fields: [car_id], references: [id])
+  car_id String? @db.Uuid
+  car    Car?    @relation(fields: [car_id], references: [id])
 
   @@index([car_id])
 }
 
 // Boat: inventário de iates/embarcações de luxo
-// TODO: converter id Int para UUID em migração futura
 model Boat {
-  id                         Int       @id @default(autoincrement())
+  id                         String    @id @default(uuid()) @db.Uuid
   specialist_id              String?   @db.Uuid
   is_active                  Boolean   @default(true)
   deactivated_at             DateTime?
   deactivated_by_sync_job_id String?   @db.Uuid
   marca                      String
   modelo                     String
+  identificador              String
   valor                      Decimal
   ano                        Int
   fabricante                 String?
@@ -748,6 +748,7 @@ model Boat {
 
   @@index([specialist_id])
   @@index([specialist_id, is_active])
+  @@unique([specialist_id, identificador])
 }
 
 // Boat_image: imagens associadas aos anúncios de Boat
@@ -758,16 +759,15 @@ model Boat_image {
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
 
-  boat_id Int?
-  boat    Boat? @relation(fields: [boat_id], references: [id])
+  boat_id String? @db.Uuid
+  boat    Boat?  @relation(fields: [boat_id], references: [id])
 
   @@index([boat_id])
 }
 
 // Aircraft: inventário de aeronaves de luxo
-// TODO: converter id Int para UUID em migração futura
 model Aircraft {
-  id                         Int       @id @default(autoincrement())
+  id                         String    @id @default(uuid()) @db.Uuid
   specialist_id              String?   @db.Uuid
   is_active                  Boolean   @default(true)
   deactivated_at             DateTime?
@@ -776,6 +776,7 @@ model Aircraft {
   ano                        Int
   marca                      String
   modelo                     String
+  identificador              String
   assentos                   Int?
   estado                     String
   descricao                  String?
@@ -790,6 +791,7 @@ model Aircraft {
 
   @@index([specialist_id])
   @@index([specialist_id, is_active])
+  @@unique([specialist_id, identificador])
 }
 
 // Aircraft_image: imagens associadas aos anúncios de Aircraft
@@ -800,20 +802,19 @@ model Aircraft_image {
   is_primary   Boolean  @default(false)
   created_at   DateTime @default(now())
 
-  aircraft_id Int?
-  aircraft    Aircraft? @relation(fields: [aircraft_id], references: [id])
+  aircraft_id String? @db.Uuid
+  aircraft    Aircraft?  @relation(fields: [aircraft_id], references: [id])
 
   @@index([aircraft_id])
 }
 
 // Product: camada de abstração para entidades de produto (Car, Boat, Aircraft)
-// TODO: converter car_id, boat_id, aircraft_id para UUID quando IDs de produto migrarem
 model Product {
   id          String      @id @default(uuid()) @db.Uuid
   type        ProductType
-  car_id      Int?
-  boat_id     Int?
-  aircraft_id Int?
+  car_id      String?     @db.Uuid
+  boat_id     String?     @db.Uuid
+  aircraft_id String?     @db.Uuid
 
   process   Process? @relation(fields: [processId], references: [id])
   processId String?  @db.Uuid
@@ -832,14 +833,13 @@ model Product {
 // Process: fluxo de negociação/venda vinculando cliente, especialista e produto
 // Suporta fluxo de consultoria: product_type e car_id/boat_id/aircraft_id opcionais
 // Se product_type for null, é um processo de consultoria sem produto definido
-// TODO: converter car_id, boat_id, aircraft_id para UUID em migração futura
 model Process {
   id            String @id @default(uuid()) @db.Uuid
   client_id     String @db.Uuid
   specialist_id String @db.Uuid
-  car_id        Int?
-  aircraft_id   Int?
-  boat_id       Int?
+  car_id        String? @db.Uuid
+  aircraft_id   String? @db.Uuid
+  boat_id       String? @db.Uuid
 
   product_id         String?       @db.Uuid
   product_type       ProductType? // Opcional para consultoria (null = consultoria sem produto)
@@ -1130,7 +1130,7 @@ model Appointment {
   client_id     String       @db.Uuid
   specialist_id String       @db.Uuid
   product_type  ProductType? // Opcional: null para consultoria sem produto específico
-  product_id    Int? // Opcional: null para consultoria sem produto específico
+  product_id    String?       @db.Uuid // Opcional: null para consultoria sem produto específico
 
   // Data e hora do agendamento em UTC (ISO 8601)
   // Exemplo: "2024-10-10T14:00:00Z"
@@ -1324,7 +1324,7 @@ model ProductImportJobItem {
   status        ProductImportItemStatus @default(PENDING)
   payload       Json
   folder_url    String?
-  product_id    Int?
+  product_id    String?                 @db.Uuid
   action        String?
   attempts      Int                     @default(0)
   error_message String?

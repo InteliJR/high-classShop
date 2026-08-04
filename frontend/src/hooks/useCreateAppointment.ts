@@ -5,7 +5,7 @@ export interface AppointmentData {
   specialist_id: string;
   client_id: string;
   product_type: "CAR" | "BOAT" | "AIRCRAFT";
-  product_id: string | number;
+  product_id: string;
   appointment_datetime?: string;
   notes?: string;
 }

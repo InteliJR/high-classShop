@@ -59,7 +59,7 @@ interface ProcessCardProps {
   product?:
     | Product
     | {
-        id: number | string;
+        id: string;
         marca?: string;
         modelo?: string;
         descricao?: string;

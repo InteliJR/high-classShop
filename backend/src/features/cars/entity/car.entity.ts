@@ -1,7 +1,7 @@
 import { CarImage } from './car-image.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 export class Car {
-  id: number;
+  id: string;
   specialist_id: string | null;
   is_active: boolean;
   deactivated_at: Date | null;

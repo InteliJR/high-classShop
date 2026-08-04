@@ -5,7 +5,7 @@ export interface Appointment {
   client_id: string;
   specialist_id: string;
   product_type?: "CAR" | "BOAT" | "AIRCRAFT" | null;
-  product_id?: number | null;
+  product_id?: string | null;
   appointment_datetime?: string | null;
   status: "PENDING" | "SCHEDULED" | "COMPLETED" | "CANCELLED";
   notes?: string;
@@ -33,7 +33,7 @@ export interface Appointment {
     calendly_url?: string;
   };
   product?: {
-    id: number;
+    id: string;
     product_type: string;
     marca: string;
     modelo: string;
@@ -82,7 +82,7 @@ export async function checkExistingAppointment(
   clientId: string,
   specialistId: string,
   productType: "CAR" | "BOAT" | "AIRCRAFT",
-  productId: number,
+  productId: string,
 ): Promise<Appointment | null> {
   try {
     const response = await api.get<ApiResponse<Appointment | null>>(
@@ -113,7 +113,7 @@ export async function createPendingAppointment(data: {
   client_id: string;
   specialist_id: string;
   product_type: "CAR" | "BOAT" | "AIRCRAFT";
-  product_id: number;
+  product_id: string;
   notes?: string;
 }): Promise<Appointment> {
   const response = await api.post<ApiResponse<Appointment>>(

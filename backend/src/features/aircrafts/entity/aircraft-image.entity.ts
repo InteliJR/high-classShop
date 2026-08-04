@@ -5,7 +5,7 @@ export class AircraftImage {
   product_type: string;
   image_url: string;
   is_primary: boolean;
-  aircraft_id?: number | null;
+  aircraft_id?: string | null;
   created_at: Date;
 
   aircraft?: Aircraft;

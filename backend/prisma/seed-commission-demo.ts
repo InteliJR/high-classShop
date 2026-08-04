@@ -77,7 +77,7 @@ async function createSale(params: {
   specialist: { id: string; name: string; cpf: string; commission_rate: number };
   company: { name: string; cnpj: string; commission_rate: number } | null;
   productType: 'CAR' | 'BOAT';
-  productId: number;
+  productId: string;
   saleValue: number;
   totalCommissionRate: number;
 }) {

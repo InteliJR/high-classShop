@@ -5,7 +5,7 @@ export class CarImage {
   product_type: string;
   image_url: string;
   is_primary: boolean;
-  car_id?: number | null;
+  car_id?: string | null;
   created_at: Date;
 
   car?: Car;

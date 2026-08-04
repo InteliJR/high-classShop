@@ -33,13 +33,13 @@ export interface ImportResponseDto {
   /** Produtos criados com falhas parciais de imagem */
   warningRows: ImportErrorRow[];
   /** IDs dos produtos inseridos (opcional) */
-  insertedIds?: number[];
+  insertedIds?: string[];
   /** IDs dos produtos atualizados (opcional) */
-  updatedIds?: number[];
+  updatedIds?: string[];
   /** Quantidade de produtos inativados por ausência na planilha */
   deactivatedCount: number;
   /** IDs dos produtos inativados por ausência na planilha */
-  deactivatedIds: number[];
+  deactivatedIds: string[];
   /** Quantidade de produtos reativados (voltaram na planilha) */
   reactivatedCount: number;
 }

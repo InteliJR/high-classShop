@@ -91,7 +91,7 @@ export interface PaginationMeta {
 
 // Informações essenciais dos produtos
 export interface Product {
-  id: number;
+  id: string;
   marca: string;
   modelo: string;
   descricao?: string;
