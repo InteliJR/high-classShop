@@ -8,17 +8,23 @@ import {
 } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import express, { Express } from 'express';
+import { getFrontendUrl, stripEnvQuotes } from './shared/utils/frontend-url';
 
 export async function createApp(): Promise<Express> {
   const server = express();
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
 
-  const configuredFrontendUrl = (
-    process.env.FRONTEND_URL || 'http://localhost:5173'
-  ).replace(/\/$/, '');
+  const configuredFrontendUrl = getFrontendUrl();
+  // ponytail: allowlist simples via env var; upgrade pra tabela de domínios
+  // por escritório se o número de front-ends próprios crescer muito.
+  const extraOrigins = (process.env.ADDITIONAL_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((origin) => stripEnvQuotes(origin).replace(/\/+$/, ''))
+    .filter(Boolean);
   const allowedOrigins = new Set([
     configuredFrontendUrl,
     'http://localhost:5173',
+    ...extraOrigins,
   ]);
 
   app.enableCors({
