@@ -1,4 +1,5 @@
 import api from "./api";
+import { stripFormatting } from "../utils/mask";
 
 // === TIPOS PARA PREFILL ===
 
@@ -385,55 +386,6 @@ export async function cancelContractPreview(envelopeId: string): Promise<void> {
 // === HELPERS DE FORMATAÇÃO ===
 
 /**
- * Remove formatação de string, mantendo apenas dígitos
- */
-export function stripFormatting(value: string): string {
-  if (!value) return "";
-  return value.replace(/\D/g, "");
-}
-
-/**
- * Formata CPF para exibição: ###.###.###-##
- */
-export function formatCpf(value: string): string {
-  const digits = stripFormatting(value);
-  if (digits.length !== 11) return value;
-  return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-}
-
-/**
- * Formata CNPJ para exibição: ##.###.###/####-##
- */
-export function formatCnpj(value: string): string {
-  const digits = stripFormatting(value);
-  if (digits.length !== 14) return value;
-  return digits.replace(
-    /(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,
-    "$1.$2.$3/$4-$5",
-  );
-}
-
-/**
- * Formata CEP para exibição: #####-###
- */
-export function formatCep(value: string): string {
-  const digits = stripFormatting(value);
-  if (digits.length !== 8) return value;
-  return digits.replace(/(\d{5})(\d{3})/, "$1-$2");
-}
-
-/**
- * Formata RG para exibição
- */
-export function formatRg(value: string): string {
-  const digits = stripFormatting(value);
-  if (digits.length === 9) {
-    return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{1})/, "$1.$2.$3-$4");
-  }
-  return value;
-}
-
-/**
  * Formata valor monetário em BRL
  */
 export function formatBRL(value: number): string {
@@ -442,45 +394,4 @@ export function formatBRL(value: number): string {
     style: "currency",
     currency: "BRL",
   }).format(value);
-}
-
-/**
- * Aplica máscara de CPF enquanto o usuário digita
- */
-export function applyCpfMask(value: string): string {
-  const digits = stripFormatting(value).slice(0, 11);
-  let formatted = digits;
-  if (digits.length > 3) formatted = digits.slice(0, 3) + "." + digits.slice(3);
-  if (digits.length > 6)
-    formatted = formatted.slice(0, 7) + "." + digits.slice(6);
-  if (digits.length > 9)
-    formatted = formatted.slice(0, 11) + "-" + digits.slice(9);
-  return formatted;
-}
-
-/**
- * Aplica máscara de CNPJ enquanto o usuário digita
- */
-export function applyCnpjMask(value: string): string {
-  const digits = stripFormatting(value).slice(0, 14);
-  let formatted = digits;
-  if (digits.length > 2) formatted = digits.slice(0, 2) + "." + digits.slice(2);
-  if (digits.length > 5)
-    formatted = formatted.slice(0, 6) + "." + digits.slice(5);
-  if (digits.length > 8)
-    formatted = formatted.slice(0, 10) + "/" + digits.slice(8);
-  if (digits.length > 12)
-    formatted = formatted.slice(0, 15) + "-" + digits.slice(12);
-  return formatted;
-}
-
-/**
- * Aplica máscara de CEP enquanto o usuário digita
- */
-export function applyCepMask(value: string): string {
-  const digits = stripFormatting(value).slice(0, 8);
-  if (digits.length > 5) {
-    return digits.slice(0, 5) + "-" + digits.slice(5);
-  }
-  return digits;
 }

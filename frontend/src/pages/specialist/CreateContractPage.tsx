@@ -22,11 +22,13 @@ import {
   type PreviewContractData,
   type PreviewContractResponse,
   type ContractTemplate,
+  formatBRL,
+} from "../../services/contracts.service";
+import {
   applyCpfMask,
   applyCnpjMask,
   applyCepMask,
-  formatBRL,
-} from "../../services/contracts.service";
+} from "../../utils/mask";
 import DocuSignPreviewModal from "../../components/contracts/DocuSignPreviewModal";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
