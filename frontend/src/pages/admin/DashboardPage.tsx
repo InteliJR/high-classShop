@@ -32,6 +32,7 @@ import {
 import { AppContext } from "../../contexts/AppContext";
 import { Card } from "../../components/ui/card";
 import { PageHeader } from "../../components/patterns/PageHeader";
+import { CommissionMiniCalculator } from "../../components/commission/CommissionMiniCalculator";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -334,6 +335,17 @@ export default function DashboardPage() {
               </div>
             )}
           </Card>
+        </motion.div>
+      </div>
+
+      {/* Calculadora rápida de comissões */}
+      <div className="mb-8">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: cardDuration, delay: 0.19 }}
+        >
+          <CommissionMiniCalculator />
         </motion.div>
       </div>
 

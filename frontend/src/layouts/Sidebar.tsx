@@ -13,7 +13,7 @@ import {
   Settings,
   Percent,
   Database,
-  UserCheck,
+  Calculator,
 } from "lucide-react";
 import { useContext } from "react";
 import { AppContext } from "../contexts/AppContext";
@@ -151,6 +151,11 @@ export default function Sidebar() {
             icon: <Percent size={20} />,
           },
           {
+            to: "/admin/calculator",
+            label: "Calculadora",
+            icon: <Calculator size={20} />,
+          },
+          {
             to: "/admin/database",
             label: "Base de dados",
             icon: <Database size={20} />,
@@ -193,13 +198,6 @@ export default function Sidebar() {
         break;
     }
 
-    if (user.role !== "OFFICE") {
-      links.push({
-        to: "/advisor/dashboard",
-        label: "Meus Assessorados",
-        icon: <UserCheck size={20} />,
-      });
-    }
   }
 
   return (
