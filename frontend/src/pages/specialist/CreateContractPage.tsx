@@ -28,6 +28,8 @@ import {
   applyCpfMask,
   applyCnpjMask,
   applyCepMask,
+  applyRgMask,
+  stripFormatting,
 } from "../../utils/mask";
 import DocuSignPreviewModal from "../../components/contracts/DocuSignPreviewModal";
 import Button from "../../components/ui/button";
@@ -239,7 +241,10 @@ export default function CreateContractPage() {
           "seller_cpf",
           data.seller.cpf ? applyCpfMask(data.seller.cpf) : "",
         );
-        setValue("seller_rg", data.seller.rg || "");
+        setValue(
+          "seller_rg",
+          data.seller.rg ? applyRgMask(data.seller.rg) : "",
+        );
         setValue("seller_address", data.seller.address || "");
         setValue(
           "seller_cep",
@@ -253,7 +258,10 @@ export default function CreateContractPage() {
           "buyer_cpf",
           data.buyer.cpf ? applyCpfMask(data.buyer.cpf) : "",
         );
-        setValue("buyer_rg", data.buyer.rg || "");
+        setValue(
+          "buyer_rg",
+          data.buyer.rg ? applyRgMask(data.buyer.rg) : "",
+        );
         setValue("buyer_address", data.buyer.address || "");
         setValue(
           "buyer_cep",
@@ -409,19 +417,23 @@ export default function CreateContractPage() {
     template_id: selectedTemplateId || undefined,
     seller_name: formData.seller_name,
     seller_email: formData.seller_email,
-    seller_cpf: formData.seller_cpf,
-    seller_rg: formData.seller_rg || undefined,
+    seller_cpf: stripFormatting(formData.seller_cpf),
+    seller_rg: formData.seller_rg
+      ? stripFormatting(formData.seller_rg)
+      : undefined,
     seller_address: formData.seller_address,
-    seller_cep: formData.seller_cep,
+    seller_cep: stripFormatting(formData.seller_cep),
     seller_bank: formData.seller_bank,
     seller_agency: formData.seller_agency,
     seller_checking_account: formData.seller_checking_account,
     buyer_name: formData.buyer_name,
     buyer_email: formData.buyer_email,
-    buyer_cpf: formData.buyer_cpf,
-    buyer_rg: formData.buyer_rg || undefined,
+    buyer_cpf: stripFormatting(formData.buyer_cpf),
+    buyer_rg: formData.buyer_rg
+      ? stripFormatting(formData.buyer_rg)
+      : undefined,
     buyer_address: formData.buyer_address,
-    buyer_cep: formData.buyer_cep,
+    buyer_cep: stripFormatting(formData.buyer_cep),
     vehicle_model: formData.vehicle_model,
     vehicle_year: formData.vehicle_year,
     vehicle_registration_id: formData.vehicle_registration_id,
@@ -433,31 +445,41 @@ export default function CreateContractPage() {
     total_commission_rate: formData.total_commission_rate,
     // Platform split (opcional — nem todo ambiente tem esses dados cadastrados)
     platform_name: formData.platform_name || undefined,
-    platform_cnpj: formData.platform_cnpj || undefined,
+    platform_cnpj: formData.platform_cnpj
+      ? stripFormatting(formData.platform_cnpj)
+      : undefined,
     platform_bank: formData.platform_bank || undefined,
     platform_agency: formData.platform_agency || undefined,
     platform_checking_account:
       formData.platform_checking_account || undefined,
     // Office split
     office_name: formData.office_name || undefined,
-    office_cnpj: formData.office_cnpj || undefined,
+    office_cnpj: formData.office_cnpj
+      ? stripFormatting(formData.office_cnpj)
+      : undefined,
     office_bank: formData.office_bank || undefined,
     office_agency: formData.office_agency || undefined,
     office_checking_account: formData.office_checking_account || undefined,
     // Specialist split
     specialist_name: formData.specialist_name || undefined,
     specialist_email: formData.specialist_email || undefined,
-    specialist_document: formData.specialist_document || undefined,
+    specialist_document: formData.specialist_document
+      ? stripFormatting(formData.specialist_document)
+      : undefined,
     specialist_bank: formData.specialist_bank || undefined,
     specialist_agency: formData.specialist_agency || undefined,
     specialist_checking_account:
       formData.specialist_checking_account || undefined,
     // Witnesses (optional)
     testimonial1_name: formData.testimonial1_name || undefined,
-    testimonial1_cpf: formData.testimonial1_cpf || undefined,
+    testimonial1_cpf: formData.testimonial1_cpf
+      ? stripFormatting(formData.testimonial1_cpf)
+      : undefined,
     testimonial1_email: formData.testimonial1_email || undefined,
     testimonial2_name: formData.testimonial2_name || undefined,
-    testimonial2_cpf: formData.testimonial2_cpf || undefined,
+    testimonial2_cpf: formData.testimonial2_cpf
+      ? stripFormatting(formData.testimonial2_cpf)
+      : undefined,
     testimonial2_email: formData.testimonial2_email || undefined,
     city: formData.city,
     description: formData.description || undefined,
@@ -900,10 +922,19 @@ export default function CreateContractPage() {
                 <label className="block text-sm font-medium text-ink-soft mb-1">
                   RG
                 </label>
-                <input
-                  type="text"
-                  {...register("seller_rg")}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
+                <Controller
+                  name="seller_rg"
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      type="text"
+                      {...field}
+                      onChange={(e) =>
+                        field.onChange(applyRgMask(e.target.value))
+                      }
+                      className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
+                    />
+                  )}
                 />
               </div>
 
@@ -1065,10 +1096,22 @@ export default function CreateContractPage() {
                 <label className="block text-sm font-medium text-ink-soft mb-1">
                   CPF *
                 </label>
-                <input
-                  type="text"
-                  {...register("buyer_cpf", { required: "CPF é obrigatório" })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
+                <Controller
+                  name="buyer_cpf"
+                  control={control}
+                  rules={{ required: "CPF é obrigatório" }}
+                  render={({ field }) => (
+                    <input
+                      type="text"
+                      {...field}
+                      onChange={(e) =>
+                        field.onChange(applyCpfMask(e.target.value))
+                      }
+                      maxLength={14}
+                      placeholder="000.000.000-00"
+                      className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
+                    />
+                  )}
                 />
                 {errors.buyer_cpf && (
                   <p className="text-status-bad text-sm mt-1">
@@ -1081,10 +1124,19 @@ export default function CreateContractPage() {
                 <label className="block text-sm font-medium text-ink-soft mb-1">
                   RG
                 </label>
-                <input
-                  type="text"
-                  {...register("buyer_rg")}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
+                <Controller
+                  name="buyer_rg"
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      type="text"
+                      {...field}
+                      onChange={(e) =>
+                        field.onChange(applyRgMask(e.target.value))
+                      }
+                      className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
+                    />
+                  )}
                 />
               </div>
 
