@@ -32,11 +32,53 @@ import {
   formatRg,
   formatBRL,
   numberToWords,
+  stripFormatting,
 } from 'src/shared/utils/format.utils';
 import { ProductType } from '@prisma/client';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { PlatformCompanyService } from 'src/features/platform-company/platform-company.service';
 import { computeNestedCommissionSplit } from './commission-split';
+
+export interface ContractDocumentFields {
+  seller_cpf?: string;
+  seller_rg?: string;
+  seller_cep?: string;
+  buyer_cpf?: string;
+  buyer_rg?: string;
+  buyer_cep?: string;
+  platform_cnpj?: string;
+  office_cnpj?: string;
+  specialist_document?: string;
+  testimonial1_cpf?: string;
+  testimonial2_cpf?: string;
+}
+
+/**
+ * Remove pontuação de todos os campos de documento/CEP do contrato antes de
+ * gravar no banco — defesa em profundidade caso o chamador (frontend ou
+ * integração futura) envie o valor já formatado. Recebe o DTO completo
+ * (que tem mais campos além destes 11) e devolve só os campos
+ * higienizados — os call sites leem `cleanDocs.seller_cpf` etc. e
+ * continuam lendo os demais campos direto de `dto`.
+ */
+export function stripContractDocumentFields(
+  fields: ContractDocumentFields,
+): ContractDocumentFields {
+  const strip = (v?: string) => (v ? stripFormatting(v) : v);
+  return {
+    seller_cpf: strip(fields.seller_cpf),
+    seller_rg: strip(fields.seller_rg),
+    seller_cep: strip(fields.seller_cep),
+    buyer_cpf: strip(fields.buyer_cpf),
+    buyer_rg: strip(fields.buyer_rg),
+    buyer_cep: strip(fields.buyer_cep),
+    platform_cnpj: strip(fields.platform_cnpj),
+    office_cnpj: strip(fields.office_cnpj),
+    specialist_document: strip(fields.specialist_document),
+    testimonial1_cpf: strip(fields.testimonial1_cpf),
+    testimonial2_cpf: strip(fields.testimonial2_cpf),
+  };
+}
 
 /**
  * Serviço de Contratos - Geração via Formulário
@@ -731,6 +773,7 @@ export class ContractsService {
       const createdContract = await this.prismaService.$transaction(
         async (tx) => {
           // 4.1 Criar contrato no BD com todos os dados do formulário
+          const cleanDocs = stripContractDocumentFields(dto);
           const contract = await tx.contract.create({
             data: {
               process_id: dto.process_id,
@@ -750,20 +793,20 @@ export class ContractsService {
 
               // Dados do vendedor
               seller_name: dto.seller_name,
-              seller_cpf: dto.seller_cpf,
-              seller_rg: dto.seller_rg,
+              seller_cpf: cleanDocs.seller_cpf,
+              seller_rg: cleanDocs.seller_rg,
               seller_address: dto.seller_address,
-              seller_cep: dto.seller_cep,
+              seller_cep: cleanDocs.seller_cep,
               seller_bank: dto.seller_bank,
               seller_agency: dto.seller_agency,
               seller_checking_account: dto.seller_checking_account,
 
               // Dados do comprador
               buyer_name: dto.buyer_name,
-              buyer_cpf: dto.buyer_cpf,
-              buyer_rg: dto.buyer_rg,
+              buyer_cpf: cleanDocs.buyer_cpf,
+              buyer_rg: cleanDocs.buyer_rg,
               buyer_address: dto.buyer_address,
-              buyer_cep: dto.buyer_cep,
+              buyer_cep: cleanDocs.buyer_cep,
 
               // Dados do veículo
               vehicle_model: dto.vehicle_model,
@@ -785,7 +828,7 @@ export class ContractsService {
               platform_value_written: numberToWords(commission.platformValue),
               platform_percentage: commission.platformRate,
               platform_name: dto.platform_name,
-              platform_cnpj: dto.platform_cnpj,
+              platform_cnpj: cleanDocs.platform_cnpj,
               platform_bank: dto.platform_bank,
               platform_agency: dto.platform_agency,
               platform_checking_account: dto.platform_checking_account,
@@ -794,7 +837,7 @@ export class ContractsService {
               office_value: commission.officeValue,
               office_value_written: numberToWords(commission.officeValue),
               office_name: dto.office_name,
-              office_cnpj: dto.office_cnpj,
+              office_cnpj: cleanDocs.office_cnpj,
               office_bank: dto.office_bank || null,
               office_agency: dto.office_agency || null,
               office_checking_account: dto.office_checking_account || null,
@@ -806,16 +849,16 @@ export class ContractsService {
                 commission.specialistValue,
               ),
               specialist_name: dto.specialist_name,
-              specialist_document: dto.specialist_document,
+              specialist_document: cleanDocs.specialist_document,
               specialist_bank: dto.specialist_bank || null,
               specialist_agency: dto.specialist_agency || null,
               specialist_checking_account:
                 dto.specialist_checking_account || null,
 
               // Testemunhas (opcionais)
-              testimonial1_cpf: dto.testimonial1_cpf || null,
+              testimonial1_cpf: cleanDocs.testimonial1_cpf || null,
               testimonial1_email: dto.testimonial1_email || null,
-              testimonial2_cpf: dto.testimonial2_cpf || null,
+              testimonial2_cpf: cleanDocs.testimonial2_cpf || null,
               testimonial2_email: dto.testimonial2_email || null,
 
               // Cidade
@@ -1385,6 +1428,7 @@ export class ContractsService {
 
       const createdContract = await this.prismaService.$transaction(
         async (tx) => {
+          const cleanDocs = stripContractDocumentFields(dto);
           const contract = await tx.contract.create({
             data: {
               process_id: dto.process_id,
@@ -1405,20 +1449,20 @@ export class ContractsService {
 
               // Dados do vendedor
               seller_name: dto.seller_name,
-              seller_cpf: dto.seller_cpf,
-              seller_rg: dto.seller_rg,
+              seller_cpf: cleanDocs.seller_cpf,
+              seller_rg: cleanDocs.seller_rg,
               seller_address: dto.seller_address,
-              seller_cep: dto.seller_cep,
+              seller_cep: cleanDocs.seller_cep,
               seller_bank: dto.seller_bank,
               seller_agency: dto.seller_agency,
               seller_checking_account: dto.seller_checking_account,
 
               // Dados do comprador
               buyer_name: dto.buyer_name,
-              buyer_cpf: dto.buyer_cpf,
-              buyer_rg: dto.buyer_rg,
+              buyer_cpf: cleanDocs.buyer_cpf,
+              buyer_rg: cleanDocs.buyer_rg,
               buyer_address: dto.buyer_address,
-              buyer_cep: dto.buyer_cep,
+              buyer_cep: cleanDocs.buyer_cep,
 
               // Dados do veículo
               vehicle_model: dto.vehicle_model,
@@ -1440,7 +1484,7 @@ export class ContractsService {
               platform_value_written: numberToWords(commission.platformValue),
               platform_percentage: commission.platformRate,
               platform_name: dto.platform_name,
-              platform_cnpj: dto.platform_cnpj,
+              platform_cnpj: cleanDocs.platform_cnpj,
               platform_bank: dto.platform_bank,
               platform_agency: dto.platform_agency,
               platform_checking_account: dto.platform_checking_account,
@@ -1449,7 +1493,7 @@ export class ContractsService {
               office_value: commission.officeValue,
               office_value_written: numberToWords(commission.officeValue),
               office_name: dto.office_name,
-              office_cnpj: dto.office_cnpj,
+              office_cnpj: cleanDocs.office_cnpj,
               office_bank: dto.office_bank || null,
               office_agency: dto.office_agency || null,
               office_checking_account: dto.office_checking_account || null,
@@ -1461,16 +1505,16 @@ export class ContractsService {
                 commission.specialistValue,
               ),
               specialist_name: dto.specialist_name,
-              specialist_document: dto.specialist_document,
+              specialist_document: cleanDocs.specialist_document,
               specialist_bank: dto.specialist_bank || null,
               specialist_agency: dto.specialist_agency || null,
               specialist_checking_account:
                 dto.specialist_checking_account || null,
 
               // Testemunhas (opcionais)
-              testimonial1_cpf: dto.testimonial1_cpf || null,
+              testimonial1_cpf: cleanDocs.testimonial1_cpf || null,
               testimonial1_email: dto.testimonial1_email || null,
-              testimonial2_cpf: dto.testimonial2_cpf || null,
+              testimonial2_cpf: cleanDocs.testimonial2_cpf || null,
               testimonial2_email: dto.testimonial2_email || null,
 
               // Cidade

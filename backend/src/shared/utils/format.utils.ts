@@ -75,6 +75,10 @@ export function formatCep(value: string): string {
 export function formatRg(value: string): string {
   if (!value) return '';
   const digits = value.replace(/\D/g, '');
+  // Unificação RG/CPF: 10-11 dígitos é um CPF sendo usado como documento de RG.
+  if (digits.length >= 10 && digits.length <= 11) {
+    return formatCpf(digits);
+  }
   if (digits.length < 7 || digits.length > 9) return value;
   // RG pode ter 7, 8 ou 9 dígitos dependendo do estado
   if (digits.length === 9) {

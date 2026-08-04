@@ -56,9 +56,9 @@ export class UserRegisterDto {
   cpf: string;
 
   @IsString()
-  @Length(7, 10, { message: 'RG deve ter entre 7 e 10 dígitos' })
-  @Matches(/^\d{7,10}$/, {
-    message: 'RG deve conter apenas números (7-10 dígitos)',
+  @Length(7, 11, { message: 'RG deve ter entre 7 e 11 dígitos' })
+  @Matches(/^\d{7,11}$/, {
+    message: 'RG deve conter apenas números (7-11 dígitos)',
   })
   rg: string;
 
@@ -108,9 +108,9 @@ export class RegisterConsultantDto {
   cpf: string;
 
   @IsString()
-  @Length(7, 10, { message: 'RG deve ter entre 7 e 10 dígitos' })
-  @Matches(/^\d{7,10}$/, {
-    message: 'RG deve conter apenas números (7-10 dígitos)',
+  @Length(7, 11, { message: 'RG deve ter entre 7 e 11 dígitos' })
+  @Matches(/^\d{7,11}$/, {
+    message: 'RG deve conter apenas números (7-11 dígitos)',
   })
   rg: string;
 
@@ -148,9 +148,9 @@ export class RegisterOfficeDto {
   cpf: string;
 
   @IsString()
-  @Length(7, 10, { message: 'RG deve ter entre 7 e 10 dígitos' })
-  @Matches(/^\d{7,10}$/, {
-    message: 'RG deve conter apenas números (7-10 dígitos)',
+  @Length(7, 11, { message: 'RG deve ter entre 7 e 11 dígitos' })
+  @Matches(/^\d{7,11}$/, {
+    message: 'RG deve conter apenas números (7-11 dígitos)',
   })
   rg: string;
 
@@ -185,9 +185,9 @@ export class RegisterSpecialistDto {
   cnpj: string;
 
   @IsString()
-  @Length(7, 10, { message: 'RG deve ter entre 7 e 10 dígitos' })
-  @Matches(/^\d{7,10}$/, {
-    message: 'RG deve conter apenas números (7-10 dígitos)',
+  @Length(7, 11, { message: 'RG deve ter entre 7 e 11 dígitos' })
+  @Matches(/^\d{7,11}$/, {
+    message: 'RG deve conter apenas números (7-11 dígitos)',
   })
   rg: string;
 
