@@ -868,4 +868,13 @@ export class DocuSignService {
       };
     });
   }
+
+  /**
+   * Lista os templates de envelope disponíveis na conta DocuSign
+   *
+   * @returns {Promise<Array<{ templateId: string; name: string }>>}
+   */
+  async listTemplates(): Promise<Array<{ templateId: string; name: string }>> {
+    return this.client.listTemplates();
+  }
 }

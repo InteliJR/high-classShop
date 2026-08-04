@@ -20,7 +20,7 @@ type DriveFile = {
 };
 
 type ProductRef = {
-  id: number;
+  id: string;
   marca: string;
   modelo: string;
 };
@@ -29,7 +29,7 @@ type ImportItemResult = {
   file_name: string;
   status: 'uploaded' | 'skipped' | 'failed';
   reason?: string;
-  product_id?: number;
+  product_id?: string;
   product_key?: string;
   s3_key?: string;
 };
@@ -56,7 +56,7 @@ export class DriveImportService {
   async importImagesForProductFromFolder(params: {
     folder_url: string;
     product_type: ProductType;
-    product_id: number;
+    product_id: string;
     max_files?: number;
   }): Promise<DirectProductFolderImportResult> {
     const apiKey = this.configService.get<string>('GOOGLE_DRIVE_API_KEY');
@@ -476,8 +476,8 @@ export class DriveImportService {
   private async buildExistingImageNameIndex(
     type: ProductType,
     products: ProductRef[],
-  ): Promise<Map<number, Set<string>>> {
-    const index = new Map<number, Set<string>>();
+  ): Promise<Map<string, Set<string>>> {
+    const index = new Map<string, Set<string>>();
     const ids = products.map((p) => p.id);
 
     if (ids.length === 0) {
@@ -531,7 +531,7 @@ export class DriveImportService {
 
   private async getExistingImageFileNamesByProduct(
     type: ProductType,
-    productId: number,
+    productId: string,
   ): Promise<Set<string>> {
     const names = new Set<string>();
 
@@ -579,7 +579,7 @@ export class DriveImportService {
 
   private async hasPrimaryImage(
     type: ProductType,
-    productId: number,
+    productId: string,
   ): Promise<boolean> {
     if (type === ProductType.CAR) {
       const record = await this.prisma.car_image.findFirst({
@@ -606,7 +606,7 @@ export class DriveImportService {
 
   private async deleteAllProductImages(
     type: ProductType,
-    productId: number,
+    productId: string,
   ): Promise<void> {
     let keys: string[] = [];
 
@@ -694,7 +694,7 @@ export class DriveImportService {
 
   private buildS3ObjectKey(
     type: ProductType,
-    productId: number,
+    productId: string,
     originalName: string,
   ): string {
     const safeFileName = this.sanitizeS3FileName(originalName);
@@ -787,7 +787,7 @@ export class DriveImportService {
 
   private async createImageRecord(params: {
     productType: ProductType;
-    productId: number;
+    productId: string;
     imageKey: string;
     isPrimary: boolean;
   }): Promise<void> {

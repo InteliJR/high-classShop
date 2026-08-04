@@ -87,6 +87,11 @@ export class UserRegisterDto {
   @IsOptional()
   @IsUUID()
   consultant_id?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z0-9-]+$/, { message: 'slug inválido' })
+  company_slug?: string;
 }
 
 export class RegisterConsultantDto {

@@ -22,6 +22,10 @@ import {
   type NegotiationMeta,
 } from "../../services/proposals.service";
 import { getProcessById } from "../../services/processes.service";
+import { ProposalStatusBadge } from "../../components/patterns/ProposalStatusBadge";
+import Button from "../../components/ui/button";
+import { Alert } from "../../components/ui/alert";
+import { EmptyState } from "../../components/patterns/EmptyState";
 
 /**
  * Página de Negociação
@@ -252,49 +256,11 @@ export default function NegotiationPage() {
     return proposal.proposed_to.id === user.id;
   };
 
-  /**
-   * Retorna o status visual da proposta
-   */
-  const getProposalStatusBadge = (status: string) => {
-    switch (status) {
-      case "PENDING":
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
-            <Loader2 size={12} className="animate-spin" />
-            Aguardando resposta
-          </span>
-        );
-      case "ACCEPTED":
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-            <Check size={12} />
-            Aceita
-          </span>
-        );
-      case "REJECTED":
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full">
-            <X size={12} />
-            Rejeitada
-          </span>
-        );
-      case "COUNTERED":
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
-            <RefreshCw size={12} />
-            Contraproposta enviada
-          </span>
-        );
-      default:
-        return null;
-    }
-  };
-
   // Loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="flex items-center gap-3 text-gray-600">
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="flex items-center gap-3 text-muted">
           <Loader2 className="animate-spin" size={24} />
           <span>Carregando negociação...</span>
         </div>
@@ -305,45 +271,42 @@ export default function NegotiationPage() {
   // Error state
   if (error && !processInfo) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full text-center">
-          <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+      <div className="min-h-screen bg-bg flex items-center justify-center p-4">
+        <div className="bg-surface rounded-lg shadow-ds-modal p-6 max-w-md w-full text-center">
+          <AlertCircle className="mx-auto text-status-bad mb-4" size={48} />
+          <h2 className="text-xl font-semibold text-ink mb-2">
             Erro ao carregar
           </h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors"
-          >
+          <p className="text-muted mb-4">{error}</p>
+          <Button onClick={() => navigate(-1)} className="inline-flex items-center gap-2">
             <ArrowLeft size={18} />
             Voltar
-          </button>
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-bg flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <header className="bg-surface border-b border-border sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-3 md:py-4">
           <div className="flex items-center gap-3 md:gap-4">
             <button
               onClick={() => navigate(-1)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-border-soft rounded-lg transition-colors"
               aria-label="Voltar"
             >
-              <ArrowLeft size={20} className="text-gray-600" />
+              <ArrowLeft size={20} className="text-muted" />
             </button>
 
             <div className="flex-1 min-w-0">
-              <h1 className="text-lg md:text-xl font-semibold text-gray-900 truncate">
+              <h1 className="text-lg md:text-xl font-semibold text-ink truncate">
                 Negociação
               </h1>
               {processInfo && (
-                <p className="text-xs md:text-sm text-gray-500 truncate">
+                <p className="text-xs md:text-sm text-muted truncate">
                   {processInfo.client.name} {processInfo.client.surname} •{" "}
                   {processInfo.product_type === "CAR"
                     ? "Carro"
@@ -358,29 +321,29 @@ export default function NegotiationPage() {
             <button
               onClick={loadProposals}
               disabled={isLoading}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-border-soft rounded-lg transition-colors"
               aria-label="Atualizar"
             >
               <RefreshCw
                 size={18}
-                className={`text-gray-600 ${isLoading ? "animate-spin" : ""}`}
+                className={`text-muted ${isLoading ? "animate-spin" : ""}`}
               />
             </button>
           </div>
 
           {/* Product value info */}
           {processInfo && (
-            <div className="mt-3 p-3 bg-gray-50 rounded-lg flex flex-wrap items-center gap-3 md:gap-6 text-sm">
+            <div className="mt-3 p-3 bg-bg rounded-lg flex flex-wrap items-center gap-3 md:gap-6 text-sm">
               <div className="flex items-center gap-2">
                 <DollarSign size={16} className="text-green-600" />
-                <span className="text-gray-600">Valor do produto:</span>
-                <span className="font-semibold text-gray-900">
+                <span className="text-muted">Valor do produto:</span>
+                <span className="font-semibold text-ink">
                   {formatCurrency(processInfo.product_value)}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <AlertCircle size={16} className="text-orange-500" />
-                <span className="text-gray-600">Valor mínimo:</span>
+                <span className="text-muted">Valor mínimo:</span>
                 <span className="font-semibold text-orange-600">
                   {formatCurrency(processInfo.minimum_value)}
                 </span>
@@ -397,16 +360,13 @@ export default function NegotiationPage() {
       >
         {/* Empty state */}
         {proposals.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <MessageSquare size={48} className="text-gray-300 mb-4" />
-            <h3 className="text-lg font-medium text-gray-700 mb-2">
-              Nenhuma proposta ainda
-            </h3>
-            <p className="text-sm text-gray-500 max-w-md">
-              Inicie a negociação enviando uma proposta de valor para o{" "}
-              {user?.role === "SPECIALIST" ? "cliente" : "especialista"}.
-            </p>
-          </div>
+          <EmptyState
+            icon={MessageSquare}
+            title="Nenhuma proposta ainda"
+            description={`Inicie a negociação enviando uma proposta de valor para o ${
+              user?.role === "SPECIALIST" ? "cliente" : "especialista"
+            }.`}
+          />
         )}
 
         {/* Proposals list (chat style) */}
@@ -424,20 +384,20 @@ export default function NegotiationPage() {
                 <div
                   className={`max-w-[85%] md:max-w-[70%] ${
                     isOwnProposal
-                      ? "bg-slate-700 text-white"
-                      : "bg-white border border-gray-200"
+                      ? "bg-ink-soft text-white"
+                      : "bg-surface border border-border"
                   } rounded-2xl shadow-sm overflow-hidden`}
                 >
                   {/* Proposal header */}
                   <div
                     className={`px-4 py-2 border-b ${
-                      isOwnProposal ? "border-slate-600" : "border-gray-100"
+                      isOwnProposal ? "border-ink" : "border-border-soft"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-4">
                       <span
                         className={`text-xs font-medium ${
-                          isOwnProposal ? "text-slate-300" : "text-gray-500"
+                          isOwnProposal ? "text-border-soft" : "text-muted"
                         }`}
                       >
                         {proposal.proposed_by.name}{" "}
@@ -446,7 +406,7 @@ export default function NegotiationPage() {
                       </span>
                       <span
                         className={`text-xs ${
-                          isOwnProposal ? "text-slate-400" : "text-gray-400"
+                          isOwnProposal ? "text-border" : "text-subtle"
                         }`}
                       >
                         {formatDate(proposal.created_at)}
@@ -465,7 +425,7 @@ export default function NegotiationPage() {
                       />
                       <span
                         className={`text-xl font-bold ${
-                          isOwnProposal ? "text-white" : "text-gray-900"
+                          isOwnProposal ? "text-white" : "text-ink"
                         }`}
                       >
                         {formatCurrency(proposal.proposed_value)}
@@ -475,7 +435,7 @@ export default function NegotiationPage() {
                     {proposal.message && (
                       <p
                         className={`text-sm mb-2 ${
-                          isOwnProposal ? "text-slate-200" : "text-gray-600"
+                          isOwnProposal ? "text-border-soft" : "text-muted"
                         }`}
                       >
                         {proposal.message}
@@ -484,16 +444,16 @@ export default function NegotiationPage() {
 
                     {/* Status badge */}
                     <div className="mt-2">
-                      {getProposalStatusBadge(proposal.status)}
+                      <ProposalStatusBadge status={proposal.status} />
                     </div>
 
                     {/* Action buttons for pending proposals */}
                     {canRespondToProposal(proposal) && (
-                      <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
-                        <button
+                      <div className="flex gap-2 mt-3 pt-3 border-t border-border-soft">
+                        <Button
                           onClick={() => handleAcceptProposal(proposal.id)}
                           disabled={isAccepting || isRejecting}
-                          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                          className="flex-1 inline-flex items-center justify-center gap-1"
                         >
                           {isAccepting ? (
                             <Loader2 size={16} className="animate-spin" />
@@ -501,11 +461,12 @@ export default function NegotiationPage() {
                             <Check size={16} />
                           )}
                           Aceitar
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="danger"
                           onClick={() => handleRejectProposal(proposal.id)}
                           disabled={isAccepting || isRejecting}
-                          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                          className="flex-1 inline-flex items-center justify-center gap-1"
                         >
                           {isRejecting ? (
                             <Loader2 size={16} className="animate-spin" />
@@ -513,7 +474,7 @@ export default function NegotiationPage() {
                             <X size={16} />
                           )}
                           Rejeitar
-                        </button>
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -525,8 +486,8 @@ export default function NegotiationPage() {
 
         {/* Status message when negotiation is complete */}
         {processInfo && processInfo.status !== "NEGOTIATION" && (
-          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
-            <p className="text-sm text-blue-800">
+          <Alert variant="info" className="mt-6 justify-center text-center">
+            <p className="text-sm">
               {processInfo.status === "PROCESSING_CONTRACT"
                 ? "A negociação foi concluída. O contrato está sendo processado."
                 : processInfo.status === "DOCUMENTATION"
@@ -537,19 +498,19 @@ export default function NegotiationPage() {
                       ? "Este processo foi rejeitado."
                       : "A negociação não está mais disponível."}
             </p>
-          </div>
+          </Alert>
         )}
       </main>
 
       {/* Form to create new proposal */}
       {canCreateProposal() && (
-        <footer className="bg-white border-t border-gray-200 sticky bottom-0">
+        <footer className="bg-surface border-t border-border sticky bottom-0">
           <div className="max-w-4xl mx-auto px-4 py-3 md:py-4">
             {formError && (
-              <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
+              <Alert variant="danger" className="mb-3">
                 <AlertCircle size={16} />
                 {formError}
-              </div>
+              </Alert>
             )}
 
             <form
@@ -560,14 +521,14 @@ export default function NegotiationPage() {
                 {/* Value input */}
                 <div className="relative flex-1 min-w-0">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500">R$</span>
+                    <span className="text-muted">R$</span>
                   </div>
                   <input
                     type="text"
                     value={proposedValue}
                     onChange={handleValueChange}
                     placeholder="0,00"
-                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 text-right font-medium"
+                    className="w-full pl-10 pr-4 py-2.5 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-focus-ring text-right font-medium"
                     disabled={isSending}
                   />
                 </div>
@@ -578,7 +539,7 @@ export default function NegotiationPage() {
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Mensagem (opcional)"
-                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
+                  className="flex-1 px-4 py-2.5 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-focus-ring"
                   disabled={isSending}
                 />
               </div>
@@ -587,7 +548,7 @@ export default function NegotiationPage() {
               <button
                 type="submit"
                 disabled={isSending || !proposedValue}
-                className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-slate-700 text-white font-medium rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-ink-soft text-white font-medium rounded-lg hover:bg-ink transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSending ? (
                   <Loader2 size={18} className="animate-spin" />
@@ -601,7 +562,7 @@ export default function NegotiationPage() {
 
             {/* Minimum value hint */}
             {processInfo && (
-              <p className="mt-2 text-xs text-gray-500 text-center md:text-left">
+              <p className="mt-2 text-xs text-muted text-center md:text-left">
                 O valor mínimo aceito é{" "}
                 {formatCurrency(processInfo.minimum_value)}
               </p>
@@ -612,9 +573,9 @@ export default function NegotiationPage() {
 
       {/* Message when user cannot create proposal */}
       {!canCreateProposal() && processInfo?.status === "NEGOTIATION" && (
-        <footer className="bg-gray-50 border-t border-gray-200">
+        <footer className="bg-bg border-t border-border">
           <div className="max-w-4xl mx-auto px-4 py-4 text-center">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted">
               Aguardando resposta do{" "}
               {meta?.pending_response_from === user?.id
                 ? "outro participante"

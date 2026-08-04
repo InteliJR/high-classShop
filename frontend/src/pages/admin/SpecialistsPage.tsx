@@ -6,11 +6,12 @@ import {
 } from "../../services/specialists.service";
 import { getSpecialistDashboardStats } from "../../services/dashboard.service";
 import Button from "../../components/ui/button";
-import EditIcon from "../../assets/icons/edit.svg";
-import TrashIcon from "../../assets/icons/trash.svg";
-import Modal from "../../components/ui/Modal";
+import { Alert } from "../../components/ui/alert";
+import { Dialog, DialogContent } from "../../components/ui/dialog";
+import { PageHeader } from "../../components/patterns/PageHeader";
 import NewSpecialistForm from "./NewSpecialistForm";
 import { AppContext } from "../../contexts/AppContext";
+import { Pencil, Trash2 } from "lucide-react";
 
 // Interface para armazenar os dados de cada especialista
 interface SpecialistWithStats extends Specialist {
@@ -107,27 +108,29 @@ export default function SpecialistsPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-3 border-gray-200 border-t-primary rounded-full animate-spin" />
-          <p className="text-gray-600">Carregando especialistas...</p>
+          <div className="w-12 h-12 border-3 border-border-soft border-t-primary rounded-full animate-spin" />
+          <p className="text-muted">Carregando especialistas...</p>
         </div>
       </div>
     );
   }
-  if (error) return <p className="text-red-500">{error}</p>;
+  if (error) return <Alert variant="danger">{error}</Alert>;
 
   return (
     <div className="text-text-main w-full">
       {/* Cabeçalho */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="h1-style">Gestão de Especialistas</h1>
-        <Button type="button" onClick={() => setIsNewSpecialistModalOpen(true)}>
-          + Novo Especialista
-        </Button>
-      </div>
+      <PageHeader
+        title="Gestão de Especialistas"
+        actions={
+          <Button type="button" onClick={() => setIsNewSpecialistModalOpen(true)}>
+            + Novo Especialista
+          </Button>
+        }
+      />
 
       {/* Tabela */}
       <div className="p-6 rounded-lg shadow bg-brand-container bg-bg-container overflow-x-auto">
-        <h2 className="h2-style">Especialistas</h2>
+        <h2 className="text-h2 font-semibold text-ink">Especialistas</h2>
         <p className="text-base mb-8 mt-2">Lista completa de especialistas</p>
 
         {/* Cabeçalho da lista */}
@@ -142,7 +145,7 @@ export default function SpecialistsPage() {
         {/* Corpo da lista */}
         <div className="mt-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto p-2">
           {filteredSpecialists.length === 0 ? (
-            <p className="text-center text-gray-500 py-8">
+            <p className="text-center text-muted py-8">
               {searchTerm
                 ? "Nenhum especialista encontrado com esse termo de busca."
                 : "Nenhum especialista cadastrado."}
@@ -152,7 +155,7 @@ export default function SpecialistsPage() {
               return (
                 <div
                   key={specialist.id}
-                  className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-3 md:gap-5 items-start md:items-center bg-brand-card p-4 md:p-6 rounded-lg shadow-sm bg-white"
+                  className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-3 md:gap-5 items-start md:items-center bg-brand-card p-4 md:p-6 rounded-lg shadow-sm bg-surface"
                 >
                   <div className="flex items-center gap-3">
                     <span className="font-normal">
@@ -160,27 +163,27 @@ export default function SpecialistsPage() {
                     </span>
                   </div>
                   <div>
-                    <span className="bg-blue-100 text-blue-800 text-base px-2.5 py-0.5 rounded-full">
+                    <span className="bg-border-soft text-ink-soft text-base px-2.5 py-0.5 rounded-full">
                       {specialist.speciality ?? "-"}
                     </span>
                   </div>
                   <div>{specialist.activeProcesses ?? 0}</div>
                   <div>{specialist.conversionRate ?? 0}%</div>
-                  <div className="flex justify-end items-center gap-4 text-gray-400">
-                    <button onClick={() => setSpecialistToEdit(specialist)}>
-                      <img
-                        src={EditIcon}
-                        alt="Editar"
-                        className="h-6 w-6 cursor-pointer hover:text-gray-600"
-                      />
+                  <div className="flex justify-end items-center gap-4 text-subtle">
+                    <button
+                      onClick={() => setSpecialistToEdit(specialist)}
+                      className="p-1.5 rounded hover:bg-border-soft text-ink-soft"
+                      title="Editar"
+                    >
+                      <Pencil size={18} />
                     </button>
 
-                    <button onClick={() => setSpecialistToDelete(specialist)}>
-                      <img
-                        src={TrashIcon}
-                        alt="Deletar"
-                        className="h-5 w-5 cursor-pointer hover:text-gray-600"
-                      />
+                    <button
+                      onClick={() => setSpecialistToDelete(specialist)}
+                      className="p-1.5 rounded hover:bg-status-bad-wash text-status-bad"
+                      title="Deletar"
+                    >
+                      <Trash2 size={18} />
                     </button>
                   </div>
                 </div>
@@ -191,39 +194,46 @@ export default function SpecialistsPage() {
       </div>
 
       {/* Modal criação/edição */}
-      <Modal
-        isOpen={isNewSpecialistModalOpen || !!specialistToEdit}
-        onClose={() => {
-          setIsNewSpecialistModalOpen(false);
-          setSpecialistToEdit(null);
+      <Dialog
+        open={isNewSpecialistModalOpen || !!specialistToEdit}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsNewSpecialistModalOpen(false);
+            setSpecialistToEdit(null);
+          }
         }}
       >
-        <NewSpecialistForm
-          onSuccess={handleFormSuccess}
-          specialistToEdit={specialistToEdit}
-        />
-      </Modal>
+        <DialogContent
+          open={isNewSpecialistModalOpen || !!specialistToEdit}
+          title={specialistToEdit ? "Editar Especialista" : "Novo Especialista"}
+          hideTitle
+        >
+          <NewSpecialistForm
+            onSuccess={handleFormSuccess}
+            specialistToEdit={specialistToEdit}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Modal exclusão */}
-      <Modal
-        isOpen={!!specialistToDelete}
-        onClose={() => setSpecialistToDelete(null)}
-      >
-        <div className="text-center">
-          <h2 className="h2-style mb-4">Confirmar Exclusão</h2>
-          <p className="text-text-secondary mb-8">
-            Tem a certeza que deseja apagar o especialista{" "}
-            <span className="font-bold">{specialistToDelete?.name}</span>? Esta
-            ação não pode ser desfeita.
-          </p>
-          <div className="flex justify-center gap-4">
-            <Button onClick={() => setSpecialistToDelete(null)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleConfirmDelete}>Confirmar Exclusão</Button>
+      <Dialog open={!!specialistToDelete} onOpenChange={(open) => !open && setSpecialistToDelete(null)}>
+        <DialogContent open={!!specialistToDelete} title="Confirmar Exclusão" hideTitle>
+          <div className="text-center">
+            <h2 className="text-h2 font-semibold text-ink mb-4">Confirmar Exclusão</h2>
+            <p className="text-text-secondary mb-8">
+              Tem a certeza que deseja apagar o especialista{" "}
+              <span className="font-bold">{specialistToDelete?.name}</span>? Esta
+              ação não pode ser desfeita.
+            </p>
+            <div className="flex justify-center gap-4">
+              <Button variant="light" onClick={() => setSpecialistToDelete(null)}>
+                Cancelar
+              </Button>
+              <Button variant="danger" onClick={handleConfirmDelete}>Confirmar Exclusão</Button>
+            </div>
           </div>
-        </div>
-      </Modal>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

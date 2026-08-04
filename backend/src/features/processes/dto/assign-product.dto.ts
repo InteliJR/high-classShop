@@ -1,5 +1,5 @@
 import { $Enums } from '@prisma/client';
-import { IsNotEmpty, IsInt, Min, IsEnum } from 'class-validator';
+import { IsNotEmpty, IsUUID, IsEnum } from 'class-validator';
 
 /**
  * DTO para associar um produto a um processo de consultoria
@@ -28,7 +28,6 @@ export class AssignProductToProcessDto {
    * Deve existir na tabela correspondente e pertencer ao especialista
    */
   @IsNotEmpty({ message: 'product_id é obrigatório' })
-  @IsInt({ message: 'product_id deve ser um número inteiro' })
-  @Min(1, { message: 'product_id deve ser no mínimo 1' })
-  product_id: number;
+  @IsUUID('4', { message: 'product_id deve ser um UUID válido' })
+  product_id: string;
 }

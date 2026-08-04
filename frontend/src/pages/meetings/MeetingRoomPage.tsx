@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Copy, ExternalLink, Video } from "lucide-react";
+import { Copy, ExternalLink, Video } from "lucide-react";
 import { useAuth } from "../../store/authStateManager";
 import {
   getProcessById,
@@ -9,6 +9,8 @@ import {
   startMeeting,
   type MeetingSession,
 } from "../../services/processes.service";
+import { BackButton } from "../../components/patterns/BackButton";
+import Button from "../../components/ui/button";
 
 function isJitsiLink(url?: string | null): boolean {
   if (!url) return false;
@@ -150,15 +152,12 @@ export default function MeetingRoomPage() {
 
   if (!processId) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-6 max-w-xl w-full text-center">
-          <p className="text-gray-800 font-medium">Processo inválido.</p>
-          <button
-            onClick={() => navigate(-1)}
-            className="mt-4 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900"
-          >
+      <div className="min-h-screen bg-bg flex items-center justify-center p-4">
+        <div className="bg-surface rounded-lg border border-border p-6 max-w-xl w-full text-center">
+          <p className="text-ink-soft font-medium">Processo inválido.</p>
+          <Button onClick={() => navigate(-1)} className="mt-4">
             Voltar
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -169,24 +168,21 @@ export default function MeetingRoomPage() {
     Boolean(scheduledDate) && !Number.isNaN(scheduledDate?.getTime() ?? NaN);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-bg">
       {showAdvanceConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-lg max-w-md w-full p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+          <div className="bg-surface rounded-xl border border-border shadow-ds-modal max-w-md w-full p-6">
+            <h2 className="text-lg font-semibold text-ink mb-2">
               Antecipar Reunião
             </h2>
-            <p className="text-sm text-gray-700 mb-6">
+            <p className="text-sm text-ink-soft mb-6">
               Deseja antecipar a reunião? O cliente receberá um e-mail
               informando que a reunião começará agora.
             </p>
             <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowAdvanceConfirm(false)}
-                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
+              <Button variant="light" onClick={() => setShowAdvanceConfirm(false)}>
                 Cancelar
-              </button>
+              </Button>
               <button
                 onClick={handleAdvanceMeeting}
                 disabled={isAdvancing}
@@ -199,29 +195,24 @@ export default function MeetingRoomPage() {
         </div>
       )}
       <div className="max-w-4xl mx-auto px-4 py-6">
-        <button
-          onClick={() => navigate(-1)}
-          className="mb-4 inline-flex items-center gap-2 text-sm text-slate-700 hover:text-slate-900"
-        >
-          <ArrowLeft size={16} /> Voltar
-        </button>
+        <BackButton className="mb-4" />
 
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
+        <div className="bg-surface border border-border rounded-xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 bg-cyan-100 rounded-lg">
               <Video className="text-cyan-700" size={20} />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">
+              <h1 className="text-xl font-semibold text-ink">
                 Sala de Reunião
               </h1>
-              <p className="text-sm text-gray-600">Processo {processId}</p>
+              <p className="text-sm text-muted">Processo {processId}</p>
             </div>
           </div>
 
           {hasValidScheduledDate ? (
-            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-sm text-blue-900">
+            <div className="mb-4 bg-status-sched-wash border border-status-sched-line rounded-lg p-3">
+              <p className="text-sm text-status-sched">
                 Reunião agendada para{" "}
                 <strong>
                   {scheduledDate!.toLocaleDateString("pt-BR", {
@@ -243,8 +234,8 @@ export default function MeetingRoomPage() {
             </div>
           ) : (
             !meeting && (
-              <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <p className="text-sm text-amber-900">
+              <div className="mb-4 bg-status-neg-wash border border-status-neg-line rounded-lg p-3">
+                <p className="text-sm text-status-neg">
                   {isSpecialist
                     ? "Nenhum horário confirmado. Você pode iniciar a reunião a qualquer momento — o cliente receberá um e-mail com o link assim que você iniciar."
                     : "Nenhum horário confirmado. Quando o especialista iniciar a reunião, você receberá um e-mail com o link de acesso."}
@@ -254,23 +245,23 @@ export default function MeetingRoomPage() {
           )}
 
           {isLoading ? (
-            <p className="text-sm text-gray-600">Carregando reunião...</p>
+            <p className="text-sm text-muted">Carregando reunião...</p>
           ) : !meeting ? (
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+            <div className="bg-border-soft border border-border rounded-lg p-4">
               {isSpecialist ? (
                 <>
-                  <p className="text-sm text-slate-800 mb-3">
+                  <p className="text-sm text-ink-soft mb-3">
                     A reunião ainda não foi iniciada. Inicie agora para liberar
                     o acesso do cliente na plataforma e enviar a notificação.
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    <button
+                    <Button
                       onClick={handleStartMeeting}
                       disabled={isStarting || isAdvancing}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-700 text-white rounded-lg hover:bg-cyan-800 disabled:opacity-50"
+                      className="inline-flex items-center gap-2"
                     >
                       {isStarting ? "Iniciando..." : "Iniciar reunião"}
-                    </button>
+                    </Button>
                     {hasValidScheduledDate && (
                       <button
                         onClick={() => setShowAdvanceConfirm(true)}
@@ -283,7 +274,7 @@ export default function MeetingRoomPage() {
                   </div>
                 </>
               ) : (
-                <p className="text-sm text-slate-800">
+                <p className="text-sm text-ink-soft">
                   O especialista ainda não iniciou a reunião. Assim que iniciar,
                   o link aparecerá aqui e também será enviado ao seu e-mail.
                 </p>
@@ -292,7 +283,7 @@ export default function MeetingRoomPage() {
           ) : (
             <div className="space-y-4">
               {isJitsiLink(meeting.meet_link) && !meeting.ended_at && (
-                <div className="rounded-lg border border-gray-200 overflow-hidden bg-black">
+                <div className="rounded-lg border border-border overflow-hidden bg-black">
                   <iframe
                     src={meeting.meet_link}
                     title="Sala de reunião"
@@ -303,8 +294,8 @@ export default function MeetingRoomPage() {
               )}
 
               {meeting.ended_at && (
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                  <p className="text-sm text-slate-800">
+                <div className="bg-border-soft border border-border rounded-lg p-4">
+                  <p className="text-sm text-ink-soft">
                     Esta reunião foi encerrada. Para continuar, siga com os
                     próximos passos do processo.
                   </p>
@@ -327,15 +318,15 @@ export default function MeetingRoomPage() {
 
               <div className="flex flex-wrap gap-2">
                 {isSpecialist && !meeting.ended_at && (
-                  <button
+                  <Button
                     onClick={handleConversationDone}
                     disabled={isConversationDoneLoading}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-700 text-white rounded-lg hover:bg-emerald-800 disabled:opacity-50"
+                    className="inline-flex items-center gap-2"
                   >
                     {isConversationDoneLoading
                       ? "Processando..."
                       : "Já conversei com o cliente"}
-                  </button>
+                  </Button>
                 )}
 
                 {!isJitsiLink(meeting.meet_link) && (
@@ -343,27 +334,28 @@ export default function MeetingRoomPage() {
                     href={meeting.meet_link}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-700 text-white rounded-lg hover:bg-cyan-800"
+                    className="inline-flex items-center justify-center gap-2 font-semibold py-2 px-4 rounded-lg cursor-pointer transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[--color-button-solid] active:scale-95 bg-button-solid text-white hover:bg-[--color-button-solid-hover]"
                   >
                     <ExternalLink size={16} /> Entrar na Reunião
                   </a>
                 )}
 
-                <button
+                <Button
+                  variant="light"
                   onClick={handleCopyLink}
-                  className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  className="inline-flex items-center gap-2"
                 >
                   <Copy size={16} /> {copied ? "Link copiado" : "Copiar link"}
-                </button>
+                </Button>
               </div>
 
-              <p className="text-xs text-gray-600">
+              <p className="text-xs text-muted">
                 Especialista: compartilhe este link com o cliente se necessário.
               </p>
             </div>
           )}
 
-          <div className="mt-6 pt-4 border-t border-gray-100">
+          <div className="mt-6 pt-4 border-t border-border-soft">
             <Link
               to={
                 user?.role === "SPECIALIST"
@@ -372,7 +364,7 @@ export default function MeetingRoomPage() {
                     ? "/consultant/processes"
                     : "/customer/processes"
               }
-              className="text-sm text-slate-700 hover:text-slate-900"
+              className="text-sm text-ink-soft hover:text-ink"
             >
               Voltar para processos
             </Link>

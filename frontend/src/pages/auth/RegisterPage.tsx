@@ -8,6 +8,8 @@ import { AuthContext } from "../../contexts/AuthContext";
 import { useContext, useEffect, useState } from "react";
 import type { RegisterValues } from "../../types/types";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import Button from "../../components/ui/button";
+import { useWhitelabel } from "../../store/whitelabelStore";
 
 type RegistrationMode = 'referral' | 'public';
 
@@ -16,6 +18,7 @@ export default function RegisterPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const whitelabelCompany = useWhitelabel((s) => s.company);
   const redirectPathFromState = (location.state as { from?: string } | null)
     ?.from;
   const [registrationMode, setRegistrationMode] = useState<RegistrationMode>('public');
@@ -115,7 +118,11 @@ export default function RegisterPage() {
       if (registrationMode === 'referral' && consultantId) {
         registerData.consultant_id = consultantId;
       }
-      
+
+      if (whitelabelCompany?.slug) {
+        registerData.company_slug = whitelabelCompany.slug;
+      }
+
       await auth.register(registerData);
       
       alert("Cadastro realizado com sucesso! Faça login para continuar.");
@@ -164,10 +171,10 @@ export default function RegisterPage() {
 
   if (isValidatingToken) {
     return (
-      <div className="w-screen h-screen flex items-center justify-center bg-linear-to-br from-gray-50 to-white">
+      <div className="w-screen h-screen flex items-center justify-center bg-bg">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-gray-200 border-t-gray-900"></div>
-          <p className="text-gray-700 font-medium">Validando convite...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-border border-t-ink"></div>
+          <p className="text-ink-soft font-medium">Validando convite...</p>
         </div>
       </div>
     );
@@ -177,27 +184,27 @@ export default function RegisterPage() {
     const isUserAlreadyExists = tokenError.includes("Já existe uma conta cadastrada");
     
     return (
-      <div className="w-screen h-screen flex items-center justify-center bg-linear-to-br from-gray-50 to-white p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+      <div className="w-screen h-screen flex items-center justify-center bg-bg p-4">
+        <div className="max-w-md w-full bg-surface rounded-2xl shadow-ds-modal p-8 border border-border-soft">
           <div className="flex flex-col items-center gap-4 text-center">
             <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
-              isUserAlreadyExists ? 'bg-blue-100' : 'bg-red-100'
+              isUserAlreadyExists ? 'bg-status-sched-wash' : 'bg-status-bad-wash'
             }`}>
               {isUserAlreadyExists ? (
-                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-8 h-8 text-status-sched" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
               ) : (
-                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-8 h-8 text-status-bad" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               )}
             </div>
-            <h2 className="text-2xl font-bold text-gray-900">
+            <h2 className="text-2xl font-bold text-ink">
               {isUserAlreadyExists ? 'Conta Já Cadastrada' : 'Convite Inválido'}
             </h2>
-            <p className="text-gray-600 text-sm">{tokenError}</p>
-            <button
+            <p className="text-muted text-sm">{tokenError}</p>
+            <Button
               onClick={() =>
                 navigate("/login", {
                   state: redirectPathFromState
@@ -205,10 +212,10 @@ export default function RegisterPage() {
                     : undefined,
                 })
               }
-              className="mt-4 px-6 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-black transition-all font-medium shadow-lg"
+              className="mt-4"
             >
               {isUserAlreadyExists ? 'Fazer Login' : 'Ir para Login'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -218,25 +225,25 @@ export default function RegisterPage() {
   return (
     <div className="w-screen h-screen flex">
       {/* Coluna Esquerda - Formulário */}
-      <div className="w-full lg:w-1/2 h-full overflow-y-auto bg-linear-to-br from-gray-50 to-white">
+      <div className="w-full lg:w-1/2 h-full overflow-y-auto bg-bg">
         <div className="min-h-full flex items-center justify-center p-4 sm:p-6 lg:p-8">
           <div className="w-full max-w-md">
             {/* Header */}
             <div className="text-center mb-6">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-linear-to-br from-gray-700 to-gray-900 mb-4">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-ink-soft mb-4">
+                <svg className="w-8 h-8 text-surface" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                 </svg>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+              <h1 className="text-2xl sm:text-3xl font-bold text-ink mb-2">
                 Criar Conta
               </h1>
               {registrationMode === 'referral' && consultantName ? (
-                <p className="text-sm text-gray-600">
-                  <span className="font-semibold text-gray-900">{consultantName}</span> convidou você
+                <p className="text-sm text-muted">
+                  <span className="font-semibold text-ink">{consultantName}</span> convidou você
                 </p>
               ) : (
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-muted">
                   Preencha seus dados para criar sua conta
                 </p>
               )}
@@ -247,7 +254,7 @@ export default function RegisterPage() {
               {/* Nome e Sobrenome - Lado a lado */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">
+                  <label htmlFor="name" className="block text-xs font-medium text-ink-soft mb-1">
                     Nome
                   </label>
                   <input
@@ -255,21 +262,21 @@ export default function RegisterPage() {
                     type="text"
                     placeholder="João"
                     className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 transition-all ${
-                      errors.name 
-                        ? 'border-red-500 focus:ring-red-500' 
+                      errors.name
+                        ? 'border-status-bad focus:ring-status-bad'
                         : watch("name") && watch("name").length >= 2
-                        ? 'border-green-500 focus:ring-green-500'
-                        : 'border-gray-300 focus:ring-gray-900 focus:border-transparent'
+                        ? 'border-status-ok focus:ring-status-ok'
+                        : 'border-border focus:ring-focus-ring focus:border-transparent'
                     }`}
-                    {...register("name", { 
-                      required: "Nome é obrigatório", 
-                      minLength: { value: 2, message: "Mínimo 2 caracteres" } 
+                    {...register("name", {
+                      required: "Nome é obrigatório",
+                      minLength: { value: 2, message: "Mínimo 2 caracteres" }
                     })}
                   />
-                  {errors.name && <p className="text-xs text-red-600 mt-1">{errors.name.message}</p>}
+                  {errors.name && <p className="text-xs text-status-bad mt-1">{errors.name.message}</p>}
                 </div>
                 <div>
-                  <label htmlFor="surname" className="block text-xs font-medium text-gray-700 mb-1">
+                  <label htmlFor="surname" className="block text-xs font-medium text-ink-soft mb-1">
                     Sobrenome
                   </label>
                   <input
@@ -277,37 +284,37 @@ export default function RegisterPage() {
                     type="text"
                     placeholder="Silva"
                     className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 transition-all ${
-                      errors.surname 
-                        ? 'border-red-500 focus:ring-red-500' 
+                      errors.surname
+                        ? 'border-status-bad focus:ring-status-bad'
                         : watch("surname") && watch("surname").length >= 2
-                        ? 'border-green-500 focus:ring-green-500'
-                        : 'border-gray-300 focus:ring-gray-900 focus:border-transparent'
+                        ? 'border-status-ok focus:ring-status-ok'
+                        : 'border-border focus:ring-focus-ring focus:border-transparent'
                     }`}
-                    {...register("surname", { 
-                      required: "Sobrenome é obrigatório", 
-                      minLength: { value: 2, message: "Mínimo 2 caracteres" } 
+                    {...register("surname", {
+                      required: "Sobrenome é obrigatório",
+                      minLength: { value: 2, message: "Mínimo 2 caracteres" }
                     })}
                   />
-                  {errors.surname && <p className="text-xs text-red-600 mt-1">{errors.surname.message}</p>}
+                  {errors.surname && <p className="text-xs text-status-bad mt-1">{errors.surname.message}</p>}
                 </div>
               </div>
 
               {/* E-mail */}
               <div>
-                <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">
-                  E-mail {registrationMode === 'referral' && <span className="text-gray-500 font-normal">(vinculado ao convite)</span>}
+                <label htmlFor="email" className="block text-xs font-medium text-ink-soft mb-1">
+                  E-mail {registrationMode === 'referral' && <span className="text-muted font-normal">(vinculado ao convite)</span>}
                 </label>
                 <input
                   id="email"
                   type="email"
                   placeholder={registrationMode === 'public' ? "seu@email.com" : undefined}
                   className={`w-full px-3 py-2 text-sm border rounded-lg ${
-                    registrationMode === 'referral' 
-                      ? 'border-gray-300 bg-gray-50 text-gray-600' 
-                      : 'border-gray-300 focus:ring-2 focus:ring-gray-900 focus:border-transparent'
+                    registrationMode === 'referral'
+                      ? 'border-border bg-bg text-muted'
+                      : 'border-border focus:ring-2 focus:ring-focus-ring focus:border-transparent'
                   }`}
                   disabled={registrationMode === 'referral'}
-                  {...register("email", { 
+                  {...register("email", {
                     required: "E-mail é obrigatório",
                     pattern: {
                       value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
@@ -315,13 +322,13 @@ export default function RegisterPage() {
                     }
                   })}
                 />
-                {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email.message}</p>}
+                {errors.email && <p className="text-xs text-status-bad mt-1">{errors.email.message}</p>}
               </div>
 
               {/* CPF e RG - Lado a lado */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="cpf" className="block text-xs font-medium text-gray-700 mb-1">
+                  <label htmlFor="cpf" className="block text-xs font-medium text-ink-soft mb-1">
                     CPF
                   </label>
                   <input
@@ -330,13 +337,13 @@ export default function RegisterPage() {
                     placeholder="000.000.000-00"
                     maxLength={14}
                     className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 transition-all ${
-                      errors.cpf 
-                        ? 'border-red-500 focus:ring-red-500' 
+                      errors.cpf
+                        ? 'border-status-bad focus:ring-status-bad'
                         : watchedCpf && validateCPF(watchedCpf)
-                        ? 'border-green-500 focus:ring-green-500'
-                        : 'border-gray-300 focus:ring-gray-900 focus:border-transparent'
+                        ? 'border-status-ok focus:ring-status-ok'
+                        : 'border-border focus:ring-focus-ring focus:border-transparent'
                     }`}
-                    {...register("cpf", { 
+                    {...register("cpf", {
                       required: "CPF é obrigatório",
                       validate: (value) => validateCPF(value) || "CPF inválido",
                       onChange: (e) => {
@@ -344,10 +351,10 @@ export default function RegisterPage() {
                       }
                     })}
                   />
-                  {errors.cpf && <p className="text-xs text-red-600 mt-1">{errors.cpf.message}</p>}
+                  {errors.cpf && <p className="text-xs text-status-bad mt-1">{errors.cpf.message}</p>}
                 </div>
                 <div>
-                  <label htmlFor="rg" className="block text-xs font-medium text-gray-700 mb-1">
+                  <label htmlFor="rg" className="block text-xs font-medium text-ink-soft mb-1">
                     RG
                   </label>
                   <input
@@ -356,11 +363,11 @@ export default function RegisterPage() {
                     placeholder="0000000000"
                     maxLength={10}
                     className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 transition-all ${
-                      errors.rg 
-                        ? 'border-red-500 focus:ring-red-500' 
+                      errors.rg
+                        ? 'border-status-bad focus:ring-status-bad'
                         : watch("rg") && (() => { const d = watch("rg").replace(/\D/g, "").length; return d >= 7 && d <= 10; })()
-                        ? 'border-green-500 focus:ring-green-500'
-                        : 'border-gray-300 focus:ring-gray-900 focus:border-transparent'
+                        ? 'border-status-ok focus:ring-status-ok'
+                        : 'border-border focus:ring-focus-ring focus:border-transparent'
                     }`}
                     {...register("rg", {
                       required: "RG é obrigatório",
@@ -370,13 +377,13 @@ export default function RegisterPage() {
                       }
                     })}
                   />
-                  {errors.rg && <p className="text-xs text-red-600 mt-1">{errors.rg.message}</p>}
+                  {errors.rg && <p className="text-xs text-status-bad mt-1">{errors.rg.message}</p>}
                 </div>
               </div>
 
               {/* Telefone */}
               <div>
-                <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="phone" className="block text-xs font-medium text-ink-soft mb-1">
                   Telefone
                 </label>
                 <input
@@ -386,10 +393,10 @@ export default function RegisterPage() {
                   maxLength={16}
                   className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 transition-all ${
                     errors.phone
-                      ? 'border-red-500 focus:ring-red-500'
+                      ? 'border-status-bad focus:ring-status-bad'
                       : watch("phone") && validatePhone(watch("phone"))
-                      ? 'border-green-500 focus:ring-green-500'
-                      : 'border-gray-300 focus:ring-gray-900 focus:border-transparent'
+                      ? 'border-status-ok focus:ring-status-ok'
+                      : 'border-border focus:ring-focus-ring focus:border-transparent'
                   }`}
                   {...register("phone", {
                     required: "Telefone é obrigatório",
@@ -399,13 +406,13 @@ export default function RegisterPage() {
                     }
                   })}
                 />
-                {errors.phone && <p className="text-xs text-red-600 mt-1">{errors.phone.message}</p>}
+                {errors.phone && <p className="text-xs text-status-bad mt-1">{errors.phone.message}</p>}
               </div>
 
               {/* Senha e Estado Civil - Lado a lado */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">
+                  <label htmlFor="password" className="block text-xs font-medium text-ink-soft mb-1">
                     Senha
                   </label>
                   <input
@@ -413,29 +420,29 @@ export default function RegisterPage() {
                     type="password"
                     placeholder="Min. 6 caracteres"
                     className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 transition-all ${
-                      errors.password 
-                        ? 'border-red-500 focus:ring-red-500' 
+                      errors.password
+                        ? 'border-status-bad focus:ring-status-bad'
                         : watchedPassword && watchedPassword.length >= 6
-                        ? 'border-green-500 focus:ring-green-500'
-                        : 'border-gray-300 focus:ring-gray-900 focus:border-transparent'
+                        ? 'border-status-ok focus:ring-status-ok'
+                        : 'border-border focus:ring-focus-ring focus:border-transparent'
                     }`}
-                    {...register("password", { 
-                      required: "Senha é obrigatória", 
-                      minLength: { value: 6, message: "Mínimo 6 caracteres" } 
+                    {...register("password", {
+                      required: "Senha é obrigatória",
+                      minLength: { value: 6, message: "Mínimo 6 caracteres" }
                     })}
                   />
-                  {errors.password && <p className="text-xs text-red-600 mt-1">{errors.password.message}</p>}
+                  {errors.password && <p className="text-xs text-status-bad mt-1">{errors.password.message}</p>}
                   {watchedPassword && watchedPassword.length > 0 && watchedPassword.length < 6 && (
-                    <p className="text-xs text-amber-600 mt-1">Senha muito curta</p>
+                    <p className="text-xs text-status-neg mt-1">Senha muito curta</p>
                   )}
                 </div>
                 <div>
-                  <label htmlFor="civil_state" className="block text-xs font-medium text-gray-700 mb-1">
+                  <label htmlFor="civil_state" className="block text-xs font-medium text-ink-soft mb-1">
                     Estado Civil
                   </label>
                   <select
                     id="civil_state"
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
+                    className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent transition-all"
                     {...register("civil_state")}
                   >
                     <option value="">Selecione</option>
@@ -451,16 +458,13 @@ export default function RegisterPage() {
 
               {/* Botões */}
               <div className="pt-4 space-y-3">
-                <button
-                  type="submit"
-                  className="w-full bg-linear-to-r from-gray-700 to-gray-900 text-white py-2.5 rounded-lg font-medium hover:from-gray-800 hover:to-black transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                >
+                <Button type="submit" className="w-full">
                   Criar Conta
-                </button>
+                </Button>
                 <button
                   type="button"
                   onClick={() => navigate("/login")}
-                  className="w-full text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                  className="w-full text-sm text-muted hover:text-ink transition-colors"
                 >
                   Já tem uma conta? <span className="font-semibold">Faça login</span>
                 </button>

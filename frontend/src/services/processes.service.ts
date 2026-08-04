@@ -19,7 +19,7 @@ export interface Process {
   product_type?: "CAR" | "BOAT" | "AIRCRAFT" | null;
   client_id: string;
   specialist_id: string;
-  product_id?: number | string | null;
+  product_id?: string | null;
   notes?: string;
   created_at: string;
   updated_at: string;
@@ -30,7 +30,7 @@ export interface Process {
     name?: string;
   };
   product?: {
-    id: number | string;
+    id: string;
     marca?: string;
     modelo?: string;
     descricao?: string;
@@ -138,7 +138,7 @@ export interface CreateProcessRequest {
   client_id: string;
   specialist_id: string | undefined;
   product_type: "CAR" | "BOAT" | "AIRCRAFT";
-  product_id: string | number;
+  product_id: string;
 }
 
 /**
@@ -185,7 +185,7 @@ export async function updateProcessStatus(
 export async function assignProductToProcess(
   processId: string,
   productType: "CAR" | "BOAT" | "AIRCRAFT",
-  productId: number,
+  productId: string,
 ): Promise<Process> {
   const response = await api.patch<ApiResponse<Process>>(
     `/processes/${processId}/assign-product`,
@@ -306,7 +306,7 @@ export interface CreateAppointmentRequest {
   specialist_id: string;
   client_id: string;
   product_type: "CAR" | "BOAT" | "AIRCRAFT";
-  product_id: string | number;
+  product_id: string;
   appointment_datetime?: string;
   notes?: string;
 }

@@ -3,8 +3,6 @@ import {
   IsEnum,
   IsOptional,
   MaxLength,
-  IsInt,
-  Min,
   ValidateIf,
 } from 'class-validator';
 import { ProductType } from '@prisma/client';
@@ -63,16 +61,12 @@ export class CreateAppointmentDto {
    * Opcional para consultoria (sem produto inicial)
    * Se fornecido, product_type também deve ser fornecido
    *
-   * Exemplo:
-   * - Se product_type = CAR: product_id = 1 (referencia Car com id=1)
-   * - Se product_type = BOAT: product_id = 5 (referencia Boat com id=5)
-   * - Se product_type = AIRCRAFT: product_id = 3 (referencia Aircraft com id=3)
+   * Deve ser um UUID v4 do produto correspondente.
    */
   @IsOptional()
   @ValidateIf((o) => o.product_type !== undefined)
-  @IsInt({ message: 'product_id deve ser um número inteiro' })
-  @Min(1, { message: 'product_id deve ser no mínimo 1' })
-  product_id?: number;
+  @IsUUID('4', { message: 'product_id deve ser um UUID válido' })
+  product_id?: string;
 
   /**
    * Data e hora do agendamento em ISO 8601 UTC

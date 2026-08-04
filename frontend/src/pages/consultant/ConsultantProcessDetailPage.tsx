@@ -32,24 +32,12 @@ import {
   type Process,
 } from "../../services/processes.service";
 import { useAuth } from "../../store/authStateManager";
-
-const STATUS_LABELS: Record<string, string> = {
-  SCHEDULING: "Agendamento",
-  NEGOTIATION: "Negociação",
-  PROCESSING_CONTRACT: "Contrato",
-  DOCUMENTATION: "Documentação",
-  COMPLETED: "Concluído",
-  REJECTED: "Rejeitado",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  SCHEDULING: "bg-blue-100 text-blue-700",
-  NEGOTIATION: "bg-yellow-100 text-yellow-700",
-  PROCESSING_CONTRACT: "bg-orange-100 text-orange-700",
-  DOCUMENTATION: "bg-purple-100 text-purple-700",
-  COMPLETED: "bg-green-100 text-green-700",
-  REJECTED: "bg-red-100 text-red-700",
-};
+import { Card } from "../../components/ui/card";
+import Button from "../../components/ui/button";
+import { Alert } from "../../components/ui/alert";
+import { PageHeader } from "../../components/patterns/PageHeader";
+import { StatusBadge } from "../../components/patterns/StatusBadge";
+import { ProposalStatusBadge } from "../../components/patterns/ProposalStatusBadge";
 
 const PRODUCT_LABELS: Record<string, string> = {
   CAR: "Carro",
@@ -72,41 +60,6 @@ function formatDate(dateString: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function ProposalStatusBadge({ status }: { status: string }) {
-  switch (status) {
-    case "PENDING":
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
-          <Loader2 size={12} className="animate-spin" />
-          Aguardando resposta
-        </span>
-      );
-    case "ACCEPTED":
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-          <Check size={12} />
-          Aceita
-        </span>
-      );
-    case "REJECTED":
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full">
-          <X size={12} />
-          Rejeitada
-        </span>
-      );
-    case "COUNTERED":
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
-          <RefreshCw size={12} />
-          Contraproposta enviada
-        </span>
-      );
-    default:
-      return null;
-  }
 }
 
 export default function ConsultantProcessDetailPage() {
@@ -330,20 +283,17 @@ export default function ConsultantProcessDetailPage() {
   if (error || !process) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
-        <AlertCircle className="text-red-500 mb-3" size={40} />
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">
+        <AlertCircle className="text-status-bad mb-3" size={40} />
+        <h2 className="text-lg font-semibold text-ink mb-1">
           Não foi possível carregar o processo
         </h2>
-        <p className="text-sm text-gray-600 mb-4">
+        <p className="text-sm text-muted mb-4">
           {error ?? "Processo não encontrado."}
         </p>
-        <button
-          onClick={() => navigate("/consultant/processes")}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors"
-        >
+        <Button type="button" onClick={() => navigate("/consultant/processes")}>
           <ArrowLeft size={18} />
           Voltar para processos
-        </button>
+        </Button>
       </div>
     );
   }
@@ -351,9 +301,6 @@ export default function ConsultantProcessDetailPage() {
   const productLabel = process.product_type
     ? PRODUCT_LABELS[process.product_type] ?? process.product_type
     : "Consultoria";
-  const statusLabel = STATUS_LABELS[process.status] ?? process.status;
-  const statusColor =
-    STATUS_COLORS[process.status] ?? "bg-gray-100 text-gray-600";
 
   const acceptedProposal = proposals.find((p) => p.status === "ACCEPTED");
   const isAwaitingProduct = !process.product_type || !process.product_id;
@@ -365,143 +312,133 @@ export default function ConsultantProcessDetailPage() {
 
   return (
     <div className="text-text-main w-full">
-      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
+      <PageHeader
+        title="Detalhes do processo"
+        showBack
+        backTo="/consultant/processes"
+        actions={
           <button
-            onClick={() => navigate("/consultant/processes")}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            aria-label="Voltar"
+            onClick={load}
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg hover:bg-border-soft"
           >
-            <ArrowLeft size={20} className="text-gray-600" />
+            <RefreshCw size={16} />
+            Atualizar
           </button>
-          <div>
-            <h1 className="h1-style">Detalhes do processo</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Acompanhe e atue na negociação em nome do cliente.
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={load}
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
-        >
-          <RefreshCw size={16} />
-          Atualizar
-        </button>
-      </div>
+        }
+      />
+      <p className="text-sm text-muted -mt-4 mb-6">
+        Acompanhe e atue na negociação em nome do cliente.
+      </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <div className="p-4 rounded-lg shadow bg-white">
-          <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted uppercase tracking-wider mb-2">
             <User size={14} />
             Cliente
           </div>
-          <p className="text-sm font-medium text-gray-900">
+          <p className="text-sm font-medium text-ink">
             {process.client?.name ?? "—"}
           </p>
           {process.client?.email && (
-            <p className="text-xs text-gray-500 mt-1">{process.client.email}</p>
+            <p className="text-xs text-muted mt-1">{process.client.email}</p>
           )}
-        </div>
+        </Card>
 
-        <div className="p-4 rounded-lg shadow bg-white">
-          <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted uppercase tracking-wider mb-2">
             <UserCog size={14} />
             Especialista
           </div>
-          <p className="text-sm font-medium text-gray-900">
+          <p className="text-sm font-medium text-ink">
             {process.specialist?.name ?? "—"}
           </p>
           {process.specialist?.especialidade && (
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-muted mt-1">
               {process.specialist.especialidade}
             </p>
           )}
-        </div>
+        </Card>
 
-        <div className="p-4 rounded-lg shadow bg-white">
-          <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted uppercase tracking-wider mb-2">
             <Package size={14} />
             Produto
           </div>
-          <p className="text-sm font-medium text-gray-900">{productLabel}</p>
+          <p className="text-sm font-medium text-ink">{productLabel}</p>
           {process.product && (
-            <p className="text-xs text-gray-500 mt-1 truncate">
+            <p className="text-xs text-muted mt-1 truncate">
               {[process.product.marca, process.product.modelo]
                 .filter(Boolean)
                 .join(" ")}
               {process.product.ano ? ` • ${process.product.ano}` : ""}
             </p>
           )}
-        </div>
+        </Card>
       </div>
 
-      <div className="p-4 rounded-lg shadow bg-white mb-6 flex flex-wrap items-center gap-4">
+      <Card className="mb-6 flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+          <span className="text-xs font-semibold text-muted uppercase tracking-wider">
             Status
           </span>
-          <span
-            className={`text-xs font-medium px-2 py-1 rounded-full ${statusColor}`}
-          >
-            {statusLabel}
-          </span>
+          <StatusBadge status={process.status} />
         </div>
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <Calendar size={14} className="text-gray-400" />
+        <div className="flex items-center gap-2 text-sm text-muted">
+          <Calendar size={14} className="text-subtle" />
           Criado em {formatDate(process.created_at)}
         </div>
         {process.appointment_datetime && (
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <Calendar size={14} className="text-gray-400" />
+          <div className="flex items-center gap-2 text-sm text-muted">
+            <Calendar size={14} className="text-subtle" />
             Reunião: {formatDate(process.appointment_datetime)}
           </div>
         )}
         {process.rejection_reason && (
-          <div className="flex items-center gap-2 text-sm text-red-600">
+          <div className="flex items-center gap-2 text-sm text-status-bad">
             <AlertCircle size={14} />
             Motivo da rejeição: {process.rejection_reason}
           </div>
         )}
-      </div>
+      </Card>
 
       {!isScheduling && processInfo && (
-        <div className="p-4 rounded-lg shadow bg-white mb-6 flex flex-wrap items-center gap-6 text-sm">
+        <Card className="mb-6 flex flex-wrap items-center gap-6 text-sm">
           <div className="flex items-center gap-2">
-            <DollarSign size={16} className="text-green-600" />
-            <span className="text-gray-500">Valor do produto:</span>
-            <span className="font-semibold text-gray-900">
+            <DollarSign size={16} className="text-status-ok" />
+            <span className="text-muted">Valor do produto:</span>
+            <span className="font-semibold text-ink">
               {formatCurrency(processInfo.product_value)}
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {/* laranja mantido de propósito — destaque de atenção ao valor, não é um dos 6 status de processo */}
             <AlertCircle size={16} className="text-orange-500" />
-            <span className="text-gray-500">Valor mínimo:</span>
+            <span className="text-muted">Valor mínimo:</span>
             <span className="font-semibold text-orange-600">
               {formatCurrency(processInfo.minimum_value)}
             </span>
           </div>
           {acceptedProposal && (
             <div className="flex items-center gap-2">
-              <Check size={16} className="text-green-600" />
-              <span className="text-gray-500">Valor aceito:</span>
-              <span className="font-semibold text-green-700">
+              <Check size={16} className="text-status-ok" />
+              <span className="text-muted">Valor aceito:</span>
+              <span className="font-semibold text-status-ok">
                 {formatCurrency(acceptedProposal.proposed_value)}
               </span>
             </div>
           )}
           {meta && (
-            <div className="ml-auto text-xs text-gray-400">
+            <div className="ml-auto text-xs text-subtle">
               {meta.total} {meta.total === 1 ? "proposta" : "propostas"}
             </div>
           )}
-        </div>
+        </Card>
       )}
 
       {isScheduling ? (
-        <div className="p-6 rounded-lg shadow bg-white">
+        <Card>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="h2-style">Agendamento</h2>
+            <h2 className="text-h2 font-semibold text-ink">Agendamento</h2>
           </div>
 
           <div className="mb-4">
@@ -524,72 +461,72 @@ export default function ConsultantProcessDetailPage() {
           </div>
 
           {process.appointment_datetime ? (
-            <div className="flex items-center gap-2 text-sm text-gray-700 mb-4">
-              <Calendar size={16} className="text-gray-400" />
+            <div className="flex items-center gap-2 text-sm text-ink-soft mb-4">
+              <Calendar size={16} className="text-subtle" />
               Reunião marcada para {formatDate(process.appointment_datetime)}
             </div>
           ) : (
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-muted mb-4">
               Data e horário ainda não definidos.
             </p>
           )}
 
           {isAppointmentConfirmed ? (
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+            <div className="p-4 bg-border-soft border border-border rounded-lg">
               {isLoadingMeeting ? (
-                <p className="inline-flex items-center gap-2 text-sm text-gray-600">
+                <p className="inline-flex items-center gap-2 text-sm text-muted">
                   <Loader2 size={16} className="animate-spin" />
                   Verificando reunião...
                 </p>
               ) : meetingSession && !meetingSession.ended_at ? (
                 <>
-                  <p className="text-sm text-slate-800 mb-3">
+                  <p className="text-sm text-ink-soft mb-3">
                     O especialista iniciou a reunião. Entre para acompanhar em
                     nome do cliente.
                   </p>
-                  <button
+                  <Button
+                    type="button"
                     onClick={() =>
                       navigate(`/processes/${process.id}/meeting`)
                     }
-                    className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-cyan-700 text-white rounded-lg font-medium hover:bg-cyan-800 transition-colors"
                   >
                     <Video size={16} />
                     Entrar na reunião
-                  </button>
+                  </Button>
                 </>
               ) : meetingSession?.ended_at ? (
-                <p className="text-sm text-slate-700">
+                <p className="text-sm text-ink-soft">
                   A reunião foi encerrada pelo especialista.
                 </p>
               ) : (
-                <p className="text-sm text-slate-700">
+                <p className="text-sm text-ink-soft">
                   Aguardando o especialista iniciar a reunião. O acesso aparece
                   aqui assim que ela começar.
                 </p>
               )}
             </div>
           ) : (
-            <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+            <div className="p-4 bg-border-soft border border-border rounded-lg text-sm text-muted">
               A reunião ficará disponível assim que o agendamento for
               confirmado.
             </div>
           )}
-        </div>
+        </Card>
       ) : (
-      <div className="p-6 rounded-lg shadow bg-white">
+      <Card>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="h2-style">Histórico de propostas</h2>
+          <h2 className="text-h2 font-semibold text-ink">Histórico de propostas</h2>
         </div>
 
         {isAwaitingProduct ? (
-          <div className="text-center py-10 text-gray-500 text-sm">
+          <div className="text-center py-10 text-muted text-sm">
             A negociação ainda não foi iniciada. O especialista precisa
             associar um produto ao processo.
           </div>
         ) : proposals.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
-            <MessageSquare size={40} className="text-gray-300 mb-3" />
-            <p className="text-sm text-gray-500">
+            <MessageSquare size={40} className="text-subtle mb-3" />
+            <p className="text-sm text-muted">
               Nenhuma proposta enviada até o momento.
             </p>
           </div>
@@ -601,40 +538,41 @@ export default function ConsultantProcessDetailPage() {
             {proposals.map((proposal) => (
               <div
                 key={proposal.id}
-                className="border border-gray-200 rounded-lg p-3"
+                className="border border-border rounded-lg p-3"
               >
                 <div className="flex items-center justify-between gap-3 mb-2">
-                  <span className="text-xs font-medium text-gray-500">
+                  <span className="text-xs font-medium text-muted">
                     {proposal.proposed_by.name} {proposal.proposed_by.surname}
-                    <span className="text-gray-400">
+                    <span className="text-subtle">
                       {" "}
                       → {proposal.proposed_to.name}{" "}
                       {proposal.proposed_to.surname}
                     </span>
                   </span>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-subtle">
                     {formatDate(proposal.created_at)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mb-1">
                   <DollarSign size={16} className="text-green-600" />
-                  <span className="text-lg font-bold text-gray-900">
+                  <span className="text-lg font-bold text-ink">
                     {formatCurrency(proposal.proposed_value)}
                   </span>
                 </div>
                 {proposal.message && (
-                  <p className="text-sm text-gray-600 mb-2">
+                  <p className="text-sm text-muted mb-2">
                     {proposal.message}
                   </p>
                 )}
                 <ProposalStatusBadge status={proposal.status} />
 
                 {canRespondToProposal(proposal) && (
-                  <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
-                    <button
+                  <div className="flex gap-2 mt-3 pt-3 border-t border-border-soft">
+                    <Button
+                      type="button"
                       onClick={() => handleAccept(proposal.id)}
                       disabled={pendingActionProposalId !== null}
-                      className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                      className="flex-1"
                     >
                       {pendingActionProposalId === proposal.id ? (
                         <Loader2 size={16} className="animate-spin" />
@@ -642,11 +580,13 @@ export default function ConsultantProcessDetailPage() {
                         <Check size={16} />
                       )}
                       Aceitar
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
                       onClick={() => handleReject(proposal.id)}
                       disabled={pendingActionProposalId !== null}
-                      className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                      className="flex-1"
                     >
                       {pendingActionProposalId === proposal.id ? (
                         <Loader2 size={16} className="animate-spin" />
@@ -654,7 +594,7 @@ export default function ConsultantProcessDetailPage() {
                         <X size={16} />
                       )}
                       Rejeitar
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -663,15 +603,15 @@ export default function ConsultantProcessDetailPage() {
         )}
 
         {showCreateForm && (
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+          <div className="mt-6 pt-4 border-t border-border">
+            <h3 className="text-sm font-semibold text-ink mb-3">
               Enviar nova proposta
             </h3>
             {formError && (
-              <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
+              <Alert variant="danger" className="mb-3">
                 <AlertCircle size={16} />
                 {formError}
-              </div>
+              </Alert>
             )}
             <form
               onSubmit={handleSubmitProposal}
@@ -680,14 +620,14 @@ export default function ConsultantProcessDetailPage() {
               <div className="flex-1 flex flex-col md:flex-row gap-3">
                 <div className="relative flex-1 min-w-0">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500">R$</span>
+                    <span className="text-muted">R$</span>
                   </div>
                   <input
                     type="text"
                     value={proposedValue}
                     onChange={handleValueChange}
                     placeholder="0,00"
-                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 text-right font-medium"
+                    className="w-full pl-10 pr-4 py-2.5 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring text-right font-medium"
                     disabled={isSending}
                   />
                 </div>
@@ -696,25 +636,21 @@ export default function ConsultantProcessDetailPage() {
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Mensagem (opcional)"
-                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
+                  className="flex-1 px-4 py-2.5 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring"
                   disabled={isSending}
                 />
               </div>
-              <button
-                type="submit"
-                disabled={isSending || !proposedValue}
-                className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-slate-700 text-white font-medium rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <Button type="submit" disabled={isSending || !proposedValue}>
                 {isSending ? (
                   <Loader2 size={18} className="animate-spin" />
                 ) : (
                   <Send size={18} />
                 )}
                 Enviar proposta
-              </button>
+              </Button>
             </form>
             {processInfo && (
-              <p className="mt-2 text-xs text-gray-500">
+              <p className="mt-2 text-xs text-muted">
                 Valor mínimo aceito: {formatCurrency(processInfo.minimum_value)}
               </p>
             )}
@@ -724,11 +660,11 @@ export default function ConsultantProcessDetailPage() {
         {!showCreateForm &&
           processInfo?.status === "NEGOTIATION" &&
           !isAwaitingProduct && (
-            <div className="mt-6 p-3 bg-gray-50 border border-gray-200 rounded-lg text-center text-sm text-gray-600">
+            <div className="mt-6 p-3 bg-border-soft border border-border rounded-lg text-center text-sm text-muted">
               Aguardando resposta do especialista.
             </div>
           )}
-      </div>
+      </Card>
       )}
     </div>
   );

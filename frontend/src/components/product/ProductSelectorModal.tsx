@@ -39,7 +39,7 @@ type ModalState =
   | "error";
 
 interface ProductItem {
-  id: number;
+  id: string;
   type: SpecialityType;
   marca: string;
   modelo: string;

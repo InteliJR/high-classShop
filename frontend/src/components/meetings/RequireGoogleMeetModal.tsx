@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
-import { Video, X } from "lucide-react";
+import { Video } from "lucide-react";
 import { useAuth } from "../../store/authStateManager";
 import {
   getGoogleMeetStatus,
   getGoogleMeetAuthorizeUrl,
 } from "../../services/googleMeet.service";
+import { Dialog, DialogContent } from "../ui/dialog";
+import { Alert } from "../ui/alert";
+import Button from "../ui/button";
 
 const DISMISS_KEY = "google-meet-modal-dismissed-session";
 
@@ -57,59 +60,41 @@ export default function RequireGoogleMeetModal() {
     setOpen(false);
   };
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden">
-        <div className="bg-linear-to-br from-emerald-600 to-teal-600 p-6 text-white relative">
-          <button
-            onClick={handleDismiss}
-            className="absolute top-3 right-3 text-white/80 hover:text-white p-1 rounded-full hover:bg-white/10"
-            aria-label="Fechar"
-          >
-            <X size={20} />
-          </button>
-          <div className="flex items-center gap-3 mb-2">
-            <Video size={28} />
-            <h2 className="text-xl font-bold">Conecte a conta Google Meet</h2>
-          </div>
-          <p className="text-sm text-emerald-50">
+    <Dialog open={open} onOpenChange={(next) => { if (!next) handleDismiss(); }}>
+      <DialogContent
+        open={open}
+        title={
+          <span className="flex items-center gap-2">
+            <Video size={20} aria-hidden />
+            Conecte a conta Google Meet
+          </span>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-ink-soft">
             Para que os especialistas possam criar reuniões no Google Meet,
             conecte uma conta Google Workspace à plataforma.
           </p>
-        </div>
 
-        <div className="p-6 space-y-4">
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-ink-soft">
             Sem uma conta conectada, as reuniões não geram link do Google Meet.
             A conta precisa ser Google Workspace (contas @gmail.com comuns não
             criam reunião via API).
           </p>
 
-          {error && (
-            <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg border border-red-200">
-              {error}
-            </div>
-          )}
+          {error && <Alert variant="danger">{error}</Alert>}
 
           <div className="flex flex-col sm:flex-row gap-3 pt-2">
-            <button
-              onClick={handleConnect}
-              disabled={loading}
-              className="flex-1 px-4 py-3 bg-gray-900 text-white rounded-lg font-medium hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <Button onClick={handleConnect} disabled={loading} className="flex-1">
               {loading ? "Abrindo..." : "Conectar agora"}
-            </button>
-            <button
-              onClick={handleDismiss}
-              className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
-            >
+            </Button>
+            <Button variant="light" onClick={handleDismiss} className="flex-1">
               Lembrar mais tarde
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

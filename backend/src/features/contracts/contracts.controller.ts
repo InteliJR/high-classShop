@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ContractsService } from './contracts.service';
+import { DocuSignService } from 'src/providers/docusign/docusign.service';
 import { GenerateContractDto } from './dto/generate-contract.dto';
 import { PreviewContractDto } from './dto/preview-contract.dto';
 import {
@@ -49,7 +50,10 @@ import { RateLimit } from 'src/shared/decorators/rate-limit.decorator';
 export class ContractsController {
   private readonly logger = new Logger(ContractsController.name);
 
-  constructor(private readonly contractsService: ContractsService) {}
+  constructor(
+    private readonly contractsService: ContractsService,
+    private readonly docuSignService: DocuSignService,
+  ) {}
 
   /**
    * GET /api/contracts/prefill/:processId
@@ -107,6 +111,27 @@ export class ContractsController {
       success: true,
       message: 'Dados do contrato carregados com sucesso',
       data: prefillData,
+    };
+  }
+
+  /**
+   * GET /api/contracts/templates
+   *
+   * Lista os templates de contrato disponíveis na conta DocuSign, para o
+   * especialista escolher qual usar antes de preencher o formulário.
+   *
+   * @returns ApiResponseDto<Array<{ templateId: string; name: string }>>
+   */
+  @Get('templates')
+  @Roles(UserRole.SPECIALIST, UserRole.ADMIN)
+  async listTemplates(): Promise<
+    ApiResponseDto<Array<{ templateId: string; name: string }>>
+  > {
+    const templates = await this.docuSignService.listTemplates();
+    return {
+      success: true,
+      message: 'Templates carregados com sucesso',
+      data: templates,
     };
   }
 

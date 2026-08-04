@@ -11,6 +11,9 @@ import {
 import ProcessCard from "../../components/processes/ProcessCard";
 import CreateProcessModal from "../../components/processes/CreateProcessModal";
 import ProductSelectorModal from "../../components/product/ProductSelectorModal";
+import Button from "../../components/ui/button";
+import { Alert } from "../../components/ui/alert";
+import { PageHeader } from "../../components/patterns/PageHeader";
 import {
   getProcessesBySpecialist,
   type ProcessFilters,
@@ -47,9 +50,9 @@ export default function ProcessesPage() {
   // Validate user is logged in
   if (!user?.id) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-border-soft flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-600">Carregando...</p>
+          <p className="text-muted">Carregando...</p>
         </div>
       </div>
     );
@@ -246,71 +249,49 @@ export default function ProcessesPage() {
   const hasActiveFilters = statusFilter || searchQuery;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-3 py-3 sm:px-6 sm:py-4 lg:px-8 lg:py-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 truncate">
-                Dashboard de Processos
-              </h1>
-              <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                Gerencie seus processos de negociação
-              </p>
-            </div>
-            <div className="flex gap-2 shrink-0">
-              {/* Filter Button */}
-              <button
+    <div className="min-h-screen bg-border-soft">
+      <div className="max-w-7xl mx-auto px-3 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <PageHeader
+          title="Dashboard de Processos"
+          actions={
+            <>
+              <Button
+                type="button"
+                variant={showFilters || hasActiveFilters ? "solid" : "light"}
                 onClick={() => setShowFilters(!showFilters)}
-                className={`inline-flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 border rounded-lg font-medium transition text-xs sm:text-sm ${
-                  showFilters || hasActiveFilters
-                    ? "border-slate-700 bg-slate-700 text-white hover:bg-slate-800"
-                    : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                }`}
                 aria-label="Filter processes"
                 title="Filtrar"
               >
-                <Filter size={16} className="sm:hidden" />
-                <Filter size={18} className="hidden sm:block" />
+                <Filter size={16} />
                 <span className="hidden sm:inline">Filtrar</span>
                 {hasActiveFilters && (
-                  <span className="ml-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                  <span className="ml-1 w-2 h-2 bg-status-bad rounded-full" />
                 )}
-              </button>
-
-              {/* Create Process Button */}
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-slate-700 text-white rounded-lg font-medium hover:bg-slate-800 transition text-xs sm:text-sm whitespace-nowrap"
-              >
-                <Plus size={16} className="sm:hidden" />
-                <Plus size={18} className="hidden sm:block" />
+              </Button>
+              <Button type="button" onClick={() => setShowCreateModal(true)}>
+                <Plus size={16} />
                 <span className="hidden sm:inline">Novo Processo</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+              </Button>
+            </>
+          }
+        />
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-3 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
         {/* Filter Panel */}
         {showFilters && (
-          <div className="mb-4 sm:mb-6 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+          <div className="mb-4 sm:mb-6 p-4 bg-surface rounded-lg border border-border shadow-sm">
             <div className="flex flex-col sm:flex-row gap-4">
               {/* Search Input */}
               <div className="flex-1">
                 <label
                   htmlFor="search"
-                  className="block text-xs sm:text-sm font-medium text-gray-700 mb-1"
+                  className="block text-xs sm:text-sm font-medium text-ink-soft mb-1"
                 >
                   Pesquisar
                 </label>
                 <div className="relative">
                   <Search
                     size={18}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-subtle"
                   />
                   <input
                     type="text"
@@ -318,7 +299,7 @@ export default function ProcessesPage() {
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
                     placeholder="Nome do cliente, e-mail ou produto..."
-                    className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    className="w-full pl-10 pr-10 py-2 border border-border rounded-lg text-sm focus:ring-2 focus:ring-focus-ring focus:border-transparent"
                   />
                   {searchInput && (
                     <button
@@ -326,7 +307,7 @@ export default function ProcessesPage() {
                         setSearchInput("");
                         setSearchQuery("");
                       }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-border-soft text-ink-soft"
                     >
                       <X size={16} />
                     </button>
@@ -338,7 +319,7 @@ export default function ProcessesPage() {
               <div className="w-full sm:w-48">
                 <label
                   htmlFor="status"
-                  className="block text-xs sm:text-sm font-medium text-gray-700 mb-1"
+                  className="block text-xs sm:text-sm font-medium text-ink-soft mb-1"
                 >
                   Status
                 </label>
@@ -346,7 +327,7 @@ export default function ProcessesPage() {
                   id="status"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full py-2 px-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full py-2 px-3 border border-border rounded-lg text-sm focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 >
                   {STATUS_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -359,39 +340,40 @@ export default function ProcessesPage() {
               {/* Clear Filters Button */}
               {hasActiveFilters && (
                 <div className="flex items-end">
-                  <button
-                    onClick={handleClearFilters}
-                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition"
-                  >
+                  <Button type="button" variant="light" onClick={handleClearFilters}>
                     Limpar filtros
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
 
             {/* Active Filters Summary */}
             {hasActiveFilters && (
-              <div className="mt-3 pt-3 border-t border-gray-100 text-xs sm:text-sm text-gray-600">
+              <div className="mt-3 pt-3 border-t border-border-soft text-xs sm:text-sm text-muted">
                 Filtros ativos:{" "}
                 {statusFilter && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 rounded mr-2">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-border-soft text-ink-soft rounded mr-2">
                     {
                       STATUS_OPTIONS.find((o) => o.value === statusFilter)
                         ?.label
                     }
-                    <button onClick={() => setStatusFilter("")}>
+                    <button
+                      onClick={() => setStatusFilter("")}
+                      className="hover:bg-border-soft text-ink-soft rounded"
+                    >
                       <X size={12} />
                     </button>
                   </span>
                 )}
                 {searchQuery && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 rounded">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-border-soft text-ink-soft rounded">
                     "{searchQuery}"
                     <button
                       onClick={() => {
                         setSearchInput("");
                         setSearchQuery("");
                       }}
+                      className="hover:bg-border-soft text-ink-soft rounded"
                     >
                       <X size={12} />
                     </button>
@@ -404,17 +386,17 @@ export default function ProcessesPage() {
 
         {/* Error Alert */}
         {error && (
-          <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-xs sm:text-sm text-red-700">{error}</p>
-          </div>
+          <Alert variant="danger" className="mb-4 sm:mb-6">
+            {error}
+          </Alert>
         )}
 
         {/* Loading State */}
         {isLoading && (
           <div className="flex items-center justify-center py-8 sm:py-12">
             <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-slate-700"></div>
-              <p className="mt-3 sm:mt-4 text-sm sm:text-base text-gray-600">
+              <div className="inline-block animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-ink"></div>
+              <p className="mt-3 sm:mt-4 text-sm sm:text-base text-muted">
                 Carregando processos...
               </p>
             </div>
@@ -424,45 +406,39 @@ export default function ProcessesPage() {
         {/* Empty State */}
         {!isLoading && processes.length === 0 && (
           <div className="text-center py-8 sm:py-12">
-            <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-gray-100 rounded-full mb-3 sm:mb-4">
+            <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-border-soft rounded-full mb-3 sm:mb-4">
               {hasActiveFilters ? (
                 <>
-                  <Search size={28} className="sm:hidden text-gray-400" />
-                  <Search size={32} className="hidden sm:block text-gray-400" />
+                  <Search size={28} className="sm:hidden text-subtle" />
+                  <Search size={32} className="hidden sm:block text-subtle" />
                 </>
               ) : (
                 <>
-                  <Plus size={28} className="sm:hidden text-gray-400" />
-                  <Plus size={32} className="hidden sm:block text-gray-400" />
+                  <Plus size={28} className="sm:hidden text-subtle" />
+                  <Plus size={32} className="hidden sm:block text-subtle" />
                 </>
               )}
             </div>
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
+            <h3 className="text-base sm:text-lg font-semibold text-ink mb-2">
               {hasActiveFilters
                 ? "Nenhum processo encontrado"
                 : "Nenhum processo encontrado"}
             </h3>
-            <p className="text-xs sm:text-sm text-gray-600 mb-4 sm:mb-6">
+            <p className="text-xs sm:text-sm text-muted mb-4 sm:mb-6">
               {hasActiveFilters
                 ? "Tente ajustar os filtros para encontrar mais resultados"
                 : "Crie seu primeiro processo para começar"}
             </p>
             {hasActiveFilters ? (
-              <button
-                onClick={handleClearFilters}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition text-xs sm:text-sm"
-              >
+              <Button type="button" variant="light" onClick={handleClearFilters}>
                 <X size={18} />
                 Limpar Filtros
-              </button>
+              </Button>
             ) : (
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg font-medium hover:bg-slate-800 transition text-xs sm:text-sm"
-              >
+              <Button type="button" onClick={() => setShowCreateModal(true)}>
                 <Plus size={18} />
                 Criar Novo Processo
-              </button>
+              </Button>
             )}
           </div>
         )}
@@ -489,33 +465,33 @@ export default function ProcessesPage() {
         {/* Pagination Controls */}
         {!isLoading && processes.length > 0 && (
           <div className="mt-6 sm:mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-xs sm:text-sm text-gray-600">
+            <div className="text-xs sm:text-sm text-muted">
               Página <span className="font-semibold">{currentPage}</span> de{" "}
               <span className="font-semibold">{totalPages}</span>
             </div>
 
             <div className="flex gap-2 justify-center sm:justify-end">
-              <button
+              <Button
+                type="button"
+                variant="light"
                 onClick={handlePreviousPage}
                 disabled={!hasPreviousPage}
-                className="inline-flex items-center justify-center gap-1 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm"
                 title="Anterior"
               >
-                <ChevronLeft size={16} className="sm:hidden" />
-                <ChevronLeft size={18} className="hidden sm:block" />
+                <ChevronLeft size={16} />
                 <span className="hidden sm:inline">Anterior</span>
-              </button>
+              </Button>
 
-              <button
+              <Button
+                type="button"
+                variant="light"
                 onClick={handleNextPage}
                 disabled={!hasNextPage}
-                className="inline-flex items-center justify-center gap-1 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm"
                 title="Próximo"
               >
                 <span className="hidden sm:inline">Próximo</span>
-                <ChevronRight size={16} className="sm:hidden" />
-                <ChevronRight size={18} className="hidden sm:block" />
-              </button>
+                <ChevronRight size={16} />
+              </Button>
             </div>
           </div>
         )}

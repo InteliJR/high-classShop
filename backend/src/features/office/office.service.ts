@@ -72,13 +72,21 @@ export class OfficeService {
       this.prisma.user.count({
         where: {
           role: UserRole.CUSTOMER,
-          consultant: { company_id: companyId },
+          OR: [
+            { consultant: { company_id: companyId } },
+            { company_id: companyId },
+          ],
         },
       }),
       this.prisma.process.count({
         where: {
           status: { notIn: [ProcessStatus.COMPLETED, ProcessStatus.REJECTED] },
-          client: { consultant: { company_id: companyId } },
+          client: {
+            OR: [
+              { consultant: { company_id: companyId } },
+              { company_id: companyId },
+            ],
+          },
         },
       }),
     ]);
@@ -294,11 +302,27 @@ export class OfficeService {
     if (scope.isAdmin) {
       // ADMIN pode opcionalmente escopar por empresa (ex: aba "Clientes" na
       // tela de detalhe de escritório); sem companyId, mantém visão global.
-      if (opts.companyId) where.consultant = { company_id: opts.companyId };
+      if (opts.companyId)
+        where.AND = [
+          {
+            OR: [
+              { consultant: { company_id: opts.companyId } },
+              { company_id: opts.companyId },
+            ],
+          },
+        ];
       if (opts.consultantId) where.consultant_id = opts.consultantId;
     } else {
-      // Escopo: somente clientes ligados a consultores da MESMA Company
-      where.consultant = { company_id: scope.companyId };
+      // Escopo: clientes ligados a consultores da MESMA Company OU
+      // vinculados diretamente à Company (sem consultor)
+      where.AND = [
+        {
+          OR: [
+            { consultant: { company_id: scope.companyId } },
+            { company_id: scope.companyId },
+          ],
+        },
+      ];
       if (opts.consultantId) {
         // Garante que o consultor pedido pertence à Company antes de filtrar
         const consultant = await this.prisma.user.findFirst({
@@ -376,6 +400,15 @@ export class OfficeService {
       if (dup)
         throw new ConflictException('CNPJ já cadastrado em outro escritório');
       dto.cnpj = normalizedCnpj;
+    }
+
+    if (dto.slug) {
+      const dup = await this.prisma.company.findFirst({
+        where: { slug: dto.slug, NOT: { id: companyId } },
+      });
+      if (dup) {
+        throw new ConflictException('Este endereço de site já está em uso');
+      }
     }
 
     const before = await this.prisma.company.findUnique({

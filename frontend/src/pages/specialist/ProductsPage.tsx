@@ -1,16 +1,21 @@
 import { useState, useEffect, useContext } from "react";
 import { useNavigate } from "react-router-dom";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "../../store/authStateManager";
 import { AppContext } from "../../contexts/AppContext";
 import { getCars, deleteCar } from "../../services/cars.service";
 import { getBoats, deleteBoat } from "../../services/boats.service";
 import { getAircrafts, deleteAircraft } from "../../services/aircrafts.service";
 import type { SpecialityType } from "../../types/types";
+import Button from "../../components/ui/button";
+import { Alert } from "../../components/ui/alert";
+import { Card } from "../../components/ui/card";
+import { PageHeader } from "../../components/patterns/PageHeader";
 
 type ProductType = "cars" | "boats" | "aircrafts";
 
 interface Product {
-  id: number;
+  id: string;
   marca: string;
   modelo: string;
   ano?: number;
@@ -80,7 +85,7 @@ export default function ProductsPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!window.confirm("Tem certeza que deseja excluir este produto?")) {
       return;
     }
@@ -101,7 +106,7 @@ export default function ProductsPage() {
     }
   };
 
-  const handleEdit = (id: number) => {
+  const handleEdit = (id: string) => {
     navigate(`/specialist/products/edit/${productType}/${id}`);
   };
 
@@ -123,47 +128,46 @@ export default function ProductsPage() {
   });
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">Gestão de Produtos</h1>
-        <button
-          onClick={() => navigate("/specialist/products/new")}
-          className="px-4 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-800 transition"
-        >
-          + Novo Produto
-        </button>
-      </div>
+    <div className="w-full">
+      <PageHeader
+        title="Gestão de Produtos"
+        actions={
+          <Button type="button" onClick={() => navigate("/specialist/products/new")}>
+            <Plus size={16} />
+            Novo Produto
+          </Button>
+        }
+      />
 
       {/* Filtro de Tipo (apenas se não tiver especialidade definida) */}
       {!userSpeciality && (
-        <div className="flex gap-4">
+        <div className="flex gap-4 mb-4">
           <button
             onClick={() => setProductType("cars")}
-            className={`px-6 py-2 rounded-md transition ${
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
               productType === "cars"
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                ? "border-ink text-ink"
+                : "border-transparent text-muted hover:text-ink-soft"
             }`}
           >
             Carros
           </button>
           <button
             onClick={() => setProductType("boats")}
-            className={`px-6 py-2 rounded-md transition ${
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
               productType === "boats"
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                ? "border-ink text-ink"
+                : "border-transparent text-muted hover:text-ink-soft"
             }`}
           >
             Lanchas
           </button>
           <button
             onClick={() => setProductType("aircrafts")}
-            className={`px-6 py-2 rounded-md transition ${
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
               productType === "aircrafts"
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                ? "border-ink text-ink"
+                : "border-transparent text-muted hover:text-ink-soft"
             }`}
           >
             Aeronaves
@@ -173,54 +177,54 @@ export default function ProductsPage() {
 
       {/* Mostra a especialidade do usuário (se tiver) */}
       {userSpeciality && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800">
+        <Alert variant="info" className="mb-4">
+          <p>
             <span className="font-semibold">Sua especialidade:</span>{" "}
             {getProductTypeLabel()}
           </p>
-        </div>
+        </Alert>
       )}
 
       {/* Lista de Produtos */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-semibold text-text-primary mb-4">{getProductTypeLabel()}</h2>
+      <Card>
+        <h2 className="text-h2 font-semibold text-ink mb-4">{getProductTypeLabel()}</h2>
 
         {loading ? (
-          <p className="text-center text-gray-500 py-8">Carregando...</p>
+          <p className="text-center text-muted py-8">Carregando...</p>
         ) : filteredProducts.length === 0 ? (
-          <p className="text-center text-gray-500 py-8">
+          <p className="text-center text-muted py-8">
             {searchTerm ? "Nenhum produto encontrado com esse termo de pesquisa" : "Nenhum produto cadastrado"}
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="border-b">
+              <thead className="border-b border-border">
                 <tr className="text-left">
-                  <th className="pb-3 text-sm font-medium text-gray-600">Foto</th>
-                  <th className="pb-3 text-sm font-medium text-gray-600">Marca</th>
-                  <th className="pb-3 text-sm font-medium text-gray-600">Modelo</th>
-                  <th className="pb-3 text-sm font-medium text-gray-600">Ano</th>
-                  <th className="pb-3 text-sm font-medium text-gray-600">Valor</th>
-                  <th className="pb-3 text-sm font-medium text-gray-600">Estado</th>
-                  <th className="pb-3 text-sm font-medium text-gray-600 text-right">Ações</th>
+                  <th className="pb-3 text-sm font-medium text-muted">Foto</th>
+                  <th className="pb-3 text-sm font-medium text-muted">Marca</th>
+                  <th className="pb-3 text-sm font-medium text-muted">Modelo</th>
+                  <th className="pb-3 text-sm font-medium text-muted">Ano</th>
+                  <th className="pb-3 text-sm font-medium text-muted">Valor</th>
+                  <th className="pb-3 text-sm font-medium text-muted">Estado</th>
+                  <th className="pb-3 text-sm font-medium text-muted text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredProducts.map((product) => (
-                  <tr key={product.id} className="border-b hover:bg-gray-50">
+                  <tr key={product.id} className="border-b border-border-soft hover:bg-border-soft/50">
                     <td className="py-3 pr-3">
                       {product.imageUrl ? (
                         <img
                           src={product.imageUrl}
                           alt={`${product.marca} ${product.modelo}`}
-                          className="w-16 h-16 object-cover rounded-md border border-gray-200"
+                          className="w-16 h-16 object-cover rounded-md border border-border"
                           loading="lazy"
                           onError={(e) => {
                             (e.currentTarget as HTMLImageElement).style.display = "none";
                           }}
                         />
                       ) : (
-                        <div className="w-16 h-16 rounded-md border border-gray-200 bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
+                        <div className="w-16 h-16 rounded-md border border-border bg-border-soft flex items-center justify-center text-subtle text-xs">
                           sem foto
                         </div>
                       )}
@@ -231,44 +235,20 @@ export default function ProductsPage() {
                     <td className="py-3">R$ {product.valor?.toLocaleString("pt-BR") || "0"}</td>
                     <td className="py-3 capitalize">{product.estado || "-"}</td>
                     <td className="py-3">
-                      <div className="flex gap-2 justify-end">
+                      <div className="flex gap-1 justify-end">
                         <button
                           onClick={() => handleEdit(product.id)}
-                          className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                          className="p-1.5 rounded hover:bg-border-soft text-ink-soft transition"
                           title="Editar"
                         >
-                          <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                            />
-                          </svg>
+                          <Pencil size={18} />
                         </button>
                         <button
                           onClick={() => handleDelete(product.id)}
-                          className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                          className="p-1.5 rounded hover:bg-status-bad-wash text-status-bad transition"
                           title="Excluir"
                         >
-                          <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
+                          <Trash2 size={18} />
                         </button>
                       </div>
                     </td>
@@ -278,8 +258,7 @@ export default function ProductsPage() {
             </table>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
-

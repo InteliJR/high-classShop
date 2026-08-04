@@ -33,7 +33,7 @@ import { CreateAircraftDto } from '../aircrafts/dto/create-aircraft.dto';
 import { DriveImportService } from '../drive-import/drive-import.service';
 
 type UpsertResult = {
-  productId: number;
+  productId: string;
   action: 'CREATED' | 'UPDATED';
   reactivated?: boolean;
 };
@@ -47,6 +47,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   private readonly carColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
+    { name: 'identificador', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
     { name: 'estado', required: true, type: 'string' },
     { name: 'ano', required: true, type: 'number' },
@@ -62,6 +63,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   private readonly boatColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
+    { name: 'identificador', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
     { name: 'estado', required: true, type: 'string' },
     { name: 'ano', required: true, type: 'number' },
@@ -80,6 +82,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   private readonly aircraftColumns: XlsxColumnDefinition[] = [
     { name: 'marca', required: true, type: 'string' },
     { name: 'modelo', required: true, type: 'string' },
+    { name: 'identificador', required: true, type: 'string' },
     { name: 'valor', required: true, type: 'number' },
     { name: 'estado', required: true, type: 'string' },
     { name: 'ano', required: true, type: 'number' },
@@ -230,7 +233,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
     const response = this.buildImportResponse(job.items, {
       deactivatedIds: Array.isArray(job.deactivated_product_ids)
-        ? (job.deactivated_product_ids as number[])
+      ? (job.deactivated_product_ids as string[])
         : [],
       reactivatedCount: job.reactivated_items,
     });
@@ -338,7 +341,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     });
 
     try {
-      const seenProductIds = new Set<number>();
+    const seenProductIds = new Set<string>();
       let reactivatedCount = 0;
 
       for (const item of job.items) {
@@ -447,7 +450,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
   private async refreshJobCounters(
     jobId: string,
-    syncSummary?: { deactivatedIds: number[]; reactivatedCount: number },
+    syncSummary?: { deactivatedIds: string[]; reactivatedCount: number },
   ) {
     const items = await this.prisma.productImportJobItem.findMany({
       where: { job_id: jobId },
@@ -507,9 +510,9 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   private async deactivateMissingProducts(
     productType: ProductType,
     specialistId: string,
-    seenProductIds: Set<number>,
+    seenProductIds: Set<string>,
     jobId: string,
-  ): Promise<number[]> {
+  ): Promise<string[]> {
     const activeProductIds = await this.getActiveProductIdsByType(
       productType,
       specialistId,
@@ -550,7 +553,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   private async getActiveProductIdsByType(
     productType: ProductType,
     specialistId: string,
-  ): Promise<number[]> {
+  ): Promise<string[]> {
     if (productType === ProductType.CAR) {
       const cars = await this.prisma.car.findMany({
         where: { specialist_id: specialistId, is_active: true },
@@ -579,10 +582,17 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     row: ImportParsedRow,
     specialistId: string,
   ): Promise<UpsertResult> {
+    if (!row.identificador || !row.identificador.trim()) {
+      throw new BadRequestException(
+        'identificador é obrigatório e não pode ser vazio',
+      );
+    }
+
     if (productType === ProductType.CAR) {
       const data = {
         marca: row.marca,
         modelo: row.modelo,
+        identificador: row.identificador,
         valor: Number(row.valor),
         estado: row.estado,
         ano: Number(row.ano),
@@ -599,9 +609,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
       const existing = await this.prisma.car.findFirst({
         where: {
-          marca: row.marca?.trim(),
-          modelo: row.modelo?.trim(),
           specialist_id: specialistId,
+          identificador: row.identificador?.trim(),
         },
       });
 
@@ -629,6 +638,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       const data = {
         marca: row.marca,
         modelo: row.modelo,
+        identificador: row.identificador,
         valor: Number(row.valor),
         estado: row.estado,
         ano: Number(row.ano),
@@ -648,9 +658,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
       const existing = await this.prisma.boat.findFirst({
         where: {
-          marca: row.marca?.trim(),
-          modelo: row.modelo?.trim(),
           specialist_id: specialistId,
+          identificador: row.identificador?.trim(),
         },
       });
 
@@ -677,6 +686,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     const data = {
       marca: row.marca,
       modelo: row.modelo,
+      identificador: row.identificador,
       valor: Number(row.valor),
       estado: row.estado,
       ano: Number(row.ano),
@@ -691,9 +701,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
     const existing = await this.prisma.aircraft.findFirst({
       where: {
-        marca: row.marca?.trim(),
-        modelo: row.modelo?.trim(),
         specialist_id: specialistId,
+        identificador: row.identificador?.trim(),
       },
     });
 
@@ -746,14 +755,14 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       status: ProductImportItemStatus;
       payload: unknown;
       action: string | null;
-      product_id: number | null;
+      product_id: string | null;
       error_message: string | null;
       warnings: unknown;
     }>,
-    syncSummary?: { deactivatedIds: number[]; reactivatedCount: number },
+    syncSummary?: { deactivatedIds: string[]; reactivatedCount: number },
   ): ImportResponseDto {
-    const insertedIds: number[] = [];
-    const updatedIds: number[] = [];
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
     const warningRows: ImportErrorRow[] = [];
 

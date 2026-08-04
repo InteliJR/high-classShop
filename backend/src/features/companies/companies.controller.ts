@@ -14,6 +14,7 @@ import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { Public } from 'src/shared/decorators/public.decorator';
 import { UserRole } from '@prisma/client';
 
 /**
@@ -55,6 +56,13 @@ export class CompaniesController {
       page ? Number(page) : 1,
       perPage ? Number(perPage) : 5,
     );
+  }
+
+  // Rota pública: branding do escritório pelo slug (whitelabel /i/:slug, sem auth).
+  @Public()
+  @Get('by-slug/:slug')
+  findBySlug(@Param('slug') slug: string) {
+    return this.companiesService.findBySlug(slug);
   }
 
   // Rota para buscar um único escritório pelo seu ID.

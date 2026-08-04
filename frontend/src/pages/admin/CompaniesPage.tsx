@@ -12,9 +12,9 @@ import {
 import { adminInviteOffice, officeService, type OfficeClient } from "../../services/office";
 import type { PaginationMeta } from "../../types/types";
 import Button from "../../components/ui/button";
-import EditIcon from "../../assets/icons/edit.svg";
-import TrashIcon from "../../assets/icons/trash.svg";
-import Modal from "../../components/ui/Modal";
+import { Alert } from "../../components/ui/alert";
+import { Dialog, DialogContent } from "../../components/ui/dialog";
+import { PageHeader } from "../../components/patterns/PageHeader";
 import NewCompanyForm from "./NewCompanyForm";
 import { AppContext } from "../../contexts/AppContext";
 import { resolveCompanyLogo } from "../../utils/branding";
@@ -28,6 +28,8 @@ import {
   Link,
   Copy,
   Check,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 
 // Estado de um painel de consultores expandido por empresa
@@ -288,8 +290,8 @@ export default function CompaniesPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-3 border-gray-200 border-t-primary rounded-full animate-spin" />
-          <p className="text-gray-600">Carregando empresas...</p>
+          <div className="w-12 h-12 border-3 border-border-soft border-t-primary rounded-full animate-spin" />
+          <p className="text-muted">Carregando empresas...</p>
         </div>
       </div>
     );
@@ -297,23 +299,25 @@ export default function CompaniesPage() {
 
   // Exibe uma mensagem de erro se a busca de dados falhar.
   if (error) {
-    return <p className="text-red-500">{error}</p>;
+    return <Alert variant="danger">{error}</Alert>;
   }
 
 
   return (
     <div className="text-text-main w-full">
       {/* --- CABEÇALHO DA PÁGINA --- */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="h1-style">Gestão de Escritórios</h1>
-        <Button type="button" onClick={() => setIsNewCompanyModalOpen(true)}>
-          + Novo Escritório
-        </Button>
-      </div>
+      <PageHeader
+        title="Gestão de Escritórios"
+        actions={
+          <Button type="button" onClick={() => setIsNewCompanyModalOpen(true)}>
+            + Novo Escritório
+          </Button>
+        }
+      />
 
       {/* --- TABELA DE ESCRITÓRIOS --- */}
       <div className="p-6 rounded-lg shadow bg-brand-container bg-bg-container overflow-x-auto">
-        <h2 className="h2-style">Escritórios</h2>
+        <h2 className="text-h2 font-semibold text-ink">Escritórios</h2>
         <p className="text-base mb-8 mt-2">
           Lista completa de empresas parceiras
         </p>
@@ -329,7 +333,7 @@ export default function CompaniesPage() {
         {/* Corpo da Lista */}
         <div className="mt-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto p-2">
           {filteredCompanies.length === 0 ? (
-            <p className="text-center text-gray-500 py-8">
+            <p className="text-center text-muted py-8">
               {searchTerm
                 ? "Nenhuma empresa encontrada com esse termo de busca."
                 : "Nenhuma empresa cadastrada."}
@@ -344,7 +348,7 @@ export default function CompaniesPage() {
               return (
                 <div
                   key={company.id}
-                  className="rounded-lg shadow-sm bg-white overflow-hidden"
+                  className="rounded-lg shadow-sm bg-surface overflow-hidden"
                 >
                   {/* Linha principal da empresa */}
                   <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_auto] gap-3 md:gap-5 items-start md:items-center bg-brand-card p-4 md:p-6">
@@ -352,7 +356,7 @@ export default function CompaniesPage() {
                       {/* Botão expand/collapse */}
                       <button
                         onClick={() => toggleExpand(company.id)}
-                        className="p-1 rounded hover:bg-gray-100 transition-colors"
+                        className="p-1 rounded hover:bg-border-soft transition-colors"
                         title={
                           isExpanded
                             ? "Recolher consultores"
@@ -360,9 +364,9 @@ export default function CompaniesPage() {
                         }
                       >
                         {isExpanded ? (
-                          <ChevronUp className="w-5 h-5 text-gray-500" />
+                          <ChevronUp className="w-5 h-5 text-muted" />
                         ) : (
-                          <ChevronDown className="w-5 h-5 text-gray-500" />
+                          <ChevronDown className="w-5 h-5 text-muted" />
                         )}
                       </button>
                       {(() => {
@@ -374,14 +378,14 @@ export default function CompaniesPage() {
                             className="h-8 w-24 object-contain"
                           />
                         ) : (
-                          <div className="h-8 w-24 flex items-center justify-center bg-gray-200 rounded text-xs text-gray-500">
+                          <div className="h-8 w-24 flex items-center justify-center bg-border-soft rounded text-xs text-muted">
                             Sem Logo
                           </div>
                         );
                       })()}
                       <div>
                         <span className="font-medium">{company.name}</span>
-                        <span className="block text-xs text-gray-400">
+                        <span className="block text-xs text-subtle">
                           {company.cnpj}
                         </span>
                       </div>
@@ -390,11 +394,11 @@ export default function CompaniesPage() {
                     {/* % Escritório (fatia do restante) */}
                     <div>
                       {company.commission_rate != null ? (
-                        <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
+                        <span className="inline-flex items-center gap-1 text-sm font-medium text-status-ok bg-status-ok-wash px-2.5 py-1 rounded-full">
                           {company.commission_rate}%
                         </span>
                       ) : (
-                        <span className="text-gray-400 text-sm">
+                        <span className="text-subtle text-sm">
                           Não definida
                         </span>
                       )}
@@ -404,7 +408,7 @@ export default function CompaniesPage() {
                     <div>
                       <button
                         onClick={() => toggleExpand(company.id)}
-                        className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                        className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors"
                       >
                         <Users className="w-4 h-4" />
                         <span className="font-medium">
@@ -414,34 +418,34 @@ export default function CompaniesPage() {
                     </div>
 
                     {/* Ações */}
-                    <div className="flex justify-end items-center gap-4 text-gray-400">
+                    <div className="flex justify-end items-center gap-4 text-subtle">
                       <button
                         title="Convidar gerente do escritório (OFFICE)"
                         onClick={() => openInviteModal(company, "OFFICE")}
-                        className="text-xs font-medium bg-gray-800 text-white px-2 py-1 rounded hover:bg-black"
+                        className="text-xs font-medium bg-action text-white px-2 py-1 rounded hover:bg-ink"
                       >
                         + Gerente
                       </button>
-                      <button onClick={() => setCompanyToEdit(company)}>
-                        <img
-                          src={EditIcon}
-                          alt="Editar"
-                          className="h-6 w-6 cursor-pointer hover:text-gray-600"
-                        />
+                      <button
+                        onClick={() => setCompanyToEdit(company)}
+                        className="p-1.5 rounded hover:bg-border-soft text-ink-soft"
+                        title="Editar"
+                      >
+                        <Pencil size={18} />
                       </button>
-                      <button onClick={() => setCompanyToDelete(company)}>
-                        <img
-                          src={TrashIcon}
-                          alt="Deletar"
-                          className="h-5 w-5 cursor-pointer hover:text-gray-600"
-                        />
+                      <button
+                        onClick={() => setCompanyToDelete(company)}
+                        className="p-1.5 rounded hover:bg-status-bad-wash text-status-bad"
+                        title="Deletar"
+                      >
+                        <Trash2 size={18} />
                       </button>
                     </div>
                   </div>
 
                   {/* Painel expandido: consultores / clientes */}
                   {isExpanded && (
-                    <div className="border-t border-gray-100 bg-gray-50 px-6 py-4">
+                    <div className="border-t border-border-soft bg-border-soft px-6 py-4">
                       {/* Header do painel: abas + botão convidar */}
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-4">
@@ -449,8 +453,8 @@ export default function CompaniesPage() {
                             onClick={() => switchPanelTab(company.id, "consultants")}
                             className={`text-xs font-semibold uppercase tracking-wider pb-1 border-b-2 -mb-px ${
                               activeTab === "consultants"
-                                ? "border-slate-700 text-gray-900"
-                                : "border-transparent text-gray-400 hover:text-gray-600"
+                                ? "border-ink text-ink"
+                                : "border-transparent text-muted hover:text-ink-soft"
                             }`}
                           >
                             Consultores
@@ -459,8 +463,8 @@ export default function CompaniesPage() {
                             onClick={() => switchPanelTab(company.id, "clients")}
                             className={`text-xs font-semibold uppercase tracking-wider pb-1 border-b-2 -mb-px ${
                               activeTab === "clients"
-                                ? "border-slate-700 text-gray-900"
-                                : "border-transparent text-gray-400 hover:text-gray-600"
+                                ? "border-ink text-ink"
+                                : "border-transparent text-muted hover:text-ink-soft"
                             }`}
                           >
                             Clientes
@@ -469,7 +473,7 @@ export default function CompaniesPage() {
                         {activeTab === "consultants" && (
                           <button
                             onClick={() => openInviteModal(company)}
-                            className="inline-flex items-center gap-1.5 text-xs font-medium bg-black text-white px-3 py-1.5 rounded hover:bg-gray-800 transition-colors"
+                            className="inline-flex items-center gap-1.5 text-xs font-medium bg-action text-white px-3 py-1.5 rounded hover:bg-ink transition-colors"
                           >
                             <Link className="w-3.5 h-3.5" />
                             Convidar Consultor
@@ -479,21 +483,21 @@ export default function CompaniesPage() {
 
                       {activeTab === "clients" ? (
                         clientsState?.loading ? (
-                          <div className="flex items-center justify-center py-6 gap-2 text-gray-500">
+                          <div className="flex items-center justify-center py-6 gap-2 text-muted">
                             <Loader2 className="w-5 h-5 animate-spin" />
                             <span className="text-sm">Carregando clientes...</span>
                           </div>
                         ) : clientsState?.error ? (
-                          <p className="text-sm text-red-500 py-4 text-center">
+                          <p className="text-sm text-status-bad py-4 text-center">
                             {clientsState.error}
                           </p>
                         ) : !clientsState || clientsState.clients.length === 0 ? (
-                          <p className="text-sm text-gray-500 py-4 text-center">
+                          <p className="text-sm text-muted py-4 text-center">
                             Nenhum cliente ligado a consultores deste escritório.
                           </p>
                         ) : (
                           <>
-                            <div className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            <div className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wider">
                               <div>Cliente</div>
                               <div>E-mail</div>
                               <div>Consultor</div>
@@ -503,20 +507,20 @@ export default function CompaniesPage() {
                               {clientsState.clients.map((client) => (
                                 <div
                                   key={client.id}
-                                  className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 items-center px-3 py-3 bg-white rounded-lg border border-gray-100"
+                                  className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 items-center px-3 py-3 bg-surface rounded-lg border border-border-soft"
                                 >
-                                  <div className="text-sm font-medium text-gray-900">
+                                  <div className="text-sm font-medium text-ink">
                                     {client.name} {client.surname}
                                   </div>
-                                  <div className="text-sm text-gray-600 truncate">
+                                  <div className="text-sm text-muted truncate">
                                     {client.email}
                                   </div>
-                                  <div className="text-sm text-gray-700">
+                                  <div className="text-sm text-ink-soft">
                                     {client.consultant
                                       ? `${client.consultant.name} ${client.consultant.surname}`
                                       : "—"}
                                   </div>
-                                  <div className="text-xs text-gray-400">
+                                  <div className="text-xs text-subtle">
                                     {client.created_at
                                       ? new Date(client.created_at).toLocaleDateString("pt-BR")
                                       : "—"}
@@ -530,22 +534,22 @@ export default function CompaniesPage() {
                         <>
                       {expandedState.loading &&
                       expandedState.consultants.length === 0 ? (
-                        <div className="flex items-center justify-center py-6 gap-2 text-gray-500">
+                        <div className="flex items-center justify-center py-6 gap-2 text-muted">
                           <Loader2 className="w-5 h-5 animate-spin" />
                           <span className="text-sm">Carregando consultores...</span>
                         </div>
                       ) : expandedState.error ? (
-                        <p className="text-sm text-red-500 py-4 text-center">
+                        <p className="text-sm text-status-bad py-4 text-center">
                           {expandedState.error}
                         </p>
                       ) : expandedState.consultants.length === 0 ? (
-                        <p className="text-sm text-gray-500 py-4 text-center">
+                        <p className="text-sm text-muted py-4 text-center">
                           Nenhum consultor associado a este escritório.
                         </p>
                       ) : (
                         <>
                           {/* Cabeçalho da sub-tabela */}
-                          <div className="grid grid-cols-[2fr_2fr_1fr_1fr] gap-4 px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <div className="grid grid-cols-[2fr_2fr_1fr_1fr] gap-4 px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wider">
                             <div>Nome</div>
                             <div>E-mail</div>
                             <div>Clientes</div>
@@ -557,25 +561,25 @@ export default function CompaniesPage() {
                             {expandedState.consultants.map((consultant) => (
                               <div
                                 key={consultant.id}
-                                className="grid grid-cols-[2fr_2fr_1fr_1fr] gap-4 items-center px-3 py-3 bg-white rounded-lg border border-gray-100"
+                                className="grid grid-cols-[2fr_2fr_1fr_1fr] gap-4 items-center px-3 py-3 bg-surface rounded-lg border border-border-soft"
                               >
                                 <div>
-                                  <span className="text-sm font-medium text-gray-900">
+                                  <span className="text-sm font-medium text-ink">
                                     {consultant.name} {consultant.surname}
                                   </span>
-                                  <span className="block text-xs text-gray-400">
+                                  <span className="block text-xs text-subtle">
                                     Consultor
                                   </span>
                                 </div>
-                                <div className="text-sm text-gray-600 truncate">
+                                <div className="text-sm text-muted truncate">
                                   {consultant.email}
                                 </div>
                                 <div>
-                                  <span className="text-sm text-gray-700 font-medium">
+                                  <span className="text-sm text-ink-soft font-medium">
                                     {consultant.clients_count ?? 0}
                                   </span>
                                 </div>
-                                <div className="text-xs text-gray-400">
+                                <div className="text-xs text-subtle">
                                   {consultant.created_at
                                     ? new Date(consultant.created_at).toLocaleDateString("pt-BR")
                                     : "—"}
@@ -586,8 +590,8 @@ export default function CompaniesPage() {
 
                           {/* Paginação dos consultores */}
                           {expandedState.pagination.total_pages > 1 && (
-                            <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-200">
-                              <span className="text-xs text-gray-500">
+                            <div className="flex items-center justify-between mt-4 pt-3 border-t border-border">
+                              <span className="text-xs text-muted">
                                 Página {expandedState.pagination.current_page} de{" "}
                                 {expandedState.pagination.total_pages} (
                                 {expandedState.pagination.total}{" "}
@@ -605,7 +609,7 @@ export default function CompaniesPage() {
                                     !expandedState.pagination.has_prev ||
                                     expandedState.loading
                                   }
-                                  className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                  className="p-1.5 rounded hover:bg-border-soft disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                                 >
                                   <ChevronLeft className="w-4 h-4" />
                                 </button>
@@ -620,7 +624,7 @@ export default function CompaniesPage() {
                                     !expandedState.pagination.has_next ||
                                     expandedState.loading
                                   }
-                                  className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                  className="p-1.5 rounded hover:bg-border-soft disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                                 >
                                   <ChevronRight className="w-4 h-4" />
                                 </button>
@@ -643,116 +647,125 @@ export default function CompaniesPage() {
       {/* --- MODAIS --- */}
 
       {/* Modal para criar novo escritório ou editar existente */}
-      <Modal
-        isOpen={isNewCompanyModalOpen || !!companyToEdit}
-        onClose={() => {
-          setIsNewCompanyModalOpen(false);
-          setCompanyToEdit(null);
+      <Dialog
+        open={isNewCompanyModalOpen || !!companyToEdit}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsNewCompanyModalOpen(false);
+            setCompanyToEdit(null);
+          }
         }}
       >
-        <NewCompanyForm
-          onSuccess={handleFormSuccess}
-          companyToEdit={companyToEdit}
-        />
-      </Modal>
+        <DialogContent
+          open={isNewCompanyModalOpen || !!companyToEdit}
+          title={companyToEdit ? "Editar Escritório" : "Novo Escritório"}
+          hideTitle
+        >
+          <NewCompanyForm
+            onSuccess={handleFormSuccess}
+            companyToEdit={companyToEdit}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* --- NOVO MODAL PARA CONFIRMAÇÃO DE EXCLUSÃO --- */}
-      <Modal
-        isOpen={!!companyToDelete}
-        onClose={() => setCompanyToDelete(null)}
-      >
-        <div className="text-center">
-          <h2 className="h2-style mb-4">Confirmar Exclusão</h2>
-          <p className="text-text-secondary mb-8">
-            Tem a certeza que deseja apagar o escritório{" "}
-            <span className="font-bold">{companyToDelete?.name}</span>? Esta
-            ação não pode ser desfeita.
-          </p>
-          <div className="flex justify-center gap-4">
-            <Button onClick={() => setCompanyToDelete(null)}>Cancelar</Button>
-            <Button onClick={handleConfirmDelete}>Confirmar Exclusão</Button>
+      <Dialog open={!!companyToDelete} onOpenChange={(open) => !open && setCompanyToDelete(null)}>
+        <DialogContent open={!!companyToDelete} title="Confirmar Exclusão" hideTitle>
+          <div className="text-center">
+            <h2 className="text-h2 font-semibold text-ink mb-4">Confirmar Exclusão</h2>
+            <p className="text-text-secondary mb-8">
+              Tem a certeza que deseja apagar o escritório{" "}
+              <span className="font-bold">{companyToDelete?.name}</span>? Esta
+              ação não pode ser desfeita.
+            </p>
+            <div className="flex justify-center gap-4">
+              <Button variant="light" onClick={() => setCompanyToDelete(null)}>Cancelar</Button>
+              <Button variant="danger" onClick={handleConfirmDelete}>Confirmar Exclusão</Button>
+            </div>
           </div>
-        </div>
-      </Modal>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de convite de consultor / gerente */}
-      <Modal isOpen={!!inviteState} onClose={() => setInviteState(null)}>
-        {inviteState && (
-          <div className="space-y-4">
-            <h2 className="h2-style">
-              {inviteState.role === "OFFICE" ? "Convidar Gerente" : "Convidar Consultor"}
-            </h2>
-            <p className="text-sm text-gray-500">
-              Escritório: <strong>{inviteState.companyName}</strong>
-            </p>
+      <Dialog open={!!inviteState} onOpenChange={(open) => !open && setInviteState(null)}>
+        <DialogContent open={!!inviteState} title="Convidar" hideTitle>
+          {inviteState && (
+            <div className="space-y-4">
+              <h2 className="text-h2 font-semibold text-ink">
+                {inviteState.role === "OFFICE" ? "Convidar Gerente" : "Convidar Consultor"}
+              </h2>
+              <p className="text-sm text-muted">
+                Escritório: <strong>{inviteState.companyName}</strong>
+              </p>
 
-            {inviteState.inviteLink ? (
-              <div className="space-y-3">
-                <p className="text-sm text-green-700 font-medium">
-                  Link de convite gerado! Envie para o {inviteState.role === "OFFICE" ? "gerente" : "consultor"}:
-                </p>
-                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
-                  <span className="text-xs text-gray-700 truncate flex-1 font-mono">
-                    {inviteState.inviteLink}
-                  </span>
-                  <button
-                    onClick={handleCopyLink}
-                    className="shrink-0 p-1 rounded hover:bg-gray-200 transition-colors"
-                    title="Copiar link"
-                  >
-                    {inviteState.copied
-                      ? <Check className="w-4 h-4 text-green-600" />
-                      : <Copy className="w-4 h-4 text-gray-500" />}
-                  </button>
+              {inviteState.inviteLink ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-status-ok font-medium">
+                    Link de convite gerado! Envie para o {inviteState.role === "OFFICE" ? "gerente" : "consultor"}:
+                  </p>
+                  <div className="flex items-center gap-2 bg-border-soft border border-border rounded-md px-3 py-2">
+                    <span className="text-xs text-ink-soft truncate flex-1 font-mono">
+                      {inviteState.inviteLink}
+                    </span>
+                    <button
+                      onClick={handleCopyLink}
+                      className="shrink-0 p-1 rounded hover:bg-border-soft transition-colors"
+                      title="Copiar link"
+                    >
+                      {inviteState.copied
+                        ? <Check className="w-4 h-4 text-status-ok" />
+                        : <Copy className="w-4 h-4 text-muted" />}
+                    </button>
+                  </div>
+                  <p className="text-xs text-subtle">
+                    O link expira em 7 dias. Um e-mail também foi enviado automaticamente.
+                  </p>
+                  <div className="flex justify-end pt-2">
+                    <Button type="button" variant="light" onClick={() => setInviteState(null)}>
+                      Fechar
+                    </Button>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-400">
-                  O link expira em 7 dias. Um e-mail também foi enviado automaticamente.
-                </p>
-                <div className="flex justify-end pt-2">
-                  <Button type="button" onClick={() => setInviteState(null)}>
-                    Fechar
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    E-mail do {inviteState.role === "OFFICE" ? "gerente" : "consultor"}
-                  </label>
-                  <input
-                    type="email"
-                    value={inviteState.email}
-                    onChange={(e) =>
-                      setInviteState((prev) => prev ? { ...prev, email: e.target.value } : null)
-                    }
-                    placeholder={inviteState.role === "OFFICE" ? "gerente@exemplo.com" : "consultor@exemplo.com"}
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md"
-                    autoFocus
-                  />
-                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-ink-soft mb-1">
+                      E-mail do {inviteState.role === "OFFICE" ? "gerente" : "consultor"}
+                    </label>
+                    <input
+                      type="email"
+                      value={inviteState.email}
+                      onChange={(e) =>
+                        setInviteState((prev) => prev ? { ...prev, email: e.target.value } : null)
+                      }
+                      placeholder={inviteState.role === "OFFICE" ? "gerente@exemplo.com" : "consultor@exemplo.com"}
+                      className="block w-full px-3 py-2 border border-border rounded-md"
+                      autoFocus
+                    />
+                  </div>
 
-                {inviteState.error && (
-                  <p className="text-sm text-red-500">{inviteState.error}</p>
-                )}
+                  {inviteState.error && (
+                    <p className="text-sm text-status-bad">{inviteState.error}</p>
+                  )}
 
-                <div className="flex justify-end gap-3 pt-2">
-                  <Button type="button" onClick={() => setInviteState(null)}>
-                    Cancelar
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={handleSendInvite}
-                    disabled={inviteState.isLoading}
-                  >
-                    {inviteState.isLoading ? "Gerando..." : "Gerar Convite"}
-                  </Button>
+                  <div className="flex justify-end gap-3 pt-2">
+                    <Button type="button" variant="light" onClick={() => setInviteState(null)}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handleSendInvite}
+                      disabled={inviteState.isLoading}
+                    >
+                      {inviteState.isLoading ? "Gerando..." : "Gerar Convite"}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

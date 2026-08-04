@@ -13,6 +13,7 @@ import {
   Settings,
   Percent,
   Database,
+  Calculator,
 } from "lucide-react";
 import { useContext } from "react";
 import { AppContext } from "../contexts/AppContext";
@@ -140,9 +141,19 @@ export default function Sidebar() {
             icon: <UserCog size={20} />,
           },
           {
+            to: "/office/consultants",
+            label: "Consultores",
+            icon: <Users size={20} />,
+          },
+          {
             to: "/admin/commissions",
             label: "Comissões",
             icon: <Percent size={20} />,
+          },
+          {
+            to: "/admin/calculator",
+            label: "Calculadora",
+            icon: <Calculator size={20} />,
           },
           {
             to: "/admin/database",
@@ -186,6 +197,7 @@ export default function Sidebar() {
         );
         break;
     }
+
   }
 
   return (

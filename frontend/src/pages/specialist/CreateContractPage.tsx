@@ -1,23 +1,35 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { AlertCircle, CheckCircle, Loader, FileText, Eye } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle,
+  Loader,
+  FileText,
+  Eye,
+  ChevronDown,
+  Check,
+} from "lucide-react";
 import { useIsMobile } from "../../hooks/use-is-mobile";
 import {
   prefillContract,
   previewContract,
   sendContractAfterPreview,
   cancelContractPreview,
+  listContractTemplates,
   type GenerateContractData,
   type PrefillContractResponse,
   type PreviewContractData,
   type PreviewContractResponse,
+  type ContractTemplate,
   applyCpfMask,
   applyCnpjMask,
   applyCepMask,
   formatBRL,
 } from "../../services/contracts.service";
 import DocuSignPreviewModal from "../../components/contracts/DocuSignPreviewModal";
+import Button from "../../components/ui/button";
+import { Alert } from "../../components/ui/alert";
 
 interface ContractFormData {
   // Vendedor
@@ -185,6 +197,11 @@ export default function CreateContractPage() {
     useState<PreviewContractData | null>(null);
   const [isSendingAfterPreview, setIsSendingAfterPreview] = useState(false);
 
+  const [templates, setTemplates] = useState<ContractTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [isTemplateDropdownOpen, setIsTemplateDropdownOpen] = useState(false);
+  const templateDropdownRef = useRef<HTMLDivElement>(null);
+
   const vehiclePrice = watch("vehicle_price");
   const totalCommissionRate = watch("total_commission_rate");
 
@@ -338,11 +355,56 @@ export default function CreateContractPage() {
     }
   }, [processId, setValue]);
 
+  // Carregar templates disponíveis + auto-seleção pelo tipo do produto
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const list = await listContractTemplates();
+        setTemplates(list);
+        // auto-seleção pelo tipo do produto (casa por nome do template)
+        const key =
+          prefillData?.product_type === "CAR"
+            ? "carro"
+            : prefillData?.product_type === "BOAT"
+              ? "embarca"
+              : prefillData?.product_type === "AIRCRAFT"
+                ? "aeronave"
+                : "";
+        const match = list.find((t) => t.name.toLowerCase().includes(key));
+        if (match) setSelectedTemplateId(match.templateId);
+      } catch (e) {
+        console.error("Erro ao carregar templates:", e);
+      }
+    };
+    if (prefillData) load();
+  }, [prefillData]);
+
+  // Fecha o dropdown de template ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        templateDropdownRef.current &&
+        !templateDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsTemplateDropdownOpen(false);
+      }
+    };
+    if (isTemplateDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isTemplateDropdownOpen]);
+
+  const selectedTemplate = templates.find(
+    (t) => t.templateId === selectedTemplateId,
+  );
+
   // Build contract data from form
   const buildContractData = (
     formData: ContractFormData,
   ): GenerateContractData => ({
     process_id: processId!,
+    template_id: selectedTemplateId || undefined,
     seller_name: formData.seller_name,
     seller_email: formData.seller_email,
     seller_cpf: formData.seller_cpf,
@@ -367,15 +429,16 @@ export default function CreateContractPage() {
     payment_seller_value: formData.payment_seller_value,
     // Comissão total (único valor editável — plataforma/escritório travados no backend)
     total_commission_rate: formData.total_commission_rate,
-    // Platform split
-    platform_name: formData.platform_name,
-    platform_cnpj: formData.platform_cnpj,
-    platform_bank: formData.platform_bank,
-    platform_agency: formData.platform_agency,
-    platform_checking_account: formData.platform_checking_account,
+    // Platform split (opcional — nem todo ambiente tem esses dados cadastrados)
+    platform_name: formData.platform_name || undefined,
+    platform_cnpj: formData.platform_cnpj || undefined,
+    platform_bank: formData.platform_bank || undefined,
+    platform_agency: formData.platform_agency || undefined,
+    platform_checking_account:
+      formData.platform_checking_account || undefined,
     // Office split
-    office_name: formData.office_name,
-    office_cnpj: formData.office_cnpj,
+    office_name: formData.office_name || undefined,
+    office_cnpj: formData.office_cnpj || undefined,
     office_bank: formData.office_bank || undefined,
     office_agency: formData.office_agency || undefined,
     office_checking_account: formData.office_checking_account || undefined,
@@ -592,16 +655,13 @@ export default function CreateContractPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
-          <p className="text-red-600 font-semibold mb-4">
+          <AlertCircle className="w-12 h-12 text-status-bad mx-auto mb-4" />
+          <p className="text-status-bad font-semibold mb-4">
             Nenhum processo selecionado
           </p>
-          <button
-            onClick={() => navigate("/specialist/processes")}
-            className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition"
-          >
+          <Button onClick={() => navigate("/specialist/processes")}>
             Voltar ao Dashboard
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -610,8 +670,8 @@ export default function CreateContractPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader className="w-8 h-8 animate-spin text-slate-700" />
-        <span className="ml-2 text-slate-600">
+        <Loader className="w-8 h-8 animate-spin text-ink-soft" />
+        <span className="ml-2 text-muted">
           Carregando dados do contrato...
         </span>
       </div>
@@ -625,16 +685,13 @@ export default function CreateContractPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
-          <p className="text-red-600 font-semibold mb-4">
+          <AlertCircle className="w-12 h-12 text-status-bad mx-auto mb-4" />
+          <p className="text-status-bad font-semibold mb-4">
             {submitStatus.message || "Erro ao carregar dados do processo"}
           </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition"
-          >
+          <Button onClick={() => window.location.reload()}>
             Tentar novamente
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -646,20 +703,20 @@ export default function CreateContractPage() {
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
-            <FileText className="w-8 h-8 text-slate-700" />
+            <FileText className="w-8 h-8 text-ink" />
             <h1
-              className={`${isMobile ? "text-2xl" : "text-4xl"} font-bold text-gray-900`}
+              className={`${isMobile ? "text-2xl" : "text-4xl"} font-bold text-ink`}
             >
               Gerar Contrato de Venda
             </h1>
           </div>
-          <p className="text-gray-600">
+          <p className="text-muted">
             {prefillData
               ? `${getProductTypeLabel(prefillData.product_type)}: ${prefillData.product.brand} ${prefillData.product.model} | Cliente: ${prefillData.buyer.name}`
               : "Carregando..."}
           </p>
           {prefillData?.proposal && (
-            <p className="text-sm text-green-600 mt-1">
+            <p className="text-sm text-status-ok mt-1">
               Proposta aceita: {formatBRL(prefillData.proposal.value)}
             </p>
           )}
@@ -667,53 +724,110 @@ export default function CreateContractPage() {
 
         {/* Status Messages */}
         {submitStatus.type && (
-          <div
-            className={`mb-6 p-4 rounded-lg flex items-start gap-3 ${
-              submitStatus.type === "success"
-                ? "bg-green-50 border border-green-200"
-                : "bg-red-50 border border-red-200"
-            }`}
+          <Alert
+            variant={submitStatus.type === "success" ? "success" : "danger"}
+            className="mb-6"
           >
             {submitStatus.type === "success" ? (
-              <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+              <CheckCircle className="w-5 h-5 mt-0.5" />
             ) : (
-              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+              <AlertCircle className="w-5 h-5 mt-0.5" />
             )}
-            <p
-              className={`text-sm ${
-                submitStatus.type === "success"
-                  ? "text-green-800"
-                  : "text-red-800"
-              }`}
-            >
-              {submitStatus.message}
-            </p>
-          </div>
+            <p className="text-sm">{submitStatus.message}</p>
+          </Alert>
         )}
 
         {/* Form */}
         <form onSubmit={handleSubmit(onPreview)} className="space-y-8">
 
+          {/* Seção: Modelo de contrato */}
+          <section className="bg-surface rounded-lg border border-border p-6">
+            <div className="flex items-center gap-2 border-b pb-2 mb-2">
+              <FileText className="w-4 h-4 text-brand-primary" />
+              <h2 className="text-base font-semibold text-ink">
+                Modelo de contrato
+              </h2>
+            </div>
+            <p className="text-sm text-muted mb-3">
+              Selecionado automaticamente pelo tipo do produto — troque se
+              necessário.
+            </p>
+            <div className="relative" ref={templateDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsTemplateDropdownOpen((v) => !v)}
+                className="w-full flex items-center justify-between gap-2 px-3 py-2.5 border border-border rounded-lg bg-surface text-sm hover:border-brand-primary focus:outline-none focus:ring-2 focus:ring-focus-ring transition-colors"
+              >
+                <span
+                  className={
+                    selectedTemplate
+                      ? "font-medium text-ink"
+                      : "text-subtle"
+                  }
+                >
+                  {selectedTemplate ? selectedTemplate.name : "Selecione um modelo…"}
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 shrink-0 text-muted transition-transform ${
+                    isTemplateDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {isTemplateDropdownOpen && (
+                <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-surface border border-border rounded-lg shadow-ds-floating overflow-hidden py-1">
+                  {templates.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-subtle">
+                      Nenhum modelo disponível.
+                    </p>
+                  ) : (
+                    templates.map((t) => {
+                      const isSelected = t.templateId === selectedTemplateId;
+                      return (
+                        <button
+                          key={t.templateId}
+                          type="button"
+                          onClick={() => {
+                            setSelectedTemplateId(t.templateId);
+                            setIsTemplateDropdownOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                            isSelected
+                              ? "bg-brand-primary/10 text-brand-primary font-medium"
+                              : "text-ink hover:bg-border-soft"
+                          }`}
+                        >
+                          {t.name}
+                          {isSelected && <Check className="w-4 h-4 shrink-0" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+
           {/* ── Grupo: Dados das partes ── */}
           <div>
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3 px-1">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-subtle mb-3 px-1">
               Dados das partes
             </h2>
 
           {/* Seção: Vendedor */}
-          <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <section className="bg-surface rounded-lg border border-border p-6 mb-6">
             <div className="flex items-center justify-between border-b pb-2 mb-4">
-              <h3 className="text-base font-semibold text-gray-900">
+              <h3 className="text-base font-semibold text-ink">
                 Vendedor
               </h3>
-              <span className="text-xs text-gray-400 bg-gray-100 rounded px-2 py-0.5">
+              <span className="text-xs text-subtle bg-border-soft rounded px-2 py-0.5">
                 Preenchido automaticamente — edite se necessário
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Nome Completo *
                 </label>
                 <input
@@ -721,17 +835,17 @@ export default function CreateContractPage() {
                   {...register("seller_name", {
                     required: "Nome é obrigatório",
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.seller_name && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.seller_name.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   E-mail *
                 </label>
                 <input
@@ -743,17 +857,17 @@ export default function CreateContractPage() {
                       message: "E-mail inválido",
                     },
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.seller_email && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.seller_email.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   CPF *
                 </label>
                 <Controller
@@ -769,30 +883,30 @@ export default function CreateContractPage() {
                       }
                       maxLength={14}
                       placeholder="000.000.000-00"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                      className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                     />
                   )}
                 />
                 {errors.seller_cpf && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.seller_cpf.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   RG
                 </label>
                 <input
                   type="text"
                   {...register("seller_rg")}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   CEP *
                 </label>
                 <Controller
@@ -808,19 +922,19 @@ export default function CreateContractPage() {
                       }
                       maxLength={9}
                       placeholder="00000-000"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                      className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                     />
                   )}
                 />
                 {errors.seller_cep && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.seller_cep.message}
                   </p>
                 )}
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Endereço Completo *
                 </label>
                 <input
@@ -829,23 +943,23 @@ export default function CreateContractPage() {
                     required: "Endereço é obrigatório",
                   })}
                   placeholder="Rua, número, complemento, bairro, cidade - UF"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.seller_address && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.seller_address.message}
                   </p>
                 )}
               </div>
 
               <div className="md:col-span-2 border-t pt-4 mt-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-subtle mb-3">
                   Dados bancários do vendedor
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Banco *
                 </label>
                 <input
@@ -854,17 +968,17 @@ export default function CreateContractPage() {
                     required: "Banco é obrigatório",
                   })}
                   placeholder="Ex: Itaú, Bradesco, Nubank"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.seller_bank && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.seller_bank.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Agência *
                 </label>
                 <input
@@ -872,17 +986,17 @@ export default function CreateContractPage() {
                   {...register("seller_agency", {
                     required: "Agência é obrigatória",
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.seller_agency && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.seller_agency.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Conta Corrente *
                 </label>
                 <input
@@ -890,10 +1004,10 @@ export default function CreateContractPage() {
                   {...register("seller_checking_account", {
                     required: "Conta é obrigatória",
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.seller_checking_account && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.seller_checking_account.message}
                   </p>
                 )}
@@ -902,105 +1016,105 @@ export default function CreateContractPage() {
           </section>
 
           {/* Seção: Comprador */}
-          <section className="bg-white rounded-lg border border-gray-200 p-6">
+          <section className="bg-surface rounded-lg border border-border p-6">
             <div className="flex items-center justify-between border-b pb-2 mb-4">
-              <h3 className="text-base font-semibold text-gray-900">
+              <h3 className="text-base font-semibold text-ink">
                 Comprador
               </h3>
-              <span className="text-xs text-gray-400 bg-gray-100 rounded px-2 py-0.5">
+              <span className="text-xs text-subtle bg-border-soft rounded px-2 py-0.5">
                 Preenchido automaticamente — edite se necessário
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Nome Completo *
                 </label>
                 <input
                   type="text"
                   {...register("buyer_name", { required: "Nome é obrigatório" })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.buyer_name && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.buyer_name.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   E-mail *
                 </label>
                 <input
                   type="email"
                   {...register("buyer_email", { required: "E-mail é obrigatório" })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.buyer_email && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.buyer_email.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   CPF *
                 </label>
                 <input
                   type="text"
                   {...register("buyer_cpf", { required: "CPF é obrigatório" })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.buyer_cpf && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.buyer_cpf.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   RG
                 </label>
                 <input
                   type="text"
                   {...register("buyer_rg")}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   CEP *
                 </label>
                 <input
                   type="text"
                   {...register("buyer_cep", { required: "CEP é obrigatório" })}
                   placeholder="00000-000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.buyer_cep && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.buyer_cep.message}
                   </p>
                 )}
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Endereço Completo *
                 </label>
                 <input
                   type="text"
                   {...register("buyer_address", { required: "Endereço é obrigatório" })}
                   placeholder="Rua, número, bairro, cidade — UF"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.buyer_address && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.buyer_address.message}
                   </p>
                 )}
@@ -1011,24 +1125,24 @@ export default function CreateContractPage() {
 
           {/* ── Grupo: Dados do produto ── */}
           <div>
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3 px-1">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-subtle mb-3 px-1">
               Dados do produto
             </h2>
 
           {/* Seção: Veículo/Produto */}
-          <section className="bg-white rounded-lg border border-gray-200 p-6">
+          <section className="bg-surface rounded-lg border border-border p-6">
             <div className="flex items-center justify-between border-b pb-2 mb-4">
-              <h3 className="text-base font-semibold text-gray-900">
+              <h3 className="text-base font-semibold text-ink">
                 {getProductTypeLabel(prefillData?.product_type)}
               </h3>
-              <span className="text-xs text-gray-400 bg-gray-100 rounded px-2 py-0.5">
+              <span className="text-xs text-subtle bg-border-soft rounded px-2 py-0.5">
                 Preenchido automaticamente — edite se necessário
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Marca e Modelo *
                 </label>
                 <input
@@ -1036,17 +1150,17 @@ export default function CreateContractPage() {
                   {...register("vehicle_model", {
                     required: "Modelo é obrigatório",
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.vehicle_model && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.vehicle_model.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Ano *
                 </label>
                 <input
@@ -1054,17 +1168,17 @@ export default function CreateContractPage() {
                   {...register("vehicle_year", {
                     required: "Ano é obrigatório",
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.vehicle_year && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.vehicle_year.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   {getRegistrationLabel(prefillData?.product_type)} *
                 </label>
                 <input
@@ -1079,17 +1193,17 @@ export default function CreateContractPage() {
                         ? "PT-ABC"
                         : "Número de inscrição"
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.vehicle_registration_id && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.vehicle_registration_id.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   {getSerialLabel(prefillData?.product_type)} *
                 </label>
                 <input
@@ -1097,24 +1211,24 @@ export default function CreateContractPage() {
                   {...register("vehicle_serial_number", {
                     required: "Número serial é obrigatório",
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.vehicle_serial_number && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.vehicle_serial_number.message}
                   </p>
                 )}
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Informações Técnicas
                 </label>
                 <textarea
                   {...register("vehicle_technical_info")}
                   rows={2}
                   placeholder="Motor, cor, quilometragem, acessórios, etc."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent resize-none bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent resize-none bg-surface"
                 />
               </div>
             </div>
@@ -1123,131 +1237,130 @@ export default function CreateContractPage() {
 
           {/* ── Grupo: Condições comerciais ── */}
           <div>
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3 px-1">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-subtle mb-3 px-1">
               Condições comerciais
             </h2>
 
           {/* Seção: Valores */}
-          <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <section className="bg-surface rounded-lg border border-border p-6 mb-6">
             <div className="flex items-center justify-between border-b pb-2 mb-4">
-              <h3 className="text-base font-semibold text-gray-900">
+              <h3 className="text-base font-semibold text-ink">
                 Valores da Transação
               </h3>
-              <span className="text-xs text-gray-400 bg-gray-100 rounded px-2 py-0.5">
+              <span className="text-xs text-subtle bg-border-soft rounded px-2 py-0.5">
                 Calculado automaticamente
               </span>
             </div>
             <input type="hidden" {...register("vehicle_price", { required: "Valor é obrigatório", valueAsNumber: true, min: { value: 0, message: "Valor deve ser positivo" } })} />
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">
+                <label className="block text-sm font-medium text-muted mb-1">
                   Valor Total do{" "}
                   {getProductTypeLabel(prefillData?.product_type)}
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px] font-medium">
-                  {vehiclePrice > 0 ? formatBRL(vehiclePrice) : <span className="text-gray-400">—</span>}
+                <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
+                  {vehiclePrice > 0 ? formatBRL(vehiclePrice) : <span className="text-subtle">—</span>}
                 </div>
                 {errors.vehicle_price && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.vehicle_price.message}
                   </p>
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="hidden">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Comissão Total da Venda (%) *
                 </label>
                 <input
                   type="number"
                   step="0.01"
                   {...register("total_commission_rate", {
-                    required: "Comissão total é obrigatória",
                     valueAsNumber: true,
                     min: { value: 0, message: "Valor deve ser positivo" },
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-subtle mt-1">
                   Único valor editável — plataforma e escritório ficam travados nas
                   taxas cadastradas; seu corte é o restante.
                 </p>
                 {totalCommissionValue > 0 && (
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="text-sm text-muted mt-1">
                     {formatBRL(totalCommissionValue)}
                   </p>
                 )}
                 {errors.total_commission_rate && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.total_commission_rate.message}
                   </p>
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="hidden">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Comissão da Plataforma
                   {prefillData?.platform?.rate != null && (
-                    <span className="text-xs text-gray-500 ml-1">
+                    <span className="text-xs text-muted ml-1">
                       ({prefillData.platform.rate}%)
                     </span>
                   )}
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px] font-medium">
+                <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
                   {formatBRL(platformValue)}
                 </div>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-subtle mt-1">
                   Taxa travada — não editável neste formulário.
                 </p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="hidden">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Comissão do Escritório
                   {prefillData?.office?.rate != null && (
-                    <span className="text-xs text-gray-500 ml-1">
+                    <span className="text-xs text-muted ml-1">
                       ({prefillData.office.rate}%)
                     </span>
                   )}
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px] font-medium">
+                <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
                   {formatBRL(officeValue)}
                 </div>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-subtle mt-1">
                   Taxa travada — não editável neste formulário.
                 </p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="hidden">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Comissão do Especialista
-                  <span className="text-xs text-gray-500 ml-1">
+                  <span className="text-xs text-muted ml-1">
                     ({specialistRate.toFixed(2)}%)
                   </span>
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 cursor-default text-sm min-h-[38px] font-medium">
+                <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
                   {formatBRL(specialistValue)}
                 </div>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-subtle mt-1">
                   Resíduo do total — plataforma e escritório subtraídos.
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Valor Líquido do Vendedor
                 </label>
                 <input
                   type="number"
                   step="0.01"
                   {...register("payment_seller_value", { valueAsNumber: true })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-subtle mt-1">
                   Calculado automaticamente, edite se necessário.
                 </p>
                 {sellerNetPreviewValue > 0 && (
-                  <p className="text-sm text-green-600 mt-1">
+                  <p className="text-sm text-status-ok mt-1">
                     {formatBRL(sellerNetPreviewValue)}
                   </p>
                 )}
@@ -1256,96 +1369,96 @@ export default function CreateContractPage() {
           </section>
 
           {/* Seção: Dados da Plataforma */}
-          <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <section className="hidden bg-surface rounded-lg border border-border p-6 mb-6">
             <div className="flex items-center justify-between border-b pb-2 mb-4">
-              <h3 className="text-base font-semibold text-gray-900">
+              <h3 className="text-base font-semibold text-ink">
                 Dados da Plataforma
               </h3>
-              <span className="text-xs text-gray-500 bg-gray-100 rounded px-2 py-0.5">
+              <span className="text-xs text-muted bg-border-soft rounded px-2 py-0.5">
                 Pré-preenchido (editável)
               </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Razão Social *
                 </label>
                 <input
                   type="text"
-                  {...register("platform_name", { required: "Razão social é obrigatória" })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  {...register("platform_name")}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Razão social da plataforma"
                 />
                 {errors.platform_name && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.platform_name.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   CNPJ *
                 </label>
                 <input
                   type="text"
-                  {...register("platform_cnpj", { required: "CNPJ é obrigatório" })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  {...register("platform_cnpj")}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="00.000.000/0000-00"
                 />
                 {errors.platform_cnpj && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.platform_cnpj.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Banco *
                 </label>
                 <input
                   type="text"
-                  {...register("platform_bank", { required: "Banco é obrigatório" })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  {...register("platform_bank")}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Banco"
                 />
                 {errors.platform_bank && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.platform_bank.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Agência *
                 </label>
                 <input
                   type="text"
-                  {...register("platform_agency", { required: "Agência é obrigatória" })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  {...register("platform_agency")}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Agência"
                 />
                 {errors.platform_agency && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.platform_agency.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Conta Corrente *
                 </label>
                 <input
                   type="text"
-                  {...register("platform_checking_account", { required: "Conta é obrigatória" })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  {...register("platform_checking_account")}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Conta corrente"
                 />
                 {errors.platform_checking_account && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.platform_checking_account.message}
                   </p>
                 )}
@@ -1354,82 +1467,82 @@ export default function CreateContractPage() {
           </section>
 
           {/* Seção: Dados do Escritório */}
-          <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <section className="hidden bg-surface rounded-lg border border-border p-6 mb-6">
             <div className="flex items-center justify-between border-b pb-2 mb-4">
-              <h3 className="text-base font-semibold text-gray-900">
+              <h3 className="text-base font-semibold text-ink">
                 Dados do Escritório
               </h3>
-              <span className="text-xs text-gray-500 bg-gray-100 rounded px-2 py-0.5">
+              <span className="text-xs text-muted bg-border-soft rounded px-2 py-0.5">
                 Pré-preenchido (editável)
               </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Razão Social *
                 </label>
                 <input
                   type="text"
-                  {...register("office_name", { required: "Razão social é obrigatória" })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  {...register("office_name")}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Razão social do escritório"
                 />
                 {errors.office_name && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.office_name.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   CNPJ *
                 </label>
                 <input
                   type="text"
-                  {...register("office_cnpj", { required: "CNPJ é obrigatório" })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  {...register("office_cnpj")}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="00.000.000/0000-00"
                 />
                 {errors.office_cnpj && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.office_cnpj.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Banco
                 </label>
                 <input
                   type="text"
                   {...register("office_bank")}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Banco"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Agência
                 </label>
                 <input
                   type="text"
                   {...register("office_agency")}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Agência"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Conta Corrente
                 </label>
                 <input
                   type="text"
                   {...register("office_checking_account")}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Conta corrente"
                 />
               </div>
@@ -1437,143 +1550,137 @@ export default function CreateContractPage() {
           </section>
 
           {/* Seção: Dados do Especialista */}
-          <section className="bg-white rounded-lg border border-gray-200 p-6">
+          <section className="hidden bg-surface rounded-lg border border-border p-6">
             <div className="flex items-center justify-between border-b pb-2 mb-4">
-              <h3 className="text-base font-semibold text-gray-900">
+              <h3 className="text-base font-semibold text-ink">
                 Dados do Especialista
               </h3>
-              <span className="text-xs text-gray-500 bg-gray-100 rounded px-2 py-0.5">
+              <span className="text-xs text-muted bg-border-soft rounded px-2 py-0.5">
                 Pré-preenchido (editável)
               </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Nome *
                 </label>
                 <input
                   type="text"
-                  {...register("specialist_name", { required: "Nome do especialista é obrigatório" })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  {...register("specialist_name")}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="Nome completo"
                 />
                 {errors.specialist_name && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.specialist_name.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   E-mail *
                 </label>
                 <input
                   type="email"
-                  {...register("specialist_email", { required: "E-mail do especialista é obrigatório" })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  {...register("specialist_email")}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="email@exemplo.com"
                 />
                 {errors.specialist_email && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.specialist_email.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   CNPJ *
                 </label>
                 <input
                   type="text"
-                  {...register("specialist_document", { required: "CNPJ do especialista é obrigatório" })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-sm"
+                  {...register("specialist_document")}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface text-sm"
                   placeholder="00.000.000/0000-00"
                 />
                 {errors.specialist_document && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.specialist_document.message}
                   </p>
                 )}
               </div>
 
               <div className="md:col-span-2 border-t pt-4 mt-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-subtle mb-3">
                   Dados bancários do especialista — preencha abaixo
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Banco *
                 </label>
                 <input
                   type="text"
-                  {...register("specialist_bank", {
-                    required: "Banco do especialista é obrigatório",
-                  })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  {...register("specialist_bank")}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                   placeholder="Banco do especialista"
                 />
                 {errors.specialist_bank && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.specialist_bank.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Agência *
                 </label>
                 <input
                   type="text"
-                  {...register("specialist_agency", {
-                    required: "Agência do especialista é obrigatória",
-                  })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  {...register("specialist_agency")}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                   placeholder="Agência"
                 />
                 {errors.specialist_agency && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.specialist_agency.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Conta Corrente *
                 </label>
                 <input
                   type="text"
-                  {...register("specialist_checking_account", {
-                    required: "Conta corrente do especialista é obrigatória",
-                  })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  {...register("specialist_checking_account")}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                   placeholder="Conta corrente"
                 />
                 {errors.specialist_checking_account && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.specialist_checking_account.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Valor da Comissão *
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">
                     R$
                   </span>
                   <input
                     type="text"
                     value={formatBRL(specialistValue)}
                     readOnly
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                    className="w-full pl-10 pr-3 py-2 border border-border rounded-lg bg-border-soft cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -1582,34 +1689,34 @@ export default function CreateContractPage() {
           </div>{/* end Condições comerciais */}
 
           {/* Seção: Testemunhas (Opcional) */}
-          <section className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-4 border-b pb-2">
+          <section className="bg-surface rounded-lg border border-border p-6">
+            <h2 className="text-base font-semibold text-ink mb-4 border-b pb-2">
               Testemunhas (Opcional)
             </h2>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-muted mb-4">
               Adicione até duas testemunhas para o contrato. Ambos os campos são
               opcionais.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Testemunha 1 */}
               <div className="md:col-span-2">
-                <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                <h3 className="text-sm font-semibold text-ink-soft mb-2">
                   Testemunha 1
                 </h3>
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Nome
                 </label>
                 <input
                   type="text"
                   {...register("testimonial1_name")}
                   placeholder="Nome completo da testemunha 1"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   CPF
                 </label>
                 <Controller
@@ -1625,42 +1732,42 @@ export default function CreateContractPage() {
                         const masked = applyCpfMask(e.target.value);
                         field.onChange(masked);
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
                     />
                   )}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   E-mail
                 </label>
                 <input
                   type="email"
                   {...register("testimonial1_email")}
                   placeholder="testemunha1@email.com"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
                 />
               </div>
 
               {/* Testemunha 2 */}
               <div className="md:col-span-2 mt-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                <h3 className="text-sm font-semibold text-ink-soft mb-2">
                   Testemunha 2
                 </h3>
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Nome
                 </label>
                 <input
                   type="text"
                   {...register("testimonial2_name")}
                   placeholder="Nome completo da testemunha 2"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   CPF
                 </label>
                 <Controller
@@ -1676,57 +1783,57 @@ export default function CreateContractPage() {
                         const masked = applyCpfMask(e.target.value);
                         field.onChange(masked);
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
                     />
                   )}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   E-mail
                 </label>
                 <input
                   type="email"
                   {...register("testimonial2_email")}
                   placeholder="testemunha2@email.com"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
                 />
               </div>
             </div>
           </section>
 
           {/* Seção: Cidade e Descrição */}
-          <section className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-4 border-b pb-2">
+          <section className="bg-surface rounded-lg border border-border p-6">
+            <h2 className="text-base font-semibold text-ink mb-4 border-b pb-2">
               Informações Adicionais
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Cidade de Assinatura *
                 </label>
                 <input
                   type="text"
                   {...register("city", { required: "Cidade é obrigatória" })}
                   placeholder="Ex: São Paulo"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
                 {errors.city && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-status-bad text-sm mt-1">
                     {errors.city.message}
                   </p>
                 )}
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   Observações
                 </label>
                 <textarea
                   {...register("description")}
                   rows={3}
                   placeholder="Informações adicionais sobre o contrato..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent resize-none bg-white"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent resize-none bg-surface"
                 />
               </div>
             </div>
@@ -1736,9 +1843,9 @@ export default function CreateContractPage() {
           <div className="flex flex-col gap-3 pt-2 pb-8">
             {/* Resumo de erros de validação (campos obrigatórios faltando) */}
             {Object.keys(errors).length > 0 && (
-              <div className="flex items-start gap-2 p-4 rounded-lg bg-red-50 border border-red-200">
-                <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                <div className="text-sm text-red-700">
+              <Alert variant="danger">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                <div className="text-sm">
                   <p className="font-semibold mb-1">
                     Corrija os campos abaixo antes de pré-visualizar:
                   </p>
@@ -1750,43 +1857,29 @@ export default function CreateContractPage() {
                     ))}
                   </ul>
                 </div>
-              </div>
+              </Alert>
             )}
             {/* Mensagem de erro/sucesso próximo aos botões */}
             {submitStatus.type && (
-              <div
-                className={`flex items-start gap-2 p-4 rounded-lg ${
-                  submitStatus.type === "success"
-                    ? "bg-green-50 border border-green-200"
-                    : "bg-red-50 border border-red-200"
-                }`}
-              >
+              <Alert variant={submitStatus.type === "success" ? "success" : "danger"}>
                 {submitStatus.type === "success" ? (
-                  <CheckCircle className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
+                  <CheckCircle className="w-5 h-5 shrink-0 mt-0.5" />
                 ) : (
-                  <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                  <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
                 )}
-                <p
-                  className={`text-sm ${
-                    submitStatus.type === "success"
-                      ? "text-green-700"
-                      : "text-red-700"
-                  }`}
-                >
-                  {submitStatus.message}
-                </p>
-              </div>
+                <p className="text-sm">{submitStatus.message}</p>
+              </Alert>
             )}
 
             <div className="flex flex-col sm:flex-row gap-3">
-              <button
+              <Button
                 type="submit"
-                disabled={isSubmitting || submitStatus.type === "success"}
-                className={`flex-1 px-8 py-4 rounded-lg font-semibold text-white text-base transition shadow-sm ${
-                  isSubmitting || submitStatus.type === "success"
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-slate-700 hover:bg-slate-800 active:bg-slate-900"
-                }`}
+                disabled={
+                  isSubmitting ||
+                  submitStatus.type === "success" ||
+                  !selectedTemplateId
+                }
+                className="flex-1 px-8 py-4 text-base shadow-sm"
               >
                 {isSubmitting ? (
                   <span className="flex items-center justify-center gap-2">
@@ -1804,15 +1897,16 @@ export default function CreateContractPage() {
                     Pré-visualizar e Enviar Contrato
                   </span>
                 )}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="light"
                 onClick={() => navigate(-1)}
                 disabled={isSubmitting}
-                className="sm:w-auto px-8 py-4 rounded-lg font-medium text-gray-700 bg-gray-100 border border-gray-300 hover:bg-gray-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="sm:w-auto px-8 py-4"
               >
                 Cancelar
-              </button>
+              </Button>
             </div>
           </div>
         </form>

@@ -65,8 +65,8 @@ export default function SpecialistDashboard() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ink mx-auto mb-4"></div>
+          <p className="text-muted">Carregando...</p>
         </div>
       </div>
     );
@@ -76,10 +76,10 @@ export default function SpecialistDashboard() {
     <div className="w-full">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+        <h1 className="text-3xl font-bold text-ink mb-2">
           Olá, {user.name}!
         </h1>
-        <p className="text-gray-600">
+        <p className="text-muted">
           Acompanhe o desempenho dos seus produtos e processos de venda
         </p>
       </div>
@@ -87,71 +87,71 @@ export default function SpecialistDashboard() {
       {/* Cards de Estatísticas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
         {/* Card 1: Produtos Cadastrados */}
-        <div className="bg-gray-300 rounded-lg p-6">
-          <p className="text-gray-700 font-semibold mb-2">
+        <div className="bg-border-soft rounded-lg p-6">
+          <p className="text-ink-soft font-semibold mb-2">
             Produtos Cadastrados
           </p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-gray-900 mb-2">
+            <p className="text-2xl font-bold text-ink mb-2">
               Carregando...
             </p>
           ) : (
             <>
-              <p className="text-4xl font-bold text-gray-900 mb-2">
+              <p className="text-4xl font-bold text-ink mb-2">
                 {stats?.productsListed || 0}
               </p>
-              <p className="text-sm text-gray-600">Total de produtos</p>
+              <p className="text-sm text-muted">Total de produtos</p>
             </>
           )}
         </div>
 
         {/* Card 2: Processos Ativos */}
-        <div className="bg-gray-300 rounded-lg p-6">
-          <p className="text-gray-700 font-semibold mb-2">Processos Ativos</p>
+        <div className="bg-border-soft rounded-lg p-6">
+          <p className="text-ink-soft font-semibold mb-2">Processos Ativos</p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-gray-900 mb-2">
+            <p className="text-2xl font-bold text-ink mb-2">
               Carregando...
             </p>
           ) : (
             <>
-              <p className="text-4xl font-bold text-gray-900 mb-2">
+              <p className="text-4xl font-bold text-ink mb-2">
                 {stats?.activeProcesses || 0}
               </p>
-              <p className="text-sm text-gray-600">Em andamento</p>
+              <p className="text-sm text-muted">Em andamento</p>
             </>
           )}
         </div>
 
         {/* Card 3: Vendas Concluídas */}
-        <div className="bg-gray-300 rounded-lg p-6">
-          <p className="text-gray-700 font-semibold mb-2">Vendas Concluídas</p>
+        <div className="bg-border-soft rounded-lg p-6">
+          <p className="text-ink-soft font-semibold mb-2">Vendas Concluídas</p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-gray-900 mb-2">
+            <p className="text-2xl font-bold text-ink mb-2">
               Carregando...
             </p>
           ) : (
             <>
-              <p className="text-4xl font-bold text-gray-900 mb-2">
+              <p className="text-4xl font-bold text-ink mb-2">
                 {stats?.completedSales || 0}
               </p>
-              <p className="text-sm text-gray-600">Total de vendas</p>
+              <p className="text-sm text-muted">Total de vendas</p>
             </>
           )}
         </div>
 
         {/* Card 4: Taxa de Conversão */}
-        <div className="bg-gray-300 rounded-lg p-6">
-          <p className="text-gray-700 font-semibold mb-2">Taxa de Conversão</p>
+        <div className="bg-border-soft rounded-lg p-6">
+          <p className="text-ink-soft font-semibold mb-2">Taxa de Conversão</p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-gray-900 mb-2">
+            <p className="text-2xl font-bold text-ink mb-2">
               Carregando...
             </p>
           ) : (
             <>
-              <p className="text-4xl font-bold text-gray-900 mb-2">
+              <p className="text-4xl font-bold text-ink mb-2">
                 {stats?.conversionRate || 0}%
               </p>
-              <p className="text-sm text-gray-600">Meta 80%</p>
+              <p className="text-sm text-muted">Meta 80%</p>
             </>
           )}
         </div>
@@ -160,18 +160,18 @@ export default function SpecialistDashboard() {
       {/* Gráficos */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Gráfico de Vendas por Mês */}
-        <div className="md:col-span-2 bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+        <div className="md:col-span-2 bg-surface rounded-lg p-6 shadow-ds-card border border-border">
+          <h2 className="text-lg font-semibold text-ink mb-4">
             Vendas por Mês
           </h2>
           <div className="flex gap-4 mb-4">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-              <span className="text-sm text-gray-600">Não vendidos</span>
+              <span className="text-sm text-muted">Não vendidos</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span className="text-sm text-gray-600">Vendidos</span>
+              <span className="text-sm text-muted">Vendidos</span>
             </div>
           </div>
           <ResponsiveContainer width="100%" height={300}>
@@ -198,12 +198,12 @@ export default function SpecialistDashboard() {
         </div>
 
         {/* Gráfico de Pizza - Processos por Status */}
-        <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+        <div className="bg-surface rounded-lg p-6 shadow-ds-card border border-border">
+          <h2 className="text-lg font-semibold text-ink mb-4">
             Processos por Status
           </h2>
           {processesByStatus.length === 0 ? (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-muted">
               Sem dados suficientes para exibir os status dos processos.
             </p>
           ) : (
@@ -239,9 +239,9 @@ export default function SpecialistDashboard() {
                         className="w-2 h-2 rounded-full"
                         style={{ backgroundColor: item.color }}
                       ></div>
-                      <span className="text-gray-700">{item.name}</span>
+                      <span className="text-ink-soft">{item.name}</span>
                     </div>
-                    <span className="text-gray-900 font-semibold">
+                    <span className="text-ink font-semibold">
                       {item.value}
                     </span>
                   </div>

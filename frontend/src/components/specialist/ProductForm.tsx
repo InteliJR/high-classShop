@@ -33,7 +33,7 @@ import {
   XlsxImporter,
   type CsvImportResponse,
 } from "../../components/shared/XlsxImporter";
-import { Modal } from "../../components/shared/Modal";
+import { Dialog, DialogContent } from "../../components/ui/dialog";
 import type { SpecialityType, UserRole } from "../../types/types";
 
 type ProductType = "CAR" | "BOAT" | "AIRCRAFT";
@@ -51,7 +51,7 @@ interface ProductFormProps {
   mode: "create" | "edit";
   productType?: ProductType;
   productData?: RawCar | RawBoat | RawAircraft;
-  productId?: number;
+  productId?: string;
   // Quando informado (cadastro disparado a partir de um processo em negociação),
   // o produto recém-criado é atribuído automaticamente a este processo.
   processId?: string;
@@ -205,6 +205,7 @@ export default function ProductForm({
       const formattedData: any = {
         marca: data.marca,
         modelo: data.modelo,
+        identificador: data.identificador,
         ano: Number(data.ano),
         valor: Number(data.valor),
         estado: data.estado,
@@ -254,7 +255,7 @@ export default function ProductForm({
 
       if (mode === "create") {
         // Criar novo produto
-        let createdId: number;
+        let createdId: string;
         if (productType === "CAR") {
           createdId = (await createCar(formattedData)).id;
         } else if (productType === "BOAT") {
@@ -397,20 +398,21 @@ export default function ProductForm({
       )}
 
       {/* Modal de importacao XLSX */}
-      <Modal
-        isOpen={isCsvModalOpen}
-        onClose={() => setIsCsvModalOpen(false)}
-        title={`Importar ${productType === "CAR" ? "Carros" : productType === "BOAT" ? "Lanchas" : "Aeronaves"} via CSV`}
-        size="lg"
-      >
-        <XlsxImporter
-          productType={productType}
-          onImport={handleCsvImport}
-          onDownloadTemplate={handleDownloadXlsxTemplate}
-          disabled={!isAuthorized || isSubmitting}
-          onSuccess={() => setIsCsvModalOpen(false)}
-        />
-      </Modal>
+      <Dialog open={isCsvModalOpen} onOpenChange={setIsCsvModalOpen}>
+        <DialogContent
+          open={isCsvModalOpen}
+          title={`Importar ${productType === "CAR" ? "Carros" : productType === "BOAT" ? "Lanchas" : "Aeronaves"} via CSV`}
+          className="w-[min(672px,92vw)]"
+        >
+          <XlsxImporter
+            productType={productType}
+            onImport={handleCsvImport}
+            onDownloadTemplate={handleDownloadXlsxTemplate}
+            disabled={!isAuthorized || isSubmitting}
+            onSuccess={() => setIsCsvModalOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Campos Comuns */}
       <div className="grid grid-cols-2 gap-4">

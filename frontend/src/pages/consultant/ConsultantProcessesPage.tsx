@@ -2,24 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAllConsultantProcesses, getClients, type ConsultantProcess, type Client } from "../../services/consultant.service";
 import { Loader2, Search, X, ChevronDown } from "lucide-react";
-
-const STATUS_LABELS: Record<string, string> = {
-  SCHEDULING: "Agendamento",
-  NEGOTIATION: "Negociação",
-  PROCESSING_CONTRACT: "Contrato",
-  DOCUMENTATION: "Documentação",
-  COMPLETED: "Concluído",
-  REJECTED: "Rejeitado",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  SCHEDULING: "bg-blue-100 text-blue-700",
-  NEGOTIATION: "bg-yellow-100 text-yellow-700",
-  PROCESSING_CONTRACT: "bg-orange-100 text-orange-700",
-  DOCUMENTATION: "bg-purple-100 text-purple-700",
-  COMPLETED: "bg-green-100 text-green-700",
-  REJECTED: "bg-red-100 text-red-700",
-};
+import { Card } from "../../components/ui/card";
+import { PageHeader } from "../../components/patterns/PageHeader";
+import { StatusBadge, PROCESS_STATUS_META } from "../../components/patterns/StatusBadge";
+import { EmptyState } from "../../components/patterns/EmptyState";
 
 const PRODUCT_LABELS: Record<string, string> = {
   CAR: "Carro",
@@ -44,12 +30,10 @@ export default function ConsultantProcessesPage() {
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fetch clients once (for the filter dropdown)
   useEffect(() => {
     getClients().then(setClients).catch(() => setClients([]));
   }, []);
 
-  // Fetch processes whenever server-side filters change
   const fetchProcesses = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -69,7 +53,6 @@ export default function ConsultantProcessesPage() {
 
   useEffect(() => { fetchProcesses(); }, [fetchProcesses]);
 
-  // Close client dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -88,7 +71,6 @@ export default function ConsultantProcessesPage() {
     );
   }, [clientSearch, clients]);
 
-  // Client-side pagination over filtered (server-filtered) processes
   const totalPages = Math.max(1, Math.ceil(processes.length / PAGE_SIZE));
   const pageProcesses = processes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -102,54 +84,49 @@ export default function ConsultantProcessesPage() {
 
   return (
     <div className="text-text-main w-full">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="h1-style">Processos dos Clientes</h1>
-      </div>
+      <PageHeader title="Processos dos Clientes" />
 
-      {/* Filtros */}
-      <div className="p-4 rounded-lg shadow bg-white mb-4 flex flex-wrap items-center gap-3">
-        {/* Status */}
+      <Card className="mb-4 flex flex-wrap items-center gap-3 p-4">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Status</label>
+          <label className="text-xs font-medium text-muted uppercase tracking-wider">Status</label>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-sm px-3 py-2 border border-gray-300 rounded-md bg-white min-w-[180px]"
+            className="text-sm px-3 py-2 border border-border rounded-md bg-surface min-w-[180px]"
           >
             <option value="">Todos</option>
-            {Object.entries(STATUS_LABELS).map(([value, label]) => (
+            {PROCESS_STATUS_META.map(({ value, label }) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
         </div>
 
-        {/* Cliente */}
         <div className="flex flex-col gap-1 relative" ref={dropdownRef}>
-          <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</label>
+          <label className="text-xs font-medium text-muted uppercase tracking-wider">Cliente</label>
           <button
             type="button"
             onClick={() => setIsClientDropdownOpen((v) => !v)}
-            className="flex items-center justify-between gap-2 text-sm px-3 py-2 border border-gray-300 rounded-md bg-white min-w-[240px] hover:border-gray-400"
+            className="flex items-center justify-between gap-2 text-sm px-3 py-2 border border-border rounded-md bg-surface min-w-[240px] hover:border-ink-soft"
           >
-            <span className={selectedClient ? "text-gray-900" : "text-gray-400"}>
+            <span className={selectedClient ? "text-ink" : "text-subtle"}>
               {selectedClient
                 ? `${selectedClient.name} ${selectedClient.surname}`
                 : "Todos os clientes"}
             </span>
-            <ChevronDown className="w-4 h-4 text-gray-500" />
+            <ChevronDown className="w-4 h-4 text-muted" />
           </button>
 
           {isClientDropdownOpen && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-20 max-h-72 overflow-hidden flex flex-col">
-              <div className="p-2 border-b border-gray-100">
+            <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border rounded-md shadow-ds-floating z-20 max-h-72 overflow-hidden flex flex-col">
+              <div className="p-2 border-b border-border-soft">
                 <div className="relative">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-subtle" />
                   <input
                     type="text"
                     value={clientSearch}
                     onChange={(e) => setClientSearch(e.target.value)}
                     placeholder="Buscar cliente..."
-                    className="w-full text-sm pl-8 pr-2 py-1.5 border border-gray-200 rounded"
+                    className="w-full text-sm pl-8 pr-2 py-1.5 border border-border-soft rounded"
                     autoFocus
                   />
                 </div>
@@ -162,12 +139,12 @@ export default function ConsultantProcessesPage() {
                     setIsClientDropdownOpen(false);
                     setClientSearch("");
                   }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 text-gray-500 border-b border-gray-100"
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-border-soft text-subtle border-b border-border-soft"
                 >
                   Todos os clientes
                 </button>
                 {filteredClients.length === 0 ? (
-                  <p className="px-3 py-2 text-sm text-gray-400">Nenhum cliente.</p>
+                  <p className="px-3 py-2 text-sm text-subtle">Nenhum cliente.</p>
                 ) : (
                   filteredClients.map((c) => (
                     <button
@@ -178,10 +155,10 @@ export default function ConsultantProcessesPage() {
                         setIsClientDropdownOpen(false);
                         setClientSearch("");
                       }}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-border-soft"
                     >
-                      <div className="font-medium text-gray-900">{c.name} {c.surname}</div>
-                      <div className="text-xs text-gray-400">{c.email}</div>
+                      <div className="font-medium text-ink">{c.name} {c.surname}</div>
+                      <div className="text-xs text-subtle">{c.email}</div>
                     </button>
                   ))
                 )}
@@ -194,99 +171,100 @@ export default function ConsultantProcessesPage() {
           <button
             type="button"
             onClick={clearFilters}
-            className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 px-3 py-2 self-end"
+            className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink px-3 py-2 self-end"
           >
             <X className="w-3.5 h-3.5" />
             Limpar filtros
           </button>
         )}
-      </div>
+      </Card>
 
-      {/* Lista de processos */}
-      <div className="p-6 rounded-lg shadow bg-white">
+      <Card>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="h2-style">Processos</h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <h2 className="text-h2 font-semibold text-ink">Processos</h2>
+            <p className="text-sm text-muted mt-1">
               Clique em um processo para ver os detalhes.
             </p>
           </div>
-          <span className="text-sm text-gray-500">
+          <span className="text-sm text-muted">
             {processes.length} {processes.length === 1 ? "processo" : "processos"}
           </span>
         </div>
 
         {error ? (
-          <p className="text-red-500">{error}</p>
+          <p className="text-status-bad">{error}</p>
         ) : isLoading ? (
           <div className="flex items-center justify-center py-16">
             <div className="flex flex-col items-center gap-3">
-              <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-              <p className="text-sm text-gray-500">Carregando processos...</p>
+              <Loader2 className="w-8 h-8 animate-spin text-subtle" />
+              <p className="text-sm text-muted">Carregando processos...</p>
             </div>
           </div>
         ) : processes.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            {hasFilters
-              ? "Nenhum processo com esses filtros."
-              : "Nenhum processo ainda. Crie processos na página de Clientes."}
-          </div>
+          <EmptyState
+            icon={Search}
+            title={hasFilters ? "Nenhum processo com esses filtros" : "Nenhum processo ainda"}
+            description={hasFilters ? undefined : "Crie processos na página de Clientes."}
+          />
         ) : (
           <>
-            <div className="flex flex-col gap-2">
-              <div className="grid grid-cols-[1.5fr_1.5fr_1fr_1fr_1fr] gap-4 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                <div>Cliente</div>
-                <div>Especialista</div>
-                <div>Produto</div>
-                <div>Status</div>
-                <div>Data</div>
-              </div>
-
-              {pageProcesses.map((proc) => (
-                <div
-                  key={proc.id}
-                  onClick={() => navigate(`/consultant/processes/${proc.id}`)}
-                  className="grid grid-cols-[1.5fr_1.5fr_1fr_1fr_1fr] gap-4 items-center px-4 py-3 bg-white rounded-lg border border-gray-100 hover:border-gray-300 cursor-pointer transition-colors"
-                >
-                  <div className="text-sm font-medium text-gray-900">
-                    {proc.client ? `${proc.client.name} ${proc.client.surname}` : "—"}
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    {proc.specialist ? `${proc.specialist.name} ${proc.specialist.surname}` : "—"}
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    {PRODUCT_LABELS[proc.product_type ?? ""] ?? proc.product_type ?? "Consultoria"}
-                  </div>
-                  <div>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[proc.status] ?? "bg-gray-100 text-gray-600"}`}>
-                      {STATUS_LABELS[proc.status] ?? proc.status}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    {new Date(proc.created_at).toLocaleDateString("pt-BR")}
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left text-xs uppercase tracking-wide text-muted font-semibold px-4 py-3">Cliente</th>
+                    <th className="text-left text-xs uppercase tracking-wide text-muted font-semibold px-4 py-3">Especialista</th>
+                    <th className="text-left text-xs uppercase tracking-wide text-muted font-semibold px-4 py-3">Produto</th>
+                    <th className="text-left text-xs uppercase tracking-wide text-muted font-semibold px-4 py-3">Status</th>
+                    <th className="text-left text-xs uppercase tracking-wide text-muted font-semibold px-4 py-3">Data</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageProcesses.map((proc) => (
+                    <tr
+                      key={proc.id}
+                      onClick={() => navigate(`/consultant/processes/${proc.id}`)}
+                      className="border-b border-border-soft hover:bg-border-soft/50 cursor-pointer transition-colors"
+                    >
+                      <td className="px-4 py-3 text-sm font-medium text-ink">
+                        {proc.client ? `${proc.client.name} ${proc.client.surname}` : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted">
+                        {proc.specialist ? `${proc.specialist.name} ${proc.specialist.surname}` : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted">
+                        {PRODUCT_LABELS[proc.product_type ?? ""] ?? proc.product_type ?? "Consultoria"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={proc.status} />
+                      </td>
+                      <td className="px-4 py-3 text-xs text-subtle">
+                        {new Date(proc.created_at).toLocaleDateString("pt-BR")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
-            {/* Paginação */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-200">
-                <span className="text-xs text-gray-500">
+              <div className="flex items-center justify-between mt-4 pt-3 border-t border-border">
+                <span className="text-xs text-muted">
                   Página {page} de {totalPages}
                 </span>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page === 1}
-                    className="px-3 py-1.5 text-sm rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 text-sm rounded border border-border hover:bg-border-soft disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     Anterior
                   </button>
                   <button
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page === totalPages}
-                    className="px-3 py-1.5 text-sm rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 text-sm rounded border border-border hover:bg-border-soft disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     Próxima
                   </button>
@@ -295,7 +273,7 @@ export default function ConsultantProcessesPage() {
             )}
           </>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

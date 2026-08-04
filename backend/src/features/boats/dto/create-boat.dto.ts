@@ -24,6 +24,9 @@ export class CreateBoatDto {
   @IsString()
   modelo: string;
 
+  @IsString()
+  identificador: string;
+
   @IsNumber()
   valor: number;
 

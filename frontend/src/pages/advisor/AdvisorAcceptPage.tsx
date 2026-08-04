@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle, AlertCircle, Loader } from "lucide-react";
 import { useAuth } from "../../store/authStateManager";
 import { acceptAdvisorInvite } from "../../services/advisor.service";
+import Button from "../../components/ui/button";
 
 export default function AdvisorAcceptPage() {
   const [searchParams] = useSearchParams();
@@ -44,57 +45,48 @@ export default function AdvisorAcceptPage() {
   }, [token, user, navigate, status]);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm max-w-md w-full p-8 text-center">
-        <h1 className="text-xl font-bold text-gray-900 mb-6">Convite de Assessor</h1>
+    <div className="min-h-screen bg-bg flex items-center justify-center px-4">
+      <div className="bg-surface rounded-xl border border-border shadow-ds-card max-w-md w-full p-8 text-center">
+        <h1 className="text-xl font-bold text-ink mb-6">Convite de Assessor</h1>
 
         {status === "loading" && (
           <div className="flex flex-col items-center gap-3">
-            <Loader className="w-8 h-8 animate-spin text-slate-600" />
-            <p className="text-gray-600">Validando convite...</p>
+            <Loader className="w-8 h-8 animate-spin text-ink-soft" />
+            <p className="text-muted">Validando convite...</p>
           </div>
         )}
 
         {status === "success" && (
           <div className="flex flex-col items-center gap-4">
-            <CheckCircle className="w-12 h-12 text-green-500" />
-            <p className="text-gray-800 font-medium">Convite aceito com sucesso!</p>
-            <p className="text-sm text-gray-500">
+            <CheckCircle className="w-12 h-12 text-status-ok" />
+            <p className="text-ink-soft font-medium">Convite aceito com sucesso!</p>
+            <p className="text-sm text-muted">
               Você agora é assessor deste cliente. Acesse seu painel para acompanhar os processos.
             </p>
-            <button
-              onClick={() => navigate("/advisor/dashboard")}
-              className="mt-2 px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-sm font-medium"
-            >
+            <Button onClick={() => navigate("/advisor/dashboard")} className="mt-2">
               Ir para o painel
-            </button>
+            </Button>
           </div>
         )}
 
         {status === "already" && (
           <div className="flex flex-col items-center gap-4">
-            <CheckCircle className="w-12 h-12 text-blue-500" />
-            <p className="text-gray-800 font-medium">Convite já aceito anteriormente</p>
-            <button
-              onClick={() => navigate("/advisor/dashboard")}
-              className="mt-2 px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-sm font-medium"
-            >
+            <CheckCircle className="w-12 h-12 text-status-sched" />
+            <p className="text-ink-soft font-medium">Convite já aceito anteriormente</p>
+            <Button onClick={() => navigate("/advisor/dashboard")} className="mt-2">
               Ir para o painel
-            </button>
+            </Button>
           </div>
         )}
 
         {status === "error" && (
           <div className="flex flex-col items-center gap-4">
-            <AlertCircle className="w-12 h-12 text-red-500" />
-            <p className="text-gray-800 font-medium">Não foi possível aceitar o convite</p>
-            {errorMsg && <p className="text-sm text-red-600">{errorMsg}</p>}
-            <button
-              onClick={() => navigate("/")}
-              className="mt-2 px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-sm font-medium"
-            >
+            <AlertCircle className="w-12 h-12 text-status-bad" />
+            <p className="text-ink-soft font-medium">Não foi possível aceitar o convite</p>
+            {errorMsg && <p className="text-sm text-status-bad">{errorMsg}</p>}
+            <Button onClick={() => navigate("/")} className="mt-2">
               Voltar ao início
-            </button>
+            </Button>
           </div>
         )}
       </div>

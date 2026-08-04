@@ -25,13 +25,13 @@ import RequireGoogleMeetModal from "../components/meetings/RequireGoogleMeetModa
           <div className="flex flex-col min-h-screen">
             <Header />
 
-            <div className="flex flex-1 h-full">
+            <div className="flex flex-1 h-full min-w-0">
               {/* Sidebar só aparece se houver usuário  ou tiver no mobile*/}
               {(isMobile || user) && <Sidebar />}
 
               <main
                 className={`
-                  flex flex-col flex-1 my-8 transition-all duration-300 
+                  flex flex-col flex-1 min-w-0 my-8 transition-all duration-300
                   ${user ? "mx-4 sm:mx-8" : ""}
                   ${
                     user
@@ -42,8 +42,8 @@ import RequireGoogleMeetModal from "../components/meetings/RequireGoogleMeetModa
                   /* Respiro quando não tem sidebar */
                   ${user ? "" : `${isMobile ? mobilePadding : desktopPadding}`}
                   
-                  /* Espaço quando sidebar está expandida */
-                  ${user && !isMobile && !isSidebarCollapsed ? "pl-94 pr-30" : ""}
+                  /* Espaço quando sidebar está expandida (w-64 = 256px) */
+                  ${user && !isMobile && !isSidebarCollapsed ? "pl-72" : ""}
                 `}
               >
                 {children}

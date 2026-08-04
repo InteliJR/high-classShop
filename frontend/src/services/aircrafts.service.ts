@@ -13,9 +13,10 @@ import {
 } from "./product-import-jobs.service";
 
 export interface RawAircraft {
-  id: number;
+  id: string;
   marca: string;
   modelo: string;
+  identificador: string;
   valor: number;
   estado: string;
   ano: number;
@@ -47,6 +48,7 @@ export interface ImageDto {
 export interface CreateAircraftDto {
   marca: string;
   modelo: string;
+  identificador: string;
   valor: number;
   estado: string;
   ano: number;
@@ -114,7 +116,7 @@ export async function getAircrafts(
 }
 
 // Get /aircrafts/:id
-export async function getAircraftById(id: number): Promise<RawAircraft> {
+export async function getAircraftById(id: string): Promise<RawAircraft> {
   try {
     const response = await api.get<RawAircraft>(`/aircrafts/${id}`);
     return response.data;
@@ -139,7 +141,7 @@ export async function createAircraft(
 
 // Patch /aircrafts/:id
 export async function updateAircraft(
-  id: number,
+  id: string,
   data: UpdateAircraftDto,
 ): Promise<RawAircraft> {
   try {
@@ -152,7 +154,7 @@ export async function updateAircraft(
 }
 
 // Delete /aircrafts/:id
-export async function deleteAircraft(id: number): Promise<void> {
+export async function deleteAircraft(id: string): Promise<void> {
   try {
     await api.delete(`/aircrafts/${id}`);
   } catch (error) {

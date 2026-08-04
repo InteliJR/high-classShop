@@ -1,4 +1,4 @@
-import { IsUUID, IsEnum, IsOptional, IsNumber } from 'class-validator';
+import { IsUUID, IsEnum, IsOptional } from 'class-validator';
 
 export enum ProductTypeEnum {
   CAR = 'CAR',
@@ -18,7 +18,7 @@ export class CreateConsultantProcessDto {
   })
   product_type: ProductTypeEnum;
 
-  @IsNumber({}, { message: 'product_id deve ser um número inteiro' })
+  @IsUUID('4', { message: 'product_id deve ser um UUID válido' })
   @IsOptional()
-  product_id?: number; // ID do produto (car_id, boat_id ou aircraft_id — Int PKs)
+  product_id?: string; // ID do produto (car_id, boat_id ou aircraft_id — UUID)
 }

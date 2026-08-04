@@ -98,18 +98,21 @@ export default function RegisterOfficePage() {
 
   if (isValidating) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-gray-500">Validando convite...</p>
+      <div className="min-h-screen flex items-center justify-center bg-bg">
+        <p className="text-muted">Validando convite...</p>
       </div>
     );
   }
 
   if (tokenError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full bg-white rounded-lg shadow p-8 text-center">
-          <h1 className="text-xl font-bold text-red-600 mb-2">Convite inválido</h1>
-          <p className="text-gray-600">{tokenError}</p>
+      <div className="min-h-screen flex items-center justify-center bg-bg">
+        <div className="max-w-md w-full bg-surface rounded-lg shadow-ds-card p-8 text-center">
+          <h1 className="text-xl font-bold text-status-bad mb-2">Convite inválido</h1>
+          <p className="text-muted">{tokenError}</p>
+          <Button onClick={() => navigate("/login")} className="mt-4">
+            Ir para Login
+          </Button>
         </div>
       </div>
     );
@@ -117,10 +120,10 @@ export default function RegisterOfficePage() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full bg-white rounded-lg shadow p-8 text-center">
-          <h1 className="text-xl font-bold text-green-600 mb-2">Conta criada!</h1>
-          <p className="text-gray-600 mb-6">
+      <div className="min-h-screen flex items-center justify-center bg-bg">
+        <div className="max-w-md w-full bg-surface rounded-lg shadow-ds-card p-8 text-center">
+          <h1 className="text-xl font-bold text-status-ok mb-2">Conta criada!</h1>
+          <p className="text-muted mb-6">
             Sua conta de gerente do escritório <strong>{companyName}</strong> foi criada.
           </p>
           <Button onClick={() => navigate("/login")}>Fazer Login</Button>
@@ -130,99 +133,99 @@ export default function RegisterOfficePage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow p-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Criar conta de Gerente</h1>
-        <p className="text-sm text-gray-500 mb-6">
+    <div className="min-h-screen flex items-center justify-center bg-bg py-12 px-4">
+      <div className="max-w-md w-full bg-surface rounded-lg shadow-ds-card p-8">
+        <h1 className="text-2xl font-bold text-ink mb-1">Criar conta de Gerente</h1>
+        <p className="text-sm text-muted mb-6">
           Escritório: <strong>{companyName}</strong>
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">E-mail (do convite)</label>
+            <label className="block text-sm font-medium text-ink-soft">E-mail (do convite)</label>
             <input
               type="email"
               value={email}
               readOnly
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-500 cursor-not-allowed"
+              className="mt-1 block w-full px-3 py-2 border border-border rounded-md bg-border-soft text-muted cursor-not-allowed"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Nome</label>
+              <label className="block text-sm font-medium text-ink-soft">Nome</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                className="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-focus-ring"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Sobrenome</label>
+              <label className="block text-sm font-medium text-ink-soft">Sobrenome</label>
               <input
                 type="text"
                 value={surname}
                 onChange={(e) => setSurname(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                className="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-focus-ring"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">CPF (11 dígitos)</label>
+            <label className="block text-sm font-medium text-ink-soft">CPF (11 dígitos)</label>
             <input
               type="text"
               value={cpf}
               onChange={(e) => setCpf(e.target.value)}
               placeholder="12345678901"
               maxLength={14}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-focus-ring"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">RG (7-10 dígitos)</label>
+            <label className="block text-sm font-medium text-ink-soft">RG (7-10 dígitos)</label>
             <input
               type="text"
               value={rg}
               onChange={(e) => setRg(e.target.value)}
               placeholder="1234567"
               maxLength={10}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-focus-ring"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Telefone (DDD + número)</label>
+            <label className="block text-sm font-medium text-ink-soft">Telefone (DDD + número)</label>
             <input
               type="text"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="(11) 99999-9999"
               maxLength={16}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-focus-ring"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Senha (mín. 6 caracteres)</label>
+            <label className="block text-sm font-medium text-ink-soft">Senha (mín. 6 caracteres)</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               minLength={6}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-focus-ring"
               required
             />
           </div>
 
-          {formError && <p className="text-sm text-red-500">{formError}</p>}
+          {formError && <p className="text-sm text-status-bad">{formError}</p>}
 
           <div className="pt-2">
             <Button type="submit" disabled={isSubmitting} className="w-full">
@@ -231,9 +234,9 @@ export default function RegisterOfficePage() {
           </div>
         </form>
 
-        <p className="mt-4 text-center text-sm text-gray-500">
+        <p className="mt-4 text-center text-sm text-muted">
           Já tem conta?{" "}
-          <button onClick={() => navigate("/login")} className="text-blue-600 hover:underline">
+          <button onClick={() => navigate("/login")} className="text-ink-soft hover:underline">
             Fazer login
           </button>
         </p>

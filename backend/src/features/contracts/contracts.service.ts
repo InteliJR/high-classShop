@@ -133,7 +133,7 @@ export class ContractsService {
 
     // Determinar produto baseado no tipo
     let product: {
-      id: number;
+      id: string;
       brand: string;
       model: string;
       year: number;
@@ -256,7 +256,9 @@ export class ContractsService {
     } = await this.calculateCommissionSplit(
       processData.specialist,
       platformCompany,
-      processData.client?.consultant?.company_id ?? null,
+      processData.client?.consultant?.company_id ??
+        processData.client?.company_id ??
+        null,
     );
 
     this.logger.debug(
@@ -493,7 +495,9 @@ export class ContractsService {
       await this.calculateCommissionSplit(
         process.specialist,
         platformCompany,
-        process.client?.consultant?.company_id ?? null,
+        process.client?.consultant?.company_id ??
+          process.client?.company_id ??
+          null,
       );
 
     const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -694,10 +698,11 @@ export class ContractsService {
       // ===== ETAPA 3: CRIAR ENVELOPE NO DOCUSIGN =====
       this.logger.log('Etapa 3: Criando envelope no DocuSign via template...');
 
-      const templateId = globalThis.process.env.DOCUSIGN_TEMPLATE_ID;
+      const templateId =
+        dto.template_id || globalThis.process.env.DOCUSIGN_TEMPLATE_ID;
       if (!templateId) {
         throw new InternalServerErrorException(
-          'DOCUSIGN_TEMPLATE_ID não configurado',
+          'Nenhum template informado e DOCUSIGN_TEMPLATE_ID não configurado',
         );
       }
 
@@ -986,46 +991,49 @@ export class ContractsService {
       payment_seller_value: formatBRL(dto.payment_seller_value),
       payment_seller_value_written: numberToWords(dto.payment_seller_value),
 
-      // === Campos do template ANTIGO (compatibilidade) ===
-      commission_value: formatBRL(dto.platform_value),
+      // === Campos do template ANTIGO (compatibilidade) — comissão zerada no contrato ===
+      // ponytail: comissão zerada só no payload DocuSign; DB/cálculo intactos (resolveCommissionFromTotal segue igual)
+      commission_value: formatBRL(0),
       // ATENÇÃO: typo no template antigo - "commision" com apenas 1 'm'
-      commision_value_written: numberToWords(dto.platform_value),
-      commission_name: dto.platform_name,
+      commision_value_written: numberToWords(0),
+      commission_name: dto.platform_name || '',
       // ATENÇÃO: typo no template antigo - "commision_cpf" com apenas 1 'm'
-      commision_cpf: formatCnpj(dto.platform_cnpj),
-      commission_bank: dto.platform_bank,
-      commission_agency: dto.platform_agency,
-      commission_checking_account: dto.platform_checking_account,
+      commision_cpf: formatCnpj(dto.platform_cnpj || ''),
+      commission_bank: dto.platform_bank || '',
+      commission_agency: dto.platform_agency || '',
+      commission_checking_account: dto.platform_checking_account || '',
 
-      // === Campos do template NOVO (split 3 vias) ===
+      // === Campos do template NOVO (split 3 vias) — valores de comissão zerados; dados das partes mantidos ===
       // Dados da Plataforma (Split 1)
-      platform_value: formatBRL(dto.platform_value),
-      platform_value_written: numberToWords(dto.platform_value),
-      platform_percentage: String(dto.platform_percentage),
-      platform_name: dto.platform_name,
-      platform_cnpj: formatCnpj(dto.platform_cnpj),
-      platform_bank: dto.platform_bank,
-      platform_agency: dto.platform_agency,
-      platform_checking_account: dto.platform_checking_account,
+      // ponytail: dados da plataforma são opcionais — nem todo ambiente tem
+      // banco/agência/conta cadastrados; sem eles vai vazio, nunca bloqueia o envio
+      platform_value: formatBRL(0),
+      platform_value_written: numberToWords(0),
+      platform_percentage: '0',
+      platform_name: dto.platform_name || '',
+      platform_cnpj: formatCnpj(dto.platform_cnpj || ''),
+      platform_bank: dto.platform_bank || '',
+      platform_agency: dto.platform_agency || '',
+      platform_checking_account: dto.platform_checking_account || '',
 
       // Dados do Escritório (Split 2)
-      commission_office_value: formatBRL(dto.office_value),
-      commission_office_written: numberToWords(dto.office_value),
-      office_name: dto.office_name,
-      office_cnpj: formatCnpj(dto.office_cnpj),
+      commission_office_value: formatBRL(0),
+      commission_office_written: numberToWords(0),
+      office_name: dto.office_name || '',
+      office_cnpj: formatCnpj(dto.office_cnpj || ''),
       office_bank: dto.office_bank || '',
       office_agency: dto.office_agency || '',
       office_checking_account: dto.office_checking_account || '',
 
       // Dados do Especialista (Split 3)
-      specialist_value: formatBRL(dto.specialist_value),
-      specialist_value_written: numberToWords(dto.specialist_value),
+      specialist_value: formatBRL(0),
+      specialist_value_written: numberToWords(0),
       specialist_bank: dto.specialist_bank || '',
       specialist_agency: dto.specialist_agency || '',
       specialist_checking_account: dto.specialist_checking_account || '',
       // NOTE: variável do template usa nome em português/inglês misturado
-      especialista_name: dto.specialist_name,
-      specialist_document: formatDocument(dto.specialist_document),
+      especialista_name: dto.specialist_name || '',
+      specialist_document: formatDocument(dto.specialist_document || ''),
 
       // Testemunhas (opcionais)
       testimonial1_cpf: dto.testimonial1_cpf
@@ -1215,10 +1223,11 @@ export class ContractsService {
       // ===== ETAPA 3: CRIAR PREVIEW NO DOCUSIGN =====
       this.logger.log('Preview Etapa 3: Criando preview no DocuSign...');
 
-      const templateId = globalThis.process.env.DOCUSIGN_TEMPLATE_ID;
+      const templateId =
+        dto.template_id || globalThis.process.env.DOCUSIGN_TEMPLATE_ID;
       if (!templateId) {
         throw new InternalServerErrorException(
-          'DOCUSIGN_TEMPLATE_ID não configurado',
+          'Nenhum template informado e DOCUSIGN_TEMPLATE_ID não configurado',
         );
       }
 
@@ -1375,7 +1384,8 @@ export class ContractsService {
       // ===== ETAPA 3: SALVAR NO BANCO =====
       this.logger.log('Salvando contrato no banco...');
 
-      const templateId = globalThis.process.env.DOCUSIGN_TEMPLATE_ID || '';
+      const templateId =
+        dto.template_id || globalThis.process.env.DOCUSIGN_TEMPLATE_ID || '';
 
       const createdContract = await this.prismaService.$transaction(
         async (tx) => {

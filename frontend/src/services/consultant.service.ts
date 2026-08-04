@@ -122,7 +122,7 @@ export type CreateConsultantProcessData = {
   client_id: string;
   specialist_id: string;
   product_type: 'CAR' | 'BOAT' | 'AIRCRAFT';
-  product_id?: number;
+  product_id?: string;
 };
 
 export type ConsultantProcessResult = {
@@ -161,6 +161,7 @@ export type ConsultantProcess = {
   status: string;
   product_type: string | null;
   created_at: string;
+  updated_at: string;
   client_id: string;
   client: { id: string; name: string; surname: string } | null;
   specialist: { id: string; name: string; surname: string; speciality: string } | null;
@@ -211,4 +212,3 @@ export async function registerConsultant(data: {
   const response = await api.post('/auth/register-consultant', data);
   return response.data;
 }
-

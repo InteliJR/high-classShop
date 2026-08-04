@@ -201,7 +201,7 @@ export default function NewCompanyForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <h2 className="h2-style">
+      <h2 className="text-h2 font-semibold text-ink">
         {companyToEdit ? "Editar Escritório" : "Novo Escritório"}
       </h2>
 

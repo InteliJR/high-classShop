@@ -659,4 +659,21 @@ export class DocuSignClient {
     this.logger.log(`Voiding envelope ${envelopeId}: ${reason}`);
     return this.updateEnvelopeStatus(envelopeId, 'voided', reason);
   }
+
+  /**
+   * Lista os templates de envelope disponíveis na conta DocuSign
+   *
+   * @returns {Promise<Array<{ templateId: string; name: string }>>}
+   */
+  async listTemplates(): Promise<Array<{ templateId: string; name: string }>> {
+    const token = await this.getAccessToken();
+    const data = await this.get(
+      `/v2.1/accounts/${this.accountId}/templates`,
+      token,
+    );
+    return (data.envelopeTemplates || []).map((t: any) => ({
+      templateId: t.templateId,
+      name: t.name,
+    }));
+  }
 }

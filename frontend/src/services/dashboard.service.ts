@@ -1,8 +1,8 @@
 import api from "./api";
+import type { SaleCommission } from "./commissions.service";
 
 export interface DashboardStats {
   activeProcesses: number;
-  conversionRate: number;
   activeCompanies: number;
   totalClients: number;
   specialistsCount: number;
@@ -10,6 +10,13 @@ export interface DashboardStats {
   productsByType: { cars: number; boats: number; aircrafts: number };
   salesByMonth: MonthData[];
   consultantsPerformance: ConsultantPerformanceData[];
+  commissionSummary: {
+    totalPaid: number;
+    thisMonth: number;
+    avgTicket: number;
+    recentSales: SaleCommission[];
+  };
+  databaseCounts: { key: string; label: string; count: number }[];
 }
 
 export interface MonthData {

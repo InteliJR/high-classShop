@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { officeService, type OfficeCompany } from "../../services/office";
 import Button from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
+import { PageHeader } from "../../components/patterns/PageHeader";
 import { resolveCompanyLogo } from "../../utils/branding";
 
 const DEFAULT_COLORS = ["#1a1a1a", "#3b82f6", "#10b981", "#f59e0b"];
@@ -27,6 +29,7 @@ export default function OfficeCompanySettingsPage() {
           agency: c.agency ?? "",
           checking_account: c.checking_account ?? "",
           color_identity: c.color_identity?.length ? c.color_identity : DEFAULT_COLORS,
+          slug: c.slug ?? "",
         });
       })
       .catch(() => setMsg({ ok: false, text: "Erro ao carregar escritório" }))
@@ -88,19 +91,19 @@ export default function OfficeCompanySettingsPage() {
     setForm({ ...form, color_identity: next });
   };
 
-  if (loading) return <div className="p-8 text-gray-500">Carregando...</div>;
+  if (loading) return <div className="p-8 text-muted">Carregando...</div>;
   if (!company) return null;
 
   return (
     <div className="p-8 max-w-3xl">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Configurações do escritório</h1>
+      <PageHeader title="Configurações do escritório" />
 
       {msg && (
-        <p className={`mb-4 text-sm ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>
+        <p className={`mb-4 text-sm ${msg.ok ? "text-status-ok" : "text-status-bad"}`}>{msg.text}</p>
       )}
 
-      <section className="bg-white p-6 rounded-lg shadow mb-6">
-        <h2 className="text-lg font-semibold mb-4">Logo</h2>
+      <Card className="mb-6">
+        <h2 className="text-h2 font-semibold text-ink mb-4">Logo</h2>
         <div className="flex items-center gap-4">
           {(() => {
             const src = resolveCompanyLogo(company);
@@ -108,10 +111,10 @@ export default function OfficeCompanySettingsPage() {
               <img
                 src={src}
                 alt={`Logo ${company.name}`}
-                className="w-24 h-24 border border-gray-200 rounded object-contain bg-gray-50"
+                className="w-24 h-24 border border-border rounded object-contain bg-border-soft"
               />
             ) : (
-              <div className="w-24 h-24 border border-dashed border-gray-300 rounded bg-gray-50 flex items-center justify-center text-xs text-gray-400">
+              <div className="w-24 h-24 border border-dashed border-border rounded bg-border-soft flex items-center justify-center text-xs text-subtle">
                 Sem logo
               </div>
             );
@@ -124,95 +127,112 @@ export default function OfficeCompanySettingsPage() {
             className="text-sm"
           />
         </div>
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-xs text-muted mt-2">
           PNG, JPEG, WebP (≤2MB) ou SVG sanitizado (≤500KB). SVG passa por DOMPurify antes de salvar.
         </p>
-      </section>
+      </Card>
 
-      <form onSubmit={save} className="bg-white p-6 rounded-lg shadow space-y-4">
-        <Field label="Nome do escritório">
-          <input
-            type="text"
-            value={form.name ?? ""}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            required
-          />
-        </Field>
-
-        <Field label="Descrição">
-          <textarea
-            value={form.description ?? ""}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
-        </Field>
-
-        <Field label="CNPJ">
-          <input
-            type="text"
-            value={form.cnpj ?? ""}
-            onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
-            placeholder="14 dígitos ou XX.XXX.XXX/XXXX-XX"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
-        </Field>
-
-        <div className="grid grid-cols-3 gap-4">
-          <Field label="Banco">
+      <Card>
+        <form onSubmit={save} className="space-y-4">
+          <Field label="Nome do escritório">
             <input
               type="text"
-              value={form.bank ?? ""}
-              onChange={(e) => setForm({ ...form, bank: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              value={form.name ?? ""}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="w-full px-3 py-2 border border-border rounded-md"
+              required
             />
           </Field>
-          <Field label="Agência">
+
+          <Field label="Descrição">
+            <textarea
+              value={form.description ?? ""}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={3}
+              className="w-full px-3 py-2 border border-border rounded-md"
+            />
+          </Field>
+
+          <Field label="CNPJ">
             <input
               type="text"
-              value={form.agency ?? ""}
-              onChange={(e) => setForm({ ...form, agency: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              value={form.cnpj ?? ""}
+              onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
+              placeholder="14 dígitos ou XX.XXX.XXX/XXXX-XX"
+              className="w-full px-3 py-2 border border-border rounded-md"
             />
           </Field>
-          <Field label="Conta corrente">
-            <input
-              type="text"
-              value={form.checking_account ?? ""}
-              onChange={(e) => setForm({ ...form, checking_account: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-          </Field>
-        </div>
 
-        <Field label="Comissão padrão (%)">
-          <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-700">
-            {company.commission_rate != null ? `${company.commission_rate}%` : "—"}
-          </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Somente o administrador pode alterar a comissão do escritório.
-          </p>
-        </Field>
-
-        <Field label="Identidade visual (até 4 cores hex)">
-          <div className="grid grid-cols-4 gap-3">
-            {[0, 1, 2, 3].map((i) => (
+          <div className="grid grid-cols-3 gap-4">
+            <Field label="Banco">
               <input
-                key={i}
-                type="color"
-                value={form.color_identity?.[i] ?? DEFAULT_COLORS[i]}
-                onChange={(e) => setColor(i, e.target.value)}
-                className="h-10 w-full border border-gray-300 rounded"
+                type="text"
+                value={form.bank ?? ""}
+                onChange={(e) => setForm({ ...form, bank: e.target.value })}
+                className="w-full px-3 py-2 border border-border rounded-md"
               />
-            ))}
+            </Field>
+            <Field label="Agência">
+              <input
+                type="text"
+                value={form.agency ?? ""}
+                onChange={(e) => setForm({ ...form, agency: e.target.value })}
+                className="w-full px-3 py-2 border border-border rounded-md"
+              />
+            </Field>
+            <Field label="Conta corrente">
+              <input
+                type="text"
+                value={form.checking_account ?? ""}
+                onChange={(e) => setForm({ ...form, checking_account: e.target.value })}
+                className="w-full px-3 py-2 border border-border rounded-md"
+              />
+            </Field>
           </div>
-        </Field>
 
-        <Button type="submit" disabled={saving}>
-          {saving ? "Salvando..." : "Salvar"}
-        </Button>
-      </form>
+          <Field label="Endereço do site (slug)">
+            <input
+              type="text"
+              value={form.slug ?? ""}
+              onChange={(e) =>
+                setForm({ ...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") })
+              }
+              placeholder="meu-escritorio"
+              className="w-full px-3 py-2 border border-border rounded-md"
+            />
+            <p className="text-xs text-muted mt-1">
+              Seu site: {window.location.origin}/i/{form.slug || "meu-escritorio"}
+            </p>
+          </Field>
+
+          <Field label="Comissão padrão (%)">
+            <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-md text-ink-soft">
+              {company.commission_rate != null ? `${company.commission_rate}%` : "—"}
+            </div>
+            <p className="text-xs text-muted mt-1">
+              Somente o administrador pode alterar a comissão do escritório.
+            </p>
+          </Field>
+
+          <Field label="Identidade visual (até 4 cores hex)">
+            <div className="grid grid-cols-4 gap-3">
+              {[0, 1, 2, 3].map((i) => (
+                <input
+                  key={i}
+                  type="color"
+                  value={form.color_identity?.[i] ?? DEFAULT_COLORS[i]}
+                  onChange={(e) => setColor(i, e.target.value)}
+                  className="h-10 w-full border border-border rounded"
+                />
+              ))}
+            </div>
+          </Field>
+
+          <Button type="submit" disabled={saving}>
+            {saving ? "Salvando..." : "Salvar"}
+          </Button>
+        </form>
+      </Card>
     </div>
   );
 }
@@ -220,7 +240,7 @@ export default function OfficeCompanySettingsPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <label className="block text-sm font-medium text-ink-soft mb-1">{label}</label>
       {children}
     </div>
   );

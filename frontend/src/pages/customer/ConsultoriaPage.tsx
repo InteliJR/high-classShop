@@ -1,23 +1,22 @@
-import { useEffect, useState, useContext, useRef } from "react";
+import { useEffect, useState, useContext } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Car, Ship, Plane, Calendar, UserCircle2, Loader2 } from "lucide-react";
-import { PopupModal, useCalendlyEventListener } from "react-calendly";
+import { PopupModal } from "react-calendly";
 import {
   getSpecialistsGroupedByCategory,
   type Specialist,
   type GroupedSpecialists,
 } from "../../services/specialists.service";
-import {
-  cancelPendingAppointment,
-  createConsultancyAppointment,
-  getCalendlySyncStatus,
-  registerCalendlyScheduledEvent,
-} from "../../services/appointments.service";
+import { createConsultancyAppointment } from "../../services/appointments.service";
 import { AuthContext } from "../../contexts/AuthContext";
 import Button from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
+import { Alert } from "../../components/ui/alert";
+import { EmptyState } from "../../components/patterns/EmptyState";
 import ProductTypePreferenceModal, {
   type PreferredProductType,
 } from "../../components/product/ProductTypePreferenceModal";
+import { useCalendlyScheduling } from "../../hooks/useCalendlyScheduling";
 
 type SpecialityType = "CAR" | "BOAT" | "AIRCRAFT";
 
@@ -48,17 +47,19 @@ export default function ConsultoriaPage() {
     string | null
   >(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const [isCalendlyModalOpen, setIsCalendlyModalOpen] = useState(false);
-  const [calendlyModalUrl, setCalendlyModalUrl] = useState<string | null>(null);
-  const [pendingAppointmentId, setPendingAppointmentId] = useState<
-    string | null
-  >(null);
-  const [syncMessage, setSyncMessage] = useState("");
-  const [syncState, setSyncState] = useState<
-    "idle" | "waiting_event" | "syncing" | "done" | "error"
-  >("idle");
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
-  const schedulingActuallyConfirmed = useRef(false);
+
+  const {
+    isModalOpen: isCalendlyModalOpen,
+    modalUrl: calendlyModalUrl,
+    syncState,
+    syncMessage,
+    openPopup,
+    closePopup,
+  } = useCalendlyScheduling({
+    successRedirectMessage:
+      "Solicitação de consultoria registrada com sucesso! Verifique seus processos.",
+  });
 
   const typeFromUrl = searchParams.get("type") as PreferredProductType | null;
   const selectedType: PreferredProductType | null =
@@ -109,84 +110,6 @@ export default function ConsultoriaPage() {
     setIsTypeModalOpen(false);
   };
 
-  const pollCalendlySyncStatus = async (appointmentId: string) => {
-    const maxAttempts = 8;
-    const intervalMs = 3500;
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const syncStatus = await getCalendlySyncStatus(appointmentId);
-
-      if (
-        syncStatus.calendly_sync_status === "SYNCED" ||
-        syncStatus.appointment_datetime
-      ) {
-        setSyncState("done");
-        setSyncMessage(
-          "Agendamento recebido! Você pode acompanhar os detalhes em Meus Processos."
-        );
-
-        setTimeout(() => {
-          navigate("/customer/processes", {
-            state: {
-              message:
-                "Solicitação de consultoria registrada com sucesso! Verifique seus processos.",
-            },
-          });
-        }, 900);
-        return;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
-    }
-
-    setSyncState("done");
-    setSyncMessage(
-      "Solicitação registrada. Estamos finalizando a sincronização do horário com o calendário."
-    );
-  };
-
-  useCalendlyEventListener({
-    onEventScheduled: async (event) => {
-      if (!pendingAppointmentId) {
-        return;
-      }
-
-      const payload = (event as any)?.data?.payload;
-      const eventUri = payload?.event?.uri;
-      const inviteeUri = payload?.invitee?.uri;
-
-      if (!eventUri || !inviteeUri) {
-        setSyncState("error");
-        setSyncMessage(
-          "Não foi possível capturar os dados do agendamento. Verifique seus processos para confirmar."
-        );
-        return;
-      }
-
-      try {
-        setSyncState("syncing");
-        setSyncMessage("Sincronizando seu agendamento...");
-
-        await registerCalendlyScheduledEvent(pendingAppointmentId, {
-          event_uri: eventUri,
-          invitee_uri: inviteeUri,
-          client_event: "calendly.event_scheduled",
-          client_observed_at: new Date().toISOString(),
-        });
-
-        schedulingActuallyConfirmed.current = true;
-        setIsCalendlyModalOpen(false);
-        await pollCalendlySyncStatus(pendingAppointmentId);
-      } catch (error) {
-        console.error("Erro ao sincronizar evento do Calendly:", error);
-        setSyncState("error");
-        setSyncMessage(
-          "Agendamento criado, mas houve falha na sincronização automática. Você pode seguir em Meus Processos."
-        );
-      }
-    },
-  });
-
   const handleRequestMeeting = async (specialist: Specialist) => {
     if (!user || requestingSpecialistId) return;
 
@@ -215,14 +138,7 @@ export default function ConsultoriaPage() {
         ? rawCalendlyUrl
         : `https://${rawCalendlyUrl}`;
 
-      schedulingActuallyConfirmed.current = false;
-      setPendingAppointmentId(pendingAppointment.id);
-      setCalendlyModalUrl(formattedUrl);
-      setSyncState("waiting_event");
-      setSyncMessage(
-        "Conclua seu agendamento no Calendly para sincronizar automaticamente com a plataforma."
-      );
-      setIsCalendlyModalOpen(true);
+      openPopup(pendingAppointment.id, formattedUrl);
     } catch (error: any) {
       const message =
         error?.response?.data?.error?.message ||
@@ -234,28 +150,12 @@ export default function ConsultoriaPage() {
     }
   };
 
-  const handleCalendlyModalClose = async () => {
-    setIsCalendlyModalOpen(false);
-
-    if (!schedulingActuallyConfirmed.current && pendingAppointmentId) {
-      try {
-        await cancelPendingAppointment(pendingAppointmentId);
-      } catch (err) {
-        console.error("Erro ao cancelar agendamento ao fechar modal", err);
-      } finally {
-        setPendingAppointmentId(null);
-        setSyncState("idle");
-        setSyncMessage("");
-      }
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-3 border-gray-200 border-t-primary rounded-full animate-spin" />
-          <p className="text-gray-600">Carregando especialistas...</p>
+          <p className="text-muted">Carregando especialistas...</p>
         </div>
       </div>
     );
@@ -265,10 +165,10 @@ export default function ConsultoriaPage() {
     <div className="flex flex-col gap-8 w-full max-w-6xl mx-auto py-8 px-4">
       {/* Header */}
       <div className="space-y-4">
-        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">
+        <h1 className="text-3xl sm:text-4xl font-bold text-ink">
           Consultoria Especializada
         </h1>
-        <p className="text-lg text-gray-600 max-w-3xl">
+        <p className="text-lg text-muted max-w-3xl">
           Nossos especialistas estão prontos para ajudá-lo a encontrar o produto
           perfeito. Escolha um especialista na categoria de seu interesse para
           agendar uma consultoria.
@@ -287,24 +187,20 @@ export default function ConsultoriaPage() {
             Trocar categoria
           </Button>
         </div>
-        {errorMessage && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {errorMessage}
-          </div>
-        )}
+        {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
 
         {syncState !== "idle" && syncMessage && (
-          <div
-            className={`rounded-lg border px-4 py-3 text-sm ${
+          <Alert
+            variant={
               syncState === "error"
-                ? "border-red-200 bg-red-50 text-red-700"
+                ? "danger"
                 : syncState === "done"
-                  ? "border-green-200 bg-green-50 text-green-700"
-                  : "border-amber-200 bg-amber-50 text-amber-700"
-            }`}
+                  ? "success"
+                  : "warning"
+            }
           >
             {syncMessage}
-          </div>
+          </Alert>
         )}
       </div>
 
@@ -313,14 +209,14 @@ export default function ConsultoriaPage() {
         {visibleGroups.map((group) => (
           <div key={group.type} className="space-y-6">
             {/* Category Header */}
-            <div className="flex items-center gap-4 border-b-2 border-gray-200 pb-4">
+            <div className="flex items-center gap-4 border-b-2 border-border pb-4">
               <div className="p-3 bg-brand-primary/10 rounded-full text-brand-primary">
                 {group.icon}
               </div>
-              <h2 className="text-2xl font-bold text-gray-900">
+              <h2 className="text-2xl font-bold text-ink">
                 {group.label}
               </h2>
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-muted">
                 ({group.specialists.length} especialista
                 {group.specialists.length !== 1 ? "s" : ""})
               </span>
@@ -339,9 +235,10 @@ export default function ConsultoriaPage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-xl">
-                Nenhum especialista disponível nesta categoria no momento.
-              </div>
+              <EmptyState
+                icon={UserCircle2}
+                title="Nenhum especialista disponível nesta categoria no momento."
+              />
             )}
           </div>
         ))}
@@ -351,7 +248,7 @@ export default function ConsultoriaPage() {
         <PopupModal
           url={calendlyModalUrl}
           open={isCalendlyModalOpen}
-          onModalClose={handleCalendlyModalClose}
+          onModalClose={closePopup}
           rootElement={document.getElementById("root") ?? document.body}
           prefill={{
             name: user ? `${user.name} ${user.surname}`.trim() : undefined,
@@ -387,16 +284,16 @@ function SpecialistCard({
   isRequesting,
 }: SpecialistCardProps) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+    <Card className="hover:shadow-lg transition-shadow">
       <div className="flex flex-col items-center text-center space-y-4">
-        <div className="p-4 bg-gray-100 rounded-full">
-          <UserCircle2 size={64} className="text-gray-400" />
+        <div className="p-4 bg-border-soft rounded-full">
+          <UserCircle2 size={64} className="text-subtle" />
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">
+          <h3 className="text-lg font-semibold text-ink">
             {specialist.name} {specialist.surname}
           </h3>
-          <p className="text-sm text-gray-500">{specialist.email}</p>
+          <p className="text-sm text-muted">{specialist.email}</p>
         </div>
         <Button
           onClick={() => onRequestMeeting(specialist)}
@@ -417,6 +314,6 @@ function SpecialistCard({
           )}
         </Button>
       </div>
-    </div>
+    </Card>
   );
 }

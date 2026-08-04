@@ -29,7 +29,7 @@ export default function NewSpecialistForm({
   if (specialistToEdit) {
     return (
       <div className="space-y-6 text-center">
-        <h2 className="h2-style">Editar Especialista</h2>
+        <h2 className="text-h2 font-semibold text-ink">Editar Especialista</h2>
         <p className="text-text-secondary">
           A edição de especialistas será feita pelo próprio especialista nas
           configurações de perfil.
@@ -77,7 +77,7 @@ export default function NewSpecialistForm({
   if (inviteLink) {
     return (
       <div className="space-y-4">
-        <h2 className="h2-style">Convidar Especialista</h2>
+        <h2 className="text-h2 font-semibold text-ink">Convidar Especialista</h2>
         <p className="text-sm text-green-700 font-medium">
           Link de convite gerado! Envie para o especialista:
         </p>
@@ -112,7 +112,7 @@ export default function NewSpecialistForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <h2 className="h2-style">Convidar Especialista</h2>
+      <h2 className="text-h2 font-semibold text-ink">Convidar Especialista</h2>
       <p className="text-sm text-gray-500">
         O especialista receberá um link para concluir o cadastro (nome, CPF,
         RG, senha e dados bancários).
