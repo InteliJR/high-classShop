@@ -1,5 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
-import { ContractsService } from './contracts.service';
+import {
+  ContractsService,
+  stripContractDocumentFields,
+} from './contracts.service';
 import { formatBRL, numberToWords } from '../../shared/utils/format.utils';
 
 function mkPrisma(overrides: Partial<Record<string, any>> = {}) {
@@ -327,5 +330,56 @@ describe('ContractsService — buildFormFields zera comissão no DocuSign', () =
     expect(fields.buyer_name).toBe('Comprador');
     expect(fields.vehicle_model).toBe('Carro X');
     expect(fields.platform_name).toBe('Plat');
+  });
+});
+
+describe('stripContractDocumentFields', () => {
+  it('remove pontuação de todos os campos de documento e CEP', () => {
+    const result = stripContractDocumentFields({
+      seller_cpf: '123.456.789-00',
+      seller_rg: '12.345.678-9',
+      seller_cep: '01234-567',
+      buyer_cpf: '987.654.321-00',
+      buyer_rg: undefined,
+      buyer_cep: '09876-543',
+      platform_cnpj: '12.345.678/0001-99',
+      office_cnpj: '98.765.432/0001-11',
+      specialist_document: '11.222.333/0001-44',
+      testimonial1_cpf: '111.222.333-44',
+      testimonial2_cpf: undefined,
+    });
+
+    expect(result).toEqual({
+      seller_cpf: '12345678900',
+      seller_rg: '123456789',
+      seller_cep: '01234567',
+      buyer_cpf: '98765432100',
+      buyer_rg: undefined,
+      buyer_cep: '09876543',
+      platform_cnpj: '12345678000199',
+      office_cnpj: '98765432000111',
+      specialist_document: '11222333000144',
+      testimonial1_cpf: '11122233344',
+      testimonial2_cpf: undefined,
+    });
+  });
+
+  it('mantém undefined como undefined (não vira string vazia)', () => {
+    const result = stripContractDocumentFields({
+      seller_cpf: '12345678900',
+      seller_rg: undefined,
+      seller_cep: '01234567',
+      buyer_cpf: '98765432100',
+      buyer_rg: undefined,
+      buyer_cep: '09876543',
+      platform_cnpj: undefined,
+      office_cnpj: undefined,
+      specialist_document: undefined,
+      testimonial1_cpf: undefined,
+      testimonial2_cpf: undefined,
+    });
+
+    expect(result.platform_cnpj).toBeUndefined();
+    expect(result.testimonial1_cpf).toBeUndefined();
   });
 });

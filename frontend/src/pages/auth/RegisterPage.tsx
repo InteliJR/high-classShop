@@ -10,6 +10,7 @@ import type { RegisterValues } from "../../types/types";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/button";
 import { useWhitelabel } from "../../store/whitelabelStore";
+import { applyCpfMask, applyRgMask, applyPhoneMask } from "../../utils/mask";
 
 type RegistrationMode = 'referral' | 'public';
 
@@ -138,31 +139,6 @@ export default function RegisterPage() {
     // Validation errors handled by react-hook-form
   };
 
-  const formatCPF = (value: string) => {
-    const cleaned = value.replace(/\D/g, "");
-    if (cleaned.length <= 11) {
-      return cleaned
-        .replace(/(\d{3})(\d)/, "$1.$2")
-        .replace(/(\d{3})(\d)/, "$1.$2")
-        .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-    }
-    return value;
-  };
-
-  const formatRG = (value: string) => {
-    const cleaned = value.replace(/\D/g, "");
-    return cleaned.slice(0, 10);
-  };
-
-  const formatPhone = (value: string) => {
-    const cleaned = value.replace(/\D/g, "").slice(0, 11);
-    if (cleaned.length <= 2) return `(${cleaned}`;
-    if (cleaned.length <= 6)
-      return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2)}`;
-    if (cleaned.length <= 10)
-      return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
-    return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`;
-  };
 
   const validatePhone = (value: string) => {
     const d = value.replace(/\D/g, "").length;
@@ -347,7 +323,7 @@ export default function RegisterPage() {
                       required: "CPF é obrigatório",
                       validate: (value) => validateCPF(value) || "CPF inválido",
                       onChange: (e) => {
-                        e.target.value = formatCPF(e.target.value);
+                        e.target.value = applyCpfMask(e.target.value);
                       }
                     })}
                   />
@@ -360,20 +336,20 @@ export default function RegisterPage() {
                   <input
                     id="rg"
                     type="text"
-                    placeholder="0000000000"
-                    maxLength={10}
+                    placeholder="0000000 ou CPF completo"
+                    maxLength={14}
                     className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 transition-all ${
                       errors.rg
                         ? 'border-status-bad focus:ring-status-bad'
-                        : watch("rg") && (() => { const d = watch("rg").replace(/\D/g, "").length; return d >= 7 && d <= 10; })()
+                        : watch("rg") && (() => { const d = watch("rg").replace(/\D/g, "").length; return d >= 7 && d <= 11; })()
                         ? 'border-status-ok focus:ring-status-ok'
                         : 'border-border focus:ring-focus-ring focus:border-transparent'
                     }`}
                     {...register("rg", {
                       required: "RG é obrigatório",
-                      validate: (value) => { const d = value.replace(/\D/g, "").length; return (d >= 7 && d <= 10) || "RG deve ter entre 7 e 10 dígitos"; },
+                      validate: (value) => { const d = value.replace(/\D/g, "").length; return (d >= 7 && d <= 11) || "RG deve ter entre 7 e 11 dígitos"; },
                       onChange: (e) => {
-                        e.target.value = formatRG(e.target.value);
+                        e.target.value = applyRgMask(e.target.value);
                       }
                     })}
                   />
@@ -402,7 +378,7 @@ export default function RegisterPage() {
                     required: "Telefone é obrigatório",
                     validate: (value) => validatePhone(value) || "Telefone deve ter 10 ou 11 dígitos",
                     onChange: (e) => {
-                      e.target.value = formatPhone(e.target.value);
+                      e.target.value = applyPhoneMask(e.target.value);
                     }
                   })}
                 />

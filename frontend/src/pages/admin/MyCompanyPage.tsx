@@ -8,6 +8,7 @@ import {
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
 import { Card } from "../../components/ui/card";
+import { applyCnpjMask, stripFormatting } from "../../utils/mask";
 
 /**
  * Página "Minha Empresa" - Admin
@@ -41,7 +42,7 @@ export default function MyCompanyPage() {
         const data = await getPlatformCompany();
         if (data) {
           setName(data.name);
-          setCnpj(data.cnpj);
+          setCnpj(applyCnpjMask(data.cnpj));
           setBank(data.bank);
           setAgency(data.agency);
           setCheckingAccount(data.checking_account);
@@ -82,7 +83,7 @@ export default function MyCompanyPage() {
     try {
       await updatePlatformCompany({
         name,
-        cnpj,
+        cnpj: stripFormatting(cnpj),
         bank,
         agency,
         checking_account: checkingAccount,
@@ -164,7 +165,7 @@ export default function MyCompanyPage() {
               <input
                 type="text"
                 value={cnpj}
-                onChange={(e) => setCnpj(e.target.value)}
+                onChange={(e) => setCnpj(applyCnpjMask(e.target.value))}
                 maxLength={18}
                 placeholder="00.000.000/0000-00"
                 className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
