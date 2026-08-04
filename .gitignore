@@ -140,3 +140,6 @@ Contratodevenda.json
 
 # Git worktrees isolados (superpowers:using-git-worktrees)
 .worktrees/
+
+# Workspace de execução de planos (superpowers:subagent-driven-development)
+.superpowers/
