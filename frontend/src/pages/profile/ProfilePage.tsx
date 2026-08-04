@@ -20,6 +20,7 @@ import {
   removeAdvisor,
   type AdvisorRecord,
 } from "../../services/advisor.service";
+import { applyDocumentMask, applyRgMask, applyPhoneMask, stripFormatting } from "../../utils/mask";
 
 /**
  * CustomerProfilePage
@@ -86,9 +87,9 @@ export default function CustomerProfilePage() {
         setFormData({
           name: userData.name || "",
           surname: userData.surname || "",
-          cpf: userData.cpf || "",
-          rg: userData.rg || "",
-          phone: userData.phone || "",
+          cpf: userData.cpf ? applyDocumentMask(userData.cpf) : "",
+          rg: userData.rg ? applyRgMask(userData.rg) : "",
+          phone: userData.phone ? applyPhoneMask(userData.phone) : "",
           calendly_url: userData.calendly_url || "",
         });
       } catch (err) {
@@ -227,9 +228,16 @@ export default function CustomerProfilePage() {
     }
   };
 
+  const MASKED_FIELDS: Record<string, (value: string) => string> = {
+    cpf: applyDocumentMask,
+    rg: applyRgMask,
+    phone: applyPhoneMask,
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const mask = MASKED_FIELDS[name];
+    setFormData((prev) => ({ ...prev, [name]: mask ? mask(value) : value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -244,11 +252,11 @@ export default function CustomerProfilePage() {
       const dataToUpdate: UpdateUserData = {
         name: formData.name,
         surname: formData.surname,
-        cpf: formData.cpf,
-        rg: formData.rg,
+        cpf: stripFormatting(formData.cpf),
+        rg: stripFormatting(formData.rg),
       };
 
-      const cleanPhone = formData.phone.replace(/\D/g, "");
+      const cleanPhone = stripFormatting(formData.phone);
       if (cleanPhone) {
         dataToUpdate.phone = cleanPhone;
       }
@@ -513,8 +521,7 @@ export default function CustomerProfilePage() {
                   name="cpf"
                   value={formData.cpf}
                   onChange={handleInputChange}
-                  maxLength={11}
-                  placeholder="Apenas números"
+                  maxLength={18}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
                   required
                 />
@@ -530,8 +537,7 @@ export default function CustomerProfilePage() {
                   name="rg"
                   value={formData.rg}
                   onChange={handleInputChange}
-                  maxLength={10}
-                  placeholder="Apenas números"
+                  maxLength={14}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
                   required
                 />

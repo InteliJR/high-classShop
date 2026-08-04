@@ -14,12 +14,12 @@ import {
  * - surname: sobrenome
  * - cpf: CPF (11 dígitos) para a maioria dos papéis; CNPJ (14 dígitos) para
  *   SPECIALIST — mesmo campo/coluna reaproveitados - único no sistema
- * - rg: RG (de 9 a 10 dígitos) - único no sistema
+ * - rg: RG (de 7 a 11 dígitos — 11 quando for um CPF, pela unificação RG/CPF) - único no sistema
  * - calendly_url: link do Calendly (apenas para especialistas)
  *
  * Validações:
  * - CPF/CNPJ: 11 ou 14 dígitos numéricos
- * - RG: de 9 a 10 dígitos numéricos
+ * - RG: de 7 a 11 dígitos numéricos
  * - calendly_url: URL válida do Calendly
  */
 export class UpdateUserDto {
@@ -44,8 +44,8 @@ export class UpdateUserDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^\d{9,10}$/, {
-    message: 'RG deve conter entre 9 e 10 dígitos numéricos',
+  @Matches(/^\d{7,11}$/, {
+    message: 'RG deve conter entre 7 e 11 dígitos numéricos',
   })
   rg?: string;
 

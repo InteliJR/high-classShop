@@ -8,6 +8,7 @@ import {
   type Company,
 } from "../../services/companies.service";
 import { resolveCompanyLogo } from "../../utils/branding";
+import { applyCnpjMask } from "../../utils/mask";
 
 const LOGO_MAX_BYTES = 2 * 1024 * 1024; // 2MB
 const LOGO_ALLOWED_TYPES = [
@@ -56,7 +57,7 @@ export default function NewCompanyForm({
   useEffect(() => {
     if (companyToEdit) {
       setName(companyToEdit.name);
-      setCnpj(companyToEdit.cnpj);
+      setCnpj(applyCnpjMask(companyToEdit.cnpj));
       setBank(companyToEdit.bank || "");
       setAgency(companyToEdit.agency || "");
       setCheckingAccount(companyToEdit.checking_account || "");
@@ -235,7 +236,7 @@ export default function NewCompanyForm({
           id="cnpj"
           type="text"
           value={cnpj}
-          onChange={(e) => setCnpj(e.target.value)}
+          onChange={(e) => setCnpj(applyCnpjMask(e.target.value))}
           placeholder="12345678901234"
           maxLength={18}
           className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"

@@ -18,6 +18,7 @@ import { PageHeader } from "../../components/patterns/PageHeader";
 import NewCompanyForm from "./NewCompanyForm";
 import { AppContext } from "../../contexts/AppContext";
 import { resolveCompanyLogo } from "../../utils/branding";
+import { applyCnpjMask } from "../../utils/mask";
 import {
   ChevronDown,
   ChevronUp,
@@ -386,7 +387,7 @@ export default function CompaniesPage() {
                       <div>
                         <span className="font-medium">{company.name}</span>
                         <span className="block text-xs text-subtle">
-                          {company.cnpj}
+                          {applyCnpjMask(company.cnpj)}
                         </span>
                       </div>
                     </div>
