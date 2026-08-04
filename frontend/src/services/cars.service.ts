@@ -16,6 +16,7 @@ export interface RawCar {
   id: string;
   marca: string;
   modelo: string;
+  identificador: string;
   valor: number;
   estado: string;
   ano: number;

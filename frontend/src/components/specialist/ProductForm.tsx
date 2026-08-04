@@ -205,6 +205,7 @@ export default function ProductForm({
       const formattedData: any = {
         marca: data.marca,
         modelo: data.modelo,
+        identificador: data.identificador,
         ano: Number(data.ano),
         valor: Number(data.valor),
         estado: data.estado,
