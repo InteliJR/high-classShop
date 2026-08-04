@@ -4,6 +4,7 @@ import Button from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { PageHeader } from "../../components/patterns/PageHeader";
 import { resolveCompanyLogo } from "../../utils/branding";
+import { applyCnpjMask, stripFormatting } from "../../utils/mask";
 
 const DEFAULT_COLORS = ["#1a1a1a", "#3b82f6", "#10b981", "#f59e0b"];
 
@@ -24,7 +25,7 @@ export default function OfficeCompanySettingsPage() {
         setForm({
           name: c.name,
           description: c.description ?? "",
-          cnpj: c.cnpj,
+          cnpj: c.cnpj ? applyCnpjMask(c.cnpj) : c.cnpj,
           bank: c.bank ?? "",
           agency: c.agency ?? "",
           checking_account: c.checking_account ?? "",
@@ -40,7 +41,10 @@ export default function OfficeCompanySettingsPage() {
     setSaving(true);
     setMsg(null);
     try {
-      const updated = await officeService.updateCompany(form);
+      const updated = await officeService.updateCompany({
+        ...form,
+        cnpj: form.cnpj ? stripFormatting(form.cnpj) : form.cnpj,
+      });
       setCompany(updated);
       setMsg({ ok: true, text: "Configurações salvas." });
     } catch (err) {
@@ -156,7 +160,7 @@ export default function OfficeCompanySettingsPage() {
             <input
               type="text"
               value={form.cnpj ?? ""}
-              onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
+              onChange={(e) => setForm({ ...form, cnpj: applyCnpjMask(e.target.value) })}
               placeholder="14 dígitos ou XX.XXX.XXX/XXXX-XX"
               className="w-full px-3 py-2 border border-border rounded-md"
             />
