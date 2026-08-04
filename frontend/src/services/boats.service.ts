@@ -53,6 +53,7 @@ export interface ImageDto {
 export interface CreateBoatDto {
   marca: string;
   modelo: string;
+  identificador: string;
   valor: number;
   estado: string;
   ano: number;

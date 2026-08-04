@@ -131,6 +131,9 @@ export class AircraftsService {
       );
       return aircraftWithImages;
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        throw error;
+      }
       this.logger.error(
         `[create] Erro ao criar aeronave: ${error.message}`,
         error.stack,
@@ -369,6 +372,9 @@ export class AircraftsService {
         include: { images: true },
       });
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        throw error;
+      }
       throw new Error(`Erro ao atualizar aeronave: ${error.message}`);
     }
   }

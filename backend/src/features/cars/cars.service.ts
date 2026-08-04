@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -95,6 +96,9 @@ export class CarsService {
         include: { images: true },
       });
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        throw error;
+      }
       throw new Error(`Erro ao criar carro: ${error.message}`);
     }
   }
@@ -286,6 +290,9 @@ export class CarsService {
         include: { images: true },
       });
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        throw error;
+      }
       throw new Error(`Erro ao atualizar carro: ${error.message}`);
     }
   }

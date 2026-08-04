@@ -79,7 +79,10 @@ export default function CommonProductFields({ register, errors, productType }: C
         <input
           id="identificador"
           type="text"
-          {...register("identificador", { required: "Identificador é obrigatório" })}
+          {...register("identificador", {
+            required: "Identificador é obrigatório",
+            setValueAs: (v) => (typeof v === "string" ? v.trim() : v),
+          })}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder={productType ? placeholders.identificador[productType] : "Ex: BMW-X5-1"}
         />

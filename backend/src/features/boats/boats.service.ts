@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -117,6 +118,9 @@ export class BoatsService {
       );
       return boatWithImages;
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        throw error;
+      }
       this.logger.error(
         `[create] Erro ao criar barco: ${error.message}`,
         error.stack,
@@ -309,6 +313,9 @@ export class BoatsService {
         include: { images: true },
       });
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        throw error;
+      }
       throw new Error(`Erro ao atualizar lancha: ${error.message}`);
     }
   }
