@@ -20,7 +20,7 @@ import {
   removeAdvisor,
   type AdvisorRecord,
 } from "../../services/advisor.service";
-import { applyCpfMask, applyRgMask, applyPhoneMask, stripFormatting } from "../../utils/mask";
+import { applyDocumentMask, applyRgMask, applyPhoneMask, stripFormatting } from "../../utils/mask";
 
 /**
  * CustomerProfilePage
@@ -87,7 +87,7 @@ export default function CustomerProfilePage() {
         setFormData({
           name: userData.name || "",
           surname: userData.surname || "",
-          cpf: userData.cpf ? applyCpfMask(userData.cpf) : "",
+          cpf: userData.cpf ? applyDocumentMask(userData.cpf) : "",
           rg: userData.rg ? applyRgMask(userData.rg) : "",
           phone: userData.phone ? applyPhoneMask(userData.phone) : "",
           calendly_url: userData.calendly_url || "",
@@ -229,7 +229,7 @@ export default function CustomerProfilePage() {
   };
 
   const MASKED_FIELDS: Record<string, (value: string) => string> = {
-    cpf: applyCpfMask,
+    cpf: applyDocumentMask,
     rg: applyRgMask,
     phone: applyPhoneMask,
   };
@@ -521,7 +521,7 @@ export default function CustomerProfilePage() {
                   name="cpf"
                   value={formData.cpf}
                   onChange={handleInputChange}
-                  maxLength={14}
+                  maxLength={18}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
                   required
                 />

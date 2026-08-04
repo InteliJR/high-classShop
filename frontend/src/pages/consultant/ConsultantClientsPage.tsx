@@ -17,7 +17,7 @@ import InviteClientForm from "./InviteClientForm";
 import BatchInviteClients from "./BatchInviteClients";
 import EditClientForm from "./EditClientForm";
 import { ChevronDown, ChevronUp, Loader2, Pencil, Trash2, Plus, Users } from "lucide-react";
-import { applyCpfMask } from "../../utils/mask";
+import { applyDocumentMask } from "../../utils/mask";
 
 type Process = {
   id: string;
@@ -173,7 +173,7 @@ export default function ConsultantClientsPage() {
                             {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                             {client.name} {client.surname}
                           </button>
-                          <p className="text-xs text-subtle mt-0.5 pl-6">{client.cpf ? applyCpfMask(client.cpf) : "-"}</p>
+                          <p className="text-xs text-subtle mt-0.5 pl-6">{client.cpf ? applyDocumentMask(client.cpf) : "-"}</p>
                         </td>
                         <td className="px-4 py-3 text-muted truncate">{client.email}</td>
                         <td className="px-4 py-3 text-muted">

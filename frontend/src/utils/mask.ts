@@ -38,6 +38,11 @@ export function applyCnpjMask(value: string): string {
   return formatted;
 }
 
+/** CPF ou CNPJ, detectado pelo nº de dígitos (a coluna users.cpf é polimórfica: CPF para a maioria dos papéis, CNPJ para SPECIALIST). */
+export function applyDocumentMask(value: string): string {
+  return stripFormatting(value).length > 11 ? applyCnpjMask(value) : applyCpfMask(value);
+}
+
 /** Aplica máscara de CEP (#####-###) enquanto o usuário digita. */
 export function applyCepMask(value: string): string {
   const digits = stripFormatting(value).slice(0, 8);

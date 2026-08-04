@@ -39,7 +39,7 @@ export class UpdateSpecialistDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^\d{9,11}$/, { message: 'RG deve conter entre 9 e 11 dígitos' })
+  @Matches(/^\d{7,11}$/, { message: 'RG deve conter entre 7 e 11 dígitos' })
   rg?: string;
 
   @IsOptional()
