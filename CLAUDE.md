@@ -48,6 +48,10 @@ docker compose up -d db         # start only PostgreSQL
 docker compose up --build -d    # full stack via Docker
 ```
 
+## Agent workflow
+
+Multiple agents/sessions working at once **must** use separate git worktrees (`.worktrees/<nome>/`, gitignored) instead of sharing this checkout — avoids one agent's `dev`/build/test run or uncommitted changes clobbering another's. See `superpowers:using-git-worktrees`.
+
 ## Architecture
 
 ### Monorepo layout
@@ -134,12 +138,7 @@ Frontend env var: `VITE_API_BASE_URL` (defaults to `http://localhost:3000/api/`)
 
 - Full endpoint reference + payloads: `architecture.md`
 - Frontend ↔ Backend integration guide: `frontend-integration-guide.md`
-- AI/dev context (stack, schema, integrations, env vars): `ai/contexts/`
-- Bug history + fix log: `ai/contexts/known-issues.md`
-- Architecture decisions (ADRs): `ai/decisoes/`
-- Domain glossary: `ai/instrucoes/glossario.md`
-- Technical deep dives (SPIKEs, comparativos): `ai/notas-tecnicas/`
-- Implementation plans + planejamento (input do cliente): `ai/_private/plan/`, `ai/_private/planejamento/` — **conteúdo privado, não versionado**. Acesso via Drive/Discord do squad.
+- `ai/` — dev context (stack, schema, integrations, env vars, ADRs, glossário, notas técnicas) and `docs/superpowers/`, `.superpowers/` — planos/specs gerados pelas skills superpowers. **Nenhuma dessas pastas é versionada** (estão no `.gitignore`); existem só localmente/por dev. Não referenciar conteúdo delas como fonte compartilhada — se algo lá for relevante para o time, promova para `architecture.md`, `frontend-integration-guide.md` ou este arquivo.
 
 ## CI / PR workflow
 
