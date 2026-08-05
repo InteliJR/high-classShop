@@ -6,6 +6,8 @@ import {
   type OfficeConsultant,
   type InviteJobDetail,
 } from "../../services/office";
+import { useAuth } from "../../store/authStateManager";
+import { getCompanies, type Company } from "../../services/companies.service";
 import Button from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { Dialog, DialogContent } from "../../components/ui/dialog";
@@ -72,6 +74,18 @@ function ConsultantsList() {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [consultantToDeactivate, setConsultantToDeactivate] = useState<OfficeConsultant | null>(null);
 
+  const user = useAuth((s) => s.user);
+  const isAdmin = user?.role === "ADMIN";
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [inviteCompanyId, setInviteCompanyId] = useState("");
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    getCompanies()
+      .then(setCompanies)
+      .catch(() => setCompanies([]));
+  }, [isAdmin]);
+
   const load = () => {
     setLoading(true);
     officeService
@@ -92,7 +106,10 @@ function ConsultantsList() {
     e.preventDefault();
     setInviteMsg(null);
     try {
-      await officeService.inviteConsultant(inviteEmail.trim().toLowerCase());
+      await officeService.inviteConsultant(
+        inviteEmail.trim().toLowerCase(),
+        isAdmin ? inviteCompanyId : undefined,
+      );
       setInviteMsg({ ok: true, text: "Convite enviado!" });
       setInviteEmail("");
     } catch (err) {
@@ -142,7 +159,25 @@ function ConsultantsList() {
       />
 
       {showInvite && (
-        <form onSubmit={submitInvite} className="bg-surface p-4 rounded-lg shadow mb-6 flex gap-2">
+        <form
+          onSubmit={submitInvite}
+          className="bg-surface p-4 rounded-lg shadow mb-6 flex flex-col sm:flex-row gap-2"
+        >
+          {isAdmin && (
+            <select
+              value={inviteCompanyId}
+              onChange={(e) => setInviteCompanyId(e.target.value)}
+              required
+              className="px-3 py-2 border border-border rounded-md sm:w-64"
+            >
+              <option value="">Selecione o escritório...</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
           <input
             type="email"
             value={inviteEmail}
@@ -151,7 +186,9 @@ function ConsultantsList() {
             required
             className="flex-1 px-3 py-2 border border-border rounded-md"
           />
-          <Button type="submit">Enviar convite</Button>
+          <Button type="submit" disabled={isAdmin && !inviteCompanyId}>
+            Enviar convite
+          </Button>
         </form>
       )}
       {inviteMsg && (
