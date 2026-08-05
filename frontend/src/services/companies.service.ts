@@ -17,6 +17,7 @@ export type Company = {
   checking_account?: string | null;
   color_identity?: string[];
   consultants_count?: number;
+  slug?: string | null;
 };
 
 export type CompanyConsultant = {

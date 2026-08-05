@@ -81,6 +81,9 @@ export default function CompaniesPage() {
   // Estado do modal de convite de consultor
   const [inviteState, setInviteState] = useState<InviteState | null>(null);
 
+  // Id da empresa cujo link whitelabel acabou de ser copiado (feedback visual transiente)
+  const [copiedSlugId, setCopiedSlugId] = useState<string | null>(null);
+
   // Usa o contexto de busca global
   const { searchTerm } = useContext(AppContext);
 
@@ -259,6 +262,15 @@ export default function CompaniesPage() {
     });
   }, [inviteState]);
 
+  const handleCopySlugLink = useCallback((company: Company) => {
+    if (!company.slug) return;
+    const url = `${window.location.origin}/i/${company.slug}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedSlugId(company.id);
+      setTimeout(() => setCopiedSlugId((prev) => (prev === company.id ? null : prev)), 2000);
+    });
+  }, []);
+
   // Função chamada quando o formulário de novo/edição de escritório é submetido com sucesso.
   const handleFormSuccess = () => {
     setIsNewCompanyModalOpen(false);
@@ -420,6 +432,22 @@ export default function CompaniesPage() {
 
                     {/* Ações */}
                     <div className="flex justify-end items-center gap-4 text-subtle">
+                      <button
+                        title={
+                          company.slug
+                            ? "Copiar link do site whitelabel"
+                            : "Escritório sem site whitelabel configurado"
+                        }
+                        onClick={() => handleCopySlugLink(company)}
+                        disabled={!company.slug}
+                        className="p-1.5 rounded hover:bg-border-soft text-ink-soft disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        {copiedSlugId === company.id ? (
+                          <Check className="w-4 h-4 text-status-ok" />
+                        ) : (
+                          <Link className="w-4 h-4" />
+                        )}
+                      </button>
                       <button
                         title="Convidar gerente do escritório (OFFICE)"
                         onClick={() => openInviteModal(company, "OFFICE")}
