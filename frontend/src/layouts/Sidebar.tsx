@@ -136,14 +136,14 @@ export default function Sidebar() {
             icon: <Building2 size={20} />,
           },
           {
-            to: "/admin/specialists",
-            label: "Especialistas",
-            icon: <UserCog size={20} />,
-          },
-          {
             to: "/office/consultants",
             label: "Consultores",
             icon: <Users size={20} />,
+          },
+          {
+            to: "/admin/specialists",
+            label: "Especialistas",
+            icon: <UserCog size={20} />,
           },
           {
             to: "/admin/commissions",

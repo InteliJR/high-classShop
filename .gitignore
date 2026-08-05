@@ -134,12 +134,12 @@ Dockerfile.prod
 # Templates
 Contratodevenda.json
 
-# Contexto AI
-# A estrutura `ai/` é versionada; conteúdo sensível é protegido
-# por `ai/.gitignore` interno (regra: _private/* + !_private/README.md).
+# Contexto AI — não versionado (mal planejado como pasta versionada; manter só local)
+ai/
+
+# Planos gerados pela skill superpowers — não versionados
+/.superpowers/
+docs/superpowers/
 
 # Git worktrees isolados (superpowers:using-git-worktrees)
 .worktrees/
-
-# Workspace de execução de planos (superpowers:subagent-driven-development)
-.superpowers/
