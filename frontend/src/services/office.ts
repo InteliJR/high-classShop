@@ -116,8 +116,14 @@ export const officeService = {
     api.delete(`office/consultants/${id}`).then((r) => r.data),
   reactivateConsultant: (id: string) =>
     api.post(`office/consultants/${id}/reactivate`).then((r) => r.data),
-  inviteConsultant: (email: string) =>
-    api.post('office/consultants/invite', { email }).then((r) => r.data),
+  inviteConsultant: (email: string, companyId?: string) =>
+    api
+      .post(
+        'office/consultants/invite',
+        { email },
+        companyId ? { params: { companyId } } : undefined,
+      )
+      .then((r) => r.data),
 
   // Clientes (RO)
   listClients: (
