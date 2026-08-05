@@ -11,6 +11,7 @@ import {
 } from "../../services/companies.service";
 import { adminInviteOffice, officeService, type OfficeClient } from "../../services/office";
 import type { PaginationMeta } from "../../types/types";
+import { groupClientsByConsultant } from "../../lib/group-clients-by-consultant";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
 import { Dialog, DialogContent } from "../../components/ui/dialog";
@@ -525,39 +526,44 @@ export default function CompaniesPage() {
                             Nenhum cliente ligado a consultores deste escritório.
                           </p>
                         ) : (
-                          <>
-                            <div className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wider">
-                              <div>Cliente</div>
-                              <div>E-mail</div>
-                              <div>Consultor</div>
-                              <div>Cadastro</div>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                              {clientsState.clients.map((client) => (
-                                <div
-                                  key={client.id}
-                                  className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 items-center px-3 py-3 bg-surface rounded-lg border border-border-soft"
-                                >
-                                  <div className="text-sm font-medium text-ink">
-                                    {client.name} {client.surname}
-                                  </div>
-                                  <div className="text-sm text-muted truncate">
-                                    {client.email}
-                                  </div>
-                                  <div className="text-sm text-ink-soft">
-                                    {client.consultant
-                                      ? `${client.consultant.name} ${client.consultant.surname}`
-                                      : "—"}
-                                  </div>
-                                  <div className="text-xs text-subtle">
-                                    {client.created_at
-                                      ? new Date(client.created_at).toLocaleDateString("pt-BR")
-                                      : "—"}
-                                  </div>
+                          (() => {
+                            const { groups, withoutConsultant } = groupClientsByConsultant(
+                              clientsState.clients,
+                            );
+                            return (
+                              <div className="flex flex-col gap-5">
+                                <div className="grid grid-cols-[2fr_2fr_1fr] gap-4 px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wider">
+                                  <div>Cliente</div>
+                                  <div>E-mail</div>
+                                  <div>Cadastro</div>
                                 </div>
-                              ))}
-                            </div>
-                          </>
+                                {groups.map((group) => (
+                                  <div key={group.consultantId}>
+                                    <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-soft mb-2">
+                                      {group.consultantName}
+                                    </h3>
+                                    <div className="flex flex-col gap-2">
+                                      {group.clients.map((client) => (
+                                        <ClientRow key={client.id} client={client} />
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                                {withoutConsultant.length > 0 && (
+                                  <div>
+                                    <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-soft mb-2">
+                                      Clientes sem consultor relacionado
+                                    </h3>
+                                    <div className="flex flex-col gap-2">
+                                      {withoutConsultant.map((client) => (
+                                        <ClientRow key={client.id} client={client} />
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()
                         )
                       ) : (
                         <>
@@ -795,6 +801,21 @@ export default function CompaniesPage() {
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// Uma linha de cliente dentro de um grupo (consultor ou "sem consultor")
+function ClientRow({ client }: { client: OfficeClient }) {
+  return (
+    <div className="grid grid-cols-[2fr_2fr_1fr] gap-4 items-center px-3 py-3 bg-surface rounded-lg border border-border-soft">
+      <div className="text-sm font-medium text-ink">
+        {client.name} {client.surname}
+      </div>
+      <div className="text-sm text-muted truncate">{client.email}</div>
+      <div className="text-xs text-subtle">
+        {client.created_at ? new Date(client.created_at).toLocaleDateString("pt-BR") : "—"}
+      </div>
     </div>
   );
 }
