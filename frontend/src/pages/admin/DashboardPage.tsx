@@ -31,6 +31,7 @@ import {
 } from "../../services/dashboard.service";
 import { AppContext } from "../../contexts/AppContext";
 import { Card } from "../../components/ui/card";
+import { Skeleton } from "../../components/ui/skeleton";
 import { PageHeader } from "../../components/patterns/PageHeader";
 import { CommissionMiniCalculator } from "../../components/commission/CommissionMiniCalculator";
 
@@ -510,10 +511,6 @@ function ActionCard({
       </Card>
     </Link>
   );
-}
-
-function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded bg-border-soft ${className}`} />;
 }
 
 function ColorLegendDot({
