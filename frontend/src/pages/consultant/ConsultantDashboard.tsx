@@ -15,6 +15,7 @@ import { Dialog, DialogContent } from "../../components/ui/dialog";
 import { PageHeader } from "../../components/patterns/PageHeader";
 import { StatusBadge, PROCESS_STATUS_META } from "../../components/patterns/StatusBadge";
 import { EmptyState } from "../../components/patterns/EmptyState";
+import { Skeleton } from "../../components/ui/skeleton";
 import InviteClientForm from "./InviteClientForm";
 import BatchInviteClients from "./BatchInviteClients";
 
@@ -107,17 +108,6 @@ export default function ConsultantDashboard() {
     fetchData();
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-3 border-border-soft border-t-primary rounded-full animate-spin" />
-          <p className="text-muted">Carregando dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="text-text-main w-full">
       <PageHeader
@@ -147,28 +137,36 @@ export default function ConsultantDashboard() {
             <Users size={14} />
             Clientes
           </div>
-          <p className="text-2xl font-bold text-ink">{clients.length}</p>
+          {isLoading ? <Skeleton className="h-8 w-12" /> : (
+            <p className="text-2xl font-bold text-ink">{clients.length}</p>
+          )}
         </Card>
         <Card className="p-4">
           <div className="flex items-center gap-2 text-xs font-semibold text-muted uppercase tracking-wide mb-2">
             <FilePen size={14} />
             Processos ativos
           </div>
-          <p className="text-2xl font-bold text-ink">{activeProcesses.length}</p>
+          {isLoading ? <Skeleton className="h-8 w-12" /> : (
+            <p className="text-2xl font-bold text-ink">{activeProcesses.length}</p>
+          )}
         </Card>
         <Card className="p-4">
           <div className="flex items-center gap-2 text-xs font-semibold text-muted uppercase tracking-wide mb-2">
             <CheckCircle2 size={14} />
             Concluídos
           </div>
-          <p className="text-2xl font-bold text-ink">{completedCount}</p>
+          {isLoading ? <Skeleton className="h-8 w-12" /> : (
+            <p className="text-2xl font-bold text-ink">{completedCount}</p>
+          )}
         </Card>
         <Card className="p-4">
           <div className="flex items-center gap-2 text-xs font-semibold text-muted uppercase tracking-wide mb-2">
             <TrendingUp size={14} />
             Taxa de conversão
           </div>
-          <p className="text-2xl font-bold text-ink">{conversionRate}%</p>
+          {isLoading ? <Skeleton className="h-8 w-12" /> : (
+            <p className="text-2xl font-bold text-ink">{conversionRate}%</p>
+          )}
         </Card>
       </div>
 
@@ -184,7 +182,13 @@ export default function ConsultantDashboard() {
               Ver todos
             </button>
           </div>
-          {pendingProcesses.length === 0 ? (
+          {isLoading ? (
+            <div className="flex flex-col gap-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-[52px] w-full rounded-lg" />
+              ))}
+            </div>
+          ) : pendingProcesses.length === 0 ? (
             <EmptyState
               icon={FilePen}
               title="Nenhum processo em andamento"
@@ -219,7 +223,9 @@ export default function ConsultantDashboard() {
         <div className="flex flex-col gap-4">
           <Card>
             <h2 className="text-h2 font-semibold text-ink mb-4">Distribuição por status</h2>
-            {processes.length === 0 ? (
+            {isLoading ? (
+              <Skeleton className="w-full h-[220px]" />
+            ) : processes.length === 0 ? (
               <EmptyState
                 icon={TrendingUp}
                 title="Sem dados ainda"
@@ -259,7 +265,13 @@ export default function ConsultantDashboard() {
                 Ver todos
               </button>
             </div>
-            {recentClients.length === 0 ? (
+            {isLoading ? (
+              <div className="flex flex-col gap-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-8 w-full" />
+                ))}
+              </div>
+            ) : recentClients.length === 0 ? (
               <EmptyState
                 icon={Users}
                 title="Nenhum cliente ainda"
