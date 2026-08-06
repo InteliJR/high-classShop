@@ -12,7 +12,7 @@ import RequireGoogleMeetModal from "../components/meetings/RequireGoogleMeetModa
   }
 
   export default function MainLayout({ children }: MainLayoutProps) {
-    const { isSidebarCollapsed } = useContext(AppContext);
+    const { isSidebarDesktopCollapsed } = useContext(AppContext);
     const { user } = useContext(AuthContext);
     const isMobile = useIsMobile();
 
@@ -43,7 +43,7 @@ import RequireGoogleMeetModal from "../components/meetings/RequireGoogleMeetModa
                   ${user ? "" : `${isMobile ? mobilePadding : desktopPadding}`}
                   
                   /* Espaço quando sidebar está expandida (w-64 = 256px) */
-                  ${user && !isMobile && !isSidebarCollapsed ? "pl-72" : ""}
+                  ${user && !isMobile ? (isSidebarDesktopCollapsed ? "pl-24" : "pl-72") : ""}
                 `}
               >
                 {children}

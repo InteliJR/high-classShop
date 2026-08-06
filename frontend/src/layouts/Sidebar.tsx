@@ -14,6 +14,7 @@ import {
   Percent,
   Database,
   Calculator,
+  PanelLeft,
 } from "lucide-react";
 import { useContext } from "react";
 import { AppContext } from "../contexts/AppContext";
@@ -24,12 +25,18 @@ import { useAuth } from "../store/authStateManager";
 import { resolveCompanyLogo, getUserCompany } from "../utils/branding";
 
 export default function Sidebar() {
-  const { isSidebarCollapsed, setSidebarCollapsed } = useContext(AppContext);
+  const {
+    isSidebarCollapsed,
+    setSidebarCollapsed,
+    isSidebarDesktopCollapsed,
+    toggleSidebarDesktopCollapsed,
+  } = useContext(AppContext);
   const isMobile = useIsMobile();
   const location = useLocation();
   const user = useAuth((state) => state.user);
   const company = getUserCompany(user);
   const brandLogo = resolveCompanyLogo(company) ?? Logo;
+  const isDesktopCollapsed = !isMobile && isSidebarDesktopCollapsed;
 
   // Lista de links por cargo
   const links = [];
@@ -197,7 +204,6 @@ export default function Sidebar() {
         );
         break;
     }
-
   }
 
   return (
@@ -217,55 +223,81 @@ export default function Sidebar() {
                 : "-translate-x-full opacity-0"
               : "translate-x-0 opacity-100"
           }
-          ${isMobile ? "w-2/5 fixed h-full" : "w-64 min-h-screen"}
-          top-0 left-0 transition-normal ease-out duration-300 z-50 fixed text-brand-secondary-fg
+          ${isMobile ? "w-2/5 fixed h-full" : isDesktopCollapsed ? "w-16 min-h-screen" : "w-64 min-h-screen"}
+          top-0 left-0 ease-out z-50 fixed text-brand-secondary-fg
+          ${isMobile ? "transition-normal duration-300" : "transition-[width] duration-200"}
         `}
         style={{ backgroundColor: "var(--brand-secondary)" }}
       >
-      {/* Botão para esconder a sidebar */}
-      {isMobile && (
-        <div className="flex flex-col">
-          <button
-            className="p-4 self-end"
-            onClick={() => setSidebarCollapsed(!isSidebarCollapsed)}
-          >
-            <TextAlignJustifyIcon size={27} />
-          </button>
-        </div>
-      )}
+        {/* Botão para esconder a sidebar (mobile) */}
+        {isMobile && (
+          <div className="flex flex-col">
+            <button
+              className="p-4 self-end"
+              onClick={() => setSidebarCollapsed(!isSidebarCollapsed)}
+            >
+              <TextAlignJustifyIcon size={27} />
+            </button>
+          </div>
+        )}
 
-      <div className="w-2/3 flex justify-center items-center mx-auto">
-        <img
-          src={brandLogo}
-          alt={company?.name ?? "High Class"}
-          className="max-h-24 w-auto object-contain"
-        />
-      </div>
+        {/* Botão de colapsar sidebar (desktop) */}
+        {!isMobile && (
+          <div className={`flex p-3 ${isDesktopCollapsed ? "justify-center" : "justify-end"}`}>
+            <button
+              onClick={toggleSidebarDesktopCollapsed}
+              aria-label={isDesktopCollapsed ? "Expandir menu" : "Recolher menu"}
+              title={isDesktopCollapsed ? "Expandir menu" : undefined}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <PanelLeft size={18} />
+            </button>
+          </div>
+        )}
 
-      {/* Botões navegáveis */}
-      <nav className="px-6 flex flex-col gap-4 text-sm mt-8">
-        {links.map((link) => (
-          <Link
-            key={link.to}
-            to={link.to}
-            onClick={() => { if (isMobile) setSidebarCollapsed(false); }}
-            className={`w-full flex gap-3 items-center p-3 rounded-md transition-colors ${
-              location.pathname === link.to
-                ? "text-brand-primary-fg"
-                : "text-gray-300 hover:bg-white/10 hover:text-brand-secondary-fg"
-            }`}
-            style={
-              location.pathname === link.to
-                ? { backgroundColor: "var(--brand-primary)" }
-                : undefined
-            }
-          >
-            {link.icon}
-            <p>{link.label}</p>
-          </Link>
-        ))}
-      </nav>
-    </aside>
+        {!isDesktopCollapsed && (
+          <div className="w-2/3 flex justify-center items-center mx-auto">
+            <img
+              src={brandLogo}
+              alt={company?.name ?? "High Class"}
+              className="max-h-24 w-auto object-contain"
+            />
+          </div>
+        )}
+
+        {/* Botões navegáveis */}
+        <nav
+          className={`flex flex-col gap-4 text-sm mt-8 ${
+            isDesktopCollapsed ? "px-2 items-center" : "px-6"
+          }`}
+        >
+          {links.map((link) => (
+            <Link
+              key={link.to}
+              to={link.to}
+              onClick={() => {
+                if (isMobile) setSidebarCollapsed(false);
+              }}
+              title={isDesktopCollapsed ? link.label : undefined}
+              className={`w-full flex gap-3 items-center p-3 rounded-md transition-colors ${
+                isDesktopCollapsed ? "justify-center px-2" : ""
+              } ${
+                location.pathname === link.to
+                  ? "text-brand-primary-fg"
+                  : "text-gray-300 hover:bg-white/10 hover:text-brand-secondary-fg"
+              }`}
+              style={
+                location.pathname === link.to
+                  ? { backgroundColor: "var(--brand-primary)" }
+                  : undefined
+              }
+            >
+              {link.icon}
+              {!isDesktopCollapsed && <p>{link.label}</p>}
+            </Link>
+          ))}
+        </nav>
+      </aside>
     </>
   );
 }
