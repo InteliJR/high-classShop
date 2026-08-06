@@ -8,10 +8,12 @@ import { getSpecialistDashboardStats } from "../../services/dashboard.service";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
 import { Dialog, DialogContent } from "../../components/ui/dialog";
+import { Table, TableHeader, TableBody, TableHead, TableCell } from "../../components/ui/table";
 import { PageHeader } from "../../components/patterns/PageHeader";
+import { EmptyState } from "../../components/patterns/EmptyState";
 import NewSpecialistForm from "./NewSpecialistForm";
 import { AppContext } from "../../contexts/AppContext";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, UserCog } from "lucide-react";
 
 // Interface para armazenar os dados de cada especialista
 interface SpecialistWithStats extends Specialist {
@@ -104,16 +106,6 @@ export default function SpecialistsPage() {
     fetchData();
   }, []);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-3 border-border-soft border-t-primary rounded-full animate-spin" />
-          <p className="text-muted">Carregando especialistas...</p>
-        </div>
-      </div>
-    );
-  }
   if (error) return <Alert variant="danger">{error}</Alert>;
 
   return (
@@ -129,68 +121,67 @@ export default function SpecialistsPage() {
       />
 
       {/* Tabela */}
-      <div className="p-6 rounded-lg shadow bg-brand-container bg-bg-container overflow-x-auto">
+      <div className="p-6 rounded-lg shadow bg-brand-container bg-bg-container">
         <h2 className="text-h2 font-semibold text-ink">Especialistas</h2>
         <p className="text-base mb-8 mt-2">Lista completa de especialistas</p>
 
-        {/* Cabeçalho da lista */}
-        <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-5 px-4 py-2 text-base font-normal text-left text-text-secondary">
-          <div>Nome</div>
-          <div>Especialidade</div>
-          <div>Processos Abertos</div>
-          <div>Taxa de Conversão</div>
-          <div className="text-right">Ações</div>
-        </div>
-
-        {/* Corpo da lista */}
-        <div className="mt-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto p-2">
-          {filteredSpecialists.length === 0 ? (
-            <p className="text-center text-muted py-8">
-              {searchTerm
-                ? "Nenhum especialista encontrado com esse termo de busca."
-                : "Nenhum especialista cadastrado."}
-            </p>
-          ) : (
-            filteredSpecialists.map((specialist) => {
-              return (
-                <div
-                  key={specialist.id}
-                  className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-3 md:gap-5 items-start md:items-center bg-brand-card p-4 md:p-6 rounded-lg shadow-sm bg-surface"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="font-normal">
-                      {specialist.name} {specialist.surname}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="bg-border-soft text-ink-soft text-base px-2.5 py-0.5 rounded-full">
+        {!isLoading && filteredSpecialists.length === 0 ? (
+          <EmptyState
+            icon={UserCog}
+            title={searchTerm ? "Nenhum especialista encontrado" : "Nenhum especialista cadastrado"}
+            description={
+              searchTerm
+                ? "Tente buscar por outro nome, e-mail ou especialidade."
+                : 'Clique em "+ Novo Especialista" para começar.'
+            }
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <tr>
+                <TableHead>Nome</TableHead>
+                <TableHead>Especialidade</TableHead>
+                <TableHead>Processos Abertos</TableHead>
+                <TableHead>Taxa de Conversão</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </tr>
+            </TableHeader>
+            <TableBody isLoading={isLoading} columns={5}>
+              {filteredSpecialists.map((specialist) => (
+                <tr key={specialist.id} className="border-b border-border-soft">
+                  <TableCell>
+                    {specialist.name} {specialist.surname}
+                  </TableCell>
+                  <TableCell>
+                    <span className="bg-border-soft text-ink-soft text-xs px-2.5 py-0.5 rounded-full">
                       {specialist.speciality ?? "-"}
                     </span>
-                  </div>
-                  <div>{specialist.activeProcesses ?? 0}</div>
-                  <div>{specialist.conversionRate ?? 0}%</div>
-                  <div className="flex justify-end items-center gap-4 text-subtle">
-                    <button
-                      onClick={() => setSpecialistToEdit(specialist)}
-                      className="p-1.5 rounded hover:bg-border-soft text-ink-soft"
-                      title="Editar"
-                    >
-                      <Pencil size={18} />
-                    </button>
-
-                    <button
-                      onClick={() => setSpecialistToDelete(specialist)}
-                      className="p-1.5 rounded hover:bg-status-bad-wash text-status-bad"
-                      title="Deletar"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+                  </TableCell>
+                  <TableCell>{specialist.activeProcesses ?? 0}</TableCell>
+                  <TableCell>{specialist.conversionRate ?? 0}%</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end items-center gap-4 text-subtle">
+                      <button
+                        onClick={() => setSpecialistToEdit(specialist)}
+                        className="p-1.5 rounded hover:bg-border-soft text-ink-soft"
+                        title="Editar"
+                      >
+                        <Pencil size={18} />
+                      </button>
+                      <button
+                        onClick={() => setSpecialistToDelete(specialist)}
+                        className="p-1.5 rounded hover:bg-status-bad-wash text-status-bad"
+                        title="Deletar"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </TableCell>
+                </tr>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </div>
 
       {/* Modal criação/edição */}
