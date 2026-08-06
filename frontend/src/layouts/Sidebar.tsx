@@ -248,7 +248,7 @@ export default function Sidebar() {
               onClick={toggleSidebarDesktopCollapsed}
               aria-label={isDesktopCollapsed ? "Expandir menu" : "Recolher menu"}
               title={isDesktopCollapsed ? "Expandir menu" : undefined}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-brand-secondary-fg/60 transition-colors hover:bg-brand-secondary-fg/10 hover:text-brand-secondary-fg"
             >
               <PanelLeft size={18} />
             </button>

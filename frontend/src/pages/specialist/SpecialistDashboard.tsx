@@ -88,7 +88,7 @@ export default function SpecialistDashboard() {
       {/* Cards de Estatísticas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
         {/* Card 1: Produtos Cadastrados */}
-        <div className="bg-border-soft rounded-lg p-6">
+        <div className="bg-surface rounded-lg p-6">
           <p className="text-ink-soft font-semibold mb-2">
             Produtos Cadastrados
           </p>
@@ -108,7 +108,7 @@ export default function SpecialistDashboard() {
         </div>
 
         {/* Card 2: Processos Ativos */}
-        <div className="bg-border-soft rounded-lg p-6">
+        <div className="bg-surface rounded-lg p-6">
           <p className="text-ink-soft font-semibold mb-2">Processos Ativos</p>
           {isLoading ? (
             <>
@@ -126,7 +126,7 @@ export default function SpecialistDashboard() {
         </div>
 
         {/* Card 3: Vendas Concluídas */}
-        <div className="bg-border-soft rounded-lg p-6">
+        <div className="bg-surface rounded-lg p-6">
           <p className="text-ink-soft font-semibold mb-2">Vendas Concluídas</p>
           {isLoading ? (
             <>
@@ -144,7 +144,7 @@ export default function SpecialistDashboard() {
         </div>
 
         {/* Card 4: Taxa de Conversão */}
-        <div className="bg-border-soft rounded-lg p-6">
+        <div className="bg-surface rounded-lg p-6">
           <p className="text-ink-soft font-semibold mb-2">Taxa de Conversão</p>
           {isLoading ? (
             <>
