@@ -20,6 +20,8 @@ import NewCompanyForm from "./NewCompanyForm";
 import { AppContext } from "../../contexts/AppContext";
 import { resolveCompanyLogo } from "../../utils/branding";
 import { applyCnpjMask } from "../../utils/mask";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../../components/ui/table";
+import { EmptyState } from "../../components/patterns/EmptyState";
 import {
   ChevronDown,
   ChevronUp,
@@ -32,6 +34,7 @@ import {
   Check,
   Pencil,
   Trash2,
+  Building2,
 } from "lucide-react";
 
 // Estado de um painel de consultores expandido por empresa
@@ -299,18 +302,6 @@ export default function CompaniesPage() {
     fetchData();
   }, [fetchData]);
 
-  // Exibe uma mensagem de 'loading' enquanto os dados não chegam.
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-3 border-border-soft border-t-primary rounded-full animate-spin" />
-          <p className="text-muted">Carregando empresas...</p>
-        </div>
-      </div>
-    );
-  }
-
   // Exibe uma mensagem de erro se a busca de dados falhar.
   if (error) {
     return <Alert variant="danger">{error}</Alert>;
@@ -330,353 +321,337 @@ export default function CompaniesPage() {
       />
 
       {/* --- TABELA DE ESCRITÓRIOS --- */}
-      <div className="p-6 rounded-lg shadow bg-brand-container bg-bg-container overflow-x-auto">
+      <div className="p-6 rounded-lg shadow bg-brand-container bg-bg-container">
         <h2 className="text-h2 font-semibold text-ink">Escritórios</h2>
         <p className="text-base mb-8 mt-2">
           Lista completa de empresas parceiras
         </p>
 
-        {/* Cabeçalho da Lista */}
-        <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_auto] gap-5 px-4 py-2 text-base font-normal text-left text-text-secondary">
-          <div>Empresa</div>
-          <div>Escritório (% restante)</div>
-          <div>Consultores</div>
-          <div className="text-right">Ações</div>
-        </div>
+        {!isLoading && filteredCompanies.length === 0 ? (
+          <EmptyState
+            icon={Building2}
+            title={searchTerm ? "Nenhuma empresa encontrada" : "Nenhum escritório cadastrado"}
+            description={
+              searchTerm
+                ? "Tente buscar por outro nome ou CNPJ."
+                : 'Clique em "+ Novo Escritório" para começar.'
+            }
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <tr>
+                <TableHead>Empresa</TableHead>
+                <TableHead>Escritório (% restante)</TableHead>
+                <TableHead>Consultores</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </tr>
+            </TableHeader>
+            <TableBody isLoading={isLoading} columns={4}>
+              {filteredCompanies.map((company) => {
+                const isExpanded = !!expandedCompanies[company.id];
+                const expandedState = expandedCompanies[company.id];
+                const activeTab = panelTab[company.id] ?? "consultants";
+                const clientsState = expandedClients[company.id];
 
-        {/* Corpo da Lista */}
-        <div className="mt-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto p-2">
-          {filteredCompanies.length === 0 ? (
-            <p className="text-center text-muted py-8">
-              {searchTerm
-                ? "Nenhuma empresa encontrada com esse termo de busca."
-                : "Nenhuma empresa cadastrada."}
-            </p>
-          ) : (
-            filteredCompanies.map((company) => {
-              const isExpanded = !!expandedCompanies[company.id];
-              const expandedState = expandedCompanies[company.id];
-              const activeTab = panelTab[company.id] ?? "consultants";
-              const clientsState = expandedClients[company.id];
-
-              return (
-                <div
-                  key={company.id}
-                  className="rounded-lg shadow-sm bg-surface overflow-hidden"
-                >
-                  {/* Linha principal da empresa */}
-                  <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_auto] gap-3 md:gap-5 items-start md:items-center bg-brand-card p-4 md:p-6">
-                    <div className="flex items-center gap-3">
-                      {/* Botão expand/collapse */}
-                      <button
-                        onClick={() => toggleExpand(company.id)}
-                        className="p-1 rounded hover:bg-border-soft transition-colors"
-                        title={
-                          isExpanded
-                            ? "Recolher consultores"
-                            : "Ver consultores"
-                        }
-                      >
-                        {isExpanded ? (
-                          <ChevronUp className="w-5 h-5 text-muted" />
-                        ) : (
-                          <ChevronDown className="w-5 h-5 text-muted" />
-                        )}
-                      </button>
-                      {(() => {
-                        const logoSrc = resolveCompanyLogo(company);
-                        return logoSrc ? (
-                          <img
-                            src={logoSrc}
-                            alt={company.name}
-                            className="h-8 w-24 object-contain"
-                          />
-                        ) : (
-                          <div className="h-8 w-24 flex items-center justify-center bg-border-soft rounded text-xs text-muted">
-                            Sem Logo
+                return (
+                  <TableRow
+                    key={company.id}
+                    colSpan={4}
+                    isExpanded={isExpanded}
+                    expandedContent={
+                      <div className="px-6 py-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-4">
+                            <button
+                              onClick={() => switchPanelTab(company.id, "consultants")}
+                              className={`text-xs font-semibold uppercase tracking-wider pb-1 border-b-2 -mb-px ${
+                                activeTab === "consultants"
+                                  ? "border-ink text-ink"
+                                  : "border-transparent text-muted hover:text-ink-soft"
+                              }`}
+                            >
+                              Consultores
+                            </button>
+                            <button
+                              onClick={() => switchPanelTab(company.id, "clients")}
+                              className={`text-xs font-semibold uppercase tracking-wider pb-1 border-b-2 -mb-px ${
+                                activeTab === "clients"
+                                  ? "border-ink text-ink"
+                                  : "border-transparent text-muted hover:text-ink-soft"
+                              }`}
+                            >
+                              Clientes
+                            </button>
                           </div>
-                        );
-                      })()}
-                      <div>
-                        <span className="font-medium">{company.name}</span>
-                        <span className="block text-xs text-subtle">
-                          {applyCnpjMask(company.cnpj)}
-                        </span>
-                      </div>
-                    </div>
+                          {activeTab === "consultants" && (
+                            <button
+                              onClick={() => openInviteModal(company)}
+                              className="inline-flex items-center gap-1.5 text-xs font-medium bg-action text-white px-3 py-1.5 rounded hover:bg-ink transition-colors"
+                            >
+                              <Link className="w-3.5 h-3.5" />
+                              Convidar Consultor
+                            </button>
+                          )}
+                        </div>
 
-                    {/* % Escritório (fatia do restante) */}
-                    <div>
+                        {activeTab === "clients" ? (
+                          clientsState?.loading ? (
+                            <div className="flex items-center justify-center py-6 gap-2 text-muted">
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                              <span className="text-sm">Carregando clientes...</span>
+                            </div>
+                          ) : clientsState?.error ? (
+                            <p className="text-sm text-status-bad py-4 text-center">
+                              {clientsState.error}
+                            </p>
+                          ) : !clientsState || clientsState.clients.length === 0 ? (
+                            <p className="text-sm text-muted py-4 text-center">
+                              Nenhum cliente ligado a consultores deste escritório.
+                            </p>
+                          ) : (
+                            (() => {
+                              const { groups, withoutConsultant } = groupClientsByConsultant(
+                                clientsState.clients,
+                              );
+                              return (
+                                <div className="flex flex-col gap-5">
+                                  <div className="grid grid-cols-[2fr_2fr_1fr] gap-4 px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wider">
+                                    <div>Cliente</div>
+                                    <div>E-mail</div>
+                                    <div>Cadastro</div>
+                                  </div>
+                                  {groups.map((group) => (
+                                    <div key={group.consultantId}>
+                                      <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-soft mb-2">
+                                        {group.consultantName}
+                                      </h3>
+                                      <div className="flex flex-col gap-2">
+                                        {group.clients.map((client) => (
+                                          <ClientRow key={client.id} client={client} />
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {withoutConsultant.length > 0 && (
+                                    <div>
+                                      <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-soft mb-2">
+                                        Clientes sem consultor relacionado
+                                      </h3>
+                                      <div className="flex flex-col gap-2">
+                                        {withoutConsultant.map((client) => (
+                                          <ClientRow key={client.id} client={client} />
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()
+                          )
+                        ) : (
+                          <>
+                            {expandedState.loading &&
+                            expandedState.consultants.length === 0 ? (
+                              <div className="flex items-center justify-center py-6 gap-2 text-muted">
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <span className="text-sm">Carregando consultores...</span>
+                              </div>
+                            ) : expandedState.error ? (
+                              <p className="text-sm text-status-bad py-4 text-center">
+                                {expandedState.error}
+                              </p>
+                            ) : expandedState.consultants.length === 0 ? (
+                              <p className="text-sm text-muted py-4 text-center">
+                                Nenhum consultor associado a este escritório.
+                              </p>
+                            ) : (
+                              <>
+                                <div className="grid grid-cols-[2fr_2fr_1fr_1fr] gap-4 px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wider">
+                                  <div>Nome</div>
+                                  <div>E-mail</div>
+                                  <div>Clientes</div>
+                                  <div>Cadastro</div>
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                  {expandedState.consultants.map((consultant) => (
+                                    <div
+                                      key={consultant.id}
+                                      className="grid grid-cols-[2fr_2fr_1fr_1fr] gap-4 items-center px-3 py-3 bg-surface rounded-lg border border-border-soft"
+                                    >
+                                      <div>
+                                        <span className="text-sm font-medium text-ink">
+                                          {consultant.name} {consultant.surname}
+                                        </span>
+                                        <span className="block text-xs text-subtle">
+                                          Consultor
+                                        </span>
+                                      </div>
+                                      <div className="text-sm text-muted truncate">
+                                        {consultant.email}
+                                      </div>
+                                      <div>
+                                        <span className="text-sm text-ink-soft font-medium">
+                                          {consultant.clients_count ?? 0}
+                                        </span>
+                                      </div>
+                                      <div className="text-xs text-subtle">
+                                        {consultant.created_at
+                                          ? new Date(consultant.created_at).toLocaleDateString("pt-BR")
+                                          : "—"}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                {expandedState.pagination.total_pages > 1 && (
+                                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-border">
+                                    <span className="text-xs text-muted">
+                                      Página {expandedState.pagination.current_page} de{" "}
+                                      {expandedState.pagination.total_pages} (
+                                      {expandedState.pagination.total}{" "}
+                                      {expandedState.pagination.total === 1 ? "consultor" : "consultores"})
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={() =>
+                                          loadConsultants(
+                                            company.id,
+                                            expandedState.pagination.current_page - 1,
+                                          )
+                                        }
+                                        disabled={
+                                          !expandedState.pagination.has_prev ||
+                                          expandedState.loading
+                                        }
+                                        className="p-1.5 rounded hover:bg-border-soft disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                      >
+                                        <ChevronLeft className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          loadConsultants(
+                                            company.id,
+                                            expandedState.pagination.current_page + 1,
+                                          )
+                                        }
+                                        disabled={
+                                          !expandedState.pagination.has_next ||
+                                          expandedState.loading
+                                        }
+                                        className="p-1.5 rounded hover:bg-border-soft disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                      >
+                                        <ChevronRight className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    }
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => toggleExpand(company.id)}
+                          className="p-1 rounded hover:bg-border-soft transition-colors"
+                          title={isExpanded ? "Recolher consultores" : "Ver consultores"}
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-5 h-5 text-muted" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5 text-muted" />
+                          )}
+                        </button>
+                        {(() => {
+                          const logoSrc = resolveCompanyLogo(company);
+                          return logoSrc ? (
+                            <img
+                              src={logoSrc}
+                              alt={company.name}
+                              className="h-8 w-24 object-contain"
+                            />
+                          ) : (
+                            <div className="h-8 w-24 flex items-center justify-center bg-border-soft rounded text-xs text-muted">
+                              Sem Logo
+                            </div>
+                          );
+                        })()}
+                        <div>
+                          <span className="font-medium">{company.name}</span>
+                          <span className="block text-xs text-subtle">
+                            {applyCnpjMask(company.cnpj)}
+                          </span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
                       {company.commission_rate != null ? (
                         <span className="inline-flex items-center gap-1 text-sm font-medium text-status-ok bg-status-ok-wash px-2.5 py-1 rounded-full">
                           {company.commission_rate}%
                         </span>
                       ) : (
-                        <span className="text-subtle text-sm">
-                          Não definida
-                        </span>
+                        <span className="text-subtle text-sm">Não definida</span>
                       )}
-                    </div>
-
-                    {/* Consultores count */}
-                    <div>
+                    </TableCell>
+                    <TableCell>
                       <button
                         onClick={() => toggleExpand(company.id)}
                         className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors"
                       >
                         <Users className="w-4 h-4" />
-                        <span className="font-medium">
-                          {company.consultants_count ?? 0}
-                        </span>
+                        <span className="font-medium">{company.consultants_count ?? 0}</span>
                       </button>
-                    </div>
-
-                    {/* Ações */}
-                    <div className="flex justify-end items-center gap-4 text-subtle">
-                      <button
-                        title={
-                          company.slug
-                            ? "Copiar link do site whitelabel"
-                            : "Escritório sem site whitelabel configurado"
-                        }
-                        onClick={() => handleCopySlugLink(company)}
-                        disabled={!company.slug}
-                        className="p-1.5 rounded hover:bg-border-soft text-ink-soft disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        {copiedSlugId === company.id ? (
-                          <Check className="w-4 h-4 text-status-ok" />
-                        ) : (
-                          <Link className="w-4 h-4" />
-                        )}
-                      </button>
-                      <button
-                        title="Convidar gerente do escritório (OFFICE)"
-                        onClick={() => openInviteModal(company, "OFFICE")}
-                        className="text-xs font-medium bg-action text-white px-2 py-1 rounded hover:bg-ink"
-                      >
-                        + Gerente
-                      </button>
-                      <button
-                        onClick={() => setCompanyToEdit(company)}
-                        className="p-1.5 rounded hover:bg-border-soft text-ink-soft"
-                        title="Editar"
-                      >
-                        <Pencil size={18} />
-                      </button>
-                      <button
-                        onClick={() => setCompanyToDelete(company)}
-                        className="p-1.5 rounded hover:bg-status-bad-wash text-status-bad"
-                        title="Deletar"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Painel expandido: consultores / clientes */}
-                  {isExpanded && (
-                    <div className="border-t border-border-soft bg-border-soft px-6 py-4">
-                      {/* Header do painel: abas + botão convidar */}
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-4">
-                          <button
-                            onClick={() => switchPanelTab(company.id, "consultants")}
-                            className={`text-xs font-semibold uppercase tracking-wider pb-1 border-b-2 -mb-px ${
-                              activeTab === "consultants"
-                                ? "border-ink text-ink"
-                                : "border-transparent text-muted hover:text-ink-soft"
-                            }`}
-                          >
-                            Consultores
-                          </button>
-                          <button
-                            onClick={() => switchPanelTab(company.id, "clients")}
-                            className={`text-xs font-semibold uppercase tracking-wider pb-1 border-b-2 -mb-px ${
-                              activeTab === "clients"
-                                ? "border-ink text-ink"
-                                : "border-transparent text-muted hover:text-ink-soft"
-                            }`}
-                          >
-                            Clientes
-                          </button>
-                        </div>
-                        {activeTab === "consultants" && (
-                          <button
-                            onClick={() => openInviteModal(company)}
-                            className="inline-flex items-center gap-1.5 text-xs font-medium bg-action text-white px-3 py-1.5 rounded hover:bg-ink transition-colors"
-                          >
-                            <Link className="w-3.5 h-3.5" />
-                            Convidar Consultor
-                          </button>
-                        )}
-                      </div>
-
-                      {activeTab === "clients" ? (
-                        clientsState?.loading ? (
-                          <div className="flex items-center justify-center py-6 gap-2 text-muted">
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                            <span className="text-sm">Carregando clientes...</span>
-                          </div>
-                        ) : clientsState?.error ? (
-                          <p className="text-sm text-status-bad py-4 text-center">
-                            {clientsState.error}
-                          </p>
-                        ) : !clientsState || clientsState.clients.length === 0 ? (
-                          <p className="text-sm text-muted py-4 text-center">
-                            Nenhum cliente ligado a consultores deste escritório.
-                          </p>
-                        ) : (
-                          (() => {
-                            const { groups, withoutConsultant } = groupClientsByConsultant(
-                              clientsState.clients,
-                            );
-                            return (
-                              <div className="flex flex-col gap-5">
-                                <div className="grid grid-cols-[2fr_2fr_1fr] gap-4 px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wider">
-                                  <div>Cliente</div>
-                                  <div>E-mail</div>
-                                  <div>Cadastro</div>
-                                </div>
-                                {groups.map((group) => (
-                                  <div key={group.consultantId}>
-                                    <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-soft mb-2">
-                                      {group.consultantName}
-                                    </h3>
-                                    <div className="flex flex-col gap-2">
-                                      {group.clients.map((client) => (
-                                        <ClientRow key={client.id} client={client} />
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
-                                {withoutConsultant.length > 0 && (
-                                  <div>
-                                    <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-soft mb-2">
-                                      Clientes sem consultor relacionado
-                                    </h3>
-                                    <div className="flex flex-col gap-2">
-                                      {withoutConsultant.map((client) => (
-                                        <ClientRow key={client.id} client={client} />
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()
-                        )
-                      ) : (
-                        <>
-                      {expandedState.loading &&
-                      expandedState.consultants.length === 0 ? (
-                        <div className="flex items-center justify-center py-6 gap-2 text-muted">
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          <span className="text-sm">Carregando consultores...</span>
-                        </div>
-                      ) : expandedState.error ? (
-                        <p className="text-sm text-status-bad py-4 text-center">
-                          {expandedState.error}
-                        </p>
-                      ) : expandedState.consultants.length === 0 ? (
-                        <p className="text-sm text-muted py-4 text-center">
-                          Nenhum consultor associado a este escritório.
-                        </p>
-                      ) : (
-                        <>
-                          {/* Cabeçalho da sub-tabela */}
-                          <div className="grid grid-cols-[2fr_2fr_1fr_1fr] gap-4 px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wider">
-                            <div>Nome</div>
-                            <div>E-mail</div>
-                            <div>Clientes</div>
-                            <div>Cadastro</div>
-                          </div>
-
-                          {/* Linhas de consultores */}
-                          <div className="flex flex-col gap-2">
-                            {expandedState.consultants.map((consultant) => (
-                              <div
-                                key={consultant.id}
-                                className="grid grid-cols-[2fr_2fr_1fr_1fr] gap-4 items-center px-3 py-3 bg-surface rounded-lg border border-border-soft"
-                              >
-                                <div>
-                                  <span className="text-sm font-medium text-ink">
-                                    {consultant.name} {consultant.surname}
-                                  </span>
-                                  <span className="block text-xs text-subtle">
-                                    Consultor
-                                  </span>
-                                </div>
-                                <div className="text-sm text-muted truncate">
-                                  {consultant.email}
-                                </div>
-                                <div>
-                                  <span className="text-sm text-ink-soft font-medium">
-                                    {consultant.clients_count ?? 0}
-                                  </span>
-                                </div>
-                                <div className="text-xs text-subtle">
-                                  {consultant.created_at
-                                    ? new Date(consultant.created_at).toLocaleDateString("pt-BR")
-                                    : "—"}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Paginação dos consultores */}
-                          {expandedState.pagination.total_pages > 1 && (
-                            <div className="flex items-center justify-between mt-4 pt-3 border-t border-border">
-                              <span className="text-xs text-muted">
-                                Página {expandedState.pagination.current_page} de{" "}
-                                {expandedState.pagination.total_pages} (
-                                {expandedState.pagination.total}{" "}
-                                {expandedState.pagination.total === 1 ? "consultor" : "consultores"})
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() =>
-                                    loadConsultants(
-                                      company.id,
-                                      expandedState.pagination.current_page - 1,
-                                    )
-                                  }
-                                  disabled={
-                                    !expandedState.pagination.has_prev ||
-                                    expandedState.loading
-                                  }
-                                  className="p-1.5 rounded hover:bg-border-soft disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                >
-                                  <ChevronLeft className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    loadConsultants(
-                                      company.id,
-                                      expandedState.pagination.current_page + 1,
-                                    )
-                                  }
-                                  disabled={
-                                    !expandedState.pagination.has_next ||
-                                    expandedState.loading
-                                  }
-                                  className="p-1.5 rounded hover:bg-border-soft disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                >
-                                  <ChevronRight className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end items-center gap-4 text-subtle">
+                        <button
+                          title={
+                            company.slug
+                              ? "Copiar link do site whitelabel"
+                              : "Escritório sem site whitelabel configurado"
+                          }
+                          onClick={() => handleCopySlugLink(company)}
+                          disabled={!company.slug}
+                          className="p-1.5 rounded hover:bg-border-soft text-ink-soft disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          {copiedSlugId === company.id ? (
+                            <Check className="w-4 h-4 text-status-ok" />
+                          ) : (
+                            <Link className="w-4 h-4" />
                           )}
-                        </>
-                      )}
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
+                        </button>
+                        <button
+                          title="Convidar gerente do escritório (OFFICE)"
+                          onClick={() => openInviteModal(company, "OFFICE")}
+                          className="text-xs font-medium bg-action text-white px-2 py-1 rounded hover:bg-ink"
+                        >
+                          + Gerente
+                        </button>
+                        <button
+                          onClick={() => setCompanyToEdit(company)}
+                          className="p-1.5 rounded hover:bg-border-soft text-ink-soft"
+                          title="Editar"
+                        >
+                          <Pencil size={18} />
+                        </button>
+                        <button
+                          onClick={() => setCompanyToDelete(company)}
+                          className="p-1.5 rounded hover:bg-status-bad-wash text-status-bad"
+                          title="Deletar"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
       </div>
 
       {/* --- MODAIS --- */}
