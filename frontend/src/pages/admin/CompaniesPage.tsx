@@ -360,6 +360,7 @@ export default function CompaniesPage() {
                     colSpan={4}
                     isExpanded={isExpanded}
                     expandedContent={
+                      isExpanded && expandedState ? (
                       <div className="px-6 py-4">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-4">
@@ -550,6 +551,7 @@ export default function CompaniesPage() {
                           </>
                         )}
                       </div>
+                      ) : null
                     }
                   >
                     <TableCell>

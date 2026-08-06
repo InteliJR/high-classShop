@@ -1,7 +1,7 @@
   import React, { useContext } from "react";
   import Header from "./Header";
   import Sidebar from "./Sidebar";
-  import { AppContext, AppProvider } from "../contexts/AppContext";
+  import { AppContext } from "../contexts/AppContext";
 import { useIsMobile } from "../hooks/use-is-mobile";
   import { AuthContext } from "../contexts/AuthContext";
 import RequireCalendlyModal from "../components/calendly/RequireCalendlyModal";
@@ -21,37 +21,35 @@ import RequireGoogleMeetModal from "../components/meetings/RequireGoogleMeetModa
     const mobilePadding = user ? "" : "px-4"; // 16px no mobile para não quebrar
 
     return (
-      <AppProvider>
-          <div className="flex flex-col min-h-screen">
-            <Header />
+        <div className="flex flex-col min-h-screen">
+          <Header />
 
-            <div className="flex flex-1 h-full min-w-0">
-              {/* Sidebar só aparece se houver usuário  ou tiver no mobile*/}
-              {(isMobile || user) && <Sidebar />}
+          <div className="flex flex-1 h-full min-w-0">
+            {/* Sidebar só aparece se houver usuário  ou tiver no mobile*/}
+            {(isMobile || user) && <Sidebar />}
 
-              <main
-                className={`
-                  flex flex-col flex-1 min-w-0 my-8 transition-all duration-300
-                  ${user ? "mx-4 sm:mx-8" : ""}
-                  ${
-                    user
-                      ? "justify-start"
-                      : "justify-start sm:justify-center items-center"
-                  }
-                  
-                  /* Respiro quando não tem sidebar */
-                  ${user ? "" : `${isMobile ? mobilePadding : desktopPadding}`}
-                  
-                  /* Espaço quando sidebar está expandida (w-64 = 256px) */
-                  ${user && !isMobile ? (isSidebarDesktopCollapsed ? "pl-24" : "pl-72") : ""}
-                `}
-              >
-                {children}
-              </main>
-            </div>
-            {user?.role === "SPECIALIST" && <RequireCalendlyModal />}
-            {user?.role === "ADMIN" && <RequireGoogleMeetModal />}
+            <main
+              className={`
+                flex flex-col flex-1 min-w-0 my-8 transition-all duration-300
+                ${user ? "mx-4 sm:mx-8" : ""}
+                ${
+                  user
+                    ? "justify-start"
+                    : "justify-start sm:justify-center items-center"
+                }
+
+                /* Respiro quando não tem sidebar */
+                ${user ? "" : `${isMobile ? mobilePadding : desktopPadding}`}
+
+                /* Espaço quando sidebar está expandida (w-64 = 256px) */
+                ${user && !isMobile ? (isSidebarDesktopCollapsed ? "pl-24" : "pl-72") : ""}
+              `}
+            >
+              {children}
+            </main>
           </div>
-      </AppProvider>
+          {user?.role === "SPECIALIST" && <RequireCalendlyModal />}
+          {user?.role === "ADMIN" && <RequireGoogleMeetModal />}
+        </div>
     );
   }
