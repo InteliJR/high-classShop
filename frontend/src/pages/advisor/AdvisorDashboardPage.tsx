@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Users, Loader, AlertCircle, ExternalLink } from "lucide-react";
+import { Users, AlertCircle, ExternalLink } from "lucide-react";
 import { getAdvisedClients, type AdvisedClient } from "../../services/advisor.service";
 import { StatusBadge } from "../../components/patterns/StatusBadge";
 import { Alert } from "../../components/ui/alert";
 import { EmptyState } from "../../components/patterns/EmptyState";
 import { BackButton } from "../../components/patterns/BackButton";
+import { Skeleton } from "../../components/ui/skeleton";
 
 export default function AdvisorDashboardPage() {
   const navigate = useNavigate();
@@ -29,9 +30,19 @@ export default function AdvisorDashboardPage() {
       </div>
 
       {loading && (
-        <div className="flex items-center gap-2 text-muted py-12 justify-center">
-          <Loader className="w-5 h-5 animate-spin" />
-          Carregando...
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="bg-surface rounded-xl border border-border p-6 shadow-ds-card">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-56" />
+                </div>
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <Skeleton className="h-3 w-32" />
+            </div>
+          ))}
         </div>
       )}
 
