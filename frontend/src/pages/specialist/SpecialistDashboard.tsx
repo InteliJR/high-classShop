@@ -18,6 +18,7 @@ import {
   getSpecialistDashboardStats,
   type SpecialistDashboardStats,
 } from "../../services/dashboard.service";
+import { Skeleton } from "../../components/ui/skeleton";
 
 const STATUS_COLORS: Record<string, string> = {
   Concluído: "#22C55E",
@@ -92,9 +93,10 @@ export default function SpecialistDashboard() {
             Produtos Cadastrados
           </p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-ink mb-2">
-              Carregando...
-            </p>
+            <>
+              <Skeleton className="h-9 w-16 mb-2" />
+              <Skeleton className="h-4 w-24" />
+            </>
           ) : (
             <>
               <p className="text-4xl font-bold text-ink mb-2">
@@ -109,9 +111,10 @@ export default function SpecialistDashboard() {
         <div className="bg-border-soft rounded-lg p-6">
           <p className="text-ink-soft font-semibold mb-2">Processos Ativos</p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-ink mb-2">
-              Carregando...
-            </p>
+            <>
+              <Skeleton className="h-9 w-16 mb-2" />
+              <Skeleton className="h-4 w-24" />
+            </>
           ) : (
             <>
               <p className="text-4xl font-bold text-ink mb-2">
@@ -126,9 +129,10 @@ export default function SpecialistDashboard() {
         <div className="bg-border-soft rounded-lg p-6">
           <p className="text-ink-soft font-semibold mb-2">Vendas Concluídas</p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-ink mb-2">
-              Carregando...
-            </p>
+            <>
+              <Skeleton className="h-9 w-16 mb-2" />
+              <Skeleton className="h-4 w-24" />
+            </>
           ) : (
             <>
               <p className="text-4xl font-bold text-ink mb-2">
@@ -143,9 +147,10 @@ export default function SpecialistDashboard() {
         <div className="bg-border-soft rounded-lg p-6">
           <p className="text-ink-soft font-semibold mb-2">Taxa de Conversão</p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-ink mb-2">
-              Carregando...
-            </p>
+            <>
+              <Skeleton className="h-9 w-16 mb-2" />
+              <Skeleton className="h-4 w-24" />
+            </>
           ) : (
             <>
               <p className="text-4xl font-bold text-ink mb-2">
