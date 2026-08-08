@@ -373,3 +373,72 @@ describe('AdminDatabaseService — processos', () => {
     expect(row[col(result.columns, 'Observações')]).toBe('—');
   });
 });
+
+describe('AdminDatabaseService — contratos', () => {
+  const contrato = {
+    id: 'c0ffee11-0000-0000-0000-000000000000',
+    buyer_name: 'João Silva', buyer_cpf: '12345678901',
+    seller_name: 'Ana Costa',
+    vehicle_model: 'Ferrari F8 Tributo', vehicle_year: '2022',
+    vehicle_price: { toString: () => '2400000.00' },
+    payment_seller_value: { toString: () => '2200000.00' },
+    specialist_commission_value: { toString: () => '100000.00' },
+    office_value: { toString: () => '60000.00' },
+    platform_value: { toString: () => '40000.00' },
+    status: 'SIGNED', signature_type: 'QUALIFIED',
+    signed_at: new Date('2026-03-20T17:00:00Z'),
+    process: {
+      client: { name: 'João', surname: 'Silva' },
+      car: { marca: 'Ferrari', modelo: 'F8 Tributo' },
+      boat: null, aircraft: null,
+    },
+  };
+
+  async function listarContratos(row: any = contrato) {
+    const prisma = mkPrisma({
+      contract: { count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([row]) },
+    });
+    return { prisma, result: await mkSvc(prisma).list('contracts', 1, 20) };
+  }
+
+  it('fica enxuto: no máximo 15 colunas', async () => {
+    const { result } = await listarContratos();
+    expect(result.columns.length).toBeLessThanOrEqual(15);
+  });
+
+  it('não projeta dados bancários, valores por extenso nem metadados do provedor', async () => {
+    const { prisma } = await listarContratos();
+    const select = JSON.stringify(prisma.contract.findMany.mock.calls[0][0].select);
+    for (const proibido of [
+      'seller_bank', 'platform_bank', 'office_bank', 'specialist_bank',
+      'vehicle_price_written', 'platform_value_written', 'provider_meta',
+      'template_id', 'testimonial1_cpf', 'file_path',
+    ]) {
+      expect(select).not.toContain(proibido);
+    }
+  });
+
+  it('identifica o processo por cliente e produto, não por UUID', async () => {
+    const { result } = await listarContratos();
+    expect(result.data[0][col(result.columns, 'Processo')]).toBe('João Silva — Ferrari F8 Tributo');
+  });
+
+  it('formata valores em real e traduz status e assinatura', async () => {
+    const { result } = await listarContratos();
+    const row = result.data[0];
+    expect(row[col(result.columns, 'Valor')]).toBe('R$ 2.400.000,00');
+    expect(row[col(result.columns, 'Comissão especialista')]).toBe('R$ 100.000,00');
+    expect(row[col(result.columns, 'Status')]).toBe('Assinado');
+    expect(row[col(result.columns, 'Assinatura')]).toBe('Qualificada');
+    expect(row[col(result.columns, 'Assinado em')]).toBe('20/03/2026 14:00');
+    expect(row[col(result.columns, 'CPF do comprador')]).toBe('123.456.789-01');
+  });
+
+  it('trata contrato de consultoria, sem produto no processo', async () => {
+    const { result } = await listarContratos({
+      ...contrato,
+      process: { client: { name: 'João', surname: 'Silva' }, car: null, boat: null, aircraft: null },
+    });
+    expect(result.data[0][col(result.columns, 'Processo')]).toBe('João Silva');
+  });
+});

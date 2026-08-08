@@ -67,6 +67,14 @@ const produto = (r: any) => {
   return p ? `${p.marca ?? ''} ${p.modelo ?? ''}`.trim() : undefined;
 };
 
+/** Identifica um processo por gente e coisa, não por UUID:
+ *  "João Silva — Ferrari F8 Tributo". Sem produto (consultoria), só o cliente. */
+const processoLegivel = (p: any) => {
+  if (!p) return undefined;
+  const partes = [pessoa(p.client), produto(p)].filter(Boolean);
+  return partes.length ? partes.join(' — ') : undefined;
+};
+
 export const ENTITIES: Record<string, EntityConfig> = {
   users: {
     model: 'user',
@@ -232,12 +240,42 @@ export const ENTITIES: Record<string, EntityConfig> = {
   contracts: {
     model: 'contract',
     label: 'Contratos',
-    select: { id: true },
-    columns: [{ label: 'ID', get: (r) => idCurto(r.id) }],
+    // Projeção enxuta de propósito: bancários das 4 partes, valores por
+    // extenso, provider_meta, arquivos e testemunhas são dados de geração de
+    // documento, não de consulta tabular.
+    select: {
+      id: true, buyer_name: true, buyer_cpf: true, seller_name: true,
+      vehicle_model: true, vehicle_year: true, vehicle_price: true,
+      payment_seller_value: true, specialist_commission_value: true,
+      office_value: true, platform_value: true,
+      status: true, signature_type: true, signed_at: true,
+      process: {
+        select: {
+          client: { select: { name: true, surname: true } },
+          car: { select: { marca: true, modelo: true } },
+          boat: { select: { marca: true, modelo: true } },
+          aircraft: { select: { marca: true, modelo: true } },
+        },
+      },
+    },
+    columns: [
+      { label: 'ID', get: (r) => idCurto(r.id) },
+      { label: 'Processo', get: (r) => processoLegivel(r.process) },
+      { label: 'Comprador', get: (r) => r.buyer_name },
+      { label: 'CPF do comprador', get: (r) => r.buyer_cpf, format: f.cpf },
+      { label: 'Vendedor', get: (r) => r.seller_name },
+      {
+        label: 'Veículo',
+        get: (r) => [r.vehicle_model, r.vehicle_year].filter(Boolean).join(' ') || undefined,
+      },
+      { label: 'Valor', get: (r) => r.vehicle_price, format: f.money },
+      { label: 'Valor ao vendedor', get: (r) => r.payment_seller_value, format: f.money },
+      { label: 'Comissão especialista', get: (r) => r.specialist_commission_value, format: f.money },
+      { label: 'Escritório', get: (r) => r.office_value, format: f.money },
+      { label: 'Plataforma', get: (r) => r.platform_value, format: f.money },
+      { label: 'Status', get: (r) => r.status, format: enumLabel(CONTRACT_STATUS) },
+      { label: 'Assinatura', get: (r) => r.signature_type, format: enumLabel(SIGNATURE_TYPE) },
+      { label: 'Assinado em', get: (r) => r.signed_at, format: f.datetime },
+    ],
   },
 };
-
-// Config completo de contracts entra na Task 6.
-
-// Evita "declarado mas não usado" enquanto a task 6 não chega.
-void [CONTRACT_STATUS, SIGNATURE_TYPE];
