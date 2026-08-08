@@ -371,12 +371,17 @@ export class OfficeService {
     });
     if (!company) throw new NotFoundException('Escritório não encontrado');
     const logoUrl = await resolveCompanyLogoUrl(this.s3, company.logo);
+    const backgroundImageUrl = await resolveCompanyLogoUrl(
+      this.s3,
+      company.background_image,
+    );
     return {
       ...company,
       commission_rate: company.commission_rate
         ? Number(company.commission_rate)
         : null,
       logoUrl,
+      backgroundImageUrl,
     };
   }
 
@@ -435,12 +440,17 @@ export class OfficeService {
     }
 
     const logoUrl = await resolveCompanyLogoUrl(this.s3, updated.logo);
+    const backgroundImageUrl = await resolveCompanyLogoUrl(
+      this.s3,
+      updated.background_image,
+    );
     return {
       ...updated,
       commission_rate: updated.commission_rate
         ? Number(updated.commission_rate)
         : null,
       logoUrl,
+      backgroundImageUrl,
     };
   }
 
