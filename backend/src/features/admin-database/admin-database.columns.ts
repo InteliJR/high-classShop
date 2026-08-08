@@ -60,6 +60,13 @@ const pessoa = (u: { name?: string; surname?: string } | null | undefined) =>
 /** ID curto para referência humana (suporte, conferência). */
 const idCurto = (id: unknown) => (id ? `#${String(id).slice(0, 8)}` : undefined);
 
+/** Colapsa car/boat/aircraft numa descrição única. A coluna Tipo já informa
+ *  qual dos três era, então as 4 colunas de ID viram uma só. */
+const produto = (r: any) => {
+  const p = r.car ?? r.boat ?? r.aircraft;
+  return p ? `${p.marca ?? ''} ${p.modelo ?? ''}`.trim() : undefined;
+};
+
 export const ENTITIES: Record<string, EntityConfig> = {
   users: {
     model: 'user',
@@ -196,8 +203,31 @@ export const ENTITIES: Record<string, EntityConfig> = {
   processes: {
     model: 'process',
     label: 'Processos',
-    select: { id: true },
-    columns: [{ label: 'ID', get: (r) => idCurto(r.id) }],
+    select: {
+      id: true, product_type: true, status: true, notes: true,
+      active_contract_id: true, created_at: true,
+      client: { select: { name: true, surname: true } },
+      specialist: { select: { name: true, surname: true } },
+      car: { select: { marca: true, modelo: true } },
+      boat: { select: { marca: true, modelo: true } },
+      aircraft: { select: { marca: true, modelo: true } },
+      appointment: { select: { appointment_datetime: true } },
+      accepted_proposal: { select: { proposed_value: true } },
+    },
+    columns: [
+      { label: 'ID', get: (r) => idCurto(r.id) },
+      { label: 'Cliente', get: (r) => pessoa(r.client) },
+      { label: 'Especialista', get: (r) => pessoa(r.specialist) },
+      { label: 'Produto', get: produto },
+      { label: 'Tipo', get: (r) => r.product_type, format: enumLabel(PRODUCT_TYPE) },
+      { label: 'Status', get: (r) => r.status, format: enumLabel(PROCESS_STATUS) },
+      { label: 'Agendamento', get: (r) => r.appointment?.appointment_datetime, format: f.datetime },
+      { label: 'Valor aceito', get: (r) => r.accepted_proposal?.proposed_value, format: f.money },
+      // Booleano em vez do UUID: o admin só quer saber se existe contrato.
+      { label: 'Contrato', get: (r) => r.active_contract_id != null, format: f.bool },
+      { label: 'Observações', get: (r) => r.notes, wide: true },
+      { label: 'Criado em', get: (r) => r.created_at, format: f.date },
+    ],
   },
   contracts: {
     model: 'contract',
@@ -207,8 +237,7 @@ export const ENTITIES: Record<string, EntityConfig> = {
   },
 };
 
-// Config completo de processes entra na Task 5.
 // Config completo de contracts entra na Task 6.
 
-// Evita "declarado mas não usado" enquanto as tasks 5-6 não chegaram.
-void [CONTRACT_STATUS, PROCESS_STATUS, SIGNATURE_TYPE];
+// Evita "declarado mas não usado" enquanto a task 6 não chega.
+void [CONTRACT_STATUS, SIGNATURE_TYPE];

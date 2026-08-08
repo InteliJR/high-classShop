@@ -269,3 +269,107 @@ describe('AdminDatabaseService — produtos', () => {
     expect(row[col(result.columns, 'Especialista')]).toBe('—');
   });
 });
+
+describe('AdminDatabaseService — processos', () => {
+  const processo = {
+    id: 'a3f1b2c3-0000-0000-0000-000000000000',
+    product_type: 'CAR', status: 'NEGOTIATION',
+    notes: 'Cliente pediu test drive antes de fechar',
+    active_contract_id: null,
+    created_at: new Date('2026-03-01T12:00:00Z'),
+    client: { name: 'João', surname: 'Silva' },
+    specialist: { name: 'Ana', surname: 'Costa' },
+    car: { marca: 'Ferrari', modelo: 'F8 Tributo' },
+    boat: null, aircraft: null,
+    appointment: { appointment_datetime: new Date('2026-03-12T17:00:00Z') },
+    accepted_proposal: { proposed_value: { toString: () => '2400000.00' } },
+  };
+
+  async function listarProcessos(row: any = processo) {
+    const prisma = mkPrisma({
+      process: { count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([row]) },
+    });
+    return mkSvc(prisma).list('processes', 1, 20);
+  }
+
+  it('não expõe nenhuma coluna de UUID de relação', async () => {
+    const labels = (await listarProcessos()).columns.map((c) => c.label);
+    for (const proibida of [
+      'ID do cliente', 'ID do especialista', 'ID do carro', 'ID da aeronave',
+      'ID da embarcação', 'ID do produto', 'ID do agendamento',
+      'ID da proposta aceita', 'ID do contrato ativo',
+    ]) {
+      expect(labels).not.toContain(proibida);
+    }
+  });
+
+  it('mostra pessoas por nome e o produto colapsado numa coluna só', async () => {
+    const result = await listarProcessos();
+    const row = result.data[0];
+    expect(row[col(result.columns, 'Cliente')]).toBe('João Silva');
+    expect(row[col(result.columns, 'Especialista')]).toBe('Ana Costa');
+    expect(row[col(result.columns, 'Produto')]).toBe('Ferrari F8 Tributo');
+    expect(row[col(result.columns, 'Tipo')]).toBe('Carro');
+  });
+
+  it('colapsa barco e aeronave na mesma coluna Produto', async () => {
+    const comBarco = await listarProcessos({
+      ...processo, product_type: 'BOAT', car: null,
+      boat: { marca: 'Azimut', modelo: 'Grande 27' },
+    });
+    expect(comBarco.data[0][col(comBarco.columns, 'Produto')]).toBe('Azimut Grande 27');
+
+    const comAeronave = await listarProcessos({
+      ...processo, product_type: 'AIRCRAFT', car: null,
+      aircraft: { marca: 'Embraer', modelo: 'Phenom 300' },
+    });
+    expect(comAeronave.data[0][col(comAeronave.columns, 'Produto')]).toBe('Embraer Phenom 300');
+  });
+
+  it('troca os UUIDs de agendamento e proposta por data e valor', async () => {
+    const result = await listarProcessos();
+    const row = result.data[0];
+    // 17:00 UTC = 14:00 em São Paulo.
+    expect(row[col(result.columns, 'Agendamento')]).toBe('12/03/2026 14:00');
+    expect(row[col(result.columns, 'Valor aceito')]).toBe('R$ 2.400.000,00');
+  });
+
+  it('mostra contrato ativo como Sim/Não em vez de UUID', async () => {
+    const sem = await listarProcessos();
+    expect(sem.data[0][col(sem.columns, 'Contrato')]).toBe('Não');
+
+    const com = await listarProcessos({ ...processo, active_contract_id: 'uuid-qualquer' });
+    expect(com.data[0][col(com.columns, 'Contrato')]).toBe('Sim');
+  });
+
+  it('mostra o ID curto do processo para referência', async () => {
+    const result = await listarProcessos();
+    expect(result.data[0][col(result.columns, 'ID')]).toBe('#a3f1b2c3');
+  });
+
+  it('traduz o status', async () => {
+    const result = await listarProcessos();
+    expect(result.data[0][col(result.columns, 'Status')]).toBe('Em negociação');
+  });
+
+  it('marca Observações como coluna larga para não ser truncada', async () => {
+    const result = await listarProcessos();
+    expect(result.columns[col(result.columns, 'Observações')].wide).toBe(true);
+    expect(result.data[0][col(result.columns, 'Observações')]).toBe(
+      'Cliente pediu test drive antes de fechar',
+    );
+  });
+
+  it('trata processo de consultoria (sem produto e sem agendamento)', async () => {
+    const result = await listarProcessos({
+      ...processo, product_type: null, car: null, boat: null, aircraft: null,
+      appointment: null, accepted_proposal: null, notes: null,
+    });
+    const row = result.data[0];
+    expect(row[col(result.columns, 'Produto')]).toBe('—');
+    expect(row[col(result.columns, 'Tipo')]).toBe('—');
+    expect(row[col(result.columns, 'Agendamento')]).toBe('—');
+    expect(row[col(result.columns, 'Valor aceito')]).toBe('—');
+    expect(row[col(result.columns, 'Observações')]).toBe('—');
+  });
+});
