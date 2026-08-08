@@ -478,4 +478,42 @@ export class OfficeService {
     const logoUrl = await resolveCompanyLogoUrl(this.s3, updated.logo);
     return { ...updated, logoUrl };
   }
+
+  // ─── Company: upload imagem de fundo (whitelabel) ──────────────────────
+  async uploadCompanyBackground(
+    scope: Scope,
+    file: Express.Multer.File,
+    requestedCompanyId?: string,
+  ) {
+    const companyId = this.resolveCompanyId(scope, requestedCompanyId);
+
+    const sanitized = this.logoSanitizer.sanitizeBackground(file);
+
+    const key = `companies/${companyId}/background-${Date.now()}.${sanitized.extension}`;
+    await this.s3.uploadBuffer(sanitized.buffer, key, sanitized.contentType);
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { background_image: true },
+    });
+    if (!company) throw new NotFoundException('Escritório não encontrado');
+
+    const previousKey = company.background_image;
+    const updated = await this.prisma.company.update({
+      where: { id: companyId },
+      data: { background_image: key },
+      select: { id: true, background_image: true },
+    });
+
+    // Limpa imagem anterior (best-effort)
+    if (previousKey && previousKey !== key) {
+      this.s3.deleteObject(previousKey).catch(() => {});
+    }
+
+    const backgroundImageUrl = await resolveCompanyLogoUrl(
+      this.s3,
+      updated.background_image,
+    );
+    return { ...updated, backgroundImageUrl };
+  }
 }

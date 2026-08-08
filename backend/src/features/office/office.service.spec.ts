@@ -55,8 +55,14 @@ function mkJwt(value = 'tok123') {
   return { sign: jest.fn().mockReturnValue(value) };
 }
 
-function mkSvc(prisma: any, ses: any = mkSes(), jwt: any = mkJwt()) {
-  return new OfficeService(prisma, jwt, ses, {} as any, {} as any);
+function mkSvc(
+  prisma: any,
+  ses: any = mkSes(),
+  jwt: any = mkJwt(),
+  s3: any = {},
+  logoSanitizer: any = {},
+) {
+  return new OfficeService(prisma, jwt, ses, s3, logoSanitizer);
 }
 
 describe('OfficeService — tenant isolation', () => {
@@ -272,5 +278,54 @@ describe('OfficeService — tenant isolation', () => {
     const callWhere = prisma.user.findMany.mock.calls[0][0].where;
     expect(callWhere.company_id).toBe('companyB');
     expect(callWhere.role).toBe('CONSULTANT');
+  });
+});
+
+describe('OfficeService — upload de imagem de fundo', () => {
+  it('uploadCompanyBackground: sanitiza, salva key nova, apaga a anterior e retorna backgroundImageUrl', async () => {
+    const prisma = mkPrisma();
+    prisma.company.findUnique.mockResolvedValue({
+      background_image: 'companies/companyA/background-OLD.png',
+    });
+    prisma.company.update.mockResolvedValue({
+      id: 'companyA',
+      background_image: 'companies/companyA/background-NEW.png',
+    });
+    const s3 = {
+      uploadBuffer: jest.fn().mockResolvedValue(undefined),
+      deleteObject: jest.fn().mockResolvedValue(undefined),
+      getSignedUrl: jest.fn().mockResolvedValue('https://signed-bg-url'),
+    };
+    const logoSanitizer = {
+      sanitizeBackground: jest.fn().mockReturnValue({
+        buffer: Buffer.alloc(0),
+        contentType: 'image/png',
+        extension: 'png',
+      }),
+    };
+    const svc = mkSvc(prisma, mkSes(), mkJwt(), s3, logoSanitizer);
+    const file = { buffer: Buffer.from('x'), mimetype: 'image/png' } as any;
+
+    const result = await svc.uploadCompanyBackground(SCOPE_OFFICE_A, file);
+
+    expect(logoSanitizer.sanitizeBackground).toHaveBeenCalledWith(file);
+    expect(s3.uploadBuffer).toHaveBeenCalledWith(
+      Buffer.alloc(0),
+      expect.stringMatching(/^companies\/companyA\/background-\d+\.png$/),
+      'image/png',
+    );
+    expect(prisma.company.update).toHaveBeenCalledWith({
+      where: { id: 'companyA' },
+      data: {
+        background_image: expect.stringMatching(
+          /^companies\/companyA\/background-\d+\.png$/,
+        ),
+      },
+      select: { id: true, background_image: true },
+    });
+    expect(s3.deleteObject).toHaveBeenCalledWith(
+      'companies/companyA/background-OLD.png',
+    );
+    expect(result.backgroundImageUrl).toBe('https://signed-bg-url');
   });
 });
