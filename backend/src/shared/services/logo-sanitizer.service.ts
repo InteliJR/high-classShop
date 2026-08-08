@@ -21,6 +21,7 @@ export interface SanitizedLogo {
 
 const RASTER_LIMIT = 2 * 1024 * 1024; // 2MB
 const SVG_LIMIT = 512 * 1024; // 500KB
+const BACKGROUND_LIMIT = 5 * 1024 * 1024; // 5MB — imagem de fundo full-bleed, mais generoso que o logo
 
 @Injectable()
 export class LogoSanitizerService {
@@ -67,21 +68,6 @@ export class LogoSanitizerService {
   private sanitizeBuffer(buffer: Buffer): SanitizedLogo {
     const real = this.detectByMagicBytes(buffer);
 
-    if (real === 'png') {
-      if (buffer.length > RASTER_LIMIT)
-        throw new PayloadTooLargeException('Logo PNG excede 2MB');
-      return { buffer, contentType: 'image/png', extension: 'png' };
-    }
-    if (real === 'jpg') {
-      if (buffer.length > RASTER_LIMIT)
-        throw new PayloadTooLargeException('Logo JPEG excede 2MB');
-      return { buffer, contentType: 'image/jpeg', extension: 'jpg' };
-    }
-    if (real === 'webp') {
-      if (buffer.length > RASTER_LIMIT)
-        throw new PayloadTooLargeException('Logo WebP excede 2MB');
-      return { buffer, contentType: 'image/webp', extension: 'webp' };
-    }
     if (real === 'svg') {
       if (buffer.length > SVG_LIMIT)
         throw new PayloadTooLargeException('Logo SVG excede 500KB');
@@ -93,9 +79,64 @@ export class LogoSanitizerService {
       };
     }
 
-    throw new BadRequestException(
-      'Formato de logo inválido. Aceitos: PNG, JPEG, WebP, SVG.',
-    );
+    return this.sanitizeRasterBuffer(buffer, {
+      limit: RASTER_LIMIT,
+      label: 'Logo',
+      invalidFormatMessage:
+        'Formato de logo inválido. Aceitos: PNG, JPEG, WebP, SVG.',
+    });
+  }
+
+  /**
+   * Núcleo compartilhado de validação raster (PNG/JPEG/WebP) por magic bytes.
+   * Usado tanto pelo logo (via sanitizeBuffer) quanto pela imagem de fundo
+   * (sanitizeBackground) — só muda o limite de tamanho e as mensagens.
+   */
+  private sanitizeRasterBuffer(
+    buffer: Buffer,
+    opts: { limit: number; label: string; invalidFormatMessage: string },
+  ): SanitizedLogo {
+    const real = this.detectByMagicBytes(buffer);
+    const sizeMB = opts.limit / (1024 * 1024);
+
+    if (real === 'png') {
+      if (buffer.length > opts.limit)
+        throw new PayloadTooLargeException(`${opts.label} PNG excede ${sizeMB}MB`);
+      return { buffer, contentType: 'image/png', extension: 'png' };
+    }
+    if (real === 'jpg') {
+      if (buffer.length > opts.limit)
+        throw new PayloadTooLargeException(`${opts.label} JPEG excede ${sizeMB}MB`);
+      return { buffer, contentType: 'image/jpeg', extension: 'jpg' };
+    }
+    if (real === 'webp') {
+      if (buffer.length > opts.limit)
+        throw new PayloadTooLargeException(`${opts.label} WebP excede ${sizeMB}MB`);
+      return { buffer, contentType: 'image/webp', extension: 'webp' };
+    }
+
+    throw new BadRequestException(opts.invalidFormatMessage);
+  }
+
+  /**
+   * Sanitiza imagem de fundo (Company.background_image) para a landing whitelabel.
+   * Só raster (PNG/JPEG/WebP) — SVG não faz sentido pra foto full-bleed.
+   * Limite 5MB (maior que o logo, por ser conteúdo de tela cheia).
+   */
+  sanitizeBackground(file: {
+    buffer: Buffer;
+    mimetype: string;
+    originalname?: string;
+  }): SanitizedLogo {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Arquivo de imagem de fundo vazio');
+    }
+    return this.sanitizeRasterBuffer(file.buffer, {
+      limit: BACKGROUND_LIMIT,
+      label: 'Imagem de fundo',
+      invalidFormatMessage:
+        'Formato de imagem inválido. Aceitos: PNG, JPEG, WebP.',
+    });
   }
 
   /**
