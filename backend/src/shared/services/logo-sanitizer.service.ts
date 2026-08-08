@@ -101,17 +101,23 @@ export class LogoSanitizerService {
 
     if (real === 'png') {
       if (buffer.length > opts.limit)
-        throw new PayloadTooLargeException(`${opts.label} PNG excede ${sizeMB}MB`);
+        throw new PayloadTooLargeException(
+          `${opts.label} PNG excede ${sizeMB}MB`,
+        );
       return { buffer, contentType: 'image/png', extension: 'png' };
     }
     if (real === 'jpg') {
       if (buffer.length > opts.limit)
-        throw new PayloadTooLargeException(`${opts.label} JPEG excede ${sizeMB}MB`);
+        throw new PayloadTooLargeException(
+          `${opts.label} JPEG excede ${sizeMB}MB`,
+        );
       return { buffer, contentType: 'image/jpeg', extension: 'jpg' };
     }
     if (real === 'webp') {
       if (buffer.length > opts.limit)
-        throw new PayloadTooLargeException(`${opts.label} WebP excede ${sizeMB}MB`);
+        throw new PayloadTooLargeException(
+          `${opts.label} WebP excede ${sizeMB}MB`,
+        );
       return { buffer, contentType: 'image/webp', extension: 'webp' };
     }
 

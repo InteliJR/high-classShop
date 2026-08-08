@@ -335,7 +335,9 @@ describe('OfficeService — upload de imagem de fundo', () => {
       id: 'companyA',
       background_image: 'companies/companyA/background-1.png',
     });
-    const s3 = { getSignedUrl: jest.fn().mockResolvedValue('https://signed-bg') };
+    const s3 = {
+      getSignedUrl: jest.fn().mockResolvedValue('https://signed-bg'),
+    };
     const svc = mkSvc(prisma, mkSes(), mkJwt(), s3);
 
     const result = await svc.getCompany(SCOPE_OFFICE_A);
