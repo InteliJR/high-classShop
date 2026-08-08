@@ -35,9 +35,10 @@ export default function WhitelabelPage() {
   if (!company) return <div className="p-8 text-muted">Carregando...</div>;
 
   const logo = resolveCompanyLogo(company);
+  const backgroundUrl = company.backgroundImageUrl;
 
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-brand-primary text-brand-primary-fg p-8">
+  const content = (
+    <>
       {logo && <img src={logo} alt={company.name} className="h-20 object-contain" />}
       <h1 className="text-2xl font-semibold">{company.name}</h1>
       <p className="opacity-80 max-w-md text-center">
@@ -45,7 +46,33 @@ export default function WhitelabelPage() {
       </p>
       <div className="flex gap-3">
         <Button onClick={() => navigate("/catalog/cars")}>Ver catálogo</Button>
-        <Button onClick={() => navigate("/register")}>Criar conta</Button>
+        <Button onClick={() => navigate("/login")}>Login</Button>
+      </div>
+    </>
+  );
+
+  // ponytail: sem imagem configurada, mantém o layout sólido original — zero regressão
+  if (!backgroundUrl) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-brand-primary text-brand-primary-fg p-8">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative min-h-screen flex items-center justify-center p-8 overflow-hidden bg-brand-primary">
+      <div className="absolute inset-0 -z-10">
+        <img
+          src={backgroundUrl}
+          alt=""
+          aria-hidden="true"
+          className="w-full h-full object-cover scale-110 blur-2xl brightness-75"
+        />
+        <div className="absolute inset-0 bg-black/20" />
+      </div>
+      <div className="relative flex flex-col items-center gap-6 rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl px-10 py-12 text-center text-white shadow-xl">
+        {content}
       </div>
     </div>
   );
