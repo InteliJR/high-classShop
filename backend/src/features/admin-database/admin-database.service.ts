@@ -8,7 +8,7 @@ import {
   ENTITIES,
   EntityConfig,
 } from './admin-database.columns';
-import { EMPTY } from './admin-database.format';
+import { text } from './admin-database.format';
 
 @Injectable()
 export class AdminDatabaseService {
@@ -90,15 +90,20 @@ export class AdminDatabaseService {
 
         if (col.image) {
           const key = typeof raw === 'string' ? raw : null;
+          let url: string | null = null;
+          try {
+            url = await resolveCompanyLogoUrl(this.s3, key);
+          } catch {
+            // célula feia (sem logo) é infinitamente melhor que uma página de 500.
+          }
           return {
             kind: 'image',
-            url: await resolveCompanyLogoUrl(this.s3, key),
+            url,
             alt: col.alt ? col.alt(row) : 'Imagem',
           };
         }
 
-        if (raw === null || raw === undefined || raw === '') return EMPTY;
-        return col.format ? col.format(raw) : String(raw);
+        return (col.format ?? text)(raw);
       }),
     );
   }

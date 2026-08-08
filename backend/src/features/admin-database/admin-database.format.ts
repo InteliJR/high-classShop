@@ -63,9 +63,10 @@ const BRL = new Intl.NumberFormat('pt-BR', {
 export const money = safe((v) => {
   const n = toNumber(v);
   if (!Number.isFinite(n)) return String(v);
-  // Intl usa NBSP entre símbolo e número; normalizamos para espaço comum
+  // Intl usa NBSP (ou, em builds de ICU mais recentes, o narrow no-break
+  // space U+202F) entre símbolo e número; normalizamos para espaço comum
   // para não quebrar comparações e o strip de "R$ " no CSV do frontend.
-  return BRL.format(n).replace(/\u00A0/g, ' ');
+  return BRL.format(n).replace(/[\u00A0\u202F]/g, ' ');
 });
 
 const DECIMAL2 = new Intl.NumberFormat('pt-BR', {

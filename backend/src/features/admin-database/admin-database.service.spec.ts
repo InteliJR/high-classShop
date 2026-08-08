@@ -3,19 +3,42 @@ import { AdminDatabaseService } from './admin-database.service';
 
 function mkPrisma(overrides: Record<string, any> = {}) {
   const base = {
-    user: { count: jest.fn().mockResolvedValue(3), findMany: jest.fn().mockResolvedValue([]) },
-    company: { count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([]) },
-    car: { count: jest.fn().mockResolvedValue(5), findMany: jest.fn().mockResolvedValue([]) },
-    boat: { count: jest.fn().mockResolvedValue(2), findMany: jest.fn().mockResolvedValue([]) },
-    aircraft: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
-    process: { count: jest.fn().mockResolvedValue(4), findMany: jest.fn().mockResolvedValue([]) },
-    contract: { count: jest.fn().mockResolvedValue(2), findMany: jest.fn().mockResolvedValue([]) },
+    user: {
+      count: jest.fn().mockResolvedValue(3),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    company: {
+      count: jest.fn().mockResolvedValue(1),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    car: {
+      count: jest.fn().mockResolvedValue(5),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    boat: {
+      count: jest.fn().mockResolvedValue(2),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    aircraft: {
+      count: jest.fn().mockResolvedValue(0),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    process: {
+      count: jest.fn().mockResolvedValue(4),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    contract: {
+      count: jest.fn().mockResolvedValue(2),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   };
   return { ...base, ...overrides } as any;
 }
 
 function mkS3() {
-  return { getSignedUrl: jest.fn().mockResolvedValue('https://s3.example/assinada') } as any;
+  return {
+    getSignedUrl: jest.fn().mockResolvedValue('https://s3.example/assinada'),
+  } as any;
 }
 
 function mkSvc(prisma = mkPrisma(), s3 = mkS3()) {
@@ -25,57 +48,95 @@ function mkSvc(prisma = mkPrisma(), s3 = mkS3()) {
 /** Acha o índice de uma coluna pelo label — deixa os testes independentes da ordem. */
 function col(columns: { label: string }[], label: string): number {
   const i = columns.findIndex((c) => c.label === label);
-  if (i < 0) throw new Error(`Coluna "${label}" não existe. Existem: ${columns.map((c) => c.label).join(', ')}`);
+  if (i < 0)
+    throw new Error(
+      `Coluna "${label}" não existe. Existem: ${columns.map((c) => c.label).join(', ')}`,
+    );
   return i;
 }
 
 describe('AdminDatabaseService — whitelist', () => {
   it('não expõe mais Propostas nem Agendamentos', async () => {
-    const keys = mkSvc().listEntities().map((e) => e.key);
+    const keys = mkSvc()
+      .listEntities()
+      .map((e) => e.key);
     expect(keys).not.toContain('proposals');
     expect(keys).not.toContain('appointments');
   });
 
   it('expõe exatamente as 7 entidades curadas', async () => {
-    expect(mkSvc().listEntities().map((e) => e.key)).toEqual([
-      'users', 'companies', 'cars', 'boats', 'aircrafts', 'processes', 'contracts',
+    expect(
+      mkSvc()
+        .listEntities()
+        .map((e) => e.key),
+    ).toEqual([
+      'users',
+      'companies',
+      'cars',
+      'boats',
+      'aircrafts',
+      'processes',
+      'contracts',
     ]);
   });
 
   it('countAll devolve uma entrada por entidade, com key/label/count', async () => {
     const result = await mkSvc().countAll();
     expect(result).toHaveLength(7);
-    expect(result).toContainEqual({ key: 'users', label: 'Usuários', count: 3 });
-    expect(result).toContainEqual({ key: 'contracts', label: 'Contratos', count: 2 });
+    expect(result).toContainEqual({
+      key: 'users',
+      label: 'Usuários',
+      count: 3,
+    });
+    expect(result).toContainEqual({
+      key: 'contracts',
+      label: 'Contratos',
+      count: 2,
+    });
   });
 
   it('rejeita entidade fora da whitelist', async () => {
-    await expect(mkSvc().list('proposals', 1, 20)).rejects.toThrow(BadRequestException);
-    await expect(mkSvc().list('refreshToken', 1, 20)).rejects.toThrow(BadRequestException);
+    await expect(mkSvc().list('proposals', 1, 20)).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(mkSvc().list('refreshToken', 1, 20)).rejects.toThrow(
+      BadRequestException,
+    );
   });
 });
 
 describe('AdminDatabaseService — usuários', () => {
   const usuario = {
-    name: 'João', surname: 'Silva', email: 'joao@ex.com',
-    role: 'CONSULTANT', cpf: '12345678901', rg: '123456789',
-    phone: '11987654321', speciality: 'AIRCRAFT',
+    name: 'João',
+    surname: 'Silva',
+    email: 'joao@ex.com',
+    role: 'CONSULTANT',
+    cpf: '12345678901',
+    rg: '123456789',
+    phone: '11987654321',
+    speciality: 'AIRCRAFT',
     commission_rate: { toString: () => '15.00' },
-    identification_number: 'ID-9', is_active: true,
+    identification_number: 'ID-9',
+    is_active: true,
     company: { name: 'Escritório Alfa' },
     consultant: { name: 'Ana', surname: 'Costa' },
   };
 
   async function listarUsuarios(row: any = usuario) {
     const prisma = mkPrisma({
-      user: { count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([row]) },
+      user: {
+        count: jest.fn().mockResolvedValue(1),
+        findMany: jest.fn().mockResolvedValue([row]),
+      },
     });
     return { prisma, result: await mkSvc(prisma).list('users', 1, 20) };
   }
 
   it('mostra nome de escritório e de consultor no lugar dos UUIDs', async () => {
     const { result } = await listarUsuarios();
-    expect(result.data[0][col(result.columns, 'Escritório')]).toBe('Escritório Alfa');
+    expect(result.data[0][col(result.columns, 'Escritório')]).toBe(
+      'Escritório Alfa',
+    );
     expect(result.data[0][col(result.columns, 'Consultor')]).toBe('Ana Costa');
   });
 
@@ -99,7 +160,11 @@ describe('AdminDatabaseService — usuários', () => {
 
   it('devolve travessão para relação e campos ausentes', async () => {
     const { result } = await listarUsuarios({
-      ...usuario, company: null, consultant: null, phone: null, commission_rate: null,
+      ...usuario,
+      company: null,
+      consultant: null,
+      phone: null,
+      commission_rate: null,
     });
     const row = result.data[0];
     expect(row[col(result.columns, 'Escritório')]).toBe('—');
@@ -117,16 +182,26 @@ describe('AdminDatabaseService — usuários', () => {
 
 describe('AdminDatabaseService — escritórios', () => {
   const escritorio = {
-    name: 'Alfa', cnpj: '12345678000199', slug: 'alfa', description: 'Escritório',
-    commission_rate: { toString: () => '10.00' }, platform_commission_rate: null,
-    bank: 'Itaú', agency: '0001', checking_account: '12345-6',
-    color_identity: ['#0F172A', '#EAB308'], logo: 'companies/abc/logo-1.png',
+    name: 'Alfa',
+    cnpj: '12345678000199',
+    slug: 'alfa',
+    description: 'Escritório',
+    commission_rate: { toString: () => '10.00' },
+    platform_commission_rate: null,
+    bank: 'Itaú',
+    agency: '0001',
+    checking_account: '12345-6',
+    color_identity: ['#0F172A', '#EAB308'],
+    logo: 'companies/abc/logo-1.png',
     created_at: new Date('2026-03-01T12:00:00Z'),
   };
 
   async function listarEscritorios(row: any = escritorio, s3 = mkS3()) {
     const prisma = mkPrisma({
-      company: { count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([row]) },
+      company: {
+        count: jest.fn().mockResolvedValue(1),
+        findMany: jest.fn().mockResolvedValue([row]),
+      },
     });
     return { s3, result: await mkSvc(prisma, s3).list('companies', 1, 20) };
   }
@@ -134,17 +209,36 @@ describe('AdminDatabaseService — escritórios', () => {
   it('devolve célula de imagem com URL assinada no lugar da key do S3', async () => {
     const { s3, result } = await listarEscritorios();
     expect(result.data[0][col(result.columns, 'Logo')]).toEqual({
-      kind: 'image', url: 'https://s3.example/assinada', alt: 'Logo Alfa',
+      kind: 'image',
+      url: 'https://s3.example/assinada',
+      alt: 'Logo Alfa',
     });
     expect(s3.getSignedUrl).toHaveBeenCalledWith('companies/abc/logo-1.png');
   });
 
   it('devolve url nula quando não há logo, sem chamar o S3', async () => {
-    const { s3, result } = await listarEscritorios({ ...escritorio, logo: null });
+    const { s3, result } = await listarEscritorios({
+      ...escritorio,
+      logo: null,
+    });
     expect(result.data[0][col(result.columns, 'Logo')]).toEqual({
-      kind: 'image', url: null, alt: 'Logo Alfa',
+      kind: 'image',
+      url: null,
+      alt: 'Logo Alfa',
     });
     expect(s3.getSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('devolve url nula (sem lançar) quando o S3 falha ao assinar a URL', async () => {
+    const s3 = {
+      getSignedUrl: jest.fn().mockRejectedValue(new Error('S3 fora do ar')),
+    } as any;
+    const { result } = await listarEscritorios(escritorio, s3);
+    expect(result.data[0][col(result.columns, 'Logo')]).toEqual({
+      kind: 'image',
+      url: null,
+      alt: 'Logo Alfa',
+    });
   });
 
   it('mascara CNPJ e formata taxas e cores', async () => {
@@ -162,15 +256,24 @@ describe('AdminDatabaseService — produtos', () => {
     const prisma = mkPrisma({
       car: {
         count: jest.fn().mockResolvedValue(1),
-        findMany: jest.fn().mockResolvedValue([{
-          marca: 'Ferrari', modelo: 'F8 Tributo', ano: 2022,
-          valor: { toString: () => '2400000.00' },
-          estado: 'seminovo', tipo_categoria: 'supercarro',
-          cor: 'Vermelho', km: 12000, cambio: 'Automático',
-          combustivel: 'Gasolina', identificador: 'ABC1D23',
-          is_active: true, created_at: new Date('2026-03-01T12:00:00Z'),
-          specialist: { name: 'Ana', surname: 'Costa' },
-        }]),
+        findMany: jest.fn().mockResolvedValue([
+          {
+            marca: 'Ferrari',
+            modelo: 'F8 Tributo',
+            ano: 2022,
+            valor: { toString: () => '2400000.00' },
+            estado: 'seminovo',
+            tipo_categoria: 'supercarro',
+            cor: 'Vermelho',
+            km: 12000,
+            cambio: 'Automático',
+            combustivel: 'Gasolina',
+            identificador: 'ABC1D23',
+            is_active: true,
+            created_at: new Date('2026-03-01T12:00:00Z'),
+            specialist: { name: 'Ana', surname: 'Costa' },
+          },
+        ]),
       },
     });
     const result = await mkSvc(prisma).list('cars', 1, 20);
@@ -187,15 +290,26 @@ describe('AdminDatabaseService — produtos', () => {
     const prisma = mkPrisma({
       boat: {
         count: jest.fn().mockResolvedValue(1),
-        findMany: jest.fn().mockResolvedValue([{
-          marca: 'Azimut', modelo: 'Grande 27', ano: 2021,
-          valor: { toString: () => '9000000.00' },
-          estado: 'novo', tipo_embarcacao: 'iate',
-          fabricante: 'Azimut', tamanho: '27m', estilo: 'Flybridge',
-          motor: 'MTU', ano_motor: 2021, combustivel: 'Diesel',
-          identificador: 'HULL-9', is_active: true,
-          created_at: new Date('2026-03-01T12:00:00Z'), specialist: null,
-        }]),
+        findMany: jest.fn().mockResolvedValue([
+          {
+            marca: 'Azimut',
+            modelo: 'Grande 27',
+            ano: 2021,
+            valor: { toString: () => '9000000.00' },
+            estado: 'novo',
+            tipo_embarcacao: 'iate',
+            fabricante: 'Azimut',
+            tamanho: '27m',
+            estilo: 'Flybridge',
+            motor: 'MTU',
+            ano_motor: 2021,
+            combustivel: 'Diesel',
+            identificador: 'HULL-9',
+            is_active: true,
+            created_at: new Date('2026-03-01T12:00:00Z'),
+            specialist: null,
+          },
+        ]),
       },
     });
     const result = await mkSvc(prisma).list('boats', 1, 20);
@@ -210,20 +324,30 @@ describe('AdminDatabaseService — produtos', () => {
     const prisma = mkPrisma({
       aircraft: {
         count: jest.fn().mockResolvedValue(1),
-        findMany: jest.fn().mockResolvedValue([{
-          marca: 'Embraer', modelo: 'Phenom 300', ano: 2020,
-          valor: { toString: () => '55000000.00' },
-          estado: 'seminovo', tipo_aeronave: 'executivo_medio',
-          categoria: 'Executivo', assentos: 9, identificador: 'PR-ABC',
-          is_active: true, created_at: new Date('2026-03-01T12:00:00Z'),
-          specialist: { name: 'Ana', surname: 'Costa' },
-        }]),
+        findMany: jest.fn().mockResolvedValue([
+          {
+            marca: 'Embraer',
+            modelo: 'Phenom 300',
+            ano: 2020,
+            valor: { toString: () => '55000000.00' },
+            estado: 'seminovo',
+            tipo_aeronave: 'executivo_medio',
+            categoria: 'Executivo',
+            assentos: 9,
+            identificador: 'PR-ABC',
+            is_active: true,
+            created_at: new Date('2026-03-01T12:00:00Z'),
+            specialist: { name: 'Ana', surname: 'Costa' },
+          },
+        ]),
       },
     });
     const result = await mkSvc(prisma).list('aircrafts', 1, 20);
     const row = result.data[0];
 
-    expect(row[col(result.columns, 'Tipo de aeronave')]).toBe('Executivo médio');
+    expect(row[col(result.columns, 'Tipo de aeronave')]).toBe(
+      'Executivo médio',
+    );
     expect(row[col(result.columns, 'Valor')]).toBe('R$ 55.000.000,00');
     expect(row[col(result.columns, 'Categoria')]).toBe('Executivo');
   });
@@ -232,15 +356,24 @@ describe('AdminDatabaseService — produtos', () => {
     const prisma = mkPrisma({
       car: {
         count: jest.fn().mockResolvedValue(1),
-        findMany: jest.fn().mockResolvedValue([{
-          marca: 'Ferrari', modelo: 'F8 Tributo', ano: 2022,
-          valor: { toString: () => '2400000.00' },
-          estado: 'seminovo', tipo_categoria: 'supercarro',
-          cor: 'Vermelho', km: 12000, cambio: 'Automático',
-          combustivel: 'Gasolina', identificador: 'ABC1D23',
-          is_active: true, created_at: new Date('2026-03-01T12:00:00Z'),
-          specialist: null,
-        }]),
+        findMany: jest.fn().mockResolvedValue([
+          {
+            marca: 'Ferrari',
+            modelo: 'F8 Tributo',
+            ano: 2022,
+            valor: { toString: () => '2400000.00' },
+            estado: 'seminovo',
+            tipo_categoria: 'supercarro',
+            cor: 'Vermelho',
+            km: 12000,
+            cambio: 'Automático',
+            combustivel: 'Gasolina',
+            identificador: 'ABC1D23',
+            is_active: true,
+            created_at: new Date('2026-03-01T12:00:00Z'),
+            specialist: null,
+          },
+        ]),
       },
     });
     const result = await mkSvc(prisma).list('cars', 1, 20);
@@ -253,14 +386,22 @@ describe('AdminDatabaseService — produtos', () => {
     const prisma = mkPrisma({
       aircraft: {
         count: jest.fn().mockResolvedValue(1),
-        findMany: jest.fn().mockResolvedValue([{
-          marca: 'Embraer', modelo: 'Phenom 300', ano: 2020,
-          valor: { toString: () => '55000000.00' },
-          estado: 'seminovo', tipo_aeronave: 'executivo_medio',
-          categoria: 'Executivo', assentos: 9, identificador: 'PR-ABC',
-          is_active: true, created_at: new Date('2026-03-01T12:00:00Z'),
-          specialist: null,
-        }]),
+        findMany: jest.fn().mockResolvedValue([
+          {
+            marca: 'Embraer',
+            modelo: 'Phenom 300',
+            ano: 2020,
+            valor: { toString: () => '55000000.00' },
+            estado: 'seminovo',
+            tipo_aeronave: 'executivo_medio',
+            categoria: 'Executivo',
+            assentos: 9,
+            identificador: 'PR-ABC',
+            is_active: true,
+            created_at: new Date('2026-03-01T12:00:00Z'),
+            specialist: null,
+          },
+        ]),
       },
     });
     const result = await mkSvc(prisma).list('aircrafts', 1, 20);
@@ -273,21 +414,26 @@ describe('AdminDatabaseService — produtos', () => {
 describe('AdminDatabaseService — processos', () => {
   const processo = {
     id: 'a3f1b2c3-0000-0000-0000-000000000000',
-    product_type: 'CAR', status: 'NEGOTIATION',
+    product_type: 'CAR',
+    status: 'NEGOTIATION',
     notes: 'Cliente pediu test drive antes de fechar',
     active_contract_id: null,
     created_at: new Date('2026-03-01T12:00:00Z'),
     client: { name: 'João', surname: 'Silva' },
     specialist: { name: 'Ana', surname: 'Costa' },
     car: { marca: 'Ferrari', modelo: 'F8 Tributo' },
-    boat: null, aircraft: null,
+    boat: null,
+    aircraft: null,
     appointment: { appointment_datetime: new Date('2026-03-12T17:00:00Z') },
     accepted_proposal: { proposed_value: { toString: () => '2400000.00' } },
   };
 
   async function listarProcessos(row: any = processo) {
     const prisma = mkPrisma({
-      process: { count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([row]) },
+      process: {
+        count: jest.fn().mockResolvedValue(1),
+        findMany: jest.fn().mockResolvedValue([row]),
+      },
     });
     return mkSvc(prisma).list('processes', 1, 20);
   }
@@ -295,9 +441,15 @@ describe('AdminDatabaseService — processos', () => {
   it('não expõe nenhuma coluna de UUID de relação', async () => {
     const labels = (await listarProcessos()).columns.map((c) => c.label);
     for (const proibida of [
-      'ID do cliente', 'ID do especialista', 'ID do carro', 'ID da aeronave',
-      'ID da embarcação', 'ID do produto', 'ID do agendamento',
-      'ID da proposta aceita', 'ID do contrato ativo',
+      'ID do cliente',
+      'ID do especialista',
+      'ID do carro',
+      'ID da aeronave',
+      'ID da embarcação',
+      'ID do produto',
+      'ID do agendamento',
+      'ID da proposta aceita',
+      'ID do contrato ativo',
     ]) {
       expect(labels).not.toContain(proibida);
     }
@@ -314,16 +466,24 @@ describe('AdminDatabaseService — processos', () => {
 
   it('colapsa barco e aeronave na mesma coluna Produto', async () => {
     const comBarco = await listarProcessos({
-      ...processo, product_type: 'BOAT', car: null,
+      ...processo,
+      product_type: 'BOAT',
+      car: null,
       boat: { marca: 'Azimut', modelo: 'Grande 27' },
     });
-    expect(comBarco.data[0][col(comBarco.columns, 'Produto')]).toBe('Azimut Grande 27');
+    expect(comBarco.data[0][col(comBarco.columns, 'Produto')]).toBe(
+      'Azimut Grande 27',
+    );
 
     const comAeronave = await listarProcessos({
-      ...processo, product_type: 'AIRCRAFT', car: null,
+      ...processo,
+      product_type: 'AIRCRAFT',
+      car: null,
       aircraft: { marca: 'Embraer', modelo: 'Phenom 300' },
     });
-    expect(comAeronave.data[0][col(comAeronave.columns, 'Produto')]).toBe('Embraer Phenom 300');
+    expect(comAeronave.data[0][col(comAeronave.columns, 'Produto')]).toBe(
+      'Embraer Phenom 300',
+    );
   });
 
   it('troca os UUIDs de agendamento e proposta por data e valor', async () => {
@@ -338,7 +498,10 @@ describe('AdminDatabaseService — processos', () => {
     const sem = await listarProcessos();
     expect(sem.data[0][col(sem.columns, 'Contrato')]).toBe('Não');
 
-    const com = await listarProcessos({ ...processo, active_contract_id: 'uuid-qualquer' });
+    const com = await listarProcessos({
+      ...processo,
+      active_contract_id: 'uuid-qualquer',
+    });
     expect(com.data[0][col(com.columns, 'Contrato')]).toBe('Sim');
   });
 
@@ -362,8 +525,14 @@ describe('AdminDatabaseService — processos', () => {
 
   it('trata processo de consultoria (sem produto e sem agendamento)', async () => {
     const result = await listarProcessos({
-      ...processo, product_type: null, car: null, boat: null, aircraft: null,
-      appointment: null, accepted_proposal: null, notes: null,
+      ...processo,
+      product_type: null,
+      car: null,
+      boat: null,
+      aircraft: null,
+      appointment: null,
+      accepted_proposal: null,
+      notes: null,
     });
     const row = result.data[0];
     expect(row[col(result.columns, 'Produto')]).toBe('—');
@@ -377,26 +546,33 @@ describe('AdminDatabaseService — processos', () => {
 describe('AdminDatabaseService — contratos', () => {
   const contrato = {
     id: 'c0ffee11-0000-0000-0000-000000000000',
-    buyer_name: 'João Silva', buyer_cpf: '12345678901',
+    buyer_name: 'João Silva',
+    buyer_cpf: '12345678901',
     seller_name: 'Ana Costa',
-    vehicle_model: 'Ferrari F8 Tributo', vehicle_year: '2022',
+    vehicle_model: 'Ferrari F8 Tributo',
+    vehicle_year: '2022',
     vehicle_price: { toString: () => '2400000.00' },
     payment_seller_value: { toString: () => '2200000.00' },
     specialist_commission_value: { toString: () => '100000.00' },
     office_value: { toString: () => '60000.00' },
     platform_value: { toString: () => '40000.00' },
-    status: 'SIGNED', signature_type: 'QUALIFIED',
+    status: 'SIGNED',
+    signature_type: 'QUALIFIED',
     signed_at: new Date('2026-03-20T17:00:00Z'),
     process: {
       client: { name: 'João', surname: 'Silva' },
       car: { marca: 'Ferrari', modelo: 'F8 Tributo' },
-      boat: null, aircraft: null,
+      boat: null,
+      aircraft: null,
     },
   };
 
   async function listarContratos(row: any = contrato) {
     const prisma = mkPrisma({
-      contract: { count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([row]) },
+      contract: {
+        count: jest.fn().mockResolvedValue(1),
+        findMany: jest.fn().mockResolvedValue([row]),
+      },
     });
     return { prisma, result: await mkSvc(prisma).list('contracts', 1, 20) };
   }
@@ -408,11 +584,20 @@ describe('AdminDatabaseService — contratos', () => {
 
   it('não projeta dados bancários, valores por extenso nem metadados do provedor', async () => {
     const { prisma } = await listarContratos();
-    const select = JSON.stringify(prisma.contract.findMany.mock.calls[0][0].select);
+    const select = JSON.stringify(
+      prisma.contract.findMany.mock.calls[0][0].select,
+    );
     for (const proibido of [
-      'seller_bank', 'platform_bank', 'office_bank', 'specialist_bank',
-      'vehicle_price_written', 'platform_value_written', 'provider_meta',
-      'template_id', 'testimonial1_cpf', 'file_path',
+      'seller_bank',
+      'platform_bank',
+      'office_bank',
+      'specialist_bank',
+      'vehicle_price_written',
+      'platform_value_written',
+      'provider_meta',
+      'template_id',
+      'testimonial1_cpf',
+      'file_path',
     ]) {
       expect(select).not.toContain(proibido);
     }
@@ -420,14 +605,18 @@ describe('AdminDatabaseService — contratos', () => {
 
   it('identifica o processo por cliente e produto, não por UUID', async () => {
     const { result } = await listarContratos();
-    expect(result.data[0][col(result.columns, 'Processo')]).toBe('João Silva — Ferrari F8 Tributo');
+    expect(result.data[0][col(result.columns, 'Processo')]).toBe(
+      'João Silva — Ferrari F8 Tributo',
+    );
   });
 
   it('formata valores em real e traduz status e assinatura', async () => {
     const { result } = await listarContratos();
     const row = result.data[0];
     expect(row[col(result.columns, 'Valor')]).toBe('R$ 2.400.000,00');
-    expect(row[col(result.columns, 'Comissão especialista')]).toBe('R$ 100.000,00');
+    expect(row[col(result.columns, 'Comissão especialista')]).toBe(
+      'R$ 100.000,00',
+    );
     expect(row[col(result.columns, 'Status')]).toBe('Assinado');
     expect(row[col(result.columns, 'Assinatura')]).toBe('Qualificada');
     expect(row[col(result.columns, 'Assinado em')]).toBe('20/03/2026 14:00');
@@ -437,7 +626,12 @@ describe('AdminDatabaseService — contratos', () => {
   it('trata contrato de consultoria, sem produto no processo', async () => {
     const { result } = await listarContratos({
       ...contrato,
-      process: { client: { name: 'João', surname: 'Silva' }, car: null, boat: null, aircraft: null },
+      process: {
+        client: { name: 'João', surname: 'Silva' },
+        car: null,
+        boat: null,
+        aircraft: null,
+      },
     });
     expect(result.data[0][col(result.columns, 'Processo')]).toBe('João Silva');
   });
