@@ -156,3 +156,74 @@ describe('AdminDatabaseService — escritórios', () => {
     expect(row[col(result.columns, 'Cores')]).toBe('#0F172A, #EAB308');
   });
 });
+
+describe('AdminDatabaseService — produtos', () => {
+  it('formata carro: valor em real, estado e categoria em pt-BR, especialista por nome', async () => {
+    const prisma = mkPrisma({
+      car: {
+        count: jest.fn().mockResolvedValue(1),
+        findMany: jest.fn().mockResolvedValue([{
+          marca: 'Ferrari', modelo: 'F8 Tributo', ano: 2022,
+          valor: { toString: () => '2400000.00' },
+          estado: 'seminovo', tipo_categoria: 'supercarro',
+          cor: 'Vermelho', km: 12000, cambio: 'Automático',
+          combustivel: 'Gasolina', identificador: 'ABC1D23',
+          is_active: true, created_at: new Date('2026-03-01T12:00:00Z'),
+          specialist: { name: 'Ana', surname: 'Costa' },
+        }]),
+      },
+    });
+    const result = await mkSvc(prisma).list('cars', 1, 20);
+    const row = result.data[0];
+
+    expect(row[col(result.columns, 'Valor')]).toBe('R$ 2.400.000,00');
+    expect(row[col(result.columns, 'Estado')]).toBe('Seminovo');
+    expect(row[col(result.columns, 'Categoria')]).toBe('Supercarro');
+    expect(row[col(result.columns, 'Quilometragem')]).toBe('12.000');
+    expect(row[col(result.columns, 'Especialista')]).toBe('Ana Costa');
+  });
+
+  it('formata barco: tipo de embarcação em pt-BR', async () => {
+    const prisma = mkPrisma({
+      boat: {
+        count: jest.fn().mockResolvedValue(1),
+        findMany: jest.fn().mockResolvedValue([{
+          marca: 'Azimut', modelo: 'Grande 27', ano: 2021,
+          valor: { toString: () => '9000000.00' },
+          estado: 'novo', tipo_embarcacao: 'iate',
+          fabricante: 'Azimut', tamanho: '27m', estilo: 'Flybridge',
+          motor: 'MTU', ano_motor: 2021, combustivel: 'Diesel',
+          identificador: 'HULL-9', is_active: true,
+          created_at: new Date('2026-03-01T12:00:00Z'), specialist: null,
+        }]),
+      },
+    });
+    const result = await mkSvc(prisma).list('boats', 1, 20);
+    const row = result.data[0];
+
+    expect(row[col(result.columns, 'Tipo de embarcação')]).toBe('Iate');
+    expect(row[col(result.columns, 'Estado')]).toBe('Novo');
+    expect(row[col(result.columns, 'Especialista')]).toBe('—');
+  });
+
+  it('formata aeronave: tipo em pt-BR', async () => {
+    const prisma = mkPrisma({
+      aircraft: {
+        count: jest.fn().mockResolvedValue(1),
+        findMany: jest.fn().mockResolvedValue([{
+          marca: 'Embraer', modelo: 'Phenom 300', ano: 2020,
+          valor: { toString: () => '55000000.00' },
+          estado: 'seminovo', tipo_aeronave: 'executivo_medio',
+          categoria: 'Executivo', assentos: 9, identificador: 'PR-ABC',
+          is_active: true, created_at: new Date('2026-03-01T12:00:00Z'),
+          specialist: { name: 'Ana', surname: 'Costa' },
+        }]),
+      },
+    });
+    const result = await mkSvc(prisma).list('aircrafts', 1, 20);
+    const row = result.data[0];
+
+    expect(row[col(result.columns, 'Tipo de aeronave')]).toBe('Executivo médio');
+    expect(row[col(result.columns, 'Valor')]).toBe('R$ 55.000.000,00');
+  });
+});

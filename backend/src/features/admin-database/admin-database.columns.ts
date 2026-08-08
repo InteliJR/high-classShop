@@ -112,26 +112,86 @@ export const ENTITIES: Record<string, EntityConfig> = {
     ],
   },
 
-  // Stubs — precisam existir na whitelist (contrato de countAll/list já
-  // testado nesta task), mas as colunas de negócio reais entram nas
-  // próximas tasks. Só o ID curto por enquanto.
   cars: {
     model: 'car',
     label: 'Carros',
-    select: { id: true },
-    columns: [{ label: 'ID', get: (r) => idCurto(r.id) }],
+    select: {
+      marca: true, modelo: true, ano: true, valor: true, estado: true,
+      tipo_categoria: true, cor: true, km: true, cambio: true,
+      combustivel: true, identificador: true, is_active: true, created_at: true,
+      specialist: { select: { name: true, surname: true } },
+    },
+    columns: [
+      { label: 'Marca', get: (r) => r.marca },
+      { label: 'Modelo', get: (r) => r.modelo },
+      { label: 'Ano', get: (r) => r.ano },
+      { label: 'Valor', get: (r) => r.valor, format: f.money },
+      { label: 'Estado', get: (r) => r.estado, format: enumLabel(ESTADO_PRODUTO) },
+      { label: 'Categoria', get: (r) => r.tipo_categoria, format: enumLabel(TIPO_CATEGORIA_CARRO) },
+      { label: 'Cor', get: (r) => r.cor },
+      { label: 'Quilometragem', get: (r) => r.km, format: f.int },
+      { label: 'Câmbio', get: (r) => r.cambio },
+      { label: 'Combustível', get: (r) => r.combustivel },
+      { label: 'Identificador', get: (r) => r.identificador },
+      { label: 'Especialista', get: (r) => pessoa(r.specialist) },
+      { label: 'Ativo', get: (r) => r.is_active, format: f.bool },
+      { label: 'Criado em', get: (r) => r.created_at, format: f.date },
+    ],
   },
+
   boats: {
     model: 'boat',
     label: 'Barcos',
-    select: { id: true },
-    columns: [{ label: 'ID', get: (r) => idCurto(r.id) }],
+    select: {
+      marca: true, modelo: true, ano: true, valor: true, estado: true,
+      tipo_embarcacao: true, fabricante: true, tamanho: true, estilo: true,
+      motor: true, ano_motor: true, combustivel: true, identificador: true,
+      is_active: true, created_at: true,
+      specialist: { select: { name: true, surname: true } },
+    },
+    columns: [
+      { label: 'Marca', get: (r) => r.marca },
+      { label: 'Modelo', get: (r) => r.modelo },
+      { label: 'Ano', get: (r) => r.ano },
+      { label: 'Valor', get: (r) => r.valor, format: f.money },
+      { label: 'Estado', get: (r) => r.estado, format: enumLabel(ESTADO_PRODUTO) },
+      { label: 'Tipo de embarcação', get: (r) => r.tipo_embarcacao, format: enumLabel(TIPO_EMBARCACAO) },
+      { label: 'Fabricante', get: (r) => r.fabricante },
+      { label: 'Tamanho', get: (r) => r.tamanho },
+      { label: 'Estilo', get: (r) => r.estilo },
+      { label: 'Motor', get: (r) => r.motor },
+      { label: 'Ano do motor', get: (r) => r.ano_motor },
+      { label: 'Combustível', get: (r) => r.combustivel },
+      { label: 'Identificador', get: (r) => r.identificador },
+      { label: 'Especialista', get: (r) => pessoa(r.specialist) },
+      { label: 'Ativo', get: (r) => r.is_active, format: f.bool },
+      { label: 'Criado em', get: (r) => r.created_at, format: f.date },
+    ],
   },
+
   aircrafts: {
     model: 'aircraft',
     label: 'Aeronaves',
-    select: { id: true },
-    columns: [{ label: 'ID', get: (r) => idCurto(r.id) }],
+    select: {
+      marca: true, modelo: true, ano: true, valor: true, estado: true,
+      tipo_aeronave: true, categoria: true, assentos: true,
+      identificador: true, is_active: true, created_at: true,
+      specialist: { select: { name: true, surname: true } },
+    },
+    columns: [
+      { label: 'Marca', get: (r) => r.marca },
+      { label: 'Modelo', get: (r) => r.modelo },
+      { label: 'Ano', get: (r) => r.ano },
+      { label: 'Valor', get: (r) => r.valor, format: f.money },
+      { label: 'Estado', get: (r) => r.estado, format: enumLabel(ESTADO_PRODUTO) },
+      { label: 'Tipo de aeronave', get: (r) => r.tipo_aeronave, format: enumLabel(TIPO_AERONAVE) },
+      { label: 'Categoria', get: (r) => r.categoria },
+      { label: 'Assentos', get: (r) => r.assentos },
+      { label: 'Identificador', get: (r) => r.identificador },
+      { label: 'Especialista', get: (r) => pessoa(r.specialist) },
+      { label: 'Ativo', get: (r) => r.is_active, format: f.bool },
+      { label: 'Criado em', get: (r) => r.created_at, format: f.date },
+    ],
   },
   processes: {
     model: 'process',
@@ -147,10 +207,8 @@ export const ENTITIES: Record<string, EntityConfig> = {
   },
 };
 
-// Configs completos de cars/boats/aircrafts entram na Task 4.
 // Config completo de processes entra na Task 5.
 // Config completo de contracts entra na Task 6.
 
-// Evita "declarado mas não usado" enquanto as tasks 4-6 não chegaram.
-void [CONTRACT_STATUS, ESTADO_PRODUTO, PROCESS_STATUS, SIGNATURE_TYPE,
-  TIPO_AERONAVE, TIPO_CATEGORIA_CARRO, TIPO_EMBARCACAO];
+// Evita "declarado mas não usado" enquanto as tasks 5-6 não chegaram.
+void [CONTRACT_STATUS, PROCESS_STATUS, SIGNATURE_TYPE];
