@@ -2,20 +2,30 @@
 
 type Cell = string | number;
 
-// CSV com separador ";" e BOM UTF-8 (abre correto no Excel pt-BR).
+/**
+ * Serializa em CSV com separador ";" (padrão do Excel pt-BR).
+ *
+ * O prefixo "R$ " é removido de propósito: com separador ";" e vírgula
+ * decimal, "2.400.000,00" é lido como NÚMERO pelo Excel pt-BR; com o símbolo
+ * na frente viraria texto e não somaria. Na tela e no PDF o R$ permanece.
+ */
+export function toCsv(columns: string[], rows: Cell[][]): string {
+  const escape = (v: Cell) => {
+    const s = String(v ?? "").replace(/^R\$\s/, "");
+    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [columns, ...rows].map((r) => r.map(escape).join(";")).join("\n");
+}
+
+// CSV com BOM UTF-8 (abre correto no Excel pt-BR).
 export function downloadCsv(
   filename: string,
   columns: string[],
   rows: Cell[][],
 ) {
-  const escape = (v: Cell) => {
-    const s = String(v ?? "");
-    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const csv = [columns, ...rows]
-    .map((r) => r.map(escape).join(";"))
-    .join("\n");
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const blob = new Blob(["﻿" + toCsv(columns, rows)], {
+    type: "text/csv;charset=utf-8;",
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
