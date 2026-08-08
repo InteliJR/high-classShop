@@ -7,13 +7,15 @@ import { AppContext } from "../contexts/AppContext";
 import { useNavigate } from "react-router-dom";
 import UserDropdown from "../components/ui/UserDropdown";
 import { resolveCompanyLogo, getUserCompany } from "../utils/branding";
+import { useWhitelabel } from "../store/whitelabelStore";
 
 export default function Header() {
   const { isSidebarCollapsed, setSidebarCollapsed } = useContext(AppContext);
   const isMobile = useIsMobile();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const company = getUserCompany(user);
+  const whitelabelCompany = useWhitelabel((s) => s.company);
+  const company = getUserCompany(user) ?? whitelabelCompany;
   const brandLogo = resolveCompanyLogo(company) ?? Logo;
 
   // Lista de itens do menu para visitantes
