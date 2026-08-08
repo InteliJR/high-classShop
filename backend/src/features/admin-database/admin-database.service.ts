@@ -1,50 +1,21 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { S3Service } from 'src/aws/s3.service';
+import { resolveCompanyLogoUrl } from 'src/auth/utils/company-logo.util';
 import { PrismaService } from 'src/prisma/prisma.service';
-
-interface EntityConfig {
-  model: string; // nome do delegate no PrismaService (ex: 'user')
-  label: string;
-  // Quando definido, LIMITA os campos retornados. Usado para NUNCA expor
-  // password_hash / tokens. Entidades sem segredo podem omitir (retorna scalars).
-  select?: Record<string, boolean>;
-}
-
-// Whitelist — só estas entidades são navegáveis pelo admin. Tabelas com
-// segredos (CalendlyConnection, CustomerAdvisor.token) ficam de fora de propósito.
-const ENTITIES: Record<string, EntityConfig> = {
-  users: {
-    model: 'user',
-    label: 'Usuários',
-    // Select explícito: sem password_hash, sem campos sensíveis do Calendly.
-    select: {
-      id: true,
-      name: true,
-      surname: true,
-      email: true,
-      role: true,
-      cpf: true,
-      rg: true,
-      phone: true,
-      speciality: true,
-      commission_rate: true,
-      company_id: true,
-      consultant_id: true,
-      identification_number: true,
-    },
-  },
-  companies: { model: 'company', label: 'Escritórios' },
-  cars: { model: 'car', label: 'Carros' },
-  boats: { model: 'boat', label: 'Barcos' },
-  aircrafts: { model: 'aircraft', label: 'Aeronaves' },
-  processes: { model: 'process', label: 'Processos' },
-  contracts: { model: 'contract', label: 'Contratos' },
-  proposals: { model: 'negotiationProposal', label: 'Propostas' },
-  appointments: { model: 'appointment', label: 'Agendamentos' },
-};
+import {
+  Cell,
+  ColumnMeta,
+  ENTITIES,
+  EntityConfig,
+} from './admin-database.columns';
+import { EMPTY } from './admin-database.format';
 
 @Injectable()
 export class AdminDatabaseService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly s3: S3Service,
+  ) {}
 
   listEntities() {
     return Object.entries(ENTITIES).map(([key, cfg]) => ({
@@ -63,7 +34,17 @@ export class AdminDatabaseService {
     );
   }
 
-  async list(entity: string, page: number, pageSize: number) {
+  async list(
+    entity: string,
+    page: number,
+    pageSize: number,
+  ): Promise<{
+    columns: ColumnMeta[];
+    data: Cell[][];
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
     const cfg = ENTITIES[entity];
     if (!cfg) {
       throw new BadRequestException(`Entidade inválida: ${entity}`);
@@ -77,16 +58,48 @@ export class AdminDatabaseService {
     // whitelist acima (nunca vem direto do cliente para o Prisma).
     const model = (this.prisma as any)[cfg.model];
 
-    const [data, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       model.findMany({
         skip,
         take,
         orderBy: { id: 'desc' },
-        ...(cfg.select ? { select: cfg.select } : {}),
+        select: cfg.select,
       }),
       model.count(),
     ]);
 
-    return { data, total, page: currentPage, pageSize: take };
+    // As URLs assinadas do S3 são geradas em paralelo, no máximo `take` (100)
+    // por página.
+    const data: Cell[][] = await Promise.all(
+      rows.map((row: any) => this.buildRow(cfg, row)),
+    );
+
+    const columns: ColumnMeta[] = cfg.columns.map((c) => ({
+      label: c.label,
+      ...(c.wide ? { wide: true } : {}),
+    }));
+
+    return { columns, data, total, page: currentPage, pageSize: take };
+  }
+
+  /** Projeta uma linha do Prisma na matriz de células já formatadas. */
+  private async buildRow(cfg: EntityConfig, row: any): Promise<Cell[]> {
+    return Promise.all(
+      cfg.columns.map(async (col): Promise<Cell> => {
+        const raw = col.get(row);
+
+        if (col.image) {
+          const key = typeof raw === 'string' ? raw : null;
+          return {
+            kind: 'image',
+            url: await resolveCompanyLogoUrl(this.s3, key),
+            alt: col.alt ? col.alt(row) : 'Imagem',
+          };
+        }
+
+        if (raw === null || raw === undefined || raw === '') return EMPTY;
+        return col.format ? col.format(raw) : String(raw);
+      }),
+    );
   }
 }
