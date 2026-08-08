@@ -13,6 +13,7 @@ export default function OfficeCompanySettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingBackground, setUploadingBackground] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const [form, setForm] = useState<Partial<OfficeCompany>>({});
@@ -89,6 +90,33 @@ export default function OfficeCompanySettingsPage() {
     }
   };
 
+  const uploadBackground = async (file: File) => {
+    setUploadingBackground(true);
+    setMsg(null);
+    try {
+      const updated = await officeService.uploadBackground(file);
+      if (company) {
+        setCompany({
+          ...company,
+          background_image: updated.background_image,
+          backgroundImageUrl: updated.backgroundImageUrl,
+        });
+      }
+      setMsg({ ok: true, text: "Imagem de fundo enviada." });
+    } catch (err) {
+      setMsg({
+        ok: false,
+        text:
+          (err as { friendlyMessage?: string; response?: { data?: { message?: string } } })
+            .friendlyMessage ||
+          (err as { response?: { data?: { message?: string } } }).response?.data?.message ||
+          "Imagem inválida. Aceitos: PNG, JPEG, WebP (≤5MB).",
+      });
+    } finally {
+      setUploadingBackground(false);
+    }
+  };
+
   const setColor = (idx: number, value: string) => {
     const next = [...(form.color_identity ?? DEFAULT_COLORS)];
     next[idx] = value;
@@ -133,6 +161,34 @@ export default function OfficeCompanySettingsPage() {
         </div>
         <p className="text-xs text-muted mt-2">
           PNG, JPEG, WebP (≤2MB) ou SVG sanitizado (≤500KB). SVG passa por DOMPurify antes de salvar.
+        </p>
+      </Card>
+
+      <Card className="mb-6">
+        <h2 className="text-h2 font-semibold text-ink mb-4">Imagem de fundo (tela pública)</h2>
+        <div className="flex items-center gap-4">
+          {company.backgroundImageUrl ? (
+            <img
+              src={company.backgroundImageUrl}
+              alt={`Fundo ${company.name}`}
+              className="w-40 h-24 border border-border rounded object-cover bg-border-soft"
+            />
+          ) : (
+            <div className="w-40 h-24 border border-dashed border-border rounded bg-border-soft flex items-center justify-center text-xs text-subtle">
+              Sem imagem
+            </div>
+          )}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            disabled={uploadingBackground}
+            onChange={(e) => e.target.files?.[0] && uploadBackground(e.target.files[0])}
+            className="text-sm"
+          />
+        </div>
+        <p className="text-xs text-muted mt-2">
+          PNG, JPEG ou WebP, até 5MB. Aparece com efeito de vidro fosco na sua página pública
+          {" "}/i/{company.slug || "..."}.
         </p>
       </Card>
 
