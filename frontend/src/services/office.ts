@@ -33,6 +33,8 @@ export interface OfficeCompany {
   cnpj: string;
   logo: string | null;
   logoUrl?: string | null;
+  background_image: string | null;
+  backgroundImageUrl?: string | null;
   description: string | null;
   commission_rate: number | null;
   bank: string | null;
@@ -143,6 +145,19 @@ export const officeService = {
         fd,
         { headers: { 'Content-Type': 'multipart/form-data' } },
       )
+      .then((r) => r.data);
+  },
+  uploadBackground: (file: File) => {
+    const fd = new FormData();
+    fd.append('background', file);
+    return api
+      .post<{
+        id: string;
+        background_image: string | null;
+        backgroundImageUrl: string | null;
+      }>('office/company/background', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
       .then((r) => r.data);
   },
 
