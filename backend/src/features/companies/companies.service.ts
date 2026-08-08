@@ -177,12 +177,16 @@ export class CompaniesService {
     if (!company) {
       throw new NotFoundException('Escritório não encontrado');
     }
-    const logoUrl = await this.resolveLogoUrl(company.logo);
+    const [logoUrl, backgroundImageUrl] = await Promise.all([
+      this.resolveLogoUrl(company.logo),
+      this.resolveLogoUrl(company.background_image),
+    ]);
     return {
       id: company.id,
       name: company.name,
       slug: company.slug,
       logoUrl,
+      backgroundImageUrl,
       color_identity: company.color_identity,
     };
   }
