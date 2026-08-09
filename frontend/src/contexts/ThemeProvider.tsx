@@ -2,7 +2,11 @@ import type React from "react";
 import { useLayoutEffect } from "react";
 import { useAuth } from "../store/authStateManager";
 import { useWhitelabel } from "../store/whitelabelStore";
-import { getBrandColors, getUserCompany } from "../utils/branding";
+import {
+  PLATFORM_NAME,
+  getBrandColors,
+  getUserCompany,
+} from "../utils/branding";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const user = useAuth((state) => state.user);
@@ -21,6 +25,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.style.setProperty("--brand-primary-fg", primaryFg);
     root.style.setProperty("--brand-secondary-fg", secondaryFg);
   }, [primary, secondary, primaryFg, secondaryFg]);
+
+  // A aba acompanha a mesma marca que o resto da tela. O favicon continua
+  // fixo da plataforma: o logo do escritório é URL assinada do S3, e favicon
+  // quebra em silêncio quando a assinatura vence (cache do browser é agressivo).
+  useLayoutEffect(() => {
+    document.title = company?.name ?? PLATFORM_NAME;
+  }, [company?.name]);
 
   return <>{children}</>;
 }
