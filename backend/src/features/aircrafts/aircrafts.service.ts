@@ -20,8 +20,8 @@ import { Aircraft } from './entity/aircraft.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import {
   XlsxImportService,
-  XlsxColumnDefinition,
 } from 'src/shared/services/xlsx-import.service';
+import { AIRCRAFT_COLUMNS } from 'src/shared/constants/product-columns';
 import {
   ImportResponseDto,
   ImportErrorRow,
@@ -33,20 +33,8 @@ import { plainToInstance } from 'class-transformer';
 export class AircraftsService {
   private readonly logger = new Logger(AircraftsService.name);
 
-  // Definição das colunas da planilha para aeronaves (sem 'imagens' — agora são embutidas)
-  private readonly xlsxColumns: XlsxColumnDefinition[] = [
-    { name: 'marca', required: true, type: 'string' },
-    { name: 'modelo', required: true, type: 'string' },
-    { name: 'identificador', required: true, type: 'string' },
-    { name: 'valor', required: true, type: 'number' },
-    { name: 'estado', required: true, type: 'string' },
-    { name: 'ano', required: true, type: 'number' },
-    { name: 'categoria', required: false, type: 'string' },
-    { name: 'assentos', required: false, type: 'number' },
-    { name: 'tipo_aeronave', required: false, type: 'string' },
-    { name: 'descricao', required: false, type: 'string' },
-    { name: 'folder_url', required: false, type: 'string' },
-  ];
+  // Colunas da planilha de aeronaves — fonte única em shared/constants/product-columns.ts
+  private readonly xlsxColumns = AIRCRAFT_COLUMNS;
 
   constructor(
     private prismaService: PrismaService,
@@ -441,9 +429,9 @@ export class AircraftsService {
   async getCsvTemplate(): Promise<Buffer> {
     const headers = this.xlsxColumns.map((column) => column.name).join(';');
     const exampleValues = [
+      'Embraer-Phenom 300-1',
       'Embraer',
       'Phenom 300',
-      'Embraer-Phenom 300-1',
       '15000000',
       'São Paulo',
       '2021',

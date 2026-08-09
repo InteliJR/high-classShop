@@ -20,8 +20,8 @@ import { Boat } from './entity/boat.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import {
   XlsxImportService,
-  XlsxColumnDefinition,
 } from 'src/shared/services/xlsx-import.service';
+import { BOAT_COLUMNS } from 'src/shared/constants/product-columns';
 import {
   ImportResponseDto,
   ImportErrorRow,
@@ -33,25 +33,8 @@ import { plainToInstance } from 'class-transformer';
 export class BoatsService {
   private readonly logger = new Logger(BoatsService.name);
 
-  // Definição das colunas da planilha para barcos (sem 'imagens' — agora são embutidas)
-  private readonly xlsxColumns: XlsxColumnDefinition[] = [
-    { name: 'marca', required: true, type: 'string' },
-    { name: 'modelo', required: true, type: 'string' },
-    { name: 'identificador', required: true, type: 'string' },
-    { name: 'valor', required: true, type: 'number' },
-    { name: 'estado', required: true, type: 'string' },
-    { name: 'ano', required: true, type: 'number' },
-    { name: 'fabricante', required: false, type: 'string' },
-    { name: 'tamanho', required: false, type: 'string' },
-    { name: 'estilo', required: false, type: 'string' },
-    { name: 'combustivel', required: false, type: 'string' },
-    { name: 'motor', required: false, type: 'string' },
-    { name: 'ano_motor', required: false, type: 'number' },
-    { name: 'tipo_embarcacao', required: false, type: 'string' },
-    { name: 'descricao_completa', required: false, type: 'string' },
-    { name: 'acessorios', required: false, type: 'string' },
-    { name: 'folder_url', required: false, type: 'string' },
-  ];
+  // Colunas da planilha de barcos — fonte única em shared/constants/product-columns.ts
+  private readonly xlsxColumns = BOAT_COLUMNS;
 
   constructor(
     private prismaService: PrismaService,
@@ -392,9 +375,9 @@ export class BoatsService {
   async getCsvTemplate(): Promise<Buffer> {
     const headers = this.xlsxColumns.map((column) => column.name).join(';');
     const exampleValues = [
+      'Azimut-55 Fly-1',
       'Azimut',
       '55 Fly',
-      'Azimut-55 Fly-1',
       '3500000',
       'São Paulo',
       '2022',

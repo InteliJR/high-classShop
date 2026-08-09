@@ -27,6 +27,11 @@ import {
   XlsxColumnDefinition,
   XlsxImportService,
 } from 'src/shared/services/xlsx-import.service';
+import {
+  AIRCRAFT_COLUMNS,
+  BOAT_COLUMNS,
+  CAR_COLUMNS,
+} from 'src/shared/constants/product-columns';
 import { CreateCarDto } from '../cars/dto/create-car.dto';
 import { CreateBoatDto } from '../boats/dto/create-boat.dto';
 import { CreateAircraftDto } from '../aircrafts/dto/create-aircraft.dto';
@@ -43,55 +48,6 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ProductImportJobsService.name);
   private readonly runningJobs = new Set<string>();
   private recoveryTimer?: NodeJS.Timeout;
-
-  private readonly carColumns: XlsxColumnDefinition[] = [
-    { name: 'marca', required: true, type: 'string' },
-    { name: 'modelo', required: true, type: 'string' },
-    { name: 'identificador', required: true, type: 'string' },
-    { name: 'valor', required: true, type: 'number' },
-    { name: 'estado', required: true, type: 'string' },
-    { name: 'ano', required: true, type: 'number' },
-    { name: 'cor', required: false, type: 'string' },
-    { name: 'km', required: false, type: 'number' },
-    { name: 'cambio', required: false, type: 'string' },
-    { name: 'combustivel', required: false, type: 'string' },
-    { name: 'tipo_categoria', required: false, type: 'string' },
-    { name: 'descricao', required: false, type: 'string' },
-    { name: 'folder_url', required: false, type: 'string' },
-  ];
-
-  private readonly boatColumns: XlsxColumnDefinition[] = [
-    { name: 'marca', required: true, type: 'string' },
-    { name: 'modelo', required: true, type: 'string' },
-    { name: 'identificador', required: true, type: 'string' },
-    { name: 'valor', required: true, type: 'number' },
-    { name: 'estado', required: true, type: 'string' },
-    { name: 'ano', required: true, type: 'number' },
-    { name: 'fabricante', required: false, type: 'string' },
-    { name: 'tamanho', required: false, type: 'string' },
-    { name: 'estilo', required: false, type: 'string' },
-    { name: 'combustivel', required: false, type: 'string' },
-    { name: 'motor', required: false, type: 'string' },
-    { name: 'ano_motor', required: false, type: 'number' },
-    { name: 'tipo_embarcacao', required: false, type: 'string' },
-    { name: 'descricao_completa', required: false, type: 'string' },
-    { name: 'acessorios', required: false, type: 'string' },
-    { name: 'folder_url', required: false, type: 'string' },
-  ];
-
-  private readonly aircraftColumns: XlsxColumnDefinition[] = [
-    { name: 'marca', required: true, type: 'string' },
-    { name: 'modelo', required: true, type: 'string' },
-    { name: 'identificador', required: true, type: 'string' },
-    { name: 'valor', required: true, type: 'number' },
-    { name: 'estado', required: true, type: 'string' },
-    { name: 'ano', required: true, type: 'number' },
-    { name: 'categoria', required: false, type: 'string' },
-    { name: 'assentos', required: false, type: 'number' },
-    { name: 'tipo_aeronave', required: false, type: 'string' },
-    { name: 'descricao', required: false, type: 'string' },
-    { name: 'folder_url', required: false, type: 'string' },
-  ];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -843,13 +799,13 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
   private getColumnsForType(productType: ProductType): XlsxColumnDefinition[] {
     if (productType === ProductType.CAR) {
-      return this.carColumns;
+      return CAR_COLUMNS;
     }
 
     if (productType === ProductType.BOAT) {
-      return this.boatColumns;
+      return BOAT_COLUMNS;
     }
 
-    return this.aircraftColumns;
+    return AIRCRAFT_COLUMNS;
   }
 }

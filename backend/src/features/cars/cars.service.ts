@@ -20,8 +20,8 @@ import { Car } from './entity/car.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import {
   XlsxImportService,
-  XlsxColumnDefinition,
 } from 'src/shared/services/xlsx-import.service';
+import { CAR_COLUMNS } from 'src/shared/constants/product-columns';
 import {
   ImportResponseDto,
   ImportErrorRow,
@@ -33,22 +33,8 @@ import { plainToInstance } from 'class-transformer';
 export class CarsService {
   private readonly logger = new Logger(CarsService.name);
 
-  // Definição das colunas da planilha para carros (sem 'imagens' — agora são embutidas)
-  private readonly xlsxColumns: XlsxColumnDefinition[] = [
-    { name: 'marca', required: true, type: 'string' },
-    { name: 'modelo', required: true, type: 'string' },
-    { name: 'identificador', required: true, type: 'string' },
-    { name: 'valor', required: true, type: 'number' },
-    { name: 'estado', required: true, type: 'string' },
-    { name: 'ano', required: true, type: 'number' },
-    { name: 'cor', required: false, type: 'string' },
-    { name: 'km', required: false, type: 'number' },
-    { name: 'cambio', required: false, type: 'string' },
-    { name: 'combustivel', required: false, type: 'string' },
-    { name: 'tipo_categoria', required: false, type: 'string' },
-    { name: 'descricao', required: false, type: 'string' },
-    { name: 'folder_url', required: false, type: 'string' },
-  ];
+  // Colunas da planilha de carros — fonte única em shared/constants/product-columns.ts
+  private readonly xlsxColumns = CAR_COLUMNS;
 
   constructor(
     private prismaService: PrismaService,
@@ -363,9 +349,9 @@ export class CarsService {
   async getCsvTemplate(): Promise<Buffer> {
     const headers = this.xlsxColumns.map((column) => column.name).join(';');
     const exampleValues = [
+      'BMW-X5-1',
       'BMW',
       'X5',
-      'BMW-X5-1',
       '450000',
       'São Paulo',
       '2023',
