@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X, Clock, Loader, Send, XCircle, FileText, ZoomIn, ZoomOut, Download } from "lucide-react";
+import { X, Clock, Loader2, Send, XCircle, FileText, ZoomIn, ZoomOut, Download } from "lucide-react";
 
 interface ContractPreviewModalProps {
   pdfBase64: string;
@@ -167,7 +167,7 @@ export default function ContractPreviewModal({
           {!pdfLoaded && (
             <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
               <div className="flex flex-col items-center gap-4">
-                <Loader className="w-10 h-10 text-blue-600 animate-spin" />
+                <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
                 <p className="text-slate-600 font-medium">
                   Carregando contrato...
                 </p>
@@ -224,7 +224,7 @@ export default function ContractPreviewModal({
               className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
-                <Loader className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Send className="w-4 h-4" />
               )}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Building2, Save, AlertCircle, Check, Loader } from "lucide-react";
+import { Building2, Save, AlertCircle, Check, Loader2 } from "lucide-react";
 import {
   getPlatformCompany,
   updatePlatformCompany,
@@ -104,7 +104,7 @@ export default function MyCompanyPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader className="w-8 h-8 animate-spin text-subtle" />
+        <Loader2 className="w-8 h-8 animate-spin text-subtle" />
       </div>
     );
   }
@@ -278,7 +278,7 @@ export default function MyCompanyPage() {
           <Button type="submit" disabled={isSaving}>
             {isSaving ? (
               <span className="flex items-center gap-2">
-                <Loader className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
                 Salvando...
               </span>
             ) : (

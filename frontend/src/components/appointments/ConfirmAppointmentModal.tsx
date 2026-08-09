@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, CheckCircle, AlertCircle, Mail } from "lucide-react";
+import { X, CheckCircle, AlertCircle, Mail, Loader2 } from "lucide-react";
 import { useCreateAppointment } from "../../hooks/useCreateAppointment";
 
 interface ConfirmAppointmentModalProps {
@@ -200,7 +200,7 @@ export default function ConfirmAppointmentModal({
                 >
                   {loading ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <Loader2 className="animate-spin w-4 h-4 text-white" />
                       Processando...
                     </>
                   ) : (

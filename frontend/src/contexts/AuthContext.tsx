@@ -7,6 +7,7 @@ import type {
 } from "../types/types";
 import api from "../services/api";
 import { useAuth } from "../store/authStateManager";
+import { Loader2 } from "lucide-react";
 
 export const AuthContext = createContext<AuthContextProps>(
   {} as AuthContextProps
@@ -181,7 +182,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       {loading ? (
         <div className="h-screen w-screen flex items-center justify-center">
           <div className="flex flex-col items-center gap-4">
-            <div className="w-16 h-16 border-4 border-gray-200 border-t-primary rounded-full animate-spin" />
+            <Loader2 className="animate-spin w-16 h-16 text-primary" />
             <p className="text-lg text-gray-600">Carregando...</p>
           </div>
         </div>

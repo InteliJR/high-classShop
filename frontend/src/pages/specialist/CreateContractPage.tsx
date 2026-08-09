@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertCircle,
   CheckCircle,
-  Loader,
+  Loader2,
   FileText,
   Eye,
   ChevronDown,
@@ -694,7 +694,7 @@ export default function CreateContractPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader className="w-8 h-8 animate-spin text-ink-soft" />
+        <Loader2 className="w-8 h-8 animate-spin text-ink-soft" />
         <span className="ml-2 text-muted">
           Carregando dados do contrato...
         </span>
@@ -1937,7 +1937,7 @@ export default function CreateContractPage() {
               >
                 {isSubmitting ? (
                   <span className="flex items-center justify-center gap-2">
-                    <Loader className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin" />
                     Preparando preview...
                   </span>
                 ) : submitStatus.type === "success" ? (

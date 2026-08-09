@@ -11,6 +11,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/button";
 import { useWhitelabel } from "../../store/whitelabelStore";
 import { applyCpfMask, applyRgMask, applyPhoneMask } from "../../utils/mask";
+import { Loader2 } from "lucide-react";
 
 type RegistrationMode = 'referral' | 'public';
 
@@ -149,7 +150,7 @@ export default function RegisterPage() {
     return (
       <div className="w-screen h-screen flex items-center justify-center bg-bg">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-border border-t-ink"></div>
+          <Loader2 className="animate-spin h-16 w-16 text-ink" />
           <p className="text-ink-soft font-medium">Validando convite...</p>
         </div>
       </div>

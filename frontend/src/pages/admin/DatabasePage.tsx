@@ -9,7 +9,7 @@ import {
   Database,
   Download,
   FileText,
-  Loader,
+  Loader2,
 } from "lucide-react";
 import {
   getEntities,
@@ -112,7 +112,7 @@ export default function DatabasePage() {
 
       {loading ? (
         <div className="flex items-center justify-center min-h-[300px]">
-          <Loader className="w-8 h-8 animate-spin text-subtle" />
+          <Loader2 className="w-8 h-8 animate-spin text-subtle" />
         </div>
       ) : rows.length === 0 ? (
         <EmptyState icon={Database} title="Nenhum registro." />

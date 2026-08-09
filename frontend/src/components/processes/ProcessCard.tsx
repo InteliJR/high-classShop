@@ -4,7 +4,8 @@ import {
   ChevronRight,
   Edit2,
   ExternalLink,
-  Loader,
+  Loader2,
+  Clock,
   X,
   MessageSquare,
   CheckCircle,
@@ -391,7 +392,7 @@ export default function ProcessCard({
         <div className="mb-4">
           <div className="flex items-center gap-2">
             {process.status === "PROCESSING_CONTRACT" && (
-              <Loader size={18} className="animate-spin text-orange-600" />
+              <Loader2 size={18} className="animate-spin text-orange-600" />
             )}
             {isRejected && <X size={18} className="text-red-600" />}
             <p
@@ -436,7 +437,7 @@ export default function ProcessCard({
                     className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition disabled:opacity-50"
                   >
                     {isCancelling ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
+                      <Loader2 className="animate-spin h-4 w-4 text-gray-700" />
                     ) : (
                       <>
                         <XCircle size={16} />
@@ -450,7 +451,7 @@ export default function ProcessCard({
                     className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50"
                   >
                     {isConfirming ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <Loader2 className="animate-spin h-4 w-4 text-white" />
                     ) : (
                       <>
                         <CheckCircle size={16} />
@@ -467,7 +468,7 @@ export default function ProcessCard({
                   className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-50 border border-red-300 text-red-700 rounded-lg font-medium hover:bg-red-100 transition disabled:opacity-50"
                 >
                   {isCancelling ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-700"></div>
+                    <Loader2 className="animate-spin h-4 w-4 text-red-700" />
                   ) : (
                     <>
                       <XCircle size={16} />
@@ -502,7 +503,7 @@ export default function ProcessCard({
                     className="w-full mb-2 inline-flex items-center justify-center gap-2 px-4 py-2 bg-cyan-700 text-white rounded-lg font-medium hover:bg-cyan-800 transition disabled:opacity-50"
                   >
                     {isStartingMeeting || isLoadingMeeting ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <Loader2 className="animate-spin h-4 w-4 text-white" />
                     ) : (
                       <>
                         <Video size={16} />
@@ -517,7 +518,7 @@ export default function ProcessCard({
                       className="w-full mb-2 inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-700 text-white rounded-lg font-medium hover:bg-emerald-800 transition disabled:opacity-50"
                     >
                       {isConversationDoneLoading ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <Loader2 className="animate-spin h-4 w-4 text-white" />
                       ) : (
                         <>
                           <CheckCircle size={16} />
@@ -634,7 +635,7 @@ export default function ProcessCard({
               )}
               {activeContract.status === 'PENDING' && (
                 <div className="flex items-center gap-1.5 mt-2 text-xs text-yellow-700">
-                  <Loader size={14} />
+                  <Clock size={14} />
                   <span>Aguardando assinatura</span>
                 </div>
               )}
@@ -882,7 +883,7 @@ export default function ProcessCard({
                     className="inline-flex items-center gap-1 px-2 py-1 text-xs border border-gray-300 text-gray-600 rounded hover:bg-gray-50 disabled:opacity-50 transition-colors"
                   >
                     {isAdvancing ? (
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600" />
+                      <Loader2 className="animate-spin h-3 w-3 text-gray-600" />
                     ) : (
                       <Check size={12} />
                     )}

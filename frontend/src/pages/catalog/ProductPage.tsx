@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Mail, CheckCircle, ExternalLink } from "lucide-react";
+import { ArrowLeft, Mail, CheckCircle, ExternalLink, Loader2 } from "lucide-react";
 import { PopupModal } from "react-calendly";
 import { getCarById, type RawCar } from "../../services/cars.service";
 import { getBoatById, type RawBoat } from "../../services/boats.service";
@@ -593,7 +593,7 @@ export default function ProductPage() {
               >
                 {isCreatingPending ? (
                   <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <Loader2 className="animate-spin h-5 w-5 text-white" />
                     Criando solicitação...
                   </>
                 ) : (
@@ -618,7 +618,7 @@ export default function ProductPage() {
               >
                 {isCreatingPending ? (
                   <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <Loader2 className="animate-spin h-5 w-5 text-white" />
                     Criando solicitação...
                   </>
                 ) : (

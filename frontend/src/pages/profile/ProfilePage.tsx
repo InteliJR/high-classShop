@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Save, Calendar, User, Lock, UserCheck, Trash2, Send } from "lucide-react";
+import { ArrowLeft, Save, Calendar, User, Lock, UserCheck, Trash2, Send, Loader2 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../store/authStateManager";
 import {
@@ -316,7 +316,7 @@ export default function CustomerProfilePage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        <Loader2 className="animate-spin h-8 w-8 text-ink" />
       </div>
     );
   }
@@ -403,7 +403,7 @@ export default function CustomerProfilePage() {
 
             {loadingAdvisor ? (
               <div className="flex items-center gap-2 text-gray-500 text-sm">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500" />
+                <Loader2 className="animate-spin h-4 w-4 text-muted" />
                 Carregando...
               </div>
             ) : advisorRecord?.accepted_at ? (

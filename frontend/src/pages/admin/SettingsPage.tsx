@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Settings, Check, AlertCircle, Save, Video, X } from "lucide-react";
+import { Settings, Check, AlertCircle, Save, Video, X, Loader2 } from "lucide-react";
 import { getSettings, updateSetting } from "../../services/settings.service";
 import {
   getGoogleMeetStatus,
@@ -215,7 +215,7 @@ export default function SettingsPage() {
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-ink"></div>
+              <Loader2 className="animate-spin mx-auto h-10 w-10 text-ink" />
               <p className="mt-4 text-muted">Carregando configurações...</p>
             </div>
           </div>
@@ -304,7 +304,7 @@ export default function SettingsPage() {
                         disabled={isSaving === "minimum_proposal_percentage"}
                       >
                         {isSaving === "minimum_proposal_percentage" ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <Loader2 className="animate-spin h-4 w-4 text-white" />
                         ) : (
                           <Save size={16} />
                         )}
@@ -366,7 +366,7 @@ export default function SettingsPage() {
                   ) : (
                     <Button onClick={handleConnectMeet} disabled={meetBusy}>
                       {meetBusy ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <Loader2 className="animate-spin h-4 w-4 text-white" />
                       ) : (
                         <Video size={16} />
                       )}

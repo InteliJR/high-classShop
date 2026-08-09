@@ -3,7 +3,7 @@ import Logo from "../../assets/logo_brokerage.png";
 import { UserCircle2 } from "lucide-react";
 
 // Componentes da Landing Page
-import { HeroSection } from "../../components/landing-page/HeroSection";
+import { HeroBackdrop, HeroSection } from "../../components/landing-page/HeroSection";
 import { Product } from "../../components/landing-page/Product";
 
 // Imagens para os cards
@@ -17,10 +17,12 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col font-sans">
       
-      {/* SEÇÃO ESCURA (Header + Hero) */}
-      <div className="bg-[#333333] w-full">
+      {/* SEÇÃO ESCURA (Header + Hero) — vídeo de fundo + scrim atrás dos dois */}
+      <div className="bg-[#333333] w-full relative isolate overflow-hidden">
+        <HeroBackdrop />
+
         {/* Header (Baseado no seu HomePage.tsx mas adaptado para o fundo escuro do design) */}
-        <header className="w-full flex h-20 sm:h-24 justify-between items-center px-6 sm:px-12 max-w-7xl mx-auto">
+        <header className="relative z-10 w-full flex h-20 sm:h-24 justify-between items-center px-6 sm:px-12 max-w-7xl mx-auto">
           <img src={Logo} className="w-24 sm:w-32 h-auto" alt="High Class Shop Logo" />
           
           <nav className="hidden md:flex items-center gap-8 text-sm font-light uppercase tracking-widest text-gray-200">
@@ -39,7 +41,9 @@ export default function LandingPage() {
         </header>
 
         {/* Hero Section Component */}
-        <HeroSection />
+        <div className="relative z-10">
+          <HeroSection />
+        </div>
       </div>
 
       {/* SEÇÃO CLARA (Produtos) */}

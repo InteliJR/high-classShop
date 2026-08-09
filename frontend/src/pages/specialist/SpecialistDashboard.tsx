@@ -19,6 +19,7 @@ import {
   type SpecialistDashboardStats,
 } from "../../services/dashboard.service";
 import { Skeleton } from "../../components/ui/skeleton";
+import { Loader2 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
   Concluído: "#22C55E",
@@ -66,7 +67,7 @@ export default function SpecialistDashboard() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ink mx-auto mb-4"></div>
+          <Loader2 className="animate-spin h-12 w-12 mx-auto mb-4 text-ink" />
           <p className="text-muted">Carregando...</p>
         </div>
       </div>
