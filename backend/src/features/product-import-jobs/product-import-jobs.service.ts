@@ -538,7 +538,13 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     row: ImportParsedRow,
     specialistId: string,
   ): Promise<UpsertResult> {
-    if (!row.identificador || !row.identificador.trim()) {
+    // Normaliza uma vez só: a busca do produto existente usava o valor com
+    // trim e a gravação usava o valor cru, então " ABC " seria gravado como
+    // " ABC " e nunca mais reencontrado — cada reimport criaria uma duplicata.
+    // Hoje o parseCsv já entrega tudo trimado, mas a divergência ficava
+    // armada para qualquer chamador que não passe pelo CSV.
+    const identificador = row.identificador?.trim();
+    if (!identificador) {
       throw new BadRequestException(
         'identificador é obrigatório e não pode ser vazio',
       );
@@ -548,7 +554,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       const data = {
         marca: row.marca,
         modelo: row.modelo,
-        identificador: row.identificador,
+        identificador,
         valor: Number(row.valor),
         estado: row.estado,
         ano: Number(row.ano),
@@ -566,7 +572,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       const existing = await this.prisma.car.findFirst({
         where: {
           specialist_id: specialistId,
-          identificador: row.identificador?.trim(),
+          identificador,
         },
       });
 
@@ -594,7 +600,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       const data = {
         marca: row.marca,
         modelo: row.modelo,
-        identificador: row.identificador,
+        identificador,
         valor: Number(row.valor),
         estado: row.estado,
         ano: Number(row.ano),
@@ -615,7 +621,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       const existing = await this.prisma.boat.findFirst({
         where: {
           specialist_id: specialistId,
-          identificador: row.identificador?.trim(),
+          identificador,
         },
       });
 
@@ -642,7 +648,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     const data = {
       marca: row.marca,
       modelo: row.modelo,
-      identificador: row.identificador,
+      identificador,
       valor: Number(row.valor),
       estado: row.estado,
       ano: Number(row.ano),
@@ -658,7 +664,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     const existing = await this.prisma.aircraft.findFirst({
       where: {
         specialist_id: specialistId,
-        identificador: row.identificador?.trim(),
+        identificador,
       },
     });
 
