@@ -88,6 +88,92 @@
   .h2-style {
     @apply text-2xl font-semibold;
   }
+
+  /* ---- Hero em vídeo (landing page) ----
+     O scrim precisa de rampa com curva de easing: um gradiente de 2 stops
+     (#333 → transparent) passa por cinza morto no meio e cria borda dura.
+     Os stops abaixo seguem cos²(πt/2) e esvaem para rgb(51 51 51 / 0) —
+     mesmo matiz, alpha zero.
+     O vídeo roda inteiro (90s) e leva uma curva de grading no encode; sem ela o
+     pior frame exigiria 0,67 de scrim e a rampa não teria onde esvair.
+     Medido nos 90s graduados: na borda do texto (42,5%) a rampa entrega 0,73
+     contra os 0,64 exigidos pelo pior frame (o farol estourado, em 00:15). */
+  .hero-video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* Mobile recorta 9:16 e joga o texto sobre trechos claros; escurecer o
+       vídeo permite scrim de 0,38 em vez de 0,65 — o fundo continua visível. */
+    filter: brightness(0.72);
+  }
+
+  .hero-scrim {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(to top,
+        rgb(51 51 51 / .38) 0%,   rgb(51 51 51 / .38) 72%,
+        rgb(51 51 51 / .361) 76%, rgb(51 51 51 / .309) 80%,
+        rgb(51 51 51 / .232) 84%, rgb(51 51 51 / .148) 88%,
+        rgb(51 51 51 / .071) 92%, rgb(51 51 51 / .019) 96%,
+        rgb(51 51 51 / 0) 100%),
+      linear-gradient(rgb(51 51 51 / .28), rgb(51 51 51 / .28));
+  }
+
+  /* Faixa do header. O vídeo passa por baixo dele, e do lado direito o scrim
+     horizontal já é transparente — o nav em gray-200 sobre o céu claro do plano
+     do iate fica em 1,38:1. Medido: 0,70 deixa o nav em 4,68:1, margem curta
+     demais para uma faixa que não custa nada — daí 0,76.
+     Em px (não %) para não escalar junto com a altura do hero. */
+  .hero-scrim::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom,
+      rgb(51 51 51 / .76) 0px,
+      rgb(51 51 51 / .76) 96px,
+      rgb(51 51 51 / .719) 113px,
+      rgb(51 51 51 / .603) 130px,
+      rgb(51 51 51 / .440) 147px,
+      rgb(51 51 51 / .263) 164px,
+      rgb(51 51 51 / .111) 181px,
+      rgb(51 51 51 / .019) 198px,
+      rgb(51 51 51 / 0) 210px);
+  }
+
+  /* Ruído a 3,5%: gradiente longo e escuro faz banding em telas 8-bit. */
+  .hero-scrim::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: .035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* lg: o layout vira duas colunas — o scrim gira para o eixo horizontal. */
+  @media (min-width: 1024px) {
+    .hero-video {
+      filter: none;
+    }
+    .hero-scrim {
+      background: linear-gradient(to right,
+        rgb(51 51 51 / 1)     0%,
+        rgb(51 51 51 / 1)     18%,
+        rgb(51 51 51 / .9455) 28.5%,
+        rgb(51 51 51 / .8536) 35.5%,
+        rgb(51 51 51 / .7270) 42.5%,
+        rgb(51 51 51 / .5782) 49.5%,
+        rgb(51 51 51 / .4218) 56.5%,
+        rgb(51 51 51 / .2730) 63.5%,
+        rgb(51 51 51 / .1464) 70.5%,
+        rgb(51 51 51 / .0545) 77.5%,
+        rgb(51 51 51 / .0121) 83.1%,
+        rgb(51 51 51 / 0)     88%);
+    }
+  }
 }
 
 :root {

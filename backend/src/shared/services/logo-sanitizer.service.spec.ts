@@ -121,4 +121,40 @@ describe('LogoSanitizerService', () => {
     const r = svc.sanitize(mkFile(Buffer.from(svg)));
     expect(r.buffer.toString().toLowerCase()).not.toContain('javascript:');
   });
+
+  it('sanitizeBackground: aceita PNG dentro do limite de 5MB', () => {
+    const r = svc.sanitizeBackground(mkFile(PNG_HEADER));
+    expect(r.extension).toBe('png');
+  });
+
+  it('sanitizeBackground: aceita JPEG por magic bytes', () => {
+    const r = svc.sanitizeBackground(mkFile(JPG_HEADER));
+    expect(r.extension).toBe('jpg');
+  });
+
+  it('sanitizeBackground: aceita imagem entre 2MB e 5MB (limite maior que o do logo)', () => {
+    const midSize = Buffer.concat([PNG_HEADER, Buffer.alloc(3 * 1024 * 1024)]);
+    const r = svc.sanitizeBackground(mkFile(midSize));
+    expect(r.extension).toBe('png');
+  });
+
+  it('sanitizeBackground: rejeita PNG acima de 5MB', () => {
+    const big = Buffer.concat([PNG_HEADER, Buffer.alloc(5 * 1024 * 1024 + 10)]);
+    expect(() => svc.sanitizeBackground(mkFile(big))).toThrow(
+      PayloadTooLargeException,
+    );
+  });
+
+  it('sanitizeBackground: rejeita SVG (não faz sentido pra imagem de fundo)', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle/></svg>';
+    expect(() => svc.sanitizeBackground(mkFile(Buffer.from(svg)))).toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('sanitizeBackground: rejeita buffer vazio', () => {
+    expect(() => svc.sanitizeBackground(mkFile(Buffer.alloc(0)))).toThrow(
+      BadRequestException,
+    );
+  });
 });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CheckCircle, AlertCircle, Loader } from "lucide-react";
+import { CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { useAuth } from "../../store/authStateManager";
 import { acceptAdvisorInvite } from "../../services/advisor.service";
 import Button from "../../components/ui/button";
@@ -51,7 +51,7 @@ export default function AdvisorAcceptPage() {
 
         {status === "loading" && (
           <div className="flex flex-col items-center gap-3">
-            <Loader className="w-8 h-8 animate-spin text-ink-soft" />
+            <Loader2 className="w-8 h-8 animate-spin text-ink-soft" />
             <p className="text-muted">Validando convite...</p>
           </div>
         )}

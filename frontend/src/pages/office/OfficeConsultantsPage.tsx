@@ -13,6 +13,7 @@ import { Card } from "../../components/ui/card";
 import { Dialog, DialogContent } from "../../components/ui/dialog";
 import { PageHeader } from "../../components/patterns/PageHeader";
 import { EmptyState } from "../../components/patterns/EmptyState";
+import { Table, TableHeader, TableBody, TableHead, TableCell } from "../../components/ui/table";
 
 export default function OfficeConsultantsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -208,9 +209,8 @@ function ConsultantsList() {
         <Button onClick={load}>Buscar</Button>
       </div>
 
-      {loading && <p className="text-muted">Carregando...</p>}
-      {error && <p className="text-status-bad">{error}</p>}
-      {!loading && consultants.length === 0 && (
+      {error && <p className="text-status-bad mb-4">{error}</p>}
+      {!loading && !error && consultants.length === 0 && (
         <EmptyState
           icon={Users}
           title="Nenhum consultor ainda."
@@ -218,59 +218,59 @@ function ConsultantsList() {
         />
       )}
 
-      {consultants.length > 0 && (
-        <div className="bg-surface rounded-lg shadow overflow-x-auto">
-          <table className="w-full min-w-[640px]">
-            <thead className="bg-border-soft border-b border-border">
-              <tr>
-                <th className="text-left text-xs font-medium text-muted uppercase px-4 py-3">Nome</th>
-                <th className="text-left text-xs font-medium text-muted uppercase px-4 py-3">E-mail</th>
-                <th className="text-left text-xs font-medium text-muted uppercase px-4 py-3">Clientes</th>
-                <th className="text-left text-xs font-medium text-muted uppercase px-4 py-3">Comissão</th>
-                <th className="text-left text-xs font-medium text-muted uppercase px-4 py-3">Status</th>
-                <th className="text-right text-xs font-medium text-muted uppercase px-4 py-3">Ações</th>
+      {(loading || consultants.length > 0) && (
+        <Table>
+          <TableHeader>
+            <tr>
+              <TableHead>Nome</TableHead>
+              <TableHead>E-mail</TableHead>
+              <TableHead>Clientes</TableHead>
+              <TableHead>Comissão</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Ações</TableHead>
+            </tr>
+          </TableHeader>
+          <TableBody isLoading={loading} columns={6}>
+            {consultants.map((c) => (
+              <tr key={c.id} className="border-b border-border-soft">
+                <TableCell>
+                  {c.name} {c.surname}
+                </TableCell>
+                <TableCell className="text-muted">{c.email}</TableCell>
+                <TableCell>{c.clients_count}</TableCell>
+                <TableCell>
+                  {c.commission_rate != null ? `${c.commission_rate}%` : "—"}
+                </TableCell>
+                <TableCell>
+                  {c.is_active ? (
+                    <span className="text-status-ok">Ativo</span>
+                  ) : (
+                    <span className="text-muted">Inativo</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right">
+                  {c.is_active ? (
+                    <button
+                      disabled={busyAction === c.id}
+                      onClick={() => setConsultantToDeactivate(c)}
+                      className="text-status-bad hover:underline text-sm"
+                    >
+                      Desativar
+                    </button>
+                  ) : (
+                    <button
+                      disabled={busyAction === c.id}
+                      onClick={() => reactivate(c)}
+                      className="text-status-ok hover:underline text-sm"
+                    >
+                      Reativar
+                    </button>
+                  )}
+                </TableCell>
               </tr>
-            </thead>
-            <tbody>
-              {consultants.map((c) => (
-                <tr key={c.id} className="border-b border-border-soft">
-                  <td className="px-4 py-3 text-sm">{c.name} {c.surname}</td>
-                  <td className="px-4 py-3 text-sm text-muted">{c.email}</td>
-                  <td className="px-4 py-3 text-sm">{c.clients_count}</td>
-                  <td className="px-4 py-3 text-sm">
-                    {c.commission_rate != null ? `${c.commission_rate}%` : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {c.is_active ? (
-                      <span className="text-status-ok">Ativo</span>
-                    ) : (
-                      <span className="text-muted">Inativo</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {c.is_active ? (
-                      <button
-                        disabled={busyAction === c.id}
-                        onClick={() => setConsultantToDeactivate(c)}
-                        className="text-status-bad hover:underline text-sm"
-                      >
-                        Desativar
-                      </button>
-                    ) : (
-                      <button
-                        disabled={busyAction === c.id}
-                        onClick={() => reactivate(c)}
-                        className="text-status-ok hover:underline text-sm"
-                      >
-                        Reativar
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </TableBody>
+        </Table>
       )}
 
       <Dialog open={!!consultantToDeactivate} onOpenChange={(open) => !open && setConsultantToDeactivate(null)}>

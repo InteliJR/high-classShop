@@ -100,6 +100,26 @@ export class OfficeController {
     return this.office.uploadCompanyLogo(scope, file, companyId);
   }
 
+  @Post('company/background')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(
+    FileInterceptor('background', {
+      limits: { fileSize: 5 * 1024 * 1024 + 1 },
+    }),
+  )
+  uploadBackground(
+    @OfficeScope() scope: OfficeScopeData,
+    @UploadedFile() file: Express.Multer.File,
+    @Query('companyId') companyId?: string,
+  ) {
+    if (!file)
+      throw new BadRequestException(
+        'Arquivo de imagem obrigatório (campo "background")',
+      );
+    if (companyId) assertUuid(companyId, 'companyId');
+    return this.office.uploadCompanyBackground(scope, file, companyId);
+  }
+
   // ─── Consultores ───────────────────────────────────────────────────────
   @Get('consultants')
   listConsultants(

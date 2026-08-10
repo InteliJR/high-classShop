@@ -371,12 +371,17 @@ export class OfficeService {
     });
     if (!company) throw new NotFoundException('Escritório não encontrado');
     const logoUrl = await resolveCompanyLogoUrl(this.s3, company.logo);
+    const backgroundImageUrl = await resolveCompanyLogoUrl(
+      this.s3,
+      company.background_image,
+    );
     return {
       ...company,
       commission_rate: company.commission_rate
         ? Number(company.commission_rate)
         : null,
       logoUrl,
+      backgroundImageUrl,
     };
   }
 
@@ -435,12 +440,17 @@ export class OfficeService {
     }
 
     const logoUrl = await resolveCompanyLogoUrl(this.s3, updated.logo);
+    const backgroundImageUrl = await resolveCompanyLogoUrl(
+      this.s3,
+      updated.background_image,
+    );
     return {
       ...updated,
       commission_rate: updated.commission_rate
         ? Number(updated.commission_rate)
         : null,
       logoUrl,
+      backgroundImageUrl,
     };
   }
 
@@ -454,14 +464,17 @@ export class OfficeService {
 
     const sanitized = this.logoSanitizer.sanitize(file);
 
-    const key = `companies/${companyId}/logo-${Date.now()}.${sanitized.extension}`;
-    await this.s3.uploadBuffer(sanitized.buffer, key, sanitized.contentType);
-
+    // Confere o escritório ANTES de gravar no S3: subir primeiro e só depois
+    // descobrir que não existe deixa o objeto órfão no bucket, sem nenhuma
+    // linha apontando para ele e fora do alcance do deleteObject abaixo.
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       select: { logo: true },
     });
     if (!company) throw new NotFoundException('Escritório não encontrado');
+
+    const key = `companies/${companyId}/logo-${Date.now()}.${sanitized.extension}`;
+    await this.s3.uploadBuffer(sanitized.buffer, key, sanitized.contentType);
 
     const previousKey = company.logo;
     const updated = await this.prisma.company.update({
@@ -477,5 +490,44 @@ export class OfficeService {
 
     const logoUrl = await resolveCompanyLogoUrl(this.s3, updated.logo);
     return { ...updated, logoUrl };
+  }
+
+  // ─── Company: upload imagem de fundo (whitelabel) ──────────────────────
+  async uploadCompanyBackground(
+    scope: Scope,
+    file: Express.Multer.File,
+    requestedCompanyId?: string,
+  ) {
+    const companyId = this.resolveCompanyId(scope, requestedCompanyId);
+
+    const sanitized = this.logoSanitizer.sanitizeBackground(file);
+
+    // Mesma ordem do logo: existência primeiro, S3 depois — ver comentário lá.
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { background_image: true },
+    });
+    if (!company) throw new NotFoundException('Escritório não encontrado');
+
+    const key = `companies/${companyId}/background-${Date.now()}.${sanitized.extension}`;
+    await this.s3.uploadBuffer(sanitized.buffer, key, sanitized.contentType);
+
+    const previousKey = company.background_image;
+    const updated = await this.prisma.company.update({
+      where: { id: companyId },
+      data: { background_image: key },
+      select: { id: true, background_image: true },
+    });
+
+    // Limpa imagem anterior (best-effort)
+    if (previousKey && previousKey !== key) {
+      this.s3.deleteObject(previousKey).catch(() => {});
+    }
+
+    const backgroundImageUrl = await resolveCompanyLogoUrl(
+      this.s3,
+      updated.background_image,
+    );
+    return { ...updated, backgroundImageUrl };
   }
 }

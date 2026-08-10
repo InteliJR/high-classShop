@@ -8,7 +8,7 @@ import {
   Percent,
   Save,
   Check,
-  Loader,
+  Loader2,
   Sliders,
   Receipt,
   Download,
@@ -292,7 +292,7 @@ function TabButton({
 function CenterLoader() {
   return (
     <div className="flex items-center justify-center min-h-[300px]">
-      <Loader className="w-8 h-8 animate-spin text-subtle" />
+      <Loader2 className="w-8 h-8 animate-spin text-subtle" />
     </div>
   );
 }
@@ -525,7 +525,7 @@ function RateRow({
       </div>
       <Button type="button" onClick={handleSave} disabled={!dirty || saving}>
         {saving ? (
-          <Loader className="w-4 h-4 animate-spin" />
+          <Loader2 className="w-4 h-4 animate-spin" />
         ) : (
           <Save className="w-4 h-4" />
         )}

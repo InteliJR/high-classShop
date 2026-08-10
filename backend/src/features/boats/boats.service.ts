@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
@@ -18,45 +13,18 @@ import {
 } from 'src/shared/dto/filters.dto';
 import { Boat } from './entity/boat.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
-import {
-  XlsxImportService,
-  XlsxColumnDefinition,
-} from 'src/shared/services/xlsx-import.service';
-import {
-  ImportResponseDto,
-  ImportErrorRow,
-} from 'src/shared/dto/import-response.dto';
-import { validate } from 'class-validator';
-import { plainToInstance } from 'class-transformer';
+import { BOAT_COLUMNS } from 'src/shared/constants/product-columns';
 
 @Injectable()
 export class BoatsService {
   private readonly logger = new Logger(BoatsService.name);
 
-  // Definição das colunas da planilha para barcos (sem 'imagens' — agora são embutidas)
-  private readonly xlsxColumns: XlsxColumnDefinition[] = [
-    { name: 'marca', required: true, type: 'string' },
-    { name: 'modelo', required: true, type: 'string' },
-    { name: 'identificador', required: true, type: 'string' },
-    { name: 'valor', required: true, type: 'number' },
-    { name: 'estado', required: true, type: 'string' },
-    { name: 'ano', required: true, type: 'number' },
-    { name: 'fabricante', required: false, type: 'string' },
-    { name: 'tamanho', required: false, type: 'string' },
-    { name: 'estilo', required: false, type: 'string' },
-    { name: 'combustivel', required: false, type: 'string' },
-    { name: 'motor', required: false, type: 'string' },
-    { name: 'ano_motor', required: false, type: 'number' },
-    { name: 'tipo_embarcacao', required: false, type: 'string' },
-    { name: 'descricao_completa', required: false, type: 'string' },
-    { name: 'acessorios', required: false, type: 'string' },
-    { name: 'folder_url', required: false, type: 'string' },
-  ];
+  // Colunas da planilha de barcos — fonte única em shared/constants/product-columns.ts
+  private readonly xlsxColumns = BOAT_COLUMNS;
 
   constructor(
     private prismaService: PrismaService,
     private s3Service: S3Service,
-    private xlsxImportService: XlsxImportService,
   ) {}
 
   async create(createBoatDto: CreateBoatDto) {
@@ -338,63 +306,12 @@ export class BoatsService {
     }
   }
 
-  /**
-   * Retorna o template XLSX para importação de barcos
-   */
-  async getXlsxTemplate(): Promise<Buffer> {
-    const instructions: Record<string, string> = {
-      marca: 'Nome da marca da embarcação (texto)',
-      modelo: 'Nome do modelo (texto)',
-      identificador: 'Identificador único do produto (texto)',
-      valor: 'Preço em reais (número inteiro, sem pontos ou vírgulas)',
-      estado: 'Estado onde a embarcação está localizada (texto)',
-      ano: 'Ano de fabricação (número)',
-      fabricante: 'Nome do fabricante (texto, opcional)',
-      tamanho: 'Tamanho em pés ou metros (texto, opcional)',
-      estilo: 'Estilo: Flybridge, Sport, Open, etc (opcional)',
-      combustivel: 'Tipo de combustível: Diesel, Gasolina (opcional)',
-      motor: 'Modelo do motor (texto, opcional)',
-      ano_motor: 'Ano do motor (número, opcional)',
-      tipo_embarcacao: 'Tipo: Lancha, Veleiro, Iate, Jet Ski, etc (opcional)',
-      descricao_completa: 'Descrição detalhada da embarcação (texto, opcional)',
-      acessorios: 'Lista de acessórios separados por hífen (opcional)',
-      folder_url:
-        'Link da pasta pública do Google Drive com imagens deste produto (opcional)',
-    };
-
-    const example: Record<string, any> = {
-      marca: 'Azimut',
-      modelo: '55 Fly',
-      identificador: 'Azimut-55 Fly-1',
-      valor: 3500000,
-      estado: 'São Paulo',
-      ano: 2022,
-      fabricante: 'Azimut',
-      tamanho: '55 pés',
-      estilo: 'Flybridge',
-      combustivel: 'Diesel',
-      motor: 'Volvo Penta D6',
-      ano_motor: 2022,
-      tipo_embarcacao: 'Lancha',
-      descricao_completa:
-        'Embarcação em excelente estado com todos os opcionais',
-      acessorios: 'GPS Garmin - Ar condicionado - Gerador',
-      folder_url: 'https://drive.google.com/drive/folders/SEU_FOLDER_ID',
-    };
-
-    return this.xlsxImportService.generateTemplate(
-      this.xlsxColumns,
-      example,
-      instructions,
-    );
-  }
-
   async getCsvTemplate(): Promise<Buffer> {
     const headers = this.xlsxColumns.map((column) => column.name).join(';');
     const exampleValues = [
+      'Azimut-55 Fly-1',
       'Azimut',
       '55 Fly',
-      'Azimut-55 Fly-1',
       '3500000',
       'São Paulo',
       '2022',
@@ -413,293 +330,5 @@ export class BoatsService {
     const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
     const content = Buffer.from(`${headers}\n${exampleValues}\n`, 'utf-8');
     return Buffer.concat([BOM, content]);
-  }
-
-  /**
-   * Importa barcos a partir de um arquivo CSV
-   */
-  async importFromCsv(
-    fileBuffer: Buffer,
-    user: UserEntity,
-  ): Promise<ImportResponseDto> {
-    const { rows } = this.xlsxImportService.parseCsv(fileBuffer);
-
-    const structureValidation = this.xlsxImportService.validateStructure(
-      rows,
-      this.xlsxColumns,
-    );
-
-    if (!structureValidation.valid) {
-      throw new BadRequestException({
-        message: 'Estrutura do CSV inválida',
-        errors: structureValidation.errors,
-        missingRequired: structureValidation.missingRequired,
-        unknownColumns: structureValidation.unknownColumns,
-      });
-    }
-
-    const insertedIds: string[] = [];
-    const updatedIds: string[] = [];
-    const errorRows: ImportErrorRow[] = [];
-
-    for (let i = 0; i < rows.length; i++) {
-      const rowNumber = i + 2;
-      const row = rows[i];
-
-      try {
-        const boatData: any = {
-          marca: row.marca,
-          modelo: row.modelo,
-          identificador: row.identificador,
-          valor: Number(row.valor),
-          estado: row.estado,
-          ano: Number(row.ano),
-          specialist_id: user.id,
-        };
-
-        if (row.fabricante) boatData.fabricante = row.fabricante;
-        if (row.tamanho) boatData.tamanho = row.tamanho;
-        if (row.estilo) boatData.estilo = row.estilo;
-        if (row.combustivel) boatData.combustivel = row.combustivel;
-        if (row.motor) boatData.motor = row.motor;
-        if (row.ano_motor) boatData.ano_motor = Number(row.ano_motor);
-        if (row.tipo_embarcacao) boatData.tipo_embarcacao = row.tipo_embarcacao;
-        if (row.descricao_completa)
-          boatData.descricao_completa = row.descricao_completa;
-        if (row.acessorios) boatData.acessorios = row.acessorios;
-
-        const dto = plainToInstance(CreateBoatDto, boatData);
-        const validationErrors = await validate(dto, { whitelist: true });
-
-        if (validationErrors.length > 0) {
-          const errorMessages = validationErrors.map((err) => {
-            const constraints = err.constraints
-              ? Object.values(err.constraints)
-              : [];
-            return `${err.property}: ${constraints.join(', ')}`;
-          });
-
-          errorRows.push({
-            row: rowNumber,
-            reason: errorMessages.join('; '),
-            fields: row,
-          });
-          continue;
-        }
-
-        const existingBoat = await this.prismaService.boat.findFirst({
-          where: {
-            specialist_id: user.id,
-            identificador: row.identificador?.trim(),
-          },
-        });
-
-        if (existingBoat) {
-          const { specialist_id, ...updateFields } = boatData;
-          await this.prismaService.boat.update({
-            where: { id: existingBoat.id },
-            data: updateFields,
-          });
-          updatedIds.push(existingBoat.id);
-        } else {
-          const createdBoat = await this.prismaService.boat.create({
-            data: boatData,
-          });
-          insertedIds.push(createdBoat.id);
-        }
-      } catch (error) {
-        errorRows.push({
-          row: rowNumber,
-          reason: error.message || 'Erro desconhecido ao processar linha',
-          fields: row,
-        });
-      }
-    }
-
-    return this.xlsxImportService.createResponse(
-      insertedIds,
-      errorRows,
-      [],
-      updatedIds,
-    );
-  }
-
-  /**
-   * Importa barcos a partir de um arquivo XLSX
-   */
-  async importFromXlsx(
-    fileBuffer: Buffer,
-    user: UserEntity,
-  ): Promise<ImportResponseDto> {
-    // 1. Parsear a planilha XLSX (dados + imagens embutidas)
-    const { rows, imageMap } =
-      await this.xlsxImportService.parseWorkbook(fileBuffer);
-
-    // 2. Validar estrutura
-    const structureValidation = this.xlsxImportService.validateStructure(
-      rows,
-      this.xlsxColumns,
-    );
-
-    if (!structureValidation.valid) {
-      throw new BadRequestException({
-        message: 'Estrutura da planilha inválida',
-        errors: structureValidation.errors,
-        missingRequired: structureValidation.missingRequired,
-        unknownColumns: structureValidation.unknownColumns,
-      });
-    }
-
-    const insertedIds: string[] = [];
-    const updatedIds: string[] = [];
-    const errorRows: ImportErrorRow[] = [];
-    const warningRows: ImportErrorRow[] = [];
-
-    // 3. Processar cada linha
-    for (let i = 0; i < rows.length; i++) {
-      const rowNumber = i + 2; // +2 porque linha 1 é header e arrays começam em 0
-      const row = rows[i];
-      const identificador = row.identificador?.trim();
-
-      try {
-        // Preparar DTO
-        const boatData: any = {
-          marca: row.marca,
-          modelo: row.modelo,
-          identificador,
-          valor: Number(row.valor),
-          estado: row.estado,
-          ano: Number(row.ano),
-          specialist_id: user.id,
-        };
-
-        // Campos opcionais
-        if (row.fabricante) boatData.fabricante = row.fabricante;
-        if (row.tamanho) boatData.tamanho = row.tamanho;
-        if (row.estilo) boatData.estilo = row.estilo;
-        if (row.combustivel) boatData.combustivel = row.combustivel;
-        if (row.motor) boatData.motor = row.motor;
-        if (row.ano_motor) boatData.ano_motor = Number(row.ano_motor);
-        if (row.tipo_embarcacao) boatData.tipo_embarcacao = row.tipo_embarcacao;
-        if (row.descricao_completa)
-          boatData.descricao_completa = row.descricao_completa;
-        if (row.acessorios) boatData.acessorios = row.acessorios;
-
-        // Validar usando class-validator
-        const dto = plainToInstance(CreateBoatDto, boatData);
-        const validationErrors = await validate(dto, { whitelist: true });
-
-        if (validationErrors.length > 0) {
-          const errorMessages = validationErrors.map((err) => {
-            const constraints = err.constraints
-              ? Object.values(err.constraints)
-              : [];
-            return `${err.property}: ${constraints.join(', ')}`;
-          });
-
-          errorRows.push({
-            row: rowNumber,
-            reason: errorMessages.join('; '),
-            fields: row,
-          });
-          continue;
-        }
-
-        // Verificar se já existe um produto com mesmo identificador para este especialista
-        const existingBoat = await this.prismaService.boat.findFirst({
-          where: {
-            specialist_id: user.id,
-            identificador,
-          },
-        });
-
-        let boat: any;
-        let isUpdate = false;
-
-        if (existingBoat) {
-          // Atualizar produto existente
-          const { specialist_id, ...updateFields } = boatData;
-          boat = await this.prismaService.boat.update({
-            where: { id: existingBoat.id },
-            data: updateFields,
-          });
-          isUpdate = true;
-        } else {
-          // Criar novo produto
-          boat = await this.prismaService.boat.create({ data: boatData });
-        }
-
-        // Processar imagens embutidas da planilha
-        const embeddedImages = imageMap.get(i) || [];
-
-        if (embeddedImages.length > 0) {
-          // Se é atualização, remover imagens antigas antes de adicionar novas
-          if (isUpdate) {
-            await this.prismaService.boat_image.deleteMany({
-              where: { boat_id: boat.id },
-            });
-          }
-
-          const imageErrors: string[] = [];
-          let successCount = 0;
-
-          for (let imgIdx = 0; imgIdx < embeddedImages.length; imgIdx++) {
-            try {
-              const img = embeddedImages[imgIdx];
-              const timestamp = Date.now();
-              const key = `boats/${boat.id}/${timestamp}-${imgIdx}.${img.extension}`;
-              const contentType = `image/${img.extension === 'jpg' ? 'jpeg' : img.extension}`;
-              const imageKey = await this.s3Service.uploadBuffer(
-                img.buffer,
-                key,
-                contentType,
-              );
-
-              await this.prismaService.boat_image.create({
-                data: {
-                  boat_id: boat.id,
-                  image_url: imageKey,
-                  is_primary: imgIdx === 0,
-                  product_type: 'BOAT',
-                },
-              });
-              successCount++;
-            } catch (imageError) {
-              imageErrors.push(
-                `Imagem ${imgIdx + 1}: ${imageError.message || 'Erro desconhecido'}`,
-              );
-            }
-          }
-
-          if (imageErrors.length > 0) {
-            warningRows.push({
-              row: rowNumber,
-              reason: `Produto ${isUpdate ? 'atualizado' : 'criado'} (${successCount}/${embeddedImages.length} imagens processadas)`,
-              fields: row,
-              imageWarnings: imageErrors,
-            });
-          }
-        }
-
-        if (isUpdate) {
-          updatedIds.push(boat.id);
-        } else {
-          insertedIds.push(boat.id);
-        }
-      } catch (error) {
-        errorRows.push({
-          row: rowNumber,
-          reason: error.message || 'Erro desconhecido ao processar linha',
-          fields: row,
-        });
-      }
-    }
-
-    return this.xlsxImportService.createResponse(
-      insertedIds,
-      errorRows,
-      warningRows,
-      updatedIds,
-    );
   }
 }

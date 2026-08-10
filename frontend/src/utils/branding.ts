@@ -1,6 +1,7 @@
 import type { CompanyBranding, UserProps } from "../types/types";
 import { pickReadableText } from "./contrast";
 
+export const PLATFORM_NAME = "BMF Lux Brokerage";
 export const DEFAULT_BRAND_PRIMARY = "#3C3C3C";
 export const DEFAULT_BRAND_SECONDARY = "#1C1C1C";
 

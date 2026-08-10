@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { CheckCircle, XCircle, AlertTriangle, Loader } from "lucide-react";
+import { CheckCircle, XCircle, AlertTriangle, Loader2 } from "lucide-react";
 import Button from "../../components/ui/button";
 
 /**
@@ -127,7 +127,7 @@ export default function ContractPreviewCallback() {
       <div className="max-w-md w-full bg-surface rounded-xl shadow-lg p-8 text-center">
         {status === "loading" && (
           <>
-            <Loader className="w-16 h-16 text-blue-500 animate-spin mx-auto mb-4" />
+            <Loader2 className="w-16 h-16 text-blue-500 animate-spin mx-auto mb-4" />
             <h1 className="text-xl font-semibold text-ink mb-2">
               Processando...
             </h1>

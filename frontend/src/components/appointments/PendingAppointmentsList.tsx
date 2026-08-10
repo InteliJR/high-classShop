@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Clock, Check, X, Calendar, User, Package } from "lucide-react";
+import { Clock, Check, X, Calendar, User, Package, Loader2 } from "lucide-react";
 import {
   getPendingAppointments,
   confirmPendingAppointment,
@@ -137,7 +137,7 @@ export default function PendingAppointmentsList({
         {/* Loading */}
         {isLoading && (
           <div className="p-6 text-center">
-            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-amber-600"></div>
+            <Loader2 className="animate-spin mx-auto h-6 w-6 text-amber-600" />
             <p className="mt-2 text-sm text-gray-600">Carregando...</p>
           </div>
         )}
@@ -192,7 +192,7 @@ export default function PendingAppointmentsList({
                     className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
                   >
                     {processingId === appointment.id ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
+                      <Loader2 className="animate-spin h-4 w-4 text-gray-700" />
                     ) : (
                       <>
                         <X size={16} />
@@ -206,7 +206,7 @@ export default function PendingAppointmentsList({
                     className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                   >
                     {processingId === appointment.id ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <Loader2 className="animate-spin h-4 w-4 text-white" />
                     ) : (
                       <>
                         <Check size={16} />

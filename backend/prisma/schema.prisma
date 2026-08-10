@@ -623,6 +623,7 @@ model Company {
   name            String
   cnpj            String   @unique
   logo            String?
+  background_image String?  // S3 key: companies/{id}/background-{ts}.{ext}. Imagem de fundo (glass) da landing /i/:slug. null = sem imagem.
   description     String?
   commission_rate Decimal? @db.Decimal(5, 2) // Taxa de comissão do escritório (ex: 15.00 = 15%)
   // Taxa que a PLATAFORMA cobra especificamente deste escritório — sobrepõe

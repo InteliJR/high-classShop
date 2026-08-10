@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, ChevronDown, Loader, X } from "lucide-react";
+import { Search, ChevronDown, Loader2, X } from "lucide-react";
 
 export interface InfiniteScrollOption {
   id: string | number;
@@ -243,7 +243,7 @@ export default function InfiniteScrollSelect({
                   >
                     {isLoading ? (
                       <div className="flex items-center justify-center gap-2">
-                        <Loader size={16} className="animate-spin" />
+                        <Loader2 size={16} className="animate-spin" />
                         <span>Carregando mais...</span>
                       </div>
                     ) : (

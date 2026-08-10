@@ -154,7 +154,7 @@ export default function ConsultoriaPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-3 border-gray-200 border-t-primary rounded-full animate-spin" />
+          <Loader2 className="animate-spin w-12 h-12 text-primary" />
           <p className="text-muted">Carregando especialistas...</p>
         </div>
       </div>

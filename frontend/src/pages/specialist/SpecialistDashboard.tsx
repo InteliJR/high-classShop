@@ -18,6 +18,8 @@ import {
   getSpecialistDashboardStats,
   type SpecialistDashboardStats,
 } from "../../services/dashboard.service";
+import { Skeleton } from "../../components/ui/skeleton";
+import { Loader2 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
   Concluído: "#22C55E",
@@ -65,7 +67,7 @@ export default function SpecialistDashboard() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ink mx-auto mb-4"></div>
+          <Loader2 className="animate-spin h-12 w-12 mx-auto mb-4 text-ink" />
           <p className="text-muted">Carregando...</p>
         </div>
       </div>
@@ -87,14 +89,15 @@ export default function SpecialistDashboard() {
       {/* Cards de Estatísticas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
         {/* Card 1: Produtos Cadastrados */}
-        <div className="bg-border-soft rounded-lg p-6">
+        <div className="bg-surface rounded-lg p-6">
           <p className="text-ink-soft font-semibold mb-2">
             Produtos Cadastrados
           </p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-ink mb-2">
-              Carregando...
-            </p>
+            <>
+              <Skeleton className="h-9 w-16 mb-2" />
+              <Skeleton className="h-4 w-24" />
+            </>
           ) : (
             <>
               <p className="text-4xl font-bold text-ink mb-2">
@@ -106,12 +109,13 @@ export default function SpecialistDashboard() {
         </div>
 
         {/* Card 2: Processos Ativos */}
-        <div className="bg-border-soft rounded-lg p-6">
+        <div className="bg-surface rounded-lg p-6">
           <p className="text-ink-soft font-semibold mb-2">Processos Ativos</p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-ink mb-2">
-              Carregando...
-            </p>
+            <>
+              <Skeleton className="h-9 w-16 mb-2" />
+              <Skeleton className="h-4 w-24" />
+            </>
           ) : (
             <>
               <p className="text-4xl font-bold text-ink mb-2">
@@ -123,12 +127,13 @@ export default function SpecialistDashboard() {
         </div>
 
         {/* Card 3: Vendas Concluídas */}
-        <div className="bg-border-soft rounded-lg p-6">
+        <div className="bg-surface rounded-lg p-6">
           <p className="text-ink-soft font-semibold mb-2">Vendas Concluídas</p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-ink mb-2">
-              Carregando...
-            </p>
+            <>
+              <Skeleton className="h-9 w-16 mb-2" />
+              <Skeleton className="h-4 w-24" />
+            </>
           ) : (
             <>
               <p className="text-4xl font-bold text-ink mb-2">
@@ -140,12 +145,13 @@ export default function SpecialistDashboard() {
         </div>
 
         {/* Card 4: Taxa de Conversão */}
-        <div className="bg-border-soft rounded-lg p-6">
+        <div className="bg-surface rounded-lg p-6">
           <p className="text-ink-soft font-semibold mb-2">Taxa de Conversão</p>
           {isLoading ? (
-            <p className="text-2xl font-bold text-ink mb-2">
-              Carregando...
-            </p>
+            <>
+              <Skeleton className="h-9 w-16 mb-2" />
+              <Skeleton className="h-4 w-24" />
+            </>
           ) : (
             <>
               <p className="text-4xl font-bold text-ink mb-2">

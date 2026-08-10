@@ -2,20 +2,39 @@
 
 type Cell = string | number;
 
-// CSV com separador ";" e BOM UTF-8 (abre correto no Excel pt-BR).
+// Excel/Sheets interpretam célula iniciada por estes caracteres como fórmula.
+// Conteúdo do CSV vem de campo livre preenchido por usuário (Observações,
+// Descrição, nome do comprador), então precisa ser neutralizado antes de sair.
+const FORMULA_START = /^[=+\-@\t\r]/;
+
+/**
+ * Serializa em CSV com separador ";" (padrão do Excel pt-BR).
+ *
+ * O prefixo "R$ " é removido de propósito: com separador ";" e vírgula
+ * decimal, "2.400.000,00" é lido como NÚMERO pelo Excel pt-BR; com o símbolo
+ * na frente viraria texto e não somaria. Na tela e no PDF o R$ permanece.
+ */
+export function toCsv(columns: string[], rows: Cell[][]): string {
+  const escape = (v: Cell) => {
+    let s = String(v ?? "").replace(/^R\$\s/, "");
+    // Apóstrofo força texto no Excel e não aparece na célula. Vale também para
+    // "-": um valor negativo vira texto, mas "-2+3+cmd|'/c calc'!A0" é fórmula
+    // válida, então abrir exceção para dígito reabriria o buraco.
+    if (FORMULA_START.test(s)) s = `'${s}`;
+    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [columns, ...rows].map((r) => r.map(escape).join(";")).join("\n");
+}
+
+// CSV com BOM UTF-8 (abre correto no Excel pt-BR).
 export function downloadCsv(
   filename: string,
   columns: string[],
   rows: Cell[][],
 ) {
-  const escape = (v: Cell) => {
-    const s = String(v ?? "");
-    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const csv = [columns, ...rows]
-    .map((r) => r.map(escape).join(";"))
-    .join("\n");
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const blob = new Blob(["﻿" + toCsv(columns, rows)], {
+    type: "text/csv;charset=utf-8;",
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { officeService } from "../../services/office";
 import { Card } from "../../components/ui/card";
+import { Skeleton } from "../../components/ui/skeleton";
 import { PageHeader } from "../../components/patterns/PageHeader";
 import { useAuth } from "../../store/authStateManager";
 import { DEFAULT_BRAND_PRIMARY, DEFAULT_BRAND_SECONDARY } from "../../utils/branding";
@@ -42,9 +43,7 @@ export default function OfficeDashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="p-8 text-muted">Carregando...</div>;
   if (error) return <div className="p-8 text-status-bad">{error}</div>;
-  if (!stats) return null;
 
   return (
     <div className="w-full p-8">
@@ -115,22 +114,33 @@ export default function OfficeDashboardPage() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <Card>
-          <p className="text-sm text-muted">Consultores ativos</p>
-          <p className="text-3xl font-bold text-ink mt-2">{stats.activeConsultants}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-muted">Consultores inativos</p>
-          <p className="text-3xl font-bold text-ink mt-2">{stats.inactiveConsultants}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-muted">Clientes</p>
-          <p className="text-3xl font-bold text-ink mt-2">{stats.clientsCount}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-muted">Processos abertos</p>
-          <p className="text-3xl font-bold text-ink mt-2">{stats.openProcesses}</p>
-        </Card>
+        {loading || !stats ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i}>
+              <Skeleton className="h-4 w-32 mb-3" />
+              <Skeleton className="h-8 w-16" />
+            </Card>
+          ))
+        ) : (
+          <>
+            <Card>
+              <p className="text-sm text-muted">Consultores ativos</p>
+              <p className="text-3xl font-bold text-ink mt-2">{stats.activeConsultants}</p>
+            </Card>
+            <Card>
+              <p className="text-sm text-muted">Consultores inativos</p>
+              <p className="text-3xl font-bold text-ink mt-2">{stats.inactiveConsultants}</p>
+            </Card>
+            <Card>
+              <p className="text-sm text-muted">Clientes</p>
+              <p className="text-3xl font-bold text-ink mt-2">{stats.clientsCount}</p>
+            </Card>
+            <Card>
+              <p className="text-sm text-muted">Processos abertos</p>
+              <p className="text-3xl font-bold text-ink mt-2">{stats.openProcesses}</p>
+            </Card>
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

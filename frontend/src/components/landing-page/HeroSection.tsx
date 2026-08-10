@@ -1,13 +1,97 @@
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, type Variants, easeOut } from 'framer-motion';
-import aircraft1 from '../../assets/landing-page/aircraft_1.png';
-import boat1 from '../../assets/landing-page/boat_1.png';
-import car1 from '../../assets/landing-page/car_1.png';
+import { motion, useReducedMotion, type Variants, easeOut } from 'framer-motion';
+import { Pause, Play } from 'lucide-react';
+
+const HERO_POSTER = '/hero/hero-poster.webp';
+
+type NetworkInformation = { saveData?: boolean; effectiveType?: string };
+
+/**
+ * Fundo em vídeo do bloco escuro (header + hero).
+ * Fica atrás do header de propósito: o scrim é sólido só do lado esquerdo, e
+ * um header opaco sobre a metade transparente do vídeo lê como erro de corte.
+ */
+export function HeroBackdrop() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const reduceMotion = useReducedMotion();
+  const [showVideo, setShowVideo] = useState(false);
+  // Começa em `true` e só muda por evento do elemento. Estado local otimista
+  // mente quando o autoplay é bloqueado (iOS em Modo de Baixo Consumo, extensão
+  // de bloqueio): o poster fica parado e o botão anunciaria "Pausar".
+  const [paused, setPaused] = useState(true);
+
+  useEffect(() => {
+    // WCAG 2.2 SC 2.2.2 pede pause/stop, mas com reduced-motion o vídeo nem é
+    // montado — pausar depois não atende o critério.
+    if (reduceMotion) return;
+    const conn = (navigator as Navigator & { connection?: NetworkInformation }).connection;
+    const lite = Boolean(conn?.saveData) || /(^|-)2g$/.test(conn?.effectiveType ?? '');
+    if (lite) return;
+    setShowVideo(true);
+  }, [reduceMotion]);
+
+  // Não mexe em `paused` aqui: quem manda são os eventos play/pause. Se o
+  // play() for recusado pela política de autoplay, o botão continua dizendo
+  // "Retomar", que é a verdade.
+  const togglePlayback = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) video.play().catch(() => {});
+    else video.pause();
+  };
+
+  return (
+    // aria-hidden fica no vídeo e no scrim, não no container: o botão de pausa
+    // vive aqui dentro e é focável — dentro de um aria-hidden ele sairia da
+    // árvore de acessibilidade e o leitor de tela não anunciaria nada ao
+    // receber o foco (axe: aria-hidden-focus, WCAG 4.1.2), o que anularia o
+    // próprio SC 2.2.2 que este botão existe para atender.
+    <div className="absolute inset-0 overflow-hidden">
+      {showVideo ? (
+        <video
+          ref={videoRef}
+          className="hero-video"
+          poster={HERO_POSTER}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="none"
+          tabIndex={-1}
+          aria-hidden="true"
+          onPlay={() => setPaused(false)}
+          onPause={() => setPaused(true)}
+        >
+          {/* AV1 primeiro: 6,2 MB contra 9,4 do H.264, e com SSIM maior.
+              Safari antigo e iPhone anterior ao 15 Pro caem no mp4. */}
+          <source src="/hero/hero.av1.mp4" type='video/mp4; codecs="av01.0.08M.08"' />
+          <source src="/hero/hero.mp4" type="video/mp4" />
+        </video>
+      ) : (
+        <img className="hero-video" src={HERO_POSTER} alt="" fetchPriority="high" />
+      )}
+
+      <div className="hero-scrim" aria-hidden="true" />
+
+      {showVideo && (
+        <button
+          type="button"
+          onClick={togglePlayback}
+          aria-pressed={paused}
+          aria-label={paused ? 'Retomar o vídeo de fundo' : 'Pausar o vídeo de fundo'}
+          className="absolute bottom-5 right-5 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        >
+          {paused ? <Play size={15} className="ml-0.5" /> : <Pause size={15} />}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export function HeroSection() {
   const navigate = useNavigate();
 
-  // Variáveis de animação para o texto
   const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
@@ -24,23 +108,12 @@ export function HeroSection() {
     visible: { opacity: 1, x: 0, transition: { duration: 0.5, ease: easeOut } },
   };
 
-  // Variantes das imagens (Apenas entrada suave, sem float)
-  const imageVariants = (delay: number): Variants => ({
-    hidden: { opacity: 0, y: 30, scale: 0.95 },
-    visible: { 
-      opacity: 1, 
-      y: 0, 
-      scale: 1,
-      transition: { duration: 0.7, delay, ease: easeOut }
-    }
-  });
-
   return (
-    <section className="relative px-6 sm:px-12 pt-16 pb-32 flex flex-col lg:flex-row items-center gap-16 max-w-[1400px] mx-auto overflow-visible">
-      
-      {/* Texto (Lado Esquerdo) */}
-      <motion.div 
-        className="lg:w-5/12 z-20 space-y-10"
+    // min-h fixo: o mosaico de imagens sustentava a altura do hero; sem ele o
+    // bloco colapsaria e o vídeo entraria depois do poster gerando CLS.
+    <section className="relative px-6 sm:px-12 pt-12 pb-24 lg:pt-20 lg:pb-32 max-w-[1400px] mx-auto min-h-[560px] lg:min-h-[620px] flex items-center">
+      <motion.div
+        className="lg:w-5/12 space-y-10"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
@@ -50,7 +123,9 @@ export function HeroSection() {
             Exclusividade em <br />
             <span className="text-gray-300">Cada Detalhe</span>
           </h1>
-          <p className="text-gray-300 text-base leading-relaxed max-w-md font-light">
+          {/* gray-300 sobre vídeo exige 0,80 de scrim contra 0,67 do quase-branco;
+              é ele que travava a rampa de esvair mais cedo. */}
+          <p className="text-gray-100 text-base leading-relaxed max-w-md font-light">
             Bem-vindo à referência em intermediação de luxo. Conectamos você aos produtos mais desejados do mundo com segurança, discrição e agilidade.
           </p>
         </motion.div>
@@ -60,7 +135,7 @@ export function HeroSection() {
             <span className="w-6 h-[1px] bg-white/60 block"></span>
             Nossa Expertise
           </h2>
-          <p className="text-gray-300 text-sm leading-relaxed max-w-lg font-light">
+          <p className="text-gray-100 text-sm leading-relaxed max-w-md font-light">
             Mais do que vender, nós entendemos o seu estilo de vida. Nossa curadoria rigorosa garante que cada aeronave, embarcação ou automóvel atenda aos mais altos padrões.
           </p>
         </motion.div>
@@ -70,56 +145,21 @@ export function HeroSection() {
             <span className="w-6 h-[1px] bg-white/60 block"></span>
             Categorias Premium
           </h2>
-          <p className="text-gray-300 text-sm leading-relaxed max-w-lg font-light">
+          <p className="text-gray-100 text-sm leading-relaxed max-w-md font-light">
             Navegue por um portfólio selecionado. De supercarros esportivos a iates transatlânticos e jatos executivos prontos para decolar.
           </p>
         </motion.div>
 
-        <motion.button 
+        <motion.button
           onClick={() => navigate('/login')}
           variants={itemVariants}
-          whileHover={{ scale: 1.02, backgroundColor: "#f3f4f6" }}
+          whileHover={{ scale: 1.02, backgroundColor: '#f3f4f6' }}
           whileTap={{ scale: 0.98 }}
           className="bg-white text-black px-8 py-3 rounded text-base font-semibold hover:bg-gray-100 transition-all shadow-[0_4px_14px_0_rgba(255,255,255,0.2)] mt-4 tracking-wide"
         >
           Comece a Explorar
         </motion.button>
       </motion.div>
-
-      {/* Mosaico de Imagens (Lado Direito) */}
-      <div className="lg:w-7/12 relative h-[450px] lg:h-[600px] w-full mt-12 lg:mt-0 flex justify-center lg:block">
-        
-        {/* Barco (Fundo) - Z-INDEX 0 */}
-        <motion.img 
-          src={boat1} 
-          alt="Luxury Boat" 
-          variants={imageVariants(0.2)}
-          initial="hidden"
-          animate="visible"
-          className="absolute top-0 right-0 lg:right-0 w-[280px] sm:w-[400px] lg:w-[480px] h-auto object-cover rounded-xl shadow-2xl z-0 opacity-90 transition-all duration-300" 
-        />
-        
-        {/* Avião (Meio) - Z-INDEX 10 (Era 20) */}
-        <motion.img 
-          src={aircraft1} 
-          alt="Private Jet" 
-          variants={imageVariants(0.6)}
-          initial="hidden"
-          animate="visible"
-          className="absolute bottom-0 lg:bottom-[50px] right-4 lg:right-[40px] w-[260px] sm:w-[350px] lg:w-[420px] h-auto object-cover rounded-xl shadow-2xl z-10 border-[3px] border-[#333333]" 
-        />
-
-        {/* Carro (Frente) - Z-INDEX 20 (Era 10) */}
-        <motion.img 
-          src={car1} 
-          alt="Luxury Car" 
-          variants={imageVariants(0.4)}
-          initial="hidden"
-          animate="visible"
-          className="absolute top-[120px] lg:top-[140px] left-4 lg:left-8 w-[300px] sm:w-[420px] lg:w-[500px] h-auto object-cover rounded-xl shadow-2xl z-20 border-[3px] border-[#333333]" 
-        />
-        
-      </div>
     </section>
   );
 }

@@ -2,8 +2,16 @@ import api from "./api";
 
 export type EntityInfo = { key: string; label: string };
 
+/** Célula já formatada pelo backend. Texto, salvo a exceção da imagem (logo). */
+export type Cell =
+  | string
+  | { kind: "image"; url: string | null; alt: string };
+
+export type ColumnMeta = { label: string; wide?: boolean };
+
 export type RecordsPage = {
-  data: Record<string, unknown>[];
+  columns: ColumnMeta[];
+  data: Cell[][];
   total: number;
   page: number;
   pageSize: number;

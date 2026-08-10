@@ -56,7 +56,7 @@ const COLUMN_DEFINITIONS: Record<
   { required: string[]; optional: string[] }
 > = {
   CAR: {
-    required: ["marca", "modelo", "identificador", "valor", "estado", "ano"],
+    required: ["identificador", "marca", "modelo", "valor", "estado", "ano"],
     optional: [
       "cor",
       "km",
@@ -68,7 +68,7 @@ const COLUMN_DEFINITIONS: Record<
     ],
   },
   BOAT: {
-    required: ["marca", "modelo", "identificador", "valor", "estado", "ano"],
+    required: ["identificador", "marca", "modelo", "valor", "estado", "ano"],
     optional: [
       "fabricante",
       "tamanho",
@@ -83,7 +83,7 @@ const COLUMN_DEFINITIONS: Record<
     ],
   },
   AIRCRAFT: {
-    required: ["marca", "modelo", "identificador", "valor", "estado", "ano"],
+    required: ["identificador", "marca", "modelo", "valor", "estado", "ano"],
     optional: [
       "categoria",
       "assentos",

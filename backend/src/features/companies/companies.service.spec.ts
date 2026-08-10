@@ -30,6 +30,7 @@ describe('CompaniesService.findBySlug', () => {
       name: 'Alpha',
       slug: 'alpha',
       logo: 'companies/x.png',
+      background_image: 'companies/x/background.png',
       color_identity: ['#111', '#222'],
     });
 
@@ -40,8 +41,25 @@ describe('CompaniesService.findBySlug', () => {
       name: 'Alpha',
       slug: 'alpha',
       logoUrl: 'https://logo',
+      backgroundImageUrl: 'https://logo',
       color_identity: ['#111', '#222'],
     });
+  });
+
+  it('retorna backgroundImageUrl null quando o escritório não configurou imagem', async () => {
+    const { svc } = mkSvc({
+      id: 'c1',
+      name: 'Alpha',
+      slug: 'alpha',
+      logo: null,
+      background_image: null,
+      color_identity: [],
+    });
+    (svc as any).resolveLogoUrl = jest.fn().mockResolvedValue(null);
+
+    const result = await svc.findBySlug('alpha');
+
+    expect(result.backgroundImageUrl).toBeNull();
   });
 
   it('lança NotFound quando o slug não existe', async () => {

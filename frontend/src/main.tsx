@@ -5,6 +5,7 @@ import { RouterProvider } from "react-router-dom";
 import { CookiesProvider } from "react-cookie";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeProvider";
+import { AppProvider } from "./contexts/AppContext";
 
 import RouterApp from "./routes/routes.tsx";
 
@@ -15,7 +16,9 @@ createRoot(document.getElementById("root")!).render(
     <CookiesProvider>
       <ThemeProvider>
         <AuthProvider>
-          <RouterProvider router={router} />
+          <AppProvider>
+            <RouterProvider router={router} />
+          </AppProvider>
         </AuthProvider>
       </ThemeProvider>
     </CookiesProvider>

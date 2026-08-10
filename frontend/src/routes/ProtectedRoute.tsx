@@ -3,6 +3,7 @@ import { AuthContext } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../store/authStateManager";
 import type { UserRole } from "../types/types";
+import { Loader2 } from "lucide-react";
 
 export default function ProtectedRoute({
   children,
@@ -53,7 +54,7 @@ export default function ProtectedRoute({
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 border-4 border-gray-200 border-t-primary rounded-full animate-spin" />
+          <Loader2 className="animate-spin w-16 h-16 text-primary" />
           <p className="text-lg text-gray-600">Carregando...</p>
         </div>
       </div>
