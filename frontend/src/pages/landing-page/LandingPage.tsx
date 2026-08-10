@@ -4,12 +4,6 @@ import { UserCircle2 } from "lucide-react";
 
 // Componentes da Landing Page
 import { HeroBackdrop, HeroSection } from "../../components/landing-page/HeroSection";
-import { Product } from "../../components/landing-page/Product";
-
-// Imagens para os cards
-import car2 from '../../assets/landing-page/car_2.png';
-import boat2 from '../../assets/landing-page/boat_2.png';
-import aircraft1 from '../../assets/landing-page/aircraft_1.png'; // Reutilizando a imagem ou use uma aircraft_2 se tiver
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -45,27 +39,6 @@ export default function LandingPage() {
           <HeroSection />
         </div>
       </div>
-
-      {/* SEÇÃO CLARA (Produtos) */}
-      <main className="flex-1 bg-[#E5E5E5] py-20 px-6 sm:px-12">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12">
-          <Product
-            title="Aeronaves"
-            image={aircraft1}
-            categoryLink="/catalog/aircrafts"
-          />
-          <Product
-            title="Embarcações"
-            image={boat2}
-            categoryLink="/catalog/boats"
-          />
-          <Product
-            title="Carros"
-            image={car2}
-            categoryLink="/catalog/cars"
-          />
-        </div>
-      </main>
 
       {/* Footer (Igual ao HomePage) */}
       <footer className="bg-[#E5E5E5] text-gray-500 py-8 px-6 text-center text-sm border-t border-gray-300">
