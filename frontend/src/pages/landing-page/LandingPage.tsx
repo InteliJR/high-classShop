@@ -40,8 +40,8 @@ export default function LandingPage() {
         </div>
       </div>
 
-      {/* Footer (Igual ao HomePage) */}
-      <footer className="bg-[#E5E5E5] text-gray-500 py-8 px-6 text-center text-sm border-t border-gray-300">
+      {/* Footer — gradiente a partir do cinza da seção escura acima, sem corte brusco de cor */}
+      <footer className="bg-gradient-to-b from-[#333333] to-[#1f1f1f] text-gray-400 py-8 px-6 text-center text-sm border-t border-white/10">
         <p>&copy; 2024 High Class Shop. Todos os direitos reservados.</p>
       </footer>
     </div>
