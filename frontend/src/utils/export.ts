@@ -2,6 +2,11 @@
 
 type Cell = string | number;
 
+// Excel/Sheets interpretam célula iniciada por estes caracteres como fórmula.
+// Conteúdo do CSV vem de campo livre preenchido por usuário (Observações,
+// Descrição, nome do comprador), então precisa ser neutralizado antes de sair.
+const FORMULA_START = /^[=+\-@\t\r]/;
+
 /**
  * Serializa em CSV com separador ";" (padrão do Excel pt-BR).
  *
@@ -11,7 +16,11 @@ type Cell = string | number;
  */
 export function toCsv(columns: string[], rows: Cell[][]): string {
   const escape = (v: Cell) => {
-    const s = String(v ?? "").replace(/^R\$\s/, "");
+    let s = String(v ?? "").replace(/^R\$\s/, "");
+    // Apóstrofo força texto no Excel e não aparece na célula. Vale também para
+    // "-": um valor negativo vira texto, mas "-2+3+cmd|'/c calc'!A0" é fórmula
+    // válida, então abrir exceção para dígito reabriria o buraco.
+    if (FORMULA_START.test(s)) s = `'${s}`;
     return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return [columns, ...rows].map((r) => r.map(escape).join(";")).join("\n");

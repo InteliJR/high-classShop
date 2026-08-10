@@ -464,14 +464,17 @@ export class OfficeService {
 
     const sanitized = this.logoSanitizer.sanitize(file);
 
-    const key = `companies/${companyId}/logo-${Date.now()}.${sanitized.extension}`;
-    await this.s3.uploadBuffer(sanitized.buffer, key, sanitized.contentType);
-
+    // Confere o escritório ANTES de gravar no S3: subir primeiro e só depois
+    // descobrir que não existe deixa o objeto órfão no bucket, sem nenhuma
+    // linha apontando para ele e fora do alcance do deleteObject abaixo.
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       select: { logo: true },
     });
     if (!company) throw new NotFoundException('Escritório não encontrado');
+
+    const key = `companies/${companyId}/logo-${Date.now()}.${sanitized.extension}`;
+    await this.s3.uploadBuffer(sanitized.buffer, key, sanitized.contentType);
 
     const previousKey = company.logo;
     const updated = await this.prisma.company.update({
@@ -499,14 +502,15 @@ export class OfficeService {
 
     const sanitized = this.logoSanitizer.sanitizeBackground(file);
 
-    const key = `companies/${companyId}/background-${Date.now()}.${sanitized.extension}`;
-    await this.s3.uploadBuffer(sanitized.buffer, key, sanitized.contentType);
-
+    // Mesma ordem do logo: existência primeiro, S3 depois — ver comentário lá.
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       select: { background_image: true },
     });
     if (!company) throw new NotFoundException('Escritório não encontrado');
+
+    const key = `companies/${companyId}/background-${Date.now()}.${sanitized.extension}`;
+    await this.s3.uploadBuffer(sanitized.buffer, key, sanitized.contentType);
 
     const previousKey = company.background_image;
     const updated = await this.prisma.company.update({

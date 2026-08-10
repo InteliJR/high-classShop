@@ -16,7 +16,10 @@ export function HeroBackdrop() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const reduceMotion = useReducedMotion();
   const [showVideo, setShowVideo] = useState(false);
-  const [paused, setPaused] = useState(false);
+  // Começa em `true` e só muda por evento do elemento. Estado local otimista
+  // mente quando o autoplay é bloqueado (iOS em Modo de Baixo Consumo, extensão
+  // de bloqueio): o poster fica parado e o botão anunciaria "Pausar".
+  const [paused, setPaused] = useState(true);
 
   useEffect(() => {
     // WCAG 2.2 SC 2.2.2 pede pause/stop, mas com reduced-motion o vídeo nem é
@@ -28,20 +31,23 @@ export function HeroBackdrop() {
     setShowVideo(true);
   }, [reduceMotion]);
 
+  // Não mexe em `paused` aqui: quem manda são os eventos play/pause. Se o
+  // play() for recusado pela política de autoplay, o botão continua dizendo
+  // "Retomar", que é a verdade.
   const togglePlayback = () => {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) {
-      void video.play();
-      setPaused(false);
-    } else {
-      video.pause();
-      setPaused(true);
-    }
+    if (video.paused) video.play().catch(() => {});
+    else video.pause();
   };
 
   return (
-    <div className="absolute inset-0 overflow-hidden" aria-hidden="true">
+    // aria-hidden fica no vídeo e no scrim, não no container: o botão de pausa
+    // vive aqui dentro e é focável — dentro de um aria-hidden ele sairia da
+    // árvore de acessibilidade e o leitor de tela não anunciaria nada ao
+    // receber o foco (axe: aria-hidden-focus, WCAG 4.1.2), o que anularia o
+    // próprio SC 2.2.2 que este botão existe para atender.
+    <div className="absolute inset-0 overflow-hidden">
       {showVideo ? (
         <video
           ref={videoRef}
@@ -53,6 +59,9 @@ export function HeroBackdrop() {
           playsInline
           preload="none"
           tabIndex={-1}
+          aria-hidden="true"
+          onPlay={() => setPaused(false)}
+          onPause={() => setPaused(true)}
         >
           {/* AV1 primeiro: 6,2 MB contra 9,4 do H.264, e com SSIM maior.
               Safari antigo e iPhone anterior ao 15 Pro caem no mp4. */}
@@ -63,7 +72,7 @@ export function HeroBackdrop() {
         <img className="hero-video" src={HERO_POSTER} alt="" fetchPriority="high" />
       )}
 
-      <div className="hero-scrim" />
+      <div className="hero-scrim" aria-hidden="true" />
 
       {showVideo && (
         <button

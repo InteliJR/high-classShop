@@ -56,9 +56,12 @@ export default function DatabasePage() {
     setError(null);
     getRecords(active, page, PAGE_SIZE)
       .then(setResult)
-      .catch((err) =>
-        setError((err as Error).message || "Erro ao carregar registros."),
-      )
+      .catch((err) => {
+        // Descarta o resultado anterior: sem isso a aba nova mostra as linhas
+        // da aba antiga, e o CSV sai nomeado com a entidade errada.
+        setResult(null);
+        setError((err as Error).message || "Erro ao carregar registros.");
+      })
       .finally(() => setLoading(false));
   }, [active, page]);
 

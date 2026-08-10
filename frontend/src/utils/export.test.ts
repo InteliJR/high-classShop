@@ -23,4 +23,21 @@ describe("toCsv", () => {
     expect(toCsv(["A"], [['diz "oi"; ok']])).toBe('A\n"diz ""oi""; ok"');
     expect(toCsv(["A"], [["linha1\nlinha2"]])).toBe('A\n"linha1\nlinha2"');
   });
+
+  it("neutraliza fórmula em célula vinda de campo livre", () => {
+    // Descrição de produto é texto livre: sem o apóstrofo, o Excel executaria.
+    expect(toCsv(["Obs"], [['=HYPERLINK("http://x","clique")']])).toBe(
+      'Obs\n"\'=HYPERLINK(""http://x"",""clique"")"',
+    );
+    expect(toCsv(["Obs"], [["-2+3+cmd|'/c calc'!A0"]])).toBe(
+      "Obs\n'-2+3+cmd|'/c calc'!A0",
+    );
+    expect(toCsv(["Obs"], [["@SUM(A1)"]])).toBe("Obs\n'@SUM(A1)");
+  });
+
+  it("não mexe em texto que só parece perigoso no meio", () => {
+    expect(toCsv(["Obs"], [["motor 2.0 turbo = potente"]])).toBe(
+      "Obs\nmotor 2.0 turbo = potente",
+    );
+  });
 });

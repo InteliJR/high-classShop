@@ -44,7 +44,11 @@ export default function WhitelabelPage() {
       <p className="opacity-80 max-w-md text-center">
         Explore nosso catálogo exclusivo e crie sua conta com nosso escritório.
       </p>
-      <div className="flex gap-3">
+      {/* "Criar conta" é o CTA do funil: é por ele que o visitante chega em
+          /register ainda com a marca em memória, e o RegisterPage manda o
+          company_slug que vincula o cliente a este escritório. */}
+      <div className="flex flex-wrap justify-center gap-3">
+        <Button onClick={() => navigate("/register")}>Criar conta</Button>
         <Button onClick={() => navigate("/catalog/cars")}>Ver catálogo</Button>
         <Button onClick={() => navigate("/login")}>Login</Button>
       </div>
@@ -61,7 +65,10 @@ export default function WhitelabelPage() {
   }
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-8 overflow-hidden bg-brand-primary">
+    // `isolate`: sem stacking context próprio, um filho com z-index negativo é
+    // pintado ANTES do background do pai — a imagem sumiria atrás do
+    // bg-brand-primary opaco. Mesma razão do isolate na LandingPage.
+    <div className="relative isolate min-h-screen flex items-center justify-center p-8 overflow-hidden bg-brand-primary">
       <div className="absolute inset-0 -z-10">
         <img
           src={backgroundUrl}
