@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { Link } from "react-router-dom";
-import LoginImageMobile from "../../assets/loginCarMobile.png";
-import LoginImageDesktop from "../../assets/loginCarDesktop.png";
+import AuthBrandPanel from "../../components/shared/AuthBrandPanel";
 import type { ForgotPasswordValues } from "../../types/types";
 import api from "../../services/api";
 import { Alert } from "../../components/ui/alert";
@@ -41,14 +40,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="sm:absolute w-screen h-screen flex flex-col sm:justify-between sm:items-center sm:flex-row-reverse">
-      <div className="h-1/3 shrink-0 sm:h-full w-full sm:w-4/7">
-        <img
-          srcSet={`${LoginImageMobile} 393w, ${LoginImageDesktop} 644w`}
-          sizes="(max-width: 393px) 393px, 644px"
-          src={LoginImageMobile}
-          className="min-w-full h-full object-cover sm:object-cover"
-        />
-      </div>
+      <AuthBrandPanel className="h-40 shrink-0 sm:h-full w-full sm:w-4/7" />
 
       <div className="sm:relative sm:left-8 flex flex-col gap-7 mx-13 sm:mx-0 sm:rounded-4xl sm:flex-col sm:w-1/2 sm:h-full sm:justify-center sm:gap-12 sm:px-36 sm:inset-y-0 sm:z-10 bg-bg">
         <div className="sm:relative sm:right-8 pt-8 flex flex-col justify-center items-center gap-3 sm:items-center sm:gap-4">

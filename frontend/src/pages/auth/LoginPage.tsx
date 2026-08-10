@@ -1,5 +1,4 @@
-import LoginImageMobile from "../../assets/loginCarMobile.png";
-import LoginImageDesktop from "../../assets/loginCarDesktop.png";
+import AuthBrandPanel from "../../components/shared/AuthBrandPanel";
 import {
   useForm,
   type SubmitErrorHandler,
@@ -64,15 +63,8 @@ export default function Login() {
 
   return (
     <div className="sm:absolute w-full min-h-screen overflow-x-hidden flex flex-col sm:h-screen sm:justify-between sm:items-center sm:flex-row-reverse">
-      {/* Imagem */}
-      <div className="h-1/3 shrink-0 sm:h-full w-full sm:w-4/7">
-        <img
-          srcSet={`${LoginImageMobile} 393w, ${LoginImageDesktop} 644w`}
-          sizes="(max-width: 393px) 393px, 644px"
-          src={LoginImageMobile}
-          className="min-w-full h-full object-cover sm:object-cover"
-        />
-      </div>
+      {/* Marca */}
+      <AuthBrandPanel className="h-40 shrink-0 sm:h-full w-full sm:w-4/7" />
 
       {/* Informações */}
       <div className="sm:relative sm:left-8 flex flex-col gap-7 mx-13 sm:mx-0 sm:rounded-4xl sm:flex-col sm:w-1/2 sm:h-full sm:justify-center sm:gap-12 sm:px-24 xl:px-32 sm:inset-y-0 sm:z-10 bg-bg">

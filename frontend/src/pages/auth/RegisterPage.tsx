@@ -1,4 +1,4 @@
-import LoginImageDesktop from "../../assets/loginCarDesktop.png";
+import AuthBrandPanel from "../../components/shared/AuthBrandPanel";
 import {
   useForm,
   type SubmitErrorHandler,
@@ -451,14 +451,8 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      {/* Coluna Direita - Imagem */}
-      <div className="hidden lg:block lg:w-1/2 h-full relative">
-        <img
-          src={LoginImageDesktop}
-          className="w-full h-full object-cover"
-          alt="Luxury car"
-        />        
-      </div>
+      {/* Coluna Direita - Marca */}
+      <AuthBrandPanel className="hidden lg:flex lg:w-1/2 h-full" />
     </div>
   );
 }
