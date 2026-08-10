@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion, type Variants, easeOut } from 'framer-motion';
-import { Pause, Play } from 'lucide-react';
 
 const HERO_POSTER = '/hero/hero-poster.webp';
 
@@ -13,17 +12,11 @@ type NetworkInformation = { saveData?: boolean; effectiveType?: string };
  * um header opaco sobre a metade transparente do vídeo lê como erro de corte.
  */
 export function HeroBackdrop() {
-  const videoRef = useRef<HTMLVideoElement>(null);
   const reduceMotion = useReducedMotion();
   const [showVideo, setShowVideo] = useState(false);
-  // Começa em `true` e só muda por evento do elemento. Estado local otimista
-  // mente quando o autoplay é bloqueado (iOS em Modo de Baixo Consumo, extensão
-  // de bloqueio): o poster fica parado e o botão anunciaria "Pausar".
-  const [paused, setPaused] = useState(true);
 
   useEffect(() => {
-    // WCAG 2.2 SC 2.2.2 pede pause/stop, mas com reduced-motion o vídeo nem é
-    // montado — pausar depois não atende o critério.
+    // Com reduced-motion o vídeo nem é montado — só o poster estático.
     if (reduceMotion) return;
     const conn = (navigator as Navigator & { connection?: NetworkInformation }).connection;
     const lite = Boolean(conn?.saveData) || /(^|-)2g$/.test(conn?.effectiveType ?? '');
@@ -31,37 +24,18 @@ export function HeroBackdrop() {
     setShowVideo(true);
   }, [reduceMotion]);
 
-  // Não mexe em `paused` aqui: quem manda são os eventos play/pause. Se o
-  // play() for recusado pela política de autoplay, o botão continua dizendo
-  // "Retomar", que é a verdade.
-  const togglePlayback = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (video.paused) video.play().catch(() => {});
-    else video.pause();
-  };
-
   return (
-    // aria-hidden fica no vídeo e no scrim, não no container: o botão de pausa
-    // vive aqui dentro e é focável — dentro de um aria-hidden ele sairia da
-    // árvore de acessibilidade e o leitor de tela não anunciaria nada ao
-    // receber o foco (axe: aria-hidden-focus, WCAG 4.1.2), o que anularia o
-    // próprio SC 2.2.2 que este botão existe para atender.
-    <div className="absolute inset-0 overflow-hidden">
+    <div className="absolute inset-0 overflow-hidden" aria-hidden="true">
       {showVideo ? (
         <video
-          ref={videoRef}
           className="hero-video"
           poster={HERO_POSTER}
           autoPlay
           muted
           loop
           playsInline
-          preload="none"
+          preload="auto"
           tabIndex={-1}
-          aria-hidden="true"
-          onPlay={() => setPaused(false)}
-          onPause={() => setPaused(true)}
         >
           {/* AV1 primeiro: 6,2 MB contra 9,4 do H.264, e com SSIM maior.
               Safari antigo e iPhone anterior ao 15 Pro caem no mp4. */}
@@ -72,19 +46,7 @@ export function HeroBackdrop() {
         <img className="hero-video" src={HERO_POSTER} alt="" fetchPriority="high" />
       )}
 
-      <div className="hero-scrim" aria-hidden="true" />
-
-      {showVideo && (
-        <button
-          type="button"
-          onClick={togglePlayback}
-          aria-pressed={paused}
-          aria-label={paused ? 'Retomar o vídeo de fundo' : 'Pausar o vídeo de fundo'}
-          className="absolute bottom-5 right-5 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-        >
-          {paused ? <Play size={15} className="ml-0.5" /> : <Pause size={15} />}
-        </button>
-      )}
+      <div className="hero-scrim" />
     </div>
   );
 }
@@ -146,7 +108,7 @@ export function HeroSection() {
             Categorias Premium
           </h2>
           <p className="text-gray-100 text-sm leading-relaxed max-w-md font-light">
-            Navegue por um portfólio selecionado. De supercarros esportivos a iates transatlânticos e jatos executivos prontos para decolar.
+            Navegue por um portfólio selecionado. De supercarros e embarcações premium a aeronaves executivas, encontre ativos que combinam exclusividade, performance e sofisticação.
           </p>
         </motion.div>
 
