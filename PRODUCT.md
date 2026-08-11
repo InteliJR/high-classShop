@@ -14,7 +14,7 @@ Clientes finais (compradores de carros/barcos/aeronaves de alto padrão), Consul
 
 ## Product Purpose
 
-A High Class Shop é uma plataforma de intermediação para venda de carros, barcos e aeronaves de alto padrão: conecta clientes a especialistas através de um fluxo completo — catálogo, agendamento, negociação, proposta, contrato (assinatura digital via DocuSign) e conclusão. Consultores trazem e acompanham clientes; especialistas conduzem a negociação e fecham o contrato. Sucesso é o processo (`SCHEDULING → NEGOTIATION → PROCESSING_CONTRACT → DOCUMENTATION → COMPLETED | REJECTED`) ficar claro o bastante pra que nenhum papel fique sem saber o que fazer a seguir — e pra nenhuma tela virar um beco sem saída.
+A BMF Lux Brokerage é uma plataforma de intermediação para venda de carros, barcos e aeronaves de alto padrão: conecta clientes a especialistas através de um fluxo completo — catálogo, agendamento, negociação, proposta, contrato (assinatura digital via DocuSign) e conclusão. Consultores trazem e acompanham clientes; especialistas conduzem a negociação e fecham o contrato. Sucesso é o processo (`SCHEDULING → NEGOTIATION → PROCESSING_CONTRACT → DOCUMENTATION → COMPLETED | REJECTED`) ficar claro o bastante pra que nenhum papel fique sem saber o que fazer a seguir — e pra nenhuma tela virar um beco sem saída.
 
 ## Positioning
 

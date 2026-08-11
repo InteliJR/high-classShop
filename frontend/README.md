@@ -1,4 +1,4 @@
-# 🎨 Frontend — High-class Shop
+# 🎨 Frontend — BMF Lux Brokerage
 
 Aplicação web em React responsável pela experiência de clientes, especialistas e administradores no fluxo de produtos, processos, agendamentos e reuniões.
 

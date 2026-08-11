@@ -85,7 +85,7 @@ export default function Header() {
             <div className="flex items-center w-full justify-between">
               <img
                 src={brandLogo}
-                alt={company?.name ?? "High Class"}
+                alt={company?.name ?? "BMF Lux Brokerage"}
                 className="max-h-14 w-auto max-w-36 object-contain"
               />
               <div className="ml-2 mr-2 sm:mr-4 shrink-0">
@@ -93,7 +93,7 @@ export default function Header() {
               </div>
             </div>
           ) : (
-            <img src={brandLogo} alt="High Class" className="w-25 sm:w-35 h-auto" />
+            <img src={brandLogo} alt="BMF Lux Brokerage" className="w-25 sm:w-35 h-auto" />
           )}
         </div>
       </header>

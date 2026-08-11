@@ -2,8 +2,8 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-ENV DATABASE_URL="postgresql://user:password@localhost:5432/highclassdb?schema=public"
-ENV DIRECT_URL="postgresql://user:password@localhost:5432/highclassdb?schema=public"
+ENV DATABASE_URL="postgresql://user:password@localhost:5432/bmfluxdb?schema=public"
+ENV DIRECT_URL="postgresql://user:password@localhost:5432/bmfluxdb?schema=public"
 
 COPY package*.json ./
 RUN npm ci

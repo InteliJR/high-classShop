@@ -5,8 +5,8 @@ import type * as Preset from "@docusaurus/preset-classic";
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: "High-class Shop Docs",
-  tagline: "Documentação do projeto High-class Shop",
+  title: "BMF Lux Brokerage Docs",
+  tagline: "Documentação do projeto BMF Lux Brokerage",
   favicon: "img/favicon.ico",
 
   // Set the production url of your site here
@@ -64,7 +64,7 @@ const config: Config = {
     footer: {
       style: "dark",
 
-      copyright: `Copyright © ${new Date().getFullYear()} high-classShop, Inc. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} BMF Lux Brokerage, Inc. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,

@@ -1,4 +1,4 @@
-# Design System — High Class Shop
+# Design System — BMF Lux Brokerage
 
 Este documento é a especificação visual da plataforma: tokens, componentes, navegação, ícones e layout. Companheiro de `PRODUCT.md` (o *porquê* da marca) e de `CLAUDE.md` (arquitetura de código). Resultado de uma auditoria completa da plataforma (bugs de fluxo, navegação, consistência visual e jornadas por papel) seguida de um brainstorm de design — decisões abaixo já foram validadas, não são propostas em aberto.
 

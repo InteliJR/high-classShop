@@ -17,7 +17,7 @@ export default function LandingPage() {
 
         {/* Header (Baseado no seu HomePage.tsx mas adaptado para o fundo escuro do design) */}
         <header className="relative z-10 w-full flex h-20 sm:h-24 justify-between items-center px-6 sm:px-12 max-w-7xl mx-auto">
-          <img src={Logo} className="w-24 sm:w-32 h-auto" alt="High Class Shop Logo" />
+          <img src={Logo} className="w-24 sm:w-32 h-auto" alt="BMF Lux Brokerage Logo" />
           
           <nav className="hidden md:flex items-center gap-8 text-sm font-light uppercase tracking-widest text-gray-200">
             <a href="/catalog/aircrafts" className="hover:text-white transition-colors">Aeronaves</a>
@@ -42,7 +42,7 @@ export default function LandingPage() {
 
       {/* Footer — gradiente a partir do cinza da seção escura acima, sem corte brusco de cor */}
       <footer className="bg-gradient-to-b from-[#333333] to-[#1f1f1f] text-gray-400 py-8 px-6 text-center text-sm border-t border-white/10">
-        <p>&copy; 2024 High Class Shop. Todos os direitos reservados.</p>
+        <p>&copy; 2024 BMF Lux Brokerage. Todos os direitos reservados.</p>
       </footer>
     </div>
   );

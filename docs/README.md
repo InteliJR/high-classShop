@@ -1,4 +1,4 @@
-# 📚 Documentação — High-class Shop
+# 📚 Documentação — BMF Lux Brokerage
 
 Este diretório contém a documentação do projeto usando Docusaurus.
 

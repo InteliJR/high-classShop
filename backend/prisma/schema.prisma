@@ -1,4 +1,4 @@
-// Schema Prisma do high-classShop: plataforma de marketplace para veículos, embarcações e aeronaves de luxo
+// Schema Prisma do BMF Lux Brokerage: plataforma de marketplace para veículos, embarcações e aeronaves de luxo
 // Documentação: https://pris.ly/d/prisma-schema
 
 generator client {

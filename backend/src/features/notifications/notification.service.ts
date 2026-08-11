@@ -68,7 +68,7 @@ export class NotificationService {
     this.sesClient = (this.sesService as any).sesClient;
     this.fromEmail = this.configService.get(
       'EMAIL_FROM',
-      'noreply@highclass.com',
+      'noreply@bmfluxbrokerage.com',
     );
     this.frontendUrl = this.configService.get(
       'FRONTEND_URL',
@@ -281,7 +281,7 @@ export class NotificationService {
     const fullName = [data.name, data.surname].filter(Boolean).join(' ');
     const destinationPath = this.getDashboardPathByRole(data.role);
     const destinationUrl = `${this.frontendUrl.replace(/\/$/, '')}${destinationPath}`;
-    const subject = `Boas-vindas | High-Class Shop`;
+    const subject = `Boas-vindas | BMF Lux Brokerage`;
 
     const html = `
       <!DOCTYPE html>
@@ -289,13 +289,13 @@ export class NotificationService {
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Cadastro concluído</h2>
           <p style="font-size: 16px; color: #334155;">Olá <strong>${fullName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
-            Seu cadastro na High-Class Shop foi concluído com sucesso.
+            Seu cadastro na BMF Lux Brokerage foi concluído com sucesso.
           </p>
           <p style="font-size: 16px; color: #334155;">
             Acesse a plataforma para continuar sua experiência.
@@ -310,23 +310,23 @@ export class NotificationService {
           </div>
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-Class Shop - Cadastro concluído
+BMF Lux Brokerage - Cadastro concluído
 
 Olá ${fullName},
 
-Seu cadastro na High-Class Shop foi concluído com sucesso.
+Seu cadastro na BMF Lux Brokerage foi concluído com sucesso.
 
 Acesse a plataforma:
 ${destinationUrl}
 
-High-Class Shop - Marketplace de Bens de Luxo
+BMF Lux Brokerage - Marketplace de Bens de Luxo
     `.trim();
 
     await this.sendEmailSafely('WELCOME', data.email, subject, html, text);
@@ -346,7 +346,7 @@ High-Class Shop - Marketplace de Bens de Luxo
       return;
     }
 
-    const subject = `Confirmação de Agendamento | High-Class Shop`;
+    const subject = `Confirmação de Agendamento | BMF Lux Brokerage`;
 
     const html = `
       <!DOCTYPE html>
@@ -354,7 +354,7 @@ High-Class Shop - Marketplace de Bens de Luxo
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Agendamento Confirmado</h2>
@@ -393,14 +393,14 @@ High-Class Shop - Marketplace de Bens de Luxo
           </div>
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - Agendamento Confirmado
+BMF Lux Brokerage - Agendamento Confirmado
 
 Olá ${data.clientName},
 
@@ -412,7 +412,7 @@ Produto: ${data.productDetails}
 
 Acesse ${this.frontendUrl}/processes/${data.processId} para ver detalhes e iniciar a negociação.
 
-© 2026 High-class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -435,7 +435,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para ver detalhes e inici
     const resetUrl = `${this.frontendUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(
       data.resetToken,
     )}`;
-    const subject = `Recuperação de Senha | High-Class Shop`;
+    const subject = `Recuperação de Senha | BMF Lux Brokerage`;
 
     const html = `
       <!DOCTYPE html>
@@ -443,7 +443,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para ver detalhes e inici
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Recuperação de Senha</h2>
@@ -467,14 +467,14 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para ver detalhes e inici
           </p>
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-Class Shop - Recuperação de Senha
+BMF Lux Brokerage - Recuperação de Senha
 
 Olá ${data.name},
 
@@ -488,7 +488,7 @@ Este link expira em ${data.expiresInMinutes} minutos.
 
 Se você não solicitou essa alteração, ignore este email.
 
-© 2026 High-Class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -518,7 +518,7 @@ Se você não solicitou essa alteração, ignore este email.
       (data.proposedValue / data.originalValue) *
       100
     ).toFixed(1);
-    const subject = `Nova Proposta Recebida | High-Class Shop`;
+    const subject = `Nova Proposta Recebida | BMF Lux Brokerage`;
 
     const html = `
       <!DOCTYPE html>
@@ -526,7 +526,7 @@ Se você não solicitou essa alteração, ignore este email.
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Nova Proposta Recebida</h2>
@@ -551,14 +551,14 @@ Se você não solicitou essa alteração, ignore este email.
           </div>
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - Nova Proposta Recebida
+BMF Lux Brokerage - Nova Proposta Recebida
 
 Olá ${data.recipientName},
 
@@ -572,7 +572,7 @@ ${data.message ? `Mensagem: ${data.message}` : ''}
 
 Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para responder.
 
-© 2026 High-class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -597,7 +597,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para responde
       return;
     }
 
-    const subject = `Contrato Assinado com Sucesso | High-Class Shop`;
+    const subject = `Contrato Assinado com Sucesso | BMF Lux Brokerage`;
 
     // Send to both parties - use Promise.allSettled to ensure one failure doesn't block the other
     await Promise.allSettled([
@@ -622,7 +622,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para responde
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Contrato Assinado</h2>
@@ -659,14 +659,14 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para responde
           </p>
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - Contrato Assinado
+BMF Lux Brokerage - Contrato Assinado
 
 Parabéns ${recipientName}!
 
@@ -685,7 +685,7 @@ ${
     : 'A comissão será processada conforme acordado no contrato.'
 }
 
-© 2026 High-class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -715,7 +715,7 @@ ${
       return;
     }
 
-    const subject = `Novo Agendamento Criado | High-Class Shop`;
+    const subject = `Novo Agendamento Criado | BMF Lux Brokerage`;
 
     const html = `
       <!DOCTYPE html>
@@ -723,7 +723,7 @@ ${
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Novo Agendamento</h2>
@@ -762,14 +762,14 @@ ${
           </div>
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - Novo Agendamento
+BMF Lux Brokerage - Novo Agendamento
 
 Olá ${data.specialistName},
 
@@ -782,7 +782,7 @@ Produto: ${data.productDetails}
 
 Acesse ${this.frontendUrl}/processes/${data.processId} para confirmar.
 
-© 2026 High-class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -808,7 +808,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para confirmar.
       return;
     }
 
-    const subject = `Agendamento Cancelado | High-Class Shop`;
+    const subject = `Agendamento Cancelado | BMF Lux Brokerage`;
 
     const html = `
       <!DOCTYPE html>
@@ -816,7 +816,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para confirmar.
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Agendamento Cancelado</h2>
@@ -857,14 +857,14 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para confirmar.
           }
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - Agendamento Cancelado
+BMF Lux Brokerage - Agendamento Cancelado
 
 Olá ${data.recipientName},
 
@@ -881,7 +881,7 @@ ${
     : 'Entre em contato conosco se tiver dúvidas ou quiser marcar uma nova reunião.'
 }
 
-© 2026 High-class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -907,7 +907,7 @@ ${
 
     const consultantName = data.consultantName || 'Consultor';
     const action = variant === 'ADVANCED' ? 'adiantada' : 'iniciada';
-    const subject = `Reunião do seu cliente ${action} | High-Class Shop`;
+    const subject = `Reunião do seu cliente ${action} | BMF Lux Brokerage`;
 
     const html = `
       <!DOCTYPE html>
@@ -915,7 +915,7 @@ ${
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Reunião ${action}</h2>
@@ -939,14 +939,14 @@ ${
           <p style="font-size: 14px; color: #334155; word-break: break-all;">${data.platformMeetingUrl}</p>
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - Reunião ${action}
+BMF Lux Brokerage - Reunião ${action}
 
 Olá ${consultantName},
 
@@ -955,7 +955,7 @@ A reunião do seu cliente ${data.clientName} com o especialista ${data.specialis
 Processo: ${data.processId}
 Acesse a reunião em: ${data.platformMeetingUrl}
 
-© 2026 High-class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -975,7 +975,7 @@ Acesse a reunião em: ${data.platformMeetingUrl}
       return;
     }
 
-    const subject = `Reunião Iniciada | High-Class Shop`;
+    const subject = `Reunião Iniciada | BMF Lux Brokerage`;
 
     const html = `
       <!DOCTYPE html>
@@ -983,7 +983,7 @@ Acesse a reunião em: ${data.platformMeetingUrl}
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Reunião Iniciada</h2>
@@ -1012,14 +1012,14 @@ Acesse a reunião em: ${data.platformMeetingUrl}
           }
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - Reunião iniciada
+BMF Lux Brokerage - Reunião iniciada
 
 Olá ${data.clientName},
 
@@ -1029,7 +1029,7 @@ Processo: ${data.processId}
 Acesse a reunião em: ${data.platformMeetingUrl}
 ${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
 
-© 2026 High-class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -1051,7 +1051,7 @@ ${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
       return;
     }
 
-    const subject = `Reunião Adiantada — Acesse Agora | High-Class Shop`;
+    const subject = `Reunião Adiantada — Acesse Agora | BMF Lux Brokerage`;
 
     const html = `
       <!DOCTYPE html>
@@ -1059,7 +1059,7 @@ ${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Reunião Adiantada</h2>
@@ -1089,14 +1089,14 @@ ${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
           }
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - Reuniao Adiantada
+BMF Lux Brokerage - Reuniao Adiantada
 
 Prezado(a) ${data.clientName},
 
@@ -1106,7 +1106,7 @@ Processo: ${data.processId}
 Acesse a reuniao em: ${data.platformMeetingUrl}
 ${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
 
-© 2026 High-class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -1132,8 +1132,8 @@ ${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
       ? 'está começando agora'
       : 'começa em aproximadamente 15 minutos';
     const subject = data.isStartingNow
-      ? `Lembrete de Reunião — sua reunião está começando | High-Class Shop`
-      : `Lembrete de Reunião — sua reunião começa em 15 minutos | High-Class Shop`;
+      ? `Lembrete de Reunião — sua reunião está começando | BMF Lux Brokerage`
+      : `Lembrete de Reunião — sua reunião começa em 15 minutos | BMF Lux Brokerage`;
 
     const formattedDate = new Date(data.appointmentDate).toLocaleDateString(
       'pt-BR',
@@ -1150,7 +1150,7 @@ ${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0; font-size: 20px;">Lembrete de Reunião</h2>
@@ -1173,14 +1173,14 @@ ${data.meetingLink ? `Link alternativo da sala: ${data.meetingLink}` : ''}
           </div>
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-Class Shop — Lembrete de Reunião
+BMF Lux Brokerage — Lembrete de Reunião
 
 Prezado(a) ${data.recipientName},
 
@@ -1192,7 +1192,7 @@ Processo: ${data.processId}
 
 Acesse: ${this.frontendUrl}/processes/${data.processId}/meeting
 
-High-Class Shop
+BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -1222,7 +1222,7 @@ High-Class Shop
       return;
     }
 
-    const subject = `Proposta Aceita | High-Class Shop`;
+    const subject = `Proposta Aceita | BMF Lux Brokerage`;
 
     const html = `
       <!DOCTYPE html>
@@ -1230,7 +1230,7 @@ High-Class Shop
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Proposta Aceita</h2>
@@ -1254,14 +1254,14 @@ High-Class Shop
           </div>
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - Proposta Aceita!
+BMF Lux Brokerage - Proposta Aceita!
 
 Olá ${data.proposerName},
 
@@ -1273,7 +1273,7 @@ O próximo passo é a geração e assinatura do contrato. Em breve você receber
 
 Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
 
-© 2026 High-class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -1299,7 +1299,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
       return;
     }
 
-    const subject = `Proposta Não Aceita | High-Class Shop`;
+    const subject = `Proposta Não Aceita | BMF Lux Brokerage`;
 
     const html = `
       <!DOCTYPE html>
@@ -1307,7 +1307,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Proposta Não Aceita</h2>
@@ -1335,14 +1335,14 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
           </div>
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - Proposta Não Aceita
+BMF Lux Brokerage - Proposta Não Aceita
 
 Olá ${data.proposerName},
 
@@ -1354,7 +1354,7 @@ Não desista! Muitas negociações bem-sucedidas passam por várias rodadas de p
 
 Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para continuar negociando.
 
-© 2026 High-class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -1391,7 +1391,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para continua
       ? (statusLabelMap[data.previousStatus] ?? data.previousStatus)
       : undefined;
 
-    const subject = `Atualização no Processo #${data.processId.slice(0, 8)} | High-Class Shop`;
+    const subject = `Atualização no Processo #${data.processId.slice(0, 8)} | BMF Lux Brokerage`;
 
     const html = `
       <!DOCTYPE html>
@@ -1399,7 +1399,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para continua
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Atualização de Processo</h2>
@@ -1423,14 +1423,14 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para continua
           </div>
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - Atualização de Processo
+BMF Lux Brokerage - Atualização de Processo
 
 Olá ${data.recipientName},
 
@@ -1444,7 +1444,7 @@ ${data.reason ? `Detalhes: ${data.reason}` : ''}
 
 Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
 
-© 2026 High-class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -1485,7 +1485,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
       return;
     }
 
-    const subject = `Contrato Gerado | High-Class Shop`;
+    const subject = `Contrato Gerado | BMF Lux Brokerage`;
 
     // Send to both parties
     await Promise.allSettled([
@@ -1510,7 +1510,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Contrato Gerado</h2>
@@ -1536,14 +1536,14 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
           </div>
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - Contrato Gerado
+BMF Lux Brokerage - Contrato Gerado
 
 Olá ${recipientName},
 
@@ -1557,7 +1557,7 @@ Em breve você receberá um email do DocuSign com o link para assinatura eletrô
 
 Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
 
-© 2026 High-class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -1581,7 +1581,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
       return;
     }
 
-    const subject = `Contrato Pronto para Assinatura | High-Class Shop`;
+    const subject = `Contrato Pronto para Assinatura | BMF Lux Brokerage`;
 
     // Send to both parties
     await Promise.allSettled([
@@ -1606,7 +1606,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Contrato Pronto para Assinatura</h2>
@@ -1634,14 +1634,14 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
           </p>
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - Contrato Pronto para Assinatura
+BMF Lux Brokerage - Contrato Pronto para Assinatura
 
 Olá ${recipientName},
 
@@ -1655,7 +1655,7 @@ ${data.docusignLink}
 
 Você também receberá um email diretamente do DocuSign com o mesmo link.
 
-© 2026 High-class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -1681,7 +1681,7 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
       return;
     }
 
-    const subject = `Contrato Recusado | High-Class Shop`;
+    const subject = `Contrato Recusado | BMF Lux Brokerage`;
 
     // Send to both parties
     await Promise.allSettled([
@@ -1704,7 +1704,7 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
       return;
     }
 
-    const subject = `Contrato Anulado | High-Class Shop`;
+    const subject = `Contrato Anulado | BMF Lux Brokerage`;
 
     // Send to both parties
     await Promise.allSettled([
@@ -1727,7 +1727,7 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
       return;
     }
 
-    const subject = `Contrato Expirado | High-Class Shop`;
+    const subject = `Contrato Expirado | BMF Lux Brokerage`;
 
     // Send to both parties
     await Promise.allSettled([
@@ -1790,7 +1790,7 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f5f5f5;">
         <div style="background-color: #1e293b; color: #fff; padding: 30px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">High-Class Shop</h1>
+          <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px;">BMF Lux Brokerage</h1>
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">${config.title}</h2>
@@ -1804,14 +1804,14 @@ Você também receberá um email diretamente do DocuSign com o mesmo link.
           <p style="font-size: 16px; color: #334155;">${config.action}</p>
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0;">
-          <p style="margin: 0;">High-Class Shop &mdash; Marketplace de Bens de Luxo</p>
+          <p style="margin: 0;">BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo</p>
         </div>
       </body>
       </html>
     `;
 
     const text = `
-High-class Shop - ${config.title}
+BMF Lux Brokerage - ${config.title}
 
 Olá ${recipientName},
 
@@ -1823,7 +1823,7 @@ Contrato ID: ${data.contractId}
 
 ${config.action}
 
-© 2026 High-class Shop
+© 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
@@ -1836,7 +1836,7 @@ ${config.action}
   }
 
   async sendAdvisorInviteEmail(data: AdvisorInviteEmailDto): Promise<void> {
-    const subject = `Convite para ser Assessor — ${data.customerName} | High-Class Shop`;
+    const subject = `Convite para ser Assessor — ${data.customerName} | BMF Lux Brokerage`;
 
     const html = `
 <!DOCTYPE html>
@@ -1848,7 +1848,7 @@ ${config.action}
       <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;max-width:600px;width:100%;">
         <tr>
           <td style="background-color:#1e293b;padding:32px 40px;">
-            <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:600;">High-Class Shop</h1>
+            <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:600;">BMF Lux Brokerage</h1>
             <p style="margin:8px 0 0;color:#94a3b8;font-size:14px;">Marketplace de Bens de Luxo</p>
           </td>
         </tr>
@@ -1856,7 +1856,7 @@ ${config.action}
           <td style="padding:40px;">
             <h2 style="margin:0 0 16px;color:#1e293b;font-size:20px;font-weight:600;">Convite para Assessor</h2>
             <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6;">
-              <strong>${data.customerName}</strong> convidou você para ser assessor pessoal na plataforma High-Class Shop.
+              <strong>${data.customerName}</strong> convidou você para ser assessor pessoal na plataforma BMF Lux Brokerage.
             </p>
             <p style="margin:0 0 24px;color:#475569;font-size:15px;line-height:1.6;">
               Como assessor, você terá acesso ao acompanhamento dos processos de negociação do cliente.
@@ -1877,7 +1877,7 @@ ${config.action}
         <tr>
           <td style="background-color:#f8fafc;padding:24px 40px;border-top:1px solid #e2e8f0;">
             <p style="margin:0;color:#94a3b8;font-size:12px;text-align:center;">
-              High-Class Shop &mdash; Marketplace de Bens de Luxo
+              BMF Lux Brokerage &mdash; Marketplace de Bens de Luxo
             </p>
           </td>
         </tr>
@@ -1888,7 +1888,7 @@ ${config.action}
 </html>`.trim();
 
     const text = `
-Convite para Assessor — High-Class Shop
+Convite para Assessor — BMF Lux Brokerage
 
 ${data.customerName} convidou você para ser assessor pessoal na plataforma.
 
@@ -1897,7 +1897,7 @@ ${data.acceptUrl}
 
 Link válido por 7 dias.
 
-High-Class Shop — Marketplace de Bens de Luxo
+BMF Lux Brokerage — Marketplace de Bens de Luxo
     `.trim();
 
     await this.sendEmailSafely(

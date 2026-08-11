@@ -1,4 +1,4 @@
-# 🧠 Backend — High-class Shop
+# 🧠 Backend — BMF Lux Brokerage
 
 API principal da plataforma, construída com NestJS + Prisma, responsável por autenticação, processos, agendamentos, integração com Calendly, reuniões e contratos.
 
