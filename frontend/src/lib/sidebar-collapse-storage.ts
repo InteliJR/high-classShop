@@ -1,4 +1,4 @@
-export const SIDEBAR_COLLAPSE_STORAGE_KEY = "hcs-sidebar-collapsed";
+export const SIDEBAR_COLLAPSE_STORAGE_KEY = "bmf-sidebar-collapsed";
 
 export interface KeyValueStorage {
   getItem(key: string): string | null;

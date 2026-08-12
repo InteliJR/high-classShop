@@ -88,7 +88,7 @@ export class ContractsController {
    *     "seller": { "id": "uuid", "name": "Maria Santos", ... },
    *     "product": { "brand": "Ferrari", "model": "488", ... },
    *     "proposal": { "value": 1500000 },
-   *     "commission": { "name": "High Class Shop", ... }
+   *     "commission": { "name": "BMF Lux Brokerage", ... }
    *   }
    * }
    */

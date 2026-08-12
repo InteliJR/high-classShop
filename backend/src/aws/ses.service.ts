@@ -35,7 +35,7 @@ export class SesService {
 
     this.fromEmail = this.configService.get(
       'EMAIL_FROM',
-      'noreply@highclass.com',
+      'noreply@bmfluxbrokerage.com',
     );
     this.frontendUrl = this.configService.get(
       'FRONTEND_URL',
@@ -103,7 +103,7 @@ export class SesService {
         },
         Message: {
           Subject: {
-            Data: `Convite para High-class Shop - ${consultantName}`,
+            Data: `Convite para BMF Lux Brokerage - ${consultantName}`,
             Charset: 'UTF-8',
           },
           Body: {
@@ -216,14 +216,14 @@ export class SesService {
       </head>
       <body>
         <div class="header">
-          <h1>High-class Shop</h1>
+          <h1>BMF Lux Brokerage</h1>
         </div>
         <div class="content">
           <h2>Você foi convidado!</h2>
           <p>Olá,</p>
           <p>
             <strong>${consultantName}</strong> enviou um convite para você se cadastrar na 
-            <strong>High-class Shop</strong>, a plataforma premium para aquisição de 
+            <strong>BMF Lux Brokerage</strong>, a plataforma premium para aquisição de 
             veículos, embarcações e aeronaves de luxo.
           </p>
           <p>
@@ -244,7 +244,7 @@ export class SesService {
           </p>
         </div>
         <div class="footer">
-          <p>© 2025 High-class Shop. Todos os direitos reservados.</p>
+          <p>© 2025 BMF Lux Brokerage. Todos os direitos reservados.</p>
           <p>Se você não solicitou este convite, por favor ignore este e-mail.</p>
         </div>
       </body>
@@ -260,11 +260,11 @@ export class SesService {
     registrationUrl: string,
   ): string {
     return `
-High-class Shop - Convite para Cadastro
+BMF Lux Brokerage - Convite para Cadastro
 
 Olá,
 
-${consultantName} enviou um convite para você se cadastrar na High-class Shop,
+${consultantName} enviou um convite para você se cadastrar na BMF Lux Brokerage,
 a plataforma premium para aquisição de veículos, embarcações e aeronaves de luxo.
 
 Acesse o link abaixo para criar sua conta:
@@ -275,7 +275,7 @@ para você. Ao se cadastrar, você será automaticamente vinculado ao assessor
 ${consultantName}.
 
 ---
-© 2025 High-class Shop. Todos os direitos reservados.
+© 2025 BMF Lux Brokerage. Todos os direitos reservados.
 Se você não solicitou este convite, por favor ignore este e-mail.
     `.trim();
   }
@@ -294,7 +294,7 @@ Se você não solicitou este convite, por favor ignore este e-mail.
         Destination: { ToAddresses: [recipientEmail] },
         Message: {
           Subject: {
-            Data: `Convite para ser Consultor — ${companyName} | High-class Shop`,
+            Data: `Convite para ser Consultor — ${companyName} | BMF Lux Brokerage`,
             Charset: 'UTF-8',
           },
           Body: {
@@ -306,22 +306,22 @@ body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;mar
 .button{display:inline-block;background-color:#007bff;color:#fff!important;padding:12px 30px;text-decoration:none;border-radius:5px;margin:20px 0;font-weight:bold}
 .footer{text-align:center;margin-top:30px;font-size:12px;color:#666}
 </style></head><body>
-<div class="header"><h1>High-class Shop</h1></div>
+<div class="header"><h1>BMF Lux Brokerage</h1></div>
 <div class="content">
 <h2>Você foi convidado como Consultor</h2>
 <p>Olá,</p>
-<p>Você recebeu um convite para se cadastrar como <strong>Consultor</strong> na plataforma <strong>High-class Shop</strong>, vinculado ao escritório <strong>${companyName}</strong>.</p>
+<p>Você recebeu um convite para se cadastrar como <strong>Consultor</strong> na plataforma <strong>BMF Lux Brokerage</strong>, vinculado ao escritório <strong>${companyName}</strong>.</p>
 <p>Clique no botão abaixo para criar sua conta:</p>
 <center><a href="${inviteLink}" class="button">Criar Minha Conta</a></center>
 <p style="font-size:12px;color:#666;margin-top:20px">Ou copie este link:<br><a href="${inviteLink}" style="word-break:break-all">${inviteLink}</a></p>
 <p style="font-size:12px;color:#999">Este convite é válido por 7 dias.</p>
 </div>
-<div class="footer"><p>© 2025 High-class Shop. Todos os direitos reservados.</p></div>
+<div class="footer"><p>© 2025 BMF Lux Brokerage. Todos os direitos reservados.</p></div>
 </body></html>`,
               Charset: 'UTF-8',
             },
             Text: {
-              Data: `High-class Shop — Convite de Consultor\n\nVocê foi convidado como Consultor no escritório ${companyName}.\n\nAcesse: ${inviteLink}\n\nLink válido por 7 dias.`,
+              Data: `BMF Lux Brokerage — Convite de Consultor\n\nVocê foi convidado como Consultor no escritório ${companyName}.\n\nAcesse: ${inviteLink}\n\nLink válido por 7 dias.`,
               Charset: 'UTF-8',
             },
           },
@@ -360,27 +360,27 @@ body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;mar
 .button{display:inline-block;background-color:#1a1a1a;color:#fff!important;padding:12px 30px;text-decoration:none;border-radius:5px;margin:20px 0;font-weight:bold}
 .footer{text-align:center;margin-top:30px;font-size:12px;color:#666}
 </style></head><body>
-<div class="header"><h1>High-class Shop</h1></div>
+<div class="header"><h1>BMF Lux Brokerage</h1></div>
 <div class="content">
 <h2>Você foi convidado(a) como Gerente de Escritório</h2>
 <p>Olá,</p>
-<p>Você recebeu um convite para gerenciar o escritório <strong>${companyName}</strong> na plataforma <strong>High-class Shop</strong>. Como gerente você poderá convidar e administrar consultores, visualizar clientes e configurar a marca do escritório.</p>
+<p>Você recebeu um convite para gerenciar o escritório <strong>${companyName}</strong> na plataforma <strong>BMF Lux Brokerage</strong>. Como gerente você poderá convidar e administrar consultores, visualizar clientes e configurar a marca do escritório.</p>
 <p>Clique no botão abaixo para completar seu cadastro:</p>
 <center><a href="${inviteLink}" class="button">Criar minha conta de Gerente</a></center>
 <p style="font-size:12px;color:#666;margin-top:20px">Ou copie este link:<br><a href="${inviteLink}" style="word-break:break-all">${inviteLink}</a></p>
 <p style="font-size:12px;color:#999">Este convite é válido por 7 dias e foi gerado especificamente para você.</p>
 <p style="font-size:12px;color:#999">Se você não esperava esse convite, ignore esta mensagem.</p>
 </div>
-<div class="footer"><p>© 2026 High-class Shop. Todos os direitos reservados.</p></div>
+<div class="footer"><p>© 2026 BMF Lux Brokerage. Todos os direitos reservados.</p></div>
 </body></html>`;
-      const textBody = `High-class Shop — Convite de Gerente de Escritório\n\nVocê foi convidado(a) para gerenciar o escritório ${companyName}.\n\nAcesse: ${inviteLink}\n\nO link expira em 7 dias.`;
+      const textBody = `BMF Lux Brokerage — Convite de Gerente de Escritório\n\nVocê foi convidado(a) para gerenciar o escritório ${companyName}.\n\nAcesse: ${inviteLink}\n\nO link expira em 7 dias.`;
 
       const emailParams = {
         Source: this.fromEmail,
         Destination: { ToAddresses: [recipientEmail] },
         Message: {
           Subject: {
-            Data: `Convite para gerenciar ${companyName} — High-class Shop`,
+            Data: `Convite para gerenciar ${companyName} — BMF Lux Brokerage`,
             Charset: 'UTF-8',
           },
           Body: {
@@ -429,27 +429,27 @@ body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;mar
 .button{display:inline-block;background-color:#1a1a1a;color:#fff!important;padding:12px 30px;text-decoration:none;border-radius:5px;margin:20px 0;font-weight:bold}
 .footer{text-align:center;margin-top:30px;font-size:12px;color:#666}
 </style></head><body>
-<div class="header"><h1>High-class Shop</h1></div>
+<div class="header"><h1>BMF Lux Brokerage</h1></div>
 <div class="content">
 <h2>Você foi convidado(a) para ser Especialista!</h2>
 <p>Olá,</p>
-<p>Você recebeu um convite para se tornar um <strong>Especialista em ${specialityLabel}</strong> na plataforma <strong>High Class Shop</strong>.</p>
+<p>Você recebeu um convite para se tornar um <strong>Especialista em ${specialityLabel}</strong> na plataforma <strong>BMF Lux Brokerage</strong>.</p>
 <p>Clique no botão abaixo para completar seu cadastro:</p>
 <center><a href="${inviteLink}" class="button">Criar minha conta de Especialista</a></center>
 <p style="font-size:12px;color:#666;margin-top:20px">Ou copie este link:<br><a href="${inviteLink}" style="word-break:break-all">${inviteLink}</a></p>
 <p style="font-size:12px;color:#999">Este convite é válido por 7 dias.</p>
 <p style="font-size:12px;color:#999">Se você não esperava esse convite, ignore esta mensagem.</p>
 </div>
-<div class="footer"><p>© 2025 High-class Shop. Todos os direitos reservados.</p></div>
+<div class="footer"><p>© 2025 BMF Lux Brokerage. Todos os direitos reservados.</p></div>
 </body></html>`;
-      const textBody = `High-class Shop — Convite de Especialista\n\nVocê recebeu um convite para se tornar Especialista em ${specialityLabel} na High Class Shop.\n\nAcesse: ${inviteLink}\n\nO link expira em 7 dias.`;
+      const textBody = `BMF Lux Brokerage — Convite de Especialista\n\nVocê recebeu um convite para se tornar Especialista em ${specialityLabel} na BMF Lux Brokerage.\n\nAcesse: ${inviteLink}\n\nO link expira em 7 dias.`;
 
       const emailParams = {
         Source: this.fromEmail,
         Destination: { ToAddresses: [recipientEmail] },
         Message: {
           Subject: {
-            Data: `Convite para se tornar Especialista na High Class Shop`,
+            Data: `Convite para se tornar Especialista na BMF Lux Brokerage`,
             Charset: 'UTF-8',
           },
           Body: {

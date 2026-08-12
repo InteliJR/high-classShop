@@ -57,7 +57,7 @@ export class MeetingsService {
   }
 
   private buildDemoMeetingLink(processId: string): string {
-    const room = `highclassshop-${processId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}-${Date.now().toString(36)}`;
+    const room = `bmf-lux-brokerage-${processId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}-${Date.now().toString(36)}`;
     return `${this.jitsiBaseUrl.replace(/\/$/, '')}/${room}`;
   }
 

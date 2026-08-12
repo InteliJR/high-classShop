@@ -125,7 +125,7 @@ async function createSale(params: {
         vehicle_price: params.saleValue,
         platform_value: split.platformValue,
         platform_percentage: effRate(split.platformValue),
-        platform_name: 'High-Class Platform (DEMO)',
+        platform_name: 'BMF Lux Brokerage Platform (DEMO)',
         office_value: params.company ? split.officeValue : null,
         office_name: params.company?.name ?? null,
         office_cnpj: params.company?.cnpj ?? null,

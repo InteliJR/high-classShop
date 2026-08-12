@@ -259,7 +259,7 @@ export default function Sidebar() {
           <div className="w-2/3 flex justify-center items-center mx-auto">
             <img
               src={brandLogo}
-              alt={company?.name ?? "High Class"}
+              alt={company?.name ?? "BMF Lux Brokerage"}
               className="max-h-24 w-auto object-contain"
             />
           </div>

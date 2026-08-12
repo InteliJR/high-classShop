@@ -1,4 +1,4 @@
-# 📘 High-class Shop
+# 📘 BMF Lux Brokerage
 
 Plataforma web para gestão do processo comercial de produtos de alto padrão (carros, barcos e aeronaves), com fluxo completo de agendamento, negociação, documentação e fechamento.
 
@@ -8,7 +8,7 @@ Plataforma web para gestão do processo comercial de produtos de alto padrão (c
 
 A documentação funcional e técnica está disponível em:
 
-**[High-class Shop Docs](https://intelijr.github.io/high-classShop/)**
+**[BMF Lux Brokerage Docs](https://intelijr.github.io/high-classShop/)**
 
 > A documentação é mantida com Docusaurus. Veja o guia em `docs/README.md`.
 

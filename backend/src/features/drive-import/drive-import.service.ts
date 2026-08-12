@@ -730,7 +730,7 @@ export class DriveImportService {
           timeout: 60000,
           maxContentLength: 15 * 1024 * 1024,
           maxBodyLength: 15 * 1024 * 1024,
-          headers: { 'User-Agent': 'high-class-shop-drive-importer/1.0' },
+          headers: { 'User-Agent': 'bmf-lux-brokerage-drive-importer/1.0' },
         });
 
         const contentType =

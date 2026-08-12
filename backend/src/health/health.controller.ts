@@ -16,7 +16,7 @@ export class HealthController {
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      service: 'highclass-backend',
+      service: 'bmf-lux-brokerage-backend',
       environment: process.env.NODE_ENV || 'development',
     };
   }
@@ -34,7 +34,7 @@ export class HealthController {
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      service: 'highclass-backend',
+      service: 'bmf-lux-brokerage-backend',
       environment: process.env.NODE_ENV || 'development',
       config: {
         hasDatabase: !!process.env.DATABASE_URL,

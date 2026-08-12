@@ -1,4 +1,4 @@
-# Arquitetura do Backend — high-classShop
+# Arquitetura do Backend — BMF Lux Brokerage
 
 ## 1) Visão geral
 
@@ -234,7 +234,7 @@ Controller: `backend/src/health/health.controller.ts`
 {
   "status": "ok",
   "timestamp": "",
-  "service": "highclass-backend",
+  "service": "bmf-lux-brokerage-backend",
   "environment": ""
 }
 ```
@@ -1028,7 +1028,7 @@ Controller: `backend/src/features/meetings/meetings.controller.ts`
 - Fluxo: evento → `NotificationService` → template HTML → `SesService.sendEmail()` → SES.
 - Todos fire-and-forget via `setImmediate()` — nunca bloqueiam transações.
 - Circuit breaker: 5 falhas → corta 60s. 3 retries com backoff exponencial (1s/2s/4s). Timeout 5s.
-- Estilo: sem emojis, header `#1e293b`, subjects "Ação — contexto | High-Class Shop", footer "High-Class Shop — Marketplace de Bens de Luxo".
+- Estilo: sem emojis, header `#1e293b`, subjects "Ação — contexto | BMF Lux Brokerage", footer "BMF Lux Brokerage — Marketplace de Bens de Luxo".
 - Templates ativos: `sendAppointmentCreatedEmail`, `sendAppointmentConfirmedEmail`, `sendAppointmentCancelledEmail`, `sendMeetingStartedEmail`, `sendMeetingAdvancedEmail`, `sendMeetingReminderEmail`, `sendProposalReceivedEmail`, `sendProposalAcceptedEmail`, `sendProposalRejectedEmail`, `sendProcessStatusChangedEmail`, `sendContractGeneratedEmail`, `sendContractSentEmail`, `sendContractSignedEmail`, `sendContractStatusChangedEmail`, `sendAdvisorInviteEmail`.
 - Serviços: `backend/src/aws/ses.service.ts`, `backend/src/features/notifications/notification.service.ts`.
 
