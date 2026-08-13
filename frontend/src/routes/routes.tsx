@@ -40,6 +40,7 @@ import RegisterOfficePage from "../pages/auth/RegisterOfficePage";
 import OfficeDashboardPage from "../pages/office/OfficeDashboardPage";
 import OfficeConsultantsPage from "../pages/office/OfficeConsultantsPage";
 import OfficeClientsPage from "../pages/office/OfficeClientsPage";
+import OfficeProcessesPage from "../pages/office/OfficeProcessesPage";
 import OfficeCompanySettingsPage from "../pages/office/OfficeCompanySettingsPage";
 import WhitelabelPage from "../pages/whitelabel/WhitelabelPage";
 
@@ -110,6 +111,16 @@ export default function RouterApp() {
         <MainLayout>
           <ProtectedRoute allowedRoles={["OFFICE", "ADMIN"]}>
             <OfficeClientsPage />
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/office/processes",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["OFFICE", "ADMIN"]}>
+            <OfficeProcessesPage />
           </ProtectedRoute>
         </MainLayout>
       ),
