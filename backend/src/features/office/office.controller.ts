@@ -25,6 +25,7 @@ import { ConsultantInviteJobsService } from './consultant-invite-jobs.service';
 import { InviteConsultantDto } from './dto/invite-consultant.dto';
 import { OfficeUpdateCompanyDto } from './dto/update-company.dto';
 import { OfficeUpdateConsultantDto } from './dto/update-consultant.dto';
+import { OfficeCreateProcessDto } from './dto/create-process.dto';
 import { OfficeService } from './office.service';
 
 const UUID_RE =
@@ -186,6 +187,33 @@ export class OfficeController {
     if (consultantId) assertUuid(consultantId, 'consultantId');
     if (companyId) assertUuid(companyId, 'companyId');
     return this.office.listClients(scope, { consultantId, q, companyId });
+  }
+
+  // ─── Processos ─────────────────────────────────────────────────────────
+  /**
+   * POST /api/office/processes
+   * Abre um processo em nome de um cliente do escritório, com o Appointment
+   * pendente que permite marcar o horário depois — equivalente ao fluxo que o
+   * consultor já tem em POST /api/consultant/processes.
+   */
+  @Post('processes')
+  @HttpCode(HttpStatus.CREATED)
+  async createProcess(
+    @OfficeScope() scope: OfficeScopeData,
+    @Request() req: RequestWithUser,
+    @Body() dto: OfficeCreateProcessDto,
+  ) {
+    const process = await this.office.createProcessForCompanyClient(
+      scope,
+      req.user.id,
+      dto,
+    );
+
+    return {
+      success: true,
+      message: 'Processo criado com sucesso',
+      data: process,
+    };
   }
 
   // ─── Batch invite jobs ─────────────────────────────────────────────────

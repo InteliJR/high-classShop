@@ -7,5 +7,8 @@ import { NotificationModule } from 'src/features/notifications/notification.modu
   imports: [NotificationModule],
   controllers: [ProcessesController],
   providers: [ProcessesService],
+  // Consultor e escritório abrem processos em nome do cliente reaproveitando
+  // createOnBehalfOfClient em vez de duplicar a transação de criação.
+  exports: [ProcessesService],
 })
 export class ProcessesModule {}

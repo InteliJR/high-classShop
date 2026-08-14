@@ -23,12 +23,28 @@ import { ProcessWithHistory } from './entity/process-history.response';
 import { NotificationService } from 'src/features/notifications/notification.service';
 
 /**
- * Quem está pedindo a listagem de processos. `companyId` só é usado por OFFICE.
+ * Quem está pedindo a operação. `companyId` só é usado por OFFICE.
  */
 export type ProcessesRequester = {
   id: string;
   role: UserRole;
   companyId?: string | null;
+};
+
+/**
+ * Dados para abrir um processo em nome de um cliente.
+ *
+ * `actorLabel` entra nas notas do Appointment e do Process ("consultor",
+ * "gerente do escritório") — é o que permite saber depois quem abriu o
+ * processo em nome de quem.
+ */
+export type CreateOnBehalfInput = {
+  client_id: string;
+  specialist_id: string;
+  product_type: 'CAR' | 'BOAT' | 'AIRCRAFT';
+  product_id?: string;
+  createdBy: string;
+  actorLabel: string;
 };
 
 @Injectable()
@@ -174,15 +190,105 @@ export class ProcessesService {
   }
 
   /**
+   * Autoriza a criação de um processo para um `client_id`.
+   *
+   * Antes disso o endpoint aceitava qualquer `client_id` de qualquer usuário
+   * autenticado: dava para abrir processo em nome de um cliente alheio.
+   *
+   * O especialista não é restringido a clientes com quem já tem relação —
+   * abrir o primeiro processo de um cliente novo é justamente o caso de uso
+   * da tela dele. O que se exige é que ele seja o especialista do processo.
+   *
+   * @throws {ForbiddenException} - Sem vínculo com o cliente informado
+   */
+  private async assertCanCreateFor(
+    requester: ProcessesRequester,
+    dto: CreateProcessDTO,
+  ): Promise<void> {
+    const deny = (motivo: string): never => {
+      this.logger.warn(
+        `[create] acesso negado role=${requester.role} user=${requester.id} client=${dto.client_id}: ${motivo}`,
+      );
+      throw new ForbiddenException({
+        success: false,
+        error: {
+          code: 403,
+          message: 'Você não pode criar processo para este cliente',
+          details: { user_id: requester.id, client_id: dto.client_id },
+        },
+      });
+    };
+
+    switch (requester.role) {
+      case UserRole.ADMIN:
+        return;
+
+      case UserRole.SPECIALIST:
+        if (dto.specialist_id !== requester.id) {
+          deny('especialista só cria processo para si mesmo');
+        }
+        return;
+
+      case UserRole.CUSTOMER:
+        if (dto.client_id !== requester.id) {
+          deny('cliente só cria processo para si mesmo');
+        }
+        return;
+
+      case UserRole.CONSULTANT: {
+        const client = await this.prismaService.user.findFirst({
+          where: {
+            id: dto.client_id,
+            role: UserRole.CUSTOMER,
+            consultant_id: requester.id,
+          },
+          select: { id: true },
+        });
+        if (!client) deny('cliente não pertence a este consultor');
+        return;
+      }
+
+      case UserRole.OFFICE: {
+        if (!requester.companyId) deny('escritório sem empresa vinculada');
+
+        // Mesma regra de "cliente do escritório" de OfficeService.listClients.
+        const client = await this.prismaService.user.findFirst({
+          where: {
+            id: dto.client_id,
+            role: UserRole.CUSTOMER,
+            OR: [
+              { consultant: { company_id: requester.companyId } },
+              { company_id: requester.companyId },
+            ],
+          },
+          select: { id: true },
+        });
+        if (!client) deny('cliente não pertence a este escritório');
+        return;
+      }
+
+      default:
+        deny('papel sem regra de criação definida');
+    }
+  }
+
+  /**
    * Cria um processo, normalmente no status de agendamento
    *
    * @param {CreateProcessDTO} createProcessDto - Dto para criar o processo
+   * @param {ProcessesRequester} requester - Quem está criando (autorização)
    * @returns {Promise<ProcessResponse>} - Entidade do processo
    */
-  async create(createProcessDto: CreateProcessDTO): Promise<ProcessResponse> {
+  async create(
+    createProcessDto: CreateProcessDTO,
+    requester: ProcessesRequester,
+  ): Promise<ProcessResponse> {
     this.logger.log(
       `[create] Iniciando criação de processo para cliente ${createProcessDto.client_id}`,
     );
+
+    await this.assertCanCreateFor(requester, createProcessDto);
+
     const { product_id, client_id, specialist_id, ...dataToSave } =
       createProcessDto;
 
@@ -329,6 +435,134 @@ export class ProcessesService {
       created_at: processCreated.created_at,
       notes: processCreated.notes,
     };
+  }
+
+  /**
+   * Abre um processo em nome de um cliente, junto com o Appointment pendente
+   * que permite marcar o horário depois (Calendly).
+   *
+   * Diferente de `create`, que só grava o Process: sem Appointment o
+   * especialista não consegue confirmar o agendamento
+   * (`confirmAppointment` exige um) e o processo fica sem caminho natural.
+   *
+   * Quem chama é responsável por autorizar o vínculo com o cliente ANTES —
+   * este método não sabe se o cliente pertence ao consultor ou ao escritório.
+   *
+   * @throws {NotFoundException} - Especialista inexistente
+   * @throws {ConflictException} - Já existe processo/consultoria ativa equivalente
+   */
+  async createOnBehalfOfClient(input: CreateOnBehalfInput) {
+    const specialist = await this.prismaService.user.findFirst({
+      where: { id: input.specialist_id, role: UserRole.SPECIALIST },
+    });
+
+    if (!specialist) {
+      throw new NotFoundException('Especialista não encontrado');
+    }
+
+    const productFieldMap = {
+      CAR: 'car_id',
+      BOAT: 'boat_id',
+      AIRCRAFT: 'aircraft_id',
+    } as const;
+    const productField = input.product_id
+      ? productFieldMap[input.product_type]
+      : undefined;
+
+    const activeStatuses = [
+      'SCHEDULING',
+      'NEGOTIATION',
+      'PROCESSING_CONTRACT',
+      'DOCUMENTATION',
+    ] as const;
+
+    if (productField && input.product_id) {
+      // Só bloqueia se houver processo ATIVO; processos encerrados
+      // (COMPLETED/REJECTED) permitem novo processo para o mesmo produto.
+      const existing = await this.prismaService.process.findFirst({
+        where: {
+          client_id: input.client_id,
+          specialist_id: input.specialist_id,
+          [productField]: input.product_id,
+          status: { in: [...activeStatuses] as any },
+        },
+      });
+      if (existing) {
+        throw new ConflictException(
+          'Já existe processo ativo para este cliente com este produto.',
+        );
+      }
+    } else {
+      const activeConsultancy = await this.prismaService.process.findFirst({
+        where: {
+          client_id: input.client_id,
+          specialist_id: input.specialist_id,
+          product_type: null,
+          status: { in: [...activeStatuses] as any },
+        },
+      });
+      if (activeConsultancy) {
+        throw new ConflictException(
+          'Já existe consultoria ativa entre este cliente e este especialista.',
+        );
+      }
+    }
+
+    const pendingExpiresAt = new Date();
+    pendingExpiresAt.setDate(pendingExpiresAt.getDate() + 7);
+
+    const isConsultancy = !productField || !input.product_id;
+
+    const [, process] = await this.prismaService.$transaction(async (tx) => {
+      const appointmentData: any = {
+        client_id: input.client_id,
+        specialist_id: input.specialist_id,
+        appointment_datetime: null,
+        status: 'PENDING',
+        notes: isConsultancy
+          ? `Consultoria criada pelo ${input.actorLabel} em nome do cliente (${new Date().toISOString()})`
+          : `Processo criado pelo ${input.actorLabel} em nome do cliente (${new Date().toISOString()})`,
+        user_clicked_at: new Date(),
+        pending_expires_at: pendingExpiresAt,
+      };
+      if (!isConsultancy) {
+        appointmentData.product_type = input.product_type;
+        appointmentData.product_id = input.product_id;
+      }
+
+      const createdAppointment = await tx.appointment.create({
+        data: appointmentData,
+      });
+
+      const processData: any = {
+        client_id: input.client_id,
+        specialist_id: input.specialist_id,
+        appointment_id: createdAppointment.id,
+        product_type: isConsultancy ? null : input.product_type,
+        status: 'SCHEDULING',
+        notes: isConsultancy
+          ? `Consultoria iniciada pelo ${input.actorLabel} (${new Date().toISOString()})`
+          : `Processo iniciado pelo ${input.actorLabel} (${new Date().toISOString()})`,
+      };
+      if (!isConsultancy && productField && input.product_id) {
+        processData[productField] = input.product_id;
+      }
+
+      const createdProcess = await tx.process.create({ data: processData });
+
+      await tx.processStatusHistory.create({
+        data: {
+          processId: createdProcess.id,
+          status: 'SCHEDULING',
+          changed_by: input.createdBy,
+          changed_at: new Date(),
+        },
+      });
+
+      return [createdAppointment, createdProcess];
+    });
+
+    return process;
   }
 
   /**
