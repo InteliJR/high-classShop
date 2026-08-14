@@ -6,10 +6,12 @@ import { ConsultantService } from './consultant.service';
 import { ClientInviteJobsService } from './client-invite-jobs.service';
 import { AwsModule } from 'src/aws/aws.module';
 import { XlsxImportService } from 'src/shared/services/xlsx-import.service';
+import { ProcessesModule } from 'src/features/processes/processes.module';
 
 @Module({
   imports: [
     AwsModule,
+    ProcessesModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

@@ -43,8 +43,18 @@ export class ProcessesController {
   @Post()
   async create(
     @Body() createProcessDto: CreateProcessDTO,
+    @Req() req: { user?: UserEntity },
   ): Promise<ApiResponseDto<ProcessResponse>> {
-    const process = await this.processesService.create(createProcessDto);
+    const user = req.user;
+    if (!user) {
+      throw new UnauthorizedException('Usuário autenticado não identificado');
+    }
+
+    const process = await this.processesService.create(createProcessDto, {
+      id: user.id,
+      role: user.role,
+      companyId: user.company_id,
+    });
 
     return {
       success: true,

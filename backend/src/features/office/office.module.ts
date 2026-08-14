@@ -8,11 +8,13 @@ import { XlsxImportService } from 'src/shared/services/xlsx-import.service';
 import { ConsultantInviteJobsService } from './consultant-invite-jobs.service';
 import { OfficeController } from './office.controller';
 import { OfficeService } from './office.service';
+import { ProcessesModule } from 'src/features/processes/processes.module';
 
 @Module({
   imports: [
     PrismaModule,
     AwsModule,
+    ProcessesModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
