@@ -9,13 +9,18 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 # CMD do Dockerfile já é este; explícito aqui para clareza.
-startCommand = "node dist/main.js"
+startCommand = "npx prisma migrate deploy && node dist/main.js"
 # Endpoint público (@Public) — global prefix "api" + @Controller('health').
 healthcheckPath = "/api/health"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
-# NOTA: migrations NÃO rodam no deploy (Dockerfile só faz prisma generate + build).
-# Schema é aplicado manualmente via `prisma db push` (Supabase tem drift; nunca `migrate deploy`).
+# `migrate deploy` roda a cada deploy (só aplica migrations pendentes; não-op se
+# já estiver tudo em dia). Requer que o histórico de migrations no banco (tabela
+# _prisma_migrations) esteja em dia com prisma/migrations/ — feito via baseline
+# uma única vez (`prisma migrate resolve --applied <nome>` para cada migration já
+# refletida no schema real, sem ter sido registrada por ter sido aplicada via
+# `db push` no passado). Sem esse baseline, `migrate deploy` tenta recriar
+# tabelas/colunas que já existem e falha.
 # PORT é injetado pelo Railway automaticamente (main.ts lê process.env.PORT).
