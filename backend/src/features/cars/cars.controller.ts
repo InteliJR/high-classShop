@@ -27,22 +27,29 @@ import { UserEntity } from 'src/auth/entities/user.entity';
 import {
   assertSpecialistCanCreate,
   assertSpecialistCanModify,
+  assertSpecialistHasCalendly,
   assertSpecialistOwnsProduct,
 } from 'src/shared/helpers/specialist-auth.helper';
 import { Public } from 'src/shared/decorators/public.decorator';
 import { ProductImportJobsService } from '../product-import-jobs/product-import-jobs.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Controller('cars')
 export class CarsController {
   constructor(
     private readonly carsService: CarsService,
     private readonly productImportJobsService: ProductImportJobsService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
-  create(@Body() createCarDto: CreateCarDto, @CurrentUser() user: UserEntity) {
+  async create(
+    @Body() createCarDto: CreateCarDto,
+    @CurrentUser() user: UserEntity,
+  ) {
     assertSpecialistCanCreate('CAR', user);
+    await assertSpecialistHasCalendly(user, this.prisma);
     createCarDto.specialist_id = user.id;
     return this.carsService.create(createCarDto);
   }
@@ -57,6 +64,7 @@ export class CarsController {
     @CurrentUser() user: UserEntity,
   ) {
     assertSpecialistCanCreate('CAR', user);
+    await assertSpecialistHasCalendly(user, this.prisma);
 
     if (!file) {
       throw new BadRequestException('Arquivo CSV é obrigatório.');

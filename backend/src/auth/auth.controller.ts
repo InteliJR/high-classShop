@@ -80,12 +80,19 @@ export class AuthController {
   @Public()
   @Post('register-specialist')
   @HttpCode(HttpStatus.CREATED)
-  async registerSpecialist(@Body() dto: auth.RegisterSpecialistDto) {
-    const result = await this.authService.registerSpecialist(dto);
+  async registerSpecialist(
+    @Body() dto: auth.RegisterSpecialistDto,
+    @Res({ passthrough: true }) response: express.Response,
+  ) {
+    const { user, accessToken, refreshToken } =
+      await this.authService.registerSpecialist(dto);
+
+    this.setRefreshTokenCookie(response, refreshToken);
+
     return {
       success: true,
       message: 'Conta de especialista criada com sucesso',
-      data: result,
+      data: { access_token: accessToken, user },
     };
   }
 
@@ -120,13 +127,7 @@ export class AuthController {
     const { accessToken, refreshToken, user } =
       await this.authService.login(body);
 
-    response.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // true apenas em produção (HTTPS)
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' em produção para cross-site
-      path: '/', // Enviar cookie em todas as requisições
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
-    });
+    this.setRefreshTokenCookie(response, refreshToken);
 
     return {
       success: true,
@@ -174,14 +175,7 @@ export class AuthController {
       user,
     } = await this.authService.refresh(refreshToken);
 
-    // Set new refresh token cookie
-    response.cookie('refreshToken', newRefreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // true apenas em produção (HTTPS)
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' em produção para cross-site
-      path: '/', // Enviar cookie em todas as requisições
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
-    });
+    this.setRefreshTokenCookie(response, newRefreshToken);
 
     return {
       success: true,
@@ -232,5 +226,18 @@ export class AuthController {
       success: true,
       message: 'Logout realizado com sucesso',
     };
+  }
+
+  private setRefreshTokenCookie(
+    response: express.Response,
+    refreshToken: string,
+  ) {
+    response.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production', // true apenas em produção (HTTPS)
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' em produção para cross-site
+      path: '/', // Enviar cookie em todas as requisições
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
+    });
   }
 }

@@ -2,6 +2,7 @@ import { ForbiddenException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { SpecialityType } from 'src/auth/dto/auth';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 export type ProductType = 'CAR' | 'BOAT' | 'AIRCRAFT';
 
@@ -89,4 +90,30 @@ export function assertSpecialistOwnsProduct(
   throw new ForbiddenException(
     'Apenas ADMIN e SPECIALIST podem modificar produtos.',
   );
+}
+
+/**
+ * Valida se o especialista tem o Calendly conectado antes de anunciar um produto.
+ * - ADMIN ignora a checagem.
+ *
+ * @throws ForbiddenException se o SPECIALIST não tiver uma conexão ativa
+ */
+export async function assertSpecialistHasCalendly(
+  user: UserEntity,
+  prisma: PrismaService,
+): Promise<void> {
+  if (user.role !== UserRole.SPECIALIST) {
+    return;
+  }
+
+  const connection = await prisma.calendlyConnection.findUnique({
+    where: { user_id: user.id },
+    select: { is_active: true },
+  });
+
+  if (!connection?.is_active) {
+    throw new ForbiddenException(
+      'Conecte seu Calendly antes de anunciar produtos. Acesse seu perfil para conectar.',
+    );
+  }
 }

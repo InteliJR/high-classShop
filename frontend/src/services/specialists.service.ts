@@ -1,6 +1,7 @@
 // frontend/src/services/specialists.service.ts
 import api from "./api";
 import axios from "axios";
+import type { UserProps } from "../types/types";
 
 export type Specialist = {
   id: string;
@@ -157,7 +158,7 @@ export async function registerSpecialist(data: {
   phone: string;
   password: string;
   civil_state?: string;
-}): Promise<unknown> {
+}): Promise<{ access_token: string; user: UserProps }> {
   const response = await api.post("/auth/register-specialist", data);
-  return response.data;
+  return response.data.data;
 }

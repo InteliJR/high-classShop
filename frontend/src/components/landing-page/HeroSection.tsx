@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion, type Variants, easeOut } from 'framer-motion';
+import ProductTypePreferenceModal, {
+  type PreferredProductType,
+} from '../product/ProductTypePreferenceModal';
 
 const HERO_POSTER = '/hero/hero-poster.webp';
+
+const catalogRouteMap: Record<PreferredProductType, string> = {
+  CAR: '/catalog/cars',
+  BOAT: '/catalog/boats',
+  AIRCRAFT: '/catalog/aircrafts',
+};
 
 type NetworkInformation = { saveData?: boolean; effectiveType?: string };
 
@@ -53,6 +62,12 @@ export function HeroBackdrop() {
 
 export function HeroSection() {
   const navigate = useNavigate();
+  const [isProductTypeModalOpen, setIsProductTypeModalOpen] = useState(false);
+
+  const handleSelectProductType = (type: PreferredProductType) => {
+    setIsProductTypeModalOpen(false);
+    navigate(catalogRouteMap[type]);
+  };
 
   const containerVariants: Variants = {
     hidden: { opacity: 0 },
@@ -113,7 +128,7 @@ export function HeroSection() {
         </motion.div>
 
         <motion.button
-          onClick={() => navigate('/login')}
+          onClick={() => setIsProductTypeModalOpen(true)}
           variants={itemVariants}
           whileHover={{ scale: 1.02, backgroundColor: '#f3f4f6' }}
           whileTap={{ scale: 0.98 }}
@@ -122,6 +137,14 @@ export function HeroSection() {
           Comece a Explorar
         </motion.button>
       </motion.div>
+
+      <ProductTypePreferenceModal
+        isOpen={isProductTypeModalOpen}
+        title="O que você quer explorar?"
+        description="Escolha uma categoria para ver o catálogo correspondente."
+        onClose={() => setIsProductTypeModalOpen(false)}
+        onSelect={handleSelectProductType}
+      />
     </section>
   );
 }

@@ -4,6 +4,8 @@ import {
   validateSpecialistInvite,
   registerSpecialist,
 } from "../../services/specialists.service";
+import { getCalendlyAuthorizeUrl } from "../../services/appointments.service";
+import { useAuth } from "../../store/authStateManager";
 import { applyCnpjMask, applyRgMask, applyPhoneMask } from "../../utils/mask";
 import Button from "../../components/ui/button";
 
@@ -18,6 +20,7 @@ const SPECIALITY_LABEL: Record<SpecialityType, string> = {
 export default function RegisterSpecialistPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { setAccessToken, setUser } = useAuth();
   const token = searchParams.get("invite") ?? "";
 
   const [speciality, setSpeciality] = useState<SpecialityType | null>(null);
@@ -35,6 +38,8 @@ export default function RegisterSpecialistPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [connectingCalendly, setConnectingCalendly] = useState(false);
+  const [calendlyError, setCalendlyError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -87,7 +92,7 @@ export default function RegisterSpecialistPage() {
 
     setIsSubmitting(true);
     try {
-      await registerSpecialist({
+      const { access_token, user } = await registerSpecialist({
         invite_token: token,
         name: name.trim(),
         surname: surname.trim(),
@@ -97,11 +102,25 @@ export default function RegisterSpecialistPage() {
         password,
         civil_state: civilState || undefined,
       });
+      setAccessToken(access_token);
+      setUser(user);
       setSuccess(true);
     } catch (err) {
       setFormError((err as Error).message || "Erro ao criar conta. Tente novamente.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleConnectCalendly = async () => {
+    setConnectingCalendly(true);
+    setCalendlyError(null);
+    try {
+      const authorizeUrl = await getCalendlyAuthorizeUrl();
+      window.location.href = authorizeUrl;
+    } catch {
+      setCalendlyError("Não foi possível iniciar a conexão com o Calendly. Tente novamente pelo seu perfil.");
+      setConnectingCalendly(false);
     }
   };
 
@@ -137,16 +156,28 @@ export default function RegisterSpecialistPage() {
           <p className="text-muted mb-6">
             Sua conta de especialista em{" "}
             <strong>{speciality ? SPECIALITY_LABEL[speciality] : ""}</strong> foi criada.
+            Conecte seu Calendly para poder anunciar produtos na plataforma.
           </p>
-          <Button
-            onClick={() =>
-              navigate("/login", {
-                state: { message: "Conta criada com sucesso! Faça login para continuar." },
-              })
-            }
-          >
-            Fazer Login
-          </Button>
+          {calendlyError && (
+            <p className="text-sm text-status-bad mb-4">{calendlyError}</p>
+          )}
+          <div className="space-y-2">
+            <Button
+              onClick={handleConnectCalendly}
+              disabled={connectingCalendly}
+              className="w-full"
+            >
+              {connectingCalendly ? "Conectando..." : "Conectar Calendly agora"}
+            </Button>
+            <button
+              type="button"
+              onClick={() => navigate("/specialist/dashboard")}
+              disabled={connectingCalendly}
+              className="w-full text-sm text-muted hover:underline disabled:opacity-50"
+            >
+              Depois
+            </button>
+          </div>
         </div>
       </div>
     );
