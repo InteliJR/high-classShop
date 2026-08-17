@@ -631,7 +631,11 @@ export class AuthService {
 
     this.queueWelcomeEmail(user);
 
-    return { user: UserEntity.fromPrisma(user) };
+    // Auto-login: evita exigir um segundo login só pra oferecer a etapa de conectar o Calendly
+    const accessToken = await this.generateAccessToken(user);
+    const refreshToken = await this.createRefreshToken(user.id);
+
+    return { user: UserEntity.fromPrisma(user), accessToken, refreshToken };
   }
 
   private queueWelcomeEmail(user: {

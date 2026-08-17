@@ -446,7 +446,7 @@ model User {
   email         String   @unique
   // CPF (11 dígitos) para a maioria dos papéis; para SPECIALIST, guarda CNPJ (14 dígitos) — especialista é PJ
   cpf           String?  @unique @db.VarChar(14)
-  rg            String   @unique @db.VarChar(10)
+  rg            String   @unique @db.VarChar(11)
   phone         String?  @db.VarChar(20)
   role          UserRole
   password_hash String
