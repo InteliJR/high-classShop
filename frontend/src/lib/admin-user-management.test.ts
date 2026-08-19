@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   blockerMessage,
+  ChangeValidationError,
   changeRole,
   changeSpeciality,
+  createLatestRequestGuard,
   getDialogRequirements,
+  isSameRecordsOrigin,
   roleLabel,
   specialityLabel,
   validateRoleChange,
@@ -104,5 +107,57 @@ describe("admin-user-management", () => {
     await expect(changeSpeciality("user-1", { speciality: "CAR" })).rejects.toThrow(
       "Não foi possível concluir a alteração. Tente novamente.",
     );
+  });
+
+  it("aceita somente a resposta da requisição mais recente", () => {
+    const guard = createLatestRequestGuard();
+    const firstRequest = guard.begin();
+    const secondRequest = guard.begin();
+
+    expect(guard.isCurrent(firstRequest)).toBe(false);
+    expect(guard.isCurrent(secondRequest)).toBe(true);
+
+    guard.invalidate();
+
+    expect(guard.isCurrent(secondRequest)).toBe(false);
+  });
+
+  it("associa registros somente à entidade e página que os originaram", () => {
+    const usersPage = { entity: "users", page: 1 };
+
+    expect(isSameRecordsOrigin(usersPage, { entity: "users", page: 1 })).toBe(
+      true,
+    );
+    expect(isSameRecordsOrigin(usersPage, { entity: "companies", page: 1 })).toBe(
+      false,
+    );
+    expect(isSameRecordsOrigin(usersPage, { entity: "users", page: 2 })).toBe(
+      false,
+    );
+  });
+
+  it("preserva a revalidação estruturada devolvida pelo PATCH em conflito", async () => {
+    const validation = {
+      allowed: false,
+      summary: "A alteração não pode ser concluída.",
+      blockers: [
+        {
+          code: "OFFICE_CONFLICT" as const,
+          message: "O escritório já possui um gerente ativo.",
+        },
+      ],
+    };
+    vi.mocked(api.patch).mockRejectedValueOnce({
+      response: { status: 409, data: validation },
+      friendlyMessage: "Conflito: o registro já existe.",
+    });
+
+    const caught = await changeRole("user-1", {
+      role: "OFFICE",
+      company_id: "company-1",
+    }).catch((error: unknown) => error);
+
+    expect(caught).toBeInstanceOf(ChangeValidationError);
+    expect(caught).toMatchObject({ validation });
   });
 });

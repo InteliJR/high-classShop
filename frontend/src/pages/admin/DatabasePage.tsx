@@ -2,7 +2,7 @@
 // A formatação toda (labels pt-BR, máscaras, moeda, enums) vive no backend,
 // em admin-database.columns.ts — aqui só renderizamos o que chega, e o export
 // consome exatamente a mesma matriz da tela.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -25,8 +25,18 @@ import { EmptyState } from "../../components/patterns/EmptyState";
 import AdminUserManagementDialog, {
   type AdminUserManagementDialogState,
 } from "../../components/admin/AdminUserManagementDialog";
+import {
+  createLatestRequestGuard,
+  isSameRecordsOrigin,
+  type RecordsOrigin,
+} from "../../lib/admin-user-management";
 
 const PAGE_SIZE = 20;
+
+type LoadedRecords = {
+  origin: RecordsOrigin;
+  records: RecordsPage;
+};
 
 /** Versão textual da célula — usada no CSV e no PDF. Imagem vira Sim/—. */
 function cellText(cell: Cell): string {
@@ -38,15 +48,19 @@ export default function DatabasePage() {
   const [entities, setEntities] = useState<EntityInfo[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [result, setResult] = useState<RecordsPage | null>(null);
+  const [loadedRecords, setLoadedRecords] = useState<LoadedRecords | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dialogState, setDialogState] =
     useState<AdminUserManagementDialogState | null>(null);
+  const recordsRequestGuard = useRef(createLatestRequestGuard());
 
   useEffect(() => {
     getEntities()
       .then((list) => {
+        recordsRequestGuard.current.invalidate();
         setEntities(list);
         setActive(list[0]?.key ?? null);
       })
@@ -57,23 +71,38 @@ export default function DatabasePage() {
 
   const loadRecords = useCallback(async () => {
     if (!active) return;
+    const origin = { entity: active, page };
+    const requestId = recordsRequestGuard.current.begin();
     setLoading(true);
     setError(null);
     try {
-      setResult(await getRecords(active, page, PAGE_SIZE));
+      const records = await getRecords(active, page, PAGE_SIZE);
+      if (!recordsRequestGuard.current.isCurrent(requestId)) return;
+      setLoadedRecords({ origin, records });
     } catch (err) {
+      if (!recordsRequestGuard.current.isCurrent(requestId)) return;
       // Descarta o resultado anterior: sem isso a aba nova mostra as linhas
       // da aba antiga, e o CSV sai nomeado com a entidade errada.
-      setResult(null);
+      setLoadedRecords(null);
       setError((err as Error).message || "Erro ao carregar registros.");
     } finally {
-      setLoading(false);
+      if (recordsRequestGuard.current.isCurrent(requestId)) setLoading(false);
     }
   }, [active, page]);
 
   useEffect(() => {
+    const requestGuard = recordsRequestGuard.current;
     void loadRecords();
+    return () => requestGuard.invalidate();
   }, [loadRecords]);
+
+  const currentOrigin = active ? { entity: active, page } : null;
+  const result =
+    loadedRecords &&
+    currentOrigin &&
+    isSameRecordsOrigin(loadedRecords.origin, currentOrigin)
+      ? loadedRecords.records
+      : null;
 
   const columns = result?.columns ?? [];
   const rows = result?.data ?? [];
@@ -103,6 +132,7 @@ export default function DatabasePage() {
             key={e.key}
             type="button"
             onClick={() => {
+              recordsRequestGuard.current.invalidate();
               setActive(e.key);
               setPage(1);
             }}
@@ -255,7 +285,10 @@ export default function DatabasePage() {
                 type="button"
                 variant="light"
                 disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
+                onClick={() => {
+                  recordsRequestGuard.current.invalidate();
+                  setPage((p) => p - 1);
+                }}
               >
                 <ChevronLeft className="w-4 h-4" /> Anterior
               </Button>
@@ -266,7 +299,10 @@ export default function DatabasePage() {
                 type="button"
                 variant="light"
                 disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => {
+                  recordsRequestGuard.current.invalidate();
+                  setPage((p) => p + 1);
+                }}
               >
                 Próxima <ChevronRight className="w-4 h-4" />
               </Button>

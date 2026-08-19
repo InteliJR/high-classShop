@@ -39,6 +39,16 @@ export type ChangeValidationResult = {
   blockers: ChangeBlocker[];
 };
 
+export class ChangeValidationError extends Error {
+  validation: ChangeValidationResult;
+
+  constructor(validation: ChangeValidationResult) {
+    super(validation.summary);
+    this.name = "ChangeValidationError";
+    this.validation = validation;
+  }
+}
+
 export type RoleContext = {
   role: UserRoleCode;
   company_id?: string;
@@ -56,6 +66,17 @@ export type ChangeSpecialityPayload = {
 export type RecordRowMeta = {
   id: string;
   role?: UserRoleCode;
+};
+
+export type RecordsOrigin = {
+  entity: string;
+  page: number;
+};
+
+export type LatestRequestGuard = {
+  begin: () => number;
+  invalidate: () => void;
+  isCurrent: (requestId: number) => boolean;
 };
 
 export type DialogRequirement = "company" | "speciality" | "replacement";
@@ -136,6 +157,25 @@ export function getDialogRequirements(
   return [];
 }
 
+export function createLatestRequestGuard(): LatestRequestGuard {
+  let latestRequestId = 0;
+
+  return {
+    begin: () => ++latestRequestId,
+    invalidate: () => {
+      latestRequestId += 1;
+    },
+    isCurrent: (requestId) => requestId === latestRequestId,
+  };
+}
+
+export function isSameRecordsOrigin(
+  left: RecordsOrigin,
+  right: RecordsOrigin,
+): boolean {
+  return left.entity === right.entity && left.page === right.page;
+}
+
 export async function validateRoleChange(
   id: string,
   payload: ChangeRolePayload,
@@ -190,6 +230,9 @@ async function requestChange<T>(request: () => Promise<T>): Promise<T> {
   try {
     return await request();
   } catch (error) {
+    const validation = extractConflictValidation(error);
+    if (validation) throw new ChangeValidationError(validation);
+
     const message =
       typeof error === "object" &&
       error !== null &&
@@ -199,4 +242,50 @@ async function requestChange<T>(request: () => Promise<T>): Promise<T> {
         : "Não foi possível concluir a alteração. Tente novamente.";
     throw new Error(message);
   }
+}
+
+function extractConflictValidation(
+  error: unknown,
+): ChangeValidationResult | null {
+  if (typeof error !== "object" || error === null || !("response" in error)) {
+    return null;
+  }
+
+  const response = error.response;
+  if (typeof response !== "object" || response === null) return null;
+
+  const candidate =
+    "status" in response && response.status === 409 && "data" in response
+      ? response.data
+      : null;
+  if (typeof candidate !== "object" || candidate === null) return null;
+
+  if (
+    !("allowed" in candidate) ||
+    typeof candidate.allowed !== "boolean" ||
+    !("summary" in candidate) ||
+    typeof candidate.summary !== "string" ||
+    !("blockers" in candidate) ||
+    !Array.isArray(candidate.blockers)
+  ) {
+    return null;
+  }
+
+  const blockers = candidate.blockers;
+  if (
+    !blockers.every(
+      (blocker) =>
+        typeof blocker === "object" &&
+        blocker !== null &&
+        "code" in blocker &&
+        typeof blocker.code === "string" &&
+        blocker.code in BLOCKER_MESSAGES &&
+        "message" in blocker &&
+        typeof blocker.message === "string",
+    )
+  ) {
+    return null;
+  }
+
+  return candidate as ChangeValidationResult;
 }

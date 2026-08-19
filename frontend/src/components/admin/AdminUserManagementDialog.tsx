@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   blockerMessage,
+  ChangeValidationError,
   changeRole,
   changeSpeciality,
+  createLatestRequestGuard,
   getDialogRequirements,
   ROLE_LABELS,
   SPECIALITY_LABELS,
@@ -33,6 +35,23 @@ type Props = {
   onSuccess: () => void | Promise<void>;
 };
 
+type ChangeSnapshot =
+  | {
+      userId: string;
+      mode: "role";
+      payload: ChangeRolePayload;
+    }
+  | {
+      userId: string;
+      mode: "speciality";
+      payload: ChangeSpecialityPayload;
+    };
+
+type ValidatedChange = ChangeSnapshot & {
+  requestId: number;
+  result: ChangeValidationResult;
+};
+
 const ROLE_OPTIONS = Object.entries(ROLE_LABELS) as [UserRoleCode, string][];
 const REPLACEMENT_ROLE_OPTIONS = ROLE_OPTIONS.filter(
   ([role]) => role !== "OFFICE",
@@ -46,6 +65,23 @@ const selectClassName =
   "block w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-focus-ring disabled:cursor-not-allowed disabled:opacity-60";
 
 export default function AdminUserManagementDialog({
+  state,
+  onClose,
+  onSuccess,
+}: Props) {
+  const sessionKey = state ? `${state.userId}:${state.mode}` : "closed";
+
+  return (
+    <AdminUserManagementDialogSession
+      key={sessionKey}
+      state={state}
+      onClose={onClose}
+      onSuccess={onSuccess}
+    />
+  );
+}
+
+function AdminUserManagementDialogSession({
   state,
   onClose,
   onSuccess,
@@ -66,6 +102,8 @@ export default function AdminUserManagementDialog({
   const [verifying, setVerifying] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestGuard = useRef(createLatestRequestGuard());
+  const validatedChange = useRef<ValidatedChange | null>(null);
 
   const requirements = useMemo(
     () =>
@@ -111,6 +149,8 @@ export default function AdminUserManagementDialog({
   }, [companies, requirements, state?.mode]);
 
   function reset() {
+    requestGuard.current.invalidate();
+    validatedChange.current = null;
     setTargetRole("");
     setCompanyId("");
     setSpeciality("");
@@ -132,8 +172,33 @@ export default function AdminUserManagementDialog({
   }
 
   function invalidateValidation() {
+    requestGuard.current.invalidate();
+    validatedChange.current = null;
     setValidation(null);
+    setVerifying(false);
     setError(null);
+  }
+
+  function applyValidation(
+    snapshot: ChangeSnapshot,
+    requestId: number,
+    result: ChangeValidationResult,
+  ) {
+    if (!requestGuard.current.isCurrent(requestId)) return;
+
+    const officeConflict = result.blockers.some(
+      ({ code }) =>
+        code === "OFFICE_REPLACEMENT_REQUIRED" || code === "OFFICE_CONFLICT",
+    );
+    if (
+      snapshot.mode === "role" &&
+      snapshot.payload.role === "OFFICE" &&
+      officeConflict
+    ) {
+      setHasOfficeConflict(true);
+    }
+    validatedChange.current = { ...snapshot, requestId, result };
+    setValidation(result);
   }
 
   function rolePayload(): ChangeRolePayload | null {
@@ -182,6 +247,20 @@ export default function AdminUserManagementDialog({
       state.mode === "role" ? rolePayload() : specialityPayload();
     if (!payload) return;
 
+    const snapshot: ChangeSnapshot =
+      state.mode === "role"
+        ? {
+            userId: state.userId,
+            mode: "role",
+            payload: payload as ChangeRolePayload,
+          }
+        : {
+            userId: state.userId,
+            mode: "speciality",
+            payload: payload as ChangeSpecialityPayload,
+          };
+    const requestId = requestGuard.current.begin();
+
     setVerifying(true);
     setError(null);
     try {
@@ -195,45 +274,51 @@ export default function AdminUserManagementDialog({
               state.userId,
               payload as ChangeSpecialityPayload,
             );
-      const officeConflict = result.blockers.some(
-        ({ code }) =>
-          code === "OFFICE_REPLACEMENT_REQUIRED" ||
-          code === "OFFICE_CONFLICT",
-      );
-      if (targetRole === "OFFICE" && officeConflict) {
-        setHasOfficeConflict(true);
-      }
-      setValidation(result);
+      applyValidation(snapshot, requestId, result);
     } catch (caught) {
+      if (!requestGuard.current.isCurrent(requestId)) return;
       setValidation(null);
+      validatedChange.current = null;
       setError((caught as Error).message);
     } finally {
-      setVerifying(false);
+      if (requestGuard.current.isCurrent(requestId)) setVerifying(false);
     }
   }
 
   async function confirm() {
-    if (!state || !validation?.allowed) return;
+    const approved = validatedChange.current;
+    if (
+      !state ||
+      !approved?.result.allowed ||
+      !requestGuard.current.isCurrent(approved.requestId) ||
+      approved.userId !== state.userId ||
+      approved.mode !== state.mode
+    ) {
+      return;
+    }
 
-    const payload =
-      state.mode === "role" ? rolePayload() : specialityPayload();
-    if (!payload) return;
+    const requestId = requestGuard.current.begin();
+    validatedChange.current = { ...approved, requestId };
 
     setSubmitting(true);
     setError(null);
     try {
-      if (state.mode === "role") {
-        await changeRole(state.userId, payload as ChangeRolePayload);
+      if (approved.mode === "role") {
+        await changeRole(approved.userId, approved.payload);
       } else {
-        await changeSpeciality(
-          state.userId,
-          payload as ChangeSpecialityPayload,
-        );
+        await changeSpeciality(approved.userId, approved.payload);
       }
+      if (!requestGuard.current.isCurrent(requestId)) return;
       close();
       await onSuccess();
     } catch (caught) {
-      setError((caught as Error).message);
+      if (!requestGuard.current.isCurrent(requestId)) return;
+      if (caught instanceof ChangeValidationError) {
+        applyValidation(approved, requestId, caught.validation);
+        setError(null);
+      } else {
+        setError((caught as Error).message);
+      }
       setSubmitting(false);
     }
   }
