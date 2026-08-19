@@ -41,6 +41,7 @@ export class AdminDatabaseService {
   ): Promise<{
     columns: ColumnMeta[];
     data: Cell[][];
+    rowMeta: ({ id: string; role: string } | { id: string })[];
     total: number;
     page: number;
     pageSize: number;
@@ -63,7 +64,7 @@ export class AdminDatabaseService {
         skip,
         take,
         orderBy: { id: 'desc' },
-        select: cfg.select,
+        select: { ...cfg.select, id: true },
       }),
       model.count(),
     ]);
@@ -78,8 +79,11 @@ export class AdminDatabaseService {
       label: c.label,
       ...(c.wide ? { wide: true } : {}),
     }));
+    const rowMeta = rows.map((row: any) =>
+      entity === 'users' ? { id: row.id, role: row.role } : { id: row.id },
+    );
 
-    return { columns, data, total, page: currentPage, pageSize: take };
+    return { columns, data, rowMeta, total, page: currentPage, pageSize: take };
   }
 
   /** Projeta uma linha do Prisma na matriz de células já formatadas. */
