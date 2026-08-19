@@ -897,7 +897,6 @@ export default function CreateContractPage() {
                 <Controller
                   name="seller_cpf"
                   control={control}
-                  rules={{ required: "CPF é obrigatório" }}
                   render={({ field }) => (
                     <input
                       type="text"
@@ -945,7 +944,6 @@ export default function CreateContractPage() {
                 <Controller
                   name="seller_cep"
                   control={control}
-                  rules={{ required: "CEP é obrigatório" }}
                   render={({ field }) => (
                     <input
                       type="text"
@@ -973,7 +971,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("seller_address", {
-                    required: "Endereço é obrigatório",
                   })}
                   placeholder="Rua, número, complemento, bairro, cidade - UF"
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
@@ -998,7 +995,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("seller_bank", {
-                    required: "Banco é obrigatório",
                   })}
                   placeholder="Ex: Itaú, Bradesco, Nubank"
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
@@ -1017,7 +1013,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("seller_agency", {
-                    required: "Agência é obrigatória",
                   })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1035,7 +1030,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("seller_checking_account", {
-                    required: "Conta é obrigatória",
                   })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1099,7 +1093,6 @@ export default function CreateContractPage() {
                 <Controller
                   name="buyer_cpf"
                   control={control}
-                  rules={{ required: "CPF é obrigatório" }}
                   render={({ field }) => (
                     <input
                       type="text"
@@ -1146,7 +1139,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("buyer_cep", { required: "CEP é obrigatório" })}
+                  {...register("buyer_cep")}
                   placeholder="00000-000"
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1163,7 +1156,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("buyer_address", { required: "Endereço é obrigatório" })}
+                  {...register("buyer_address")}
                   placeholder="Rua, número, bairro, cidade — UF"
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1202,7 +1195,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("vehicle_model", {
-                    required: "Modelo é obrigatório",
                   })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1220,7 +1212,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("vehicle_year", {
-                    required: "Ano é obrigatório",
                   })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1238,7 +1229,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("vehicle_registration_id", {
-                    required: "Identificação é obrigatória",
                   })}
                   placeholder={
                     prefillData?.product_type === "CAR"
@@ -1263,7 +1253,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("vehicle_serial_number", {
-                    required: "Número serial é obrigatório",
                   })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1305,7 +1294,7 @@ export default function CreateContractPage() {
                 Calculado automaticamente
               </span>
             </div>
-            <input type="hidden" {...register("vehicle_price", { required: "Valor é obrigatório", valueAsNumber: true, min: { value: 0, message: "Valor deve ser positivo" } })} />
+            <input type="hidden" {...register("vehicle_price", { valueAsNumber: true, min: { value: 0, message: "Valor deve ser positivo" } })} />
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-muted mb-1">
@@ -1330,6 +1319,7 @@ export default function CreateContractPage() {
                   type="number"
                   step="0.01"
                   {...register("total_commission_rate", {
+                    required: "Taxa de comissão é obrigatória",
                     valueAsNumber: true,
                     min: { value: 0, message: "Valor deve ser positivo" },
                   })}
@@ -1868,7 +1858,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("city", { required: "Cidade é obrigatória" })}
+                  {...register("city")}
                   placeholder="Ex: São Paulo"
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
