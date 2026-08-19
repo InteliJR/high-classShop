@@ -246,24 +246,37 @@ export class AdminUserManagementService {
     blockers: ChangeBlocker[],
     changingSpeciality: boolean,
   ) {
+    const activeProductsWhere = {
+      where: { specialist_id: specialistId, is_active: true },
+    };
+    const incompatibleProductType =
+      changingSpeciality && speciality
+        ? {
+            OR: [{ product_type: { not: speciality } }, { product_type: null }],
+          }
+        : {};
     const [cars, boats, aircraft, appointments, processes] = await Promise.all([
-      db.car.count({ where: { specialist_id: specialistId, is_active: true } }),
-      db.boat.count({
-        where: { specialist_id: specialistId, is_active: true },
-      }),
-      db.aircraft.count({
-        where: { specialist_id: specialistId, is_active: true },
-      }),
+      changingSpeciality && speciality === ProductType.CAR
+        ? 0
+        : db.car.count(activeProductsWhere),
+      changingSpeciality && speciality === ProductType.BOAT
+        ? 0
+        : db.boat.count(activeProductsWhere),
+      changingSpeciality && speciality === ProductType.AIRCRAFT
+        ? 0
+        : db.aircraft.count(activeProductsWhere),
       db.appointment.count({
-        where: { specialist_id: specialistId, status: 'PENDING' },
+        where: {
+          specialist_id: specialistId,
+          status: 'PENDING',
+          ...incompatibleProductType,
+        },
       }),
       db.process.count({
         where: {
           specialist_id: specialistId,
           status: { notIn: [ProcessStatus.COMPLETED, ProcessStatus.REJECTED] },
-          ...(changingSpeciality && speciality
-            ? { product_type: { not: speciality } }
-            : {}),
+          ...incompatibleProductType,
         },
       }),
     ]);
@@ -319,11 +332,13 @@ export class AdminUserManagementService {
   }
 
   private roleData(dto: ChangeRoleDto | OfficeManagerReplacementDto) {
-    return {
-      role: dto.role,
-      ...(dto.company_id !== undefined ? { company_id: dto.company_id } : {}),
-      ...(dto.speciality !== undefined ? { speciality: dto.speciality } : {}),
-    };
+    if (dto.role === UserRole.CONSULTANT || dto.role === UserRole.OFFICE) {
+      return { role: dto.role, company_id: dto.company_id };
+    }
+    if (dto.role === UserRole.SPECIALIST) {
+      return { role: dto.role, speciality: dto.speciality };
+    }
+    return { role: dto.role };
   }
 
   private async findUser(

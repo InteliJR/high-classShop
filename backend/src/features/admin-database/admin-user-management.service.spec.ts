@@ -222,7 +222,72 @@ describe('AdminUserManagementService', () => {
     });
   });
 
-  it.each(['car', 'boat', 'aircraft', 'appointment', 'process'] as const)(
+  it.each([
+    {
+      name: 'Cliente',
+      subject: user(customerId, UserRole.CONSULTANT),
+      dto: {
+        role: UserRole.CUSTOMER,
+        company_id: companyId,
+        speciality: ProductType.BOAT,
+      },
+      data: { role: UserRole.CUSTOMER },
+    },
+    {
+      name: 'Administrador',
+      subject: user(customerId, UserRole.CUSTOMER),
+      dto: {
+        role: UserRole.ADMIN,
+        company_id: companyId,
+        speciality: ProductType.BOAT,
+      },
+      data: { role: UserRole.ADMIN },
+    },
+    {
+      name: 'Consultor',
+      subject: user(customerId, UserRole.CUSTOMER),
+      dto: {
+        role: UserRole.CONSULTANT,
+        company_id: companyId,
+        speciality: ProductType.BOAT,
+      },
+      data: { role: UserRole.CONSULTANT, company_id: companyId },
+    },
+    {
+      name: 'Gerente de escritório',
+      subject: user(customerId, UserRole.CUSTOMER),
+      dto: {
+        role: UserRole.OFFICE,
+        company_id: companyId,
+        speciality: ProductType.BOAT,
+      },
+      data: { role: UserRole.OFFICE, company_id: companyId },
+    },
+    {
+      name: 'Especialista',
+      subject: user(customerId, UserRole.CUSTOMER),
+      dto: {
+        role: UserRole.SPECIALIST,
+        company_id: companyId,
+        speciality: ProductType.AIRCRAFT,
+      },
+      data: { role: UserRole.SPECIALIST, speciality: ProductType.AIRCRAFT },
+    },
+  ])(
+    'persiste somente o contexto permitido para $name',
+    async ({ subject, dto, data }) => {
+      const { prisma, service } = makeService([subject]);
+
+      await service.changeRole(subject.id, dto);
+
+      expect(prisma.transactionUser.update).toHaveBeenLastCalledWith({
+        where: { id: subject.id },
+        data,
+      });
+    },
+  );
+
+  it.each(['car', 'boat', 'appointment', 'process'] as const)(
     'bloqueia especialidade com %s incompatível',
     async (resource) => {
       const { prisma, service } = makeService([
@@ -243,6 +308,81 @@ describe('AdminUserManagementService', () => {
     },
   );
 
+  it('permite especialidade com aeronaves ativas compatíveis com o destino', async () => {
+    const { prisma, service } = makeService([
+      user(specialistId, UserRole.SPECIALIST, { speciality: ProductType.CAR }),
+    ]);
+    prisma.aircraft.count.mockResolvedValue(1);
+
+    await expect(
+      service.validateSpecialityChange(specialistId, {
+        speciality: ProductType.AIRCRAFT,
+      }),
+    ).resolves.toMatchObject({ allowed: true, blockers: [] });
+    expect(prisma.aircraft.count).not.toHaveBeenCalled();
+  });
+
+  it('permite especialidade com agendamento PENDING compatível com o destino', async () => {
+    const { prisma, service } = makeService([
+      user(specialistId, UserRole.SPECIALIST, { speciality: ProductType.CAR }),
+    ]);
+    prisma.appointment.count.mockImplementation(({ where }) =>
+      where.OR ? 0 : 1,
+    );
+
+    await expect(
+      service.validateSpecialityChange(specialistId, {
+        speciality: ProductType.AIRCRAFT,
+      }),
+    ).resolves.toMatchObject({ allowed: true, blockers: [] });
+    expect(prisma.appointment.count).toHaveBeenCalledWith({
+      where: {
+        specialist_id: specialistId,
+        status: 'PENDING',
+        OR: [
+          { product_type: { not: ProductType.AIRCRAFT } },
+          { product_type: null },
+        ],
+      },
+    });
+  });
+
+  it('bloqueia especialidade quando há agendamento PENDING sem tipo de produto', async () => {
+    const { prisma, service } = makeService([
+      user(specialistId, UserRole.SPECIALIST, { speciality: ProductType.CAR }),
+    ]);
+    prisma.appointment.count.mockImplementation(({ where }) =>
+      where.OR?.some((condition) => condition.product_type === null) ? 1 : 0,
+    );
+
+    await expect(
+      service.validateSpecialityChange(specialistId, {
+        speciality: ProductType.AIRCRAFT,
+      }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      blockers: [{ code: 'SPECIALIST_HAS_PENDING_APPOINTMENTS' }],
+    });
+  });
+
+  it('bloqueia especialidade quando há processo aberto sem tipo de produto', async () => {
+    const { prisma, service } = makeService([
+      user(specialistId, UserRole.SPECIALIST, { speciality: ProductType.CAR }),
+    ]);
+    prisma.process.count.mockImplementation(({ where }) =>
+      where.OR?.some((condition) => condition.product_type === null) ? 1 : 0,
+    );
+
+    await expect(
+      service.validateSpecialityChange(specialistId, {
+        speciality: ProductType.AIRCRAFT,
+      }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      blockers: [{ code: 'SPECIALIST_HAS_OPEN_PROCESSES' }],
+    });
+  });
+
   it('permite especialidade quando há somente processos concluídos ou rejeitados', async () => {
     const { prisma, service } = makeService([
       user(specialistId, UserRole.SPECIALIST, { speciality: ProductType.CAR }),
@@ -257,7 +397,10 @@ describe('AdminUserManagementService', () => {
       where: {
         specialist_id: specialistId,
         status: { notIn: [ProcessStatus.COMPLETED, ProcessStatus.REJECTED] },
-        product_type: { not: ProductType.AIRCRAFT },
+        OR: [
+          { product_type: { not: ProductType.AIRCRAFT } },
+          { product_type: null },
+        ],
       },
     });
   });
