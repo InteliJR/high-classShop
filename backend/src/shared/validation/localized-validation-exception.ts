@@ -4,6 +4,14 @@ import type { ValidationError } from 'class-validator';
 export function localizedValidationExceptionFactory(
   errors: ValidationError[],
 ): BadRequestException {
+  if (process.env.NODE_ENV === 'production') {
+    return new BadRequestException({
+      statusCode: 400,
+      message: 'Os dados informados não são válidos.',
+      error: 'Requisição inválida',
+    });
+  }
+
   const messages = collectValidationMessages(errors);
 
   return new BadRequestException({

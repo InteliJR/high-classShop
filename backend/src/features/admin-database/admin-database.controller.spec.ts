@@ -134,4 +134,35 @@ describe('AdminDatabaseController — gestão de usuários', () => {
       );
     },
   );
+
+  it('omite detalhes de validação em produção', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+
+    try {
+      const pipe = new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        disableErrorMessages: true,
+        exceptionFactory: localizedValidationExceptionFactory,
+      });
+
+      const caught = await pipe
+        .transform(
+          { role: 'SUPERUSER' },
+          { type: 'body', metatype: ChangeRoleDto },
+        )
+        .catch((error: unknown) => error);
+
+      expect(caught).toBeInstanceOf(BadRequestException);
+      expect((caught as BadRequestException).getResponse()).toEqual({
+        statusCode: 400,
+        message: 'Os dados informados não são válidos.',
+        error: 'Requisição inválida',
+      });
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
 });
