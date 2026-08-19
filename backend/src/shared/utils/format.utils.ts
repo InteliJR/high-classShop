@@ -16,7 +16,7 @@
  * @returns CPF formatado
  * @example formatCpf('12345678901') => '123.456.789-01'
  */
-export function formatCpf(value: string): string {
+export function formatCpf(value?: string | null): string {
   if (!value) return '';
   const digits = value.replace(/\D/g, '');
   if (digits.length !== 11) return value;
@@ -59,7 +59,7 @@ export function formatDocument(value: string): string {
  * @returns CEP formatado
  * @example formatCep('01234567') => '01234-567'
  */
-export function formatCep(value: string): string {
+export function formatCep(value?: string | null): string {
   if (!value) return '';
   const digits = value.replace(/\D/g, '');
   if (digits.length !== 8) return value;
@@ -72,7 +72,7 @@ export function formatCep(value: string): string {
  * @returns RG formatado
  * @example formatRg('123456789') => '12.345.678-9'
  */
-export function formatRg(value: string): string {
+export function formatRg(value?: string | null): string {
   if (!value) return '';
   const digits = value.replace(/\D/g, '');
   // Unificação RG/CPF: 10-11 dígitos é um CPF sendo usado como documento de RG.
@@ -96,7 +96,7 @@ export function formatRg(value: string): string {
  * @returns Valor formatado em reais
  * @example formatBRL(1234567.89) => 'R$ 1.234.567,89'
  */
-export function formatBRL(value: number): string {
+export function formatBRL(value?: number | null): string {
   if (value === null || value === undefined || isNaN(value)) return '';
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -110,7 +110,7 @@ export function formatBRL(value: number): string {
  * @returns Valor por extenso
  * @example numberToWords(1234567.89) => 'um milhão, duzentos e trinta e quatro mil, quinhentos e sessenta e sete reais e oitenta e nove centavos'
  */
-export function numberToWords(value: number): string {
+export function numberToWords(value?: number | null): string {
   if (value === null || value === undefined || isNaN(value)) return '';
   if (value === 0) return 'zero reais';
 

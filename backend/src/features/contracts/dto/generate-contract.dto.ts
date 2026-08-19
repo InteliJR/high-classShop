@@ -48,32 +48,32 @@ export class GenerateContractDto {
   seller_email: string;
 
   @IsString({ message: 'seller_cpf deve ser uma string' })
-  @IsNotEmpty({ message: 'seller_cpf é obrigatório' })
-  seller_cpf: string;
+  @IsOptional()
+  seller_cpf?: string;
 
   @IsString({ message: 'seller_rg deve ser uma string' })
   @IsOptional()
   seller_rg?: string;
 
   @IsString({ message: 'seller_address deve ser uma string' })
-  @IsNotEmpty({ message: 'seller_address é obrigatório' })
-  seller_address: string;
+  @IsOptional()
+  seller_address?: string;
 
   @IsString({ message: 'seller_cep deve ser uma string' })
-  @IsNotEmpty({ message: 'seller_cep é obrigatório' })
-  seller_cep: string;
+  @IsOptional()
+  seller_cep?: string;
 
   @IsString({ message: 'seller_bank deve ser uma string' })
-  @IsNotEmpty({ message: 'seller_bank é obrigatório' })
-  seller_bank: string;
+  @IsOptional()
+  seller_bank?: string;
 
   @IsString({ message: 'seller_agency deve ser uma string' })
-  @IsNotEmpty({ message: 'seller_agency é obrigatório' })
-  seller_agency: string;
+  @IsOptional()
+  seller_agency?: string;
 
   @IsString({ message: 'seller_checking_account deve ser uma string' })
-  @IsNotEmpty({ message: 'seller_checking_account é obrigatório' })
-  seller_checking_account: string;
+  @IsOptional()
+  seller_checking_account?: string;
 
   // === COMPRADOR (BUYER) ===
 
@@ -87,54 +87,54 @@ export class GenerateContractDto {
   buyer_email: string;
 
   @IsString({ message: 'buyer_cpf deve ser uma string' })
-  @IsNotEmpty({ message: 'buyer_cpf é obrigatório' })
-  buyer_cpf: string;
+  @IsOptional()
+  buyer_cpf?: string;
 
   @IsString({ message: 'buyer_rg deve ser uma string' })
   @IsOptional()
   buyer_rg?: string;
 
   @IsString({ message: 'buyer_address deve ser uma string' })
-  @IsNotEmpty({ message: 'buyer_address é obrigatório' })
-  buyer_address: string;
+  @IsOptional()
+  buyer_address?: string;
 
   @IsString({ message: 'buyer_cep deve ser uma string' })
-  @IsNotEmpty({ message: 'buyer_cep é obrigatório' })
-  buyer_cep: string;
+  @IsOptional()
+  buyer_cep?: string;
 
   // === VEÍCULO/PRODUTO ===
 
   @IsString({ message: 'vehicle_model deve ser uma string' })
-  @IsNotEmpty({ message: 'vehicle_model é obrigatório' })
-  vehicle_model: string;
+  @IsOptional()
+  vehicle_model?: string;
 
   @IsString({ message: 'vehicle_year deve ser uma string' })
-  @IsNotEmpty({ message: 'vehicle_year é obrigatório' })
-  vehicle_year: string;
+  @IsOptional()
+  vehicle_year?: string;
 
   @IsString({ message: 'vehicle_registration_id deve ser uma string' })
-  @IsNotEmpty({ message: 'vehicle_registration_id é obrigatório' })
-  vehicle_registration_id: string;
+  @IsOptional()
+  vehicle_registration_id?: string;
 
   @IsString({ message: 'vehicle_serial_number deve ser uma string' })
-  @IsNotEmpty({ message: 'vehicle_serial_number é obrigatório' })
-  vehicle_serial_number: string;
+  @IsOptional()
+  vehicle_serial_number?: string;
 
   @IsString({ message: 'vehicle_technical_info deve ser uma string' })
   @IsOptional()
   vehicle_technical_info?: string;
 
   @IsNumber({}, { message: 'vehicle_price deve ser um número' })
-  @IsNotEmpty({ message: 'vehicle_price é obrigatório' })
+  @IsOptional()
   @Min(0, { message: 'vehicle_price deve ser maior ou igual a zero' })
-  vehicle_price: number;
+  vehicle_price?: number;
 
   // === PAGAMENTO AO VENDEDOR ===
 
   @IsNumber({}, { message: 'payment_seller_value deve ser um número' })
-  @IsNotEmpty({ message: 'payment_seller_value é obrigatório' })
+  @IsOptional()
   @Min(0, { message: 'payment_seller_value deve ser maior ou igual a zero' })
-  payment_seller_value: number;
+  payment_seller_value?: number;
 
   // === COMISSÃO TOTAL DA VENDA ===
   // ATENÇÃO: rota legada (POST /contracts/generate não é usada pelo frontend
@@ -153,14 +153,14 @@ export class GenerateContractDto {
   // === DADOS DA PLATAFORMA (SPLIT 1) ===
 
   @IsNumber({}, { message: 'platform_value deve ser um número' })
-  @IsNotEmpty({ message: 'platform_value é obrigatório' })
+  @IsOptional()
   @Min(0, { message: 'platform_value deve ser maior ou igual a zero' })
-  platform_value: number;
+  platform_value?: number;
 
   @IsNumber({}, { message: 'platform_percentage deve ser um número' })
-  @IsNotEmpty({ message: 'platform_percentage é obrigatório' })
+  @IsOptional()
   @Min(0, { message: 'platform_percentage deve ser maior ou igual a zero' })
-  platform_percentage: number;
+  platform_percentage?: number;
 
   @IsString({ message: 'platform_name deve ser uma string' })
   @IsOptional()
@@ -185,9 +185,9 @@ export class GenerateContractDto {
   // === DADOS DO ESCRITÓRIO/EMPRESA PARCEIRA (SPLIT 2) ===
 
   @IsNumber({}, { message: 'office_value deve ser um número' })
-  @IsNotEmpty({ message: 'office_value é obrigatório' })
+  @IsOptional()
   @Min(0, { message: 'office_value deve ser maior ou igual a zero' })
-  office_value: number;
+  office_value?: number;
 
   @IsString({ message: 'office_name deve ser uma string' })
   @IsOptional()
@@ -212,9 +212,9 @@ export class GenerateContractDto {
   // === DADOS DO ESPECIALISTA (SPLIT 3) ===
 
   @IsNumber({}, { message: 'specialist_value deve ser um número' })
-  @IsNotEmpty({ message: 'specialist_value é obrigatório' })
+  @IsOptional()
   @Min(0, { message: 'specialist_value deve ser maior ou igual a zero' })
-  specialist_value: number;
+  specialist_value?: number;
 
   @IsString({ message: 'specialist_name deve ser uma string' })
   @IsOptional()
@@ -269,8 +269,8 @@ export class GenerateContractDto {
   // === CIDADE DE ASSINATURA ===
 
   @IsString({ message: 'city deve ser uma string' })
-  @IsNotEmpty({ message: 'city é obrigatório' })
-  city: string;
+  @IsOptional()
+  city?: string;
 
   // === DESCRIÇÃO OPCIONAL ===
 
