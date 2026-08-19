@@ -25,6 +25,7 @@ export type ChangeBlockerCode =
   | "OFFICE_REPLACEMENT_REQUIRED"
   | "OFFICE_REPLACEMENT_INVALID"
   | "OFFICE_CONFLICT"
+  | "CONCURRENT_CHANGE"
   | "LAST_ACTIVE_ADMIN";
 
 export type ChangeBlocker = {
@@ -79,6 +80,11 @@ export type LatestRequestGuard = {
   isCurrent: (requestId: number) => boolean;
 };
 
+export type ManagementDialogInteractionPolicy = {
+  controlsDisabled: boolean;
+  dismissalAllowed: boolean;
+};
+
 export type DialogRequirement = "company" | "speciality" | "replacement";
 
 export const ROLE_LABELS: Record<UserRoleCode, string> = {
@@ -95,6 +101,15 @@ export const SPECIALITY_LABELS: Record<SpecialityCode, string> = {
   AIRCRAFT: "Aeronaves",
 };
 
+function quantityMessage(
+  count: number | undefined,
+  singular: string,
+  plural: string,
+): string {
+  const quantity = count ?? 0;
+  return `${quantity} ${quantity === 1 ? singular : plural}`;
+}
+
 export const BLOCKER_MESSAGES: Record<
   ChangeBlockerCode,
   (count?: number) => string
@@ -110,20 +125,22 @@ export const BLOCKER_MESSAGES: Record<
     "O cliente ainda possui um consultor vinculado.",
   CUSTOMER_HAS_ADVISOR: () => "O cliente ainda possui um assessor vinculado.",
   CONSULTANT_HAS_CLIENTS: (count) =>
-    `O consultor ainda possui ${count ?? 0} clientes vinculados.`,
+    `O consultor ainda possui ${quantityMessage(count, "cliente vinculado", "clientes vinculados")}.`,
   CONSULTANT_HAS_ADVISEES: (count) =>
-    `O consultor ainda possui ${count ?? 0} assessorias sob sua responsabilidade.`,
+    `O consultor ainda possui ${quantityMessage(count, "assessoria sob sua responsabilidade", "assessorias sob sua responsabilidade")}.`,
   SPECIALIST_HAS_ACTIVE_PRODUCTS: (count) =>
-    `O especialista ainda possui ${count ?? 0} produtos ativos.`,
+    `O especialista ainda possui ${quantityMessage(count, "produto ativo", "produtos ativos")}.`,
   SPECIALIST_HAS_PENDING_APPOINTMENTS: (count) =>
-    `O especialista ainda possui ${count ?? 0} agendamentos pendentes.`,
+    `O especialista ainda possui ${quantityMessage(count, "agendamento pendente", "agendamentos pendentes")}.`,
   SPECIALIST_HAS_OPEN_PROCESSES: (count) =>
-    `O especialista ainda possui ${count ?? 0} processos em andamento.`,
+    `O especialista ainda possui ${quantityMessage(count, "processo em andamento", "processos em andamento")}.`,
   OFFICE_REPLACEMENT_REQUIRED: () =>
     "Informe o novo cargo do gerente atual do escritório.",
   OFFICE_REPLACEMENT_INVALID: () =>
     "A substituição do gerente de escritório é inválida.",
   OFFICE_CONFLICT: () => "O escritório já possui um gerente ativo.",
+  CONCURRENT_CHANGE: () =>
+    "Outra alteração foi concluída ao mesmo tempo. Verifique os dados e tente novamente.",
   LAST_ACTIVE_ADMIN: () =>
     "Não é possível remover o último administrador ativo da plataforma.",
 };
@@ -169,11 +186,27 @@ export function createLatestRequestGuard(): LatestRequestGuard {
   };
 }
 
+export function getManagementDialogInteractionPolicy(
+  submitting: boolean,
+): ManagementDialogInteractionPolicy {
+  return {
+    controlsDisabled: submitting,
+    dismissalAllowed: !submitting,
+  };
+}
+
 export function isSameRecordsOrigin(
   left: RecordsOrigin,
   right: RecordsOrigin,
 ): boolean {
   return left.entity === right.entity && left.page === right.page;
+}
+
+export function shouldInvalidateRecordsRequest(
+  current: RecordsOrigin | null,
+  next: RecordsOrigin,
+): boolean {
+  return current === null || !isSameRecordsOrigin(current, next);
 }
 
 export async function validateRoleChange(

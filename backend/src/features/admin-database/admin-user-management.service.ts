@@ -63,6 +63,8 @@ export class AdminUserManagementService {
     } catch (error) {
       if (this.isOfficeConflict(error))
         throw new ConflictException(this.result(['OFFICE_CONFLICT']));
+      if (this.isConcurrentChange(error))
+        throw new ConflictException(this.result(['CONCURRENT_CHANGE']));
       throw error;
     }
   }
@@ -75,35 +77,47 @@ export class AdminUserManagementService {
   }
 
   async changeSpeciality(id: string, dto: ChangeSpecialityDto) {
-    return this.prisma.$transaction(
-      async (tx) => {
-        const result = await this.analyzeSpecialityChange(tx, id, dto);
-        if (!result.allowed) throw new ConflictException(result);
-        return tx.user.update({
-          where: { id },
-          data: { speciality: dto.speciality },
-        });
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const result = await this.analyzeSpecialityChange(tx, id, dto);
+          if (!result.allowed) throw new ConflictException(result);
+          return tx.user.update({
+            where: { id },
+            data: { speciality: dto.speciality },
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (this.isConcurrentChange(error))
+        throw new ConflictException(this.result(['CONCURRENT_CHANGE']));
+      throw error;
+    }
   }
 
   private async analyzeRoleChange(
     db: UserManagementDatabase,
     id: string,
     dto: ChangeRoleDto,
-    skipOfficeReplacement = false,
+    isOfficeReplacement = false,
   ): Promise<ChangeValidationResult> {
     const subject = await this.findUser(db, id);
     const blockers: ChangeBlocker[] = [];
 
     if (subject.role === dto.role) this.add(blockers, 'ROLE_UNCHANGED');
     await this.validateRoleContext(db, dto, blockers);
-    await this.addDepartureBlockers(db, subject, dto.role, blockers);
+    await this.addDepartureBlockers(
+      db,
+      subject,
+      dto.role,
+      blockers,
+      isOfficeReplacement,
+    );
 
     let currentManager: ManagedUser | null = null;
     if (
-      !skipOfficeReplacement &&
+      !isOfficeReplacement &&
       dto.role === UserRole.OFFICE &&
       dto.company_id
     ) {
@@ -128,7 +142,7 @@ export class AdminUserManagementService {
           blockers,
         );
       }
-    } else if (!skipOfficeReplacement && dto.replacement) {
+    } else if (!isOfficeReplacement && dto.replacement) {
       this.add(blockers, 'OFFICE_REPLACEMENT_INVALID');
     }
 
@@ -188,6 +202,7 @@ export class AdminUserManagementService {
     subject: ManagedUser,
     targetRole: UserRole,
     blockers: ChangeBlocker[],
+    isOfficeReplacement: boolean,
   ) {
     if (
       subject.role === UserRole.CUSTOMER &&
@@ -225,6 +240,14 @@ export class AdminUserManagementService {
         blockers,
         false,
       );
+    }
+
+    if (
+      subject.role === UserRole.OFFICE &&
+      targetRole !== UserRole.OFFICE &&
+      !isOfficeReplacement
+    ) {
+      this.add(blockers, 'OFFICE_REPLACEMENT_REQUIRED');
     }
 
     if (
@@ -323,12 +346,32 @@ export class AdminUserManagementService {
         select: { id: true },
       });
       if (currentManager)
-        await db.user.update({
-          where: { id: currentManager.id },
-          data: this.roleData(dto.replacement),
-        });
+        await this.applyOfficeReplacement(
+          db,
+          currentManager.id,
+          dto.replacement,
+        );
     }
     return db.user.update({ where: { id }, data: this.roleData(dto) });
+  }
+
+  private async applyOfficeReplacement(
+    db: Prisma.TransactionClient,
+    currentManagerId: string,
+    replacement: OfficeManagerReplacementDto,
+  ) {
+    const result = await this.analyzeRoleChange(
+      db,
+      currentManagerId,
+      replacement as ChangeRoleDto,
+      true,
+    );
+    if (!result.allowed) throw new ConflictException(result);
+
+    return db.user.update({
+      where: { id: currentManagerId },
+      data: this.roleData(replacement),
+    });
   }
 
   private roleData(dto: ChangeRoleDto | OfficeManagerReplacementDto) {
@@ -406,5 +449,9 @@ export class AdminUserManagementService {
       (target.includes('one_office_per_company') ||
         target.includes('company_id'))
     );
+  }
+
+  private isConcurrentChange(error: unknown): boolean {
+    return (error as { code?: string })?.code === 'P2034';
   }
 }

@@ -222,6 +222,25 @@ describe('AdminUserManagementService', () => {
     });
   });
 
+  it('bloqueia gerente saindo do cargo fora de uma substituição atômica', async () => {
+    const manager = user(officeId, UserRole.OFFICE, {
+      company_id: companyId,
+    });
+    const { service } = makeService([manager]);
+
+    await expect(
+      service.validateRoleChange(officeId, { role: UserRole.CUSTOMER }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      blockers: [
+        {
+          code: 'OFFICE_REPLACEMENT_REQUIRED',
+          message: 'Informe o novo cargo do gerente atual do escritório.',
+        },
+      ],
+    });
+  });
+
   it.each([
     {
       name: 'Cliente',
@@ -442,4 +461,48 @@ describe('AdminUserManagementService', () => {
       },
     });
   });
+
+  it.each([
+    {
+      name: 'cargo',
+      mutate: (service: AdminUserManagementService) =>
+        service.changeRole(customerId, {
+          role: UserRole.CONSULTANT,
+          company_id: companyId,
+        }),
+    },
+    {
+      name: 'especialidade',
+      mutate: (service: AdminUserManagementService) =>
+        service.changeSpeciality(specialistId, {
+          speciality: ProductType.BOAT,
+        }),
+    },
+  ])(
+    'traduz P2034 ao confirmar alteração de $name em conflito localizado',
+    async ({ mutate }) => {
+      const { prisma, service } = makeService([
+        user(customerId, UserRole.CUSTOMER),
+        user(specialistId, UserRole.SPECIALIST, {
+          speciality: ProductType.CAR,
+        }),
+      ]);
+      prisma.$transaction.mockRejectedValue({ code: 'P2034' });
+
+      await expect(mutate(service)).rejects.toMatchObject({
+        status: 409,
+        response: {
+          allowed: false,
+          summary: 'A alteração não pode ser concluída.',
+          blockers: [
+            {
+              code: 'CONCURRENT_CHANGE',
+              message:
+                'Outra alteração foi concluída ao mesmo tempo. Verifique os dados e tente novamente.',
+            },
+          ],
+        },
+      });
+    },
+  );
 });

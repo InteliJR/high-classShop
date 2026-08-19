@@ -28,6 +28,7 @@ import AdminUserManagementDialog, {
 import {
   createLatestRequestGuard,
   isSameRecordsOrigin,
+  shouldInvalidateRecordsRequest,
   type RecordsOrigin,
 } from "../../lib/admin-user-management";
 
@@ -53,6 +54,7 @@ export default function DatabasePage() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [dialogState, setDialogState] =
     useState<AdminUserManagementDialogState | null>(null);
   const recordsRequestGuard = useRef(createLatestRequestGuard());
@@ -60,13 +62,14 @@ export default function DatabasePage() {
   useEffect(() => {
     getEntities()
       .then((list) => {
-        recordsRequestGuard.current.invalidate();
         setEntities(list);
         setActive(list[0]?.key ?? null);
+        if (list.length === 0) setLoading(false);
       })
-      .catch((err) =>
-        setError((err as Error).message || "Erro ao carregar entidades."),
-      );
+      .catch((err) => {
+        setError((err as Error).message || "Erro ao carregar entidades.");
+        setLoading(false);
+      });
   }, []);
 
   const loadRecords = useCallback(async () => {
@@ -132,9 +135,13 @@ export default function DatabasePage() {
             key={e.key}
             type="button"
             onClick={() => {
+              const current = active ? { entity: active, page } : null;
+              const next = { entity: e.key, page: 1 };
+              if (!shouldInvalidateRecordsRequest(current, next)) return;
               recordsRequestGuard.current.invalidate();
               setActive(e.key);
               setPage(1);
+              setSuccessMessage(null);
             }}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               active === e.key
@@ -150,6 +157,12 @@ export default function DatabasePage() {
       {error && (
         <Alert variant="danger" className="mb-4">
           {error}
+        </Alert>
+      )}
+
+      {successMessage && (
+        <Alert variant="success" className="mb-4">
+          {successMessage}
         </Alert>
       )}
 
@@ -216,12 +229,13 @@ export default function DatabasePage() {
                             variant="ghost"
                             className="px-2 py-1 text-xs"
                             disabled={!result?.rowMeta[i]?.id}
-                            onClick={() =>
+                            onClick={() => {
+                              setSuccessMessage(null);
                               setDialogState({
                                 userId: result!.rowMeta[i].id,
                                 mode: "role",
-                              })
-                            }
+                              });
+                            }}
                           >
                             Alterar cargo
                           </Button>
@@ -230,12 +244,13 @@ export default function DatabasePage() {
                               type="button"
                               variant="ghost"
                               className="px-2 py-1 text-xs"
-                              onClick={() =>
+                              onClick={() => {
+                                setSuccessMessage(null);
                                 setDialogState({
                                   userId: result.rowMeta[i].id,
                                   mode: "speciality",
-                                })
-                              }
+                                });
+                              }}
                             >
                               Alterar especialidade
                             </Button>
@@ -314,7 +329,10 @@ export default function DatabasePage() {
       <AdminUserManagementDialog
         state={dialogState}
         onClose={() => setDialogState(null)}
-        onSuccess={loadRecords}
+        onSuccess={async () => {
+          setSuccessMessage("Alteração realizada com sucesso.");
+          await loadRecords();
+        }}
       />
     </div>
   );

@@ -5,10 +5,12 @@ import {
   changeRole,
   changeSpeciality,
   createLatestRequestGuard,
+  getManagementDialogInteractionPolicy,
   getDialogRequirements,
   isSameRecordsOrigin,
   roleLabel,
   specialityLabel,
+  shouldInvalidateRecordsRequest,
   validateRoleChange,
   validateSpecialityChange,
 } from "./admin-user-management";
@@ -40,6 +42,15 @@ describe("admin-user-management", () => {
 
     expect(text).toContain("2 produtos ativos");
     expect(text).not.toMatch(/SPECIALIST|PRODUCTS|CAR|BOAT|AIRCRAFT/);
+  });
+
+  it("flexiona bloqueios contáveis no singular e no plural", () => {
+    expect(
+      blockerMessage({ code: "CONSULTANT_HAS_CLIENTS", count: 1 }),
+    ).toBe("O consultor ainda possui 1 cliente vinculado.");
+    expect(
+      blockerMessage({ code: "SPECIALIST_HAS_OPEN_PROCESSES", count: 2 }),
+    ).toBe("O especialista ainda possui 2 processos em andamento.");
   });
 
   it("pede contexto do destino", () => {
@@ -122,6 +133,17 @@ describe("admin-user-management", () => {
     expect(guard.isCurrent(secondRequest)).toBe(false);
   });
 
+  it("bloqueia edição e fechamento do diálogo enquanto o PATCH está em andamento", () => {
+    expect(getManagementDialogInteractionPolicy(true)).toEqual({
+      controlsDisabled: true,
+      dismissalAllowed: false,
+    });
+    expect(getManagementDialogInteractionPolicy(false)).toEqual({
+      controlsDisabled: false,
+      dismissalAllowed: true,
+    });
+  });
+
   it("associa registros somente à entidade e página que os originaram", () => {
     const usersPage = { entity: "users", page: 1 };
 
@@ -134,6 +156,35 @@ describe("admin-user-management", () => {
     expect(isSameRecordsOrigin(usersPage, { entity: "users", page: 2 })).toBe(
       false,
     );
+  });
+
+  it("não invalida a carga atual quando a seleção de aba e página é um no-op", () => {
+    const guard = createLatestRequestGuard();
+    const requestId = guard.begin();
+    const currentOrigin = { entity: "users", page: 1 };
+
+    if (
+      shouldInvalidateRecordsRequest(currentOrigin, {
+        entity: "users",
+        page: 1,
+      })
+    ) {
+      guard.invalidate();
+    }
+
+    expect(guard.isCurrent(requestId)).toBe(true);
+    expect(
+      shouldInvalidateRecordsRequest(currentOrigin, {
+        entity: "companies",
+        page: 1,
+      }),
+    ).toBe(true);
+    expect(
+      shouldInvalidateRecordsRequest(
+        { entity: "users", page: 2 },
+        { entity: "users", page: 1 },
+      ),
+    ).toBe(true);
   });
 
   it("preserva a revalidação estruturada devolvida pelo PATCH em conflito", async () => {

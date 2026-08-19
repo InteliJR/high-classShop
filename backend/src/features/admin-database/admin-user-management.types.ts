@@ -14,6 +14,7 @@ export type ChangeBlockerCode =
   | 'OFFICE_REPLACEMENT_REQUIRED'
   | 'OFFICE_REPLACEMENT_INVALID'
   | 'OFFICE_CONFLICT'
+  | 'CONCURRENT_CHANGE'
   | 'LAST_ACTIVE_ADMIN';
 
 export type ChangeBlocker = {

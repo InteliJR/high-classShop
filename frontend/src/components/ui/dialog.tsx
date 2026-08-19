@@ -12,12 +12,14 @@ export function DialogContent({
   children,
   className,
   hideTitle,
+  dismissible = true,
 }: {
   open: boolean;
   title: ReactNode;
   children: ReactNode;
   className?: string;
   hideTitle?: boolean;
+  dismissible?: boolean;
 }) {
   const shouldReduceMotion = useReducedMotion();
   const duration = shouldReduceMotion ? 0 : 0.15;
@@ -35,7 +37,17 @@ export function DialogContent({
               transition={{ duration }}
             />
           </DialogPrimitive.Overlay>
-          <DialogPrimitive.Content asChild forceMount aria-describedby={undefined}>
+          <DialogPrimitive.Content
+            asChild
+            forceMount
+            aria-describedby={undefined}
+            onEscapeKeyDown={(event) => {
+              if (!dismissible) event.preventDefault();
+            }}
+            onPointerDownOutside={(event) => {
+              if (!dismissible) event.preventDefault();
+            }}
+          >
             <motion.div
               className={cn(
                 "fixed left-1/2 top-1/2 z-50 w-[min(560px,90vw)] max-h-[85vh] overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-lg bg-surface p-6 shadow-ds-modal",
@@ -53,6 +65,7 @@ export function DialogContent({
                 <DialogPrimitive.Close
                   className="text-muted hover:text-ink"
                   aria-label="Fechar"
+                  disabled={!dismissible}
                 >
                   <X size={18} />
                 </DialogPrimitive.Close>

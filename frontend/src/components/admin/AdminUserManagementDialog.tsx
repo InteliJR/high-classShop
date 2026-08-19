@@ -5,6 +5,7 @@ import {
   changeRole,
   changeSpeciality,
   createLatestRequestGuard,
+  getManagementDialogInteractionPolicy,
   getDialogRequirements,
   ROLE_LABELS,
   SPECIALITY_LABELS,
@@ -104,6 +105,7 @@ function AdminUserManagementDialogSession({
   const [error, setError] = useState<string | null>(null);
   const requestGuard = useRef(createLatestRequestGuard());
   const validatedChange = useRef<ValidatedChange | null>(null);
+  const interactionPolicy = getManagementDialogInteractionPolicy(submitting);
 
   const requirements = useMemo(
     () =>
@@ -166,9 +168,14 @@ function AdminUserManagementDialogSession({
     setError(null);
   }
 
-  function close() {
+  function closeDialog() {
     reset();
     onClose();
+  }
+
+  function dismiss() {
+    if (!interactionPolicy.dismissalAllowed) return;
+    closeDialog();
   }
 
   function invalidateValidation() {
@@ -309,7 +316,7 @@ function AdminUserManagementDialogSession({
         await changeSpeciality(approved.userId, approved.payload);
       }
       if (!requestGuard.current.isCurrent(requestId)) return;
-      close();
+      closeDialog();
       await onSuccess();
     } catch (caught) {
       if (!requestGuard.current.isCurrent(requestId)) return;
@@ -327,9 +334,19 @@ function AdminUserManagementDialogSession({
     state?.mode === "speciality" ? "Alterar especialidade" : "Alterar cargo";
 
   return (
-    <Dialog open={Boolean(state)} onOpenChange={(open) => !open && close()}>
-      <DialogContent open={Boolean(state)} title={title}>
-        <div className="space-y-4">
+    <Dialog
+      open={Boolean(state)}
+      onOpenChange={(open) => !open && dismiss()}
+    >
+      <DialogContent
+        open={Boolean(state)}
+        title={title}
+        dismissible={interactionPolicy.dismissalAllowed}
+      >
+        <fieldset
+          className="space-y-4"
+          disabled={interactionPolicy.controlsDisabled}
+        >
           {state?.mode === "role" ? (
             <>
               <div>
@@ -480,7 +497,7 @@ function AdminUserManagementDialogSession({
           {error ? <Alert variant="danger">{error}</Alert> : null}
 
           <div className="flex flex-wrap justify-end gap-3 pt-2">
-            <Button type="button" variant="light" onClick={close}>
+            <Button type="button" variant="light" onClick={dismiss}>
               Cancelar
             </Button>
             <Button
@@ -499,7 +516,7 @@ function AdminUserManagementDialogSession({
               {submitting ? "Confirmando..." : "Confirmar alteração"}
             </Button>
           </div>
-        </div>
+        </fieldset>
       </DialogContent>
     </Dialog>
   );
