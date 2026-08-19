@@ -58,7 +58,7 @@ export type RecordRowMeta = {
   role?: UserRoleCode;
 };
 
-export type DialogRequirement = "company" | "speciality";
+export type DialogRequirement = "company" | "speciality" | "replacement";
 
 export const ROLE_LABELS: Record<UserRoleCode, string> = {
   CUSTOMER: "Cliente",
@@ -125,8 +125,13 @@ export function blockerMessage(
   return BLOCKER_MESSAGES[blocker.code](blocker.count);
 }
 
-export function getDialogRequirements(role: UserRoleCode): DialogRequirement[] {
-  if (role === "CONSULTANT" || role === "OFFICE") return ["company"];
+export function getDialogRequirements(
+  role: UserRoleCode,
+  hasOfficeConflict = false,
+): DialogRequirement[] {
+  if (role === "OFFICE")
+    return hasOfficeConflict ? ["company", "replacement"] : ["company"];
+  if (role === "CONSULTANT") return ["company"];
   if (role === "SPECIALIST") return ["speciality"];
   return [];
 }

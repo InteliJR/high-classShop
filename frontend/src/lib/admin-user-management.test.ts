@@ -45,6 +45,14 @@ describe("admin-user-management", () => {
     expect(getDialogRequirements("ADMIN")).toEqual([]);
   });
 
+  it("pede substituição quando escritório já tem gerente", () => {
+    expect(getDialogRequirements("OFFICE", true)).toEqual([
+      "company",
+      "replacement",
+    ]);
+    expect(getDialogRequirements("OFFICE", false)).toEqual(["company"]);
+  });
+
   it("usa Não informado para enum ausente ou desconhecido", () => {
     expect(roleLabel()).toBe("Não informado");
     expect(specialityLabel("OUTRO")).toBe("Não informado");

@@ -2,7 +2,7 @@
 // A formatação toda (labels pt-BR, máscaras, moeda, enums) vive no backend,
 // em admin-database.columns.ts — aqui só renderizamos o que chega, e o export
 // consome exatamente a mesma matriz da tela.
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -22,6 +22,9 @@ import { downloadCsv, openPrintablePdf } from "../../utils/export";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
 import { EmptyState } from "../../components/patterns/EmptyState";
+import AdminUserManagementDialog, {
+  type AdminUserManagementDialogState,
+} from "../../components/admin/AdminUserManagementDialog";
 
 const PAGE_SIZE = 20;
 
@@ -38,6 +41,8 @@ export default function DatabasePage() {
   const [result, setResult] = useState<RecordsPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dialogState, setDialogState] =
+    useState<AdminUserManagementDialogState | null>(null);
 
   useEffect(() => {
     getEntities()
@@ -50,20 +55,25 @@ export default function DatabasePage() {
       );
   }, []);
 
-  useEffect(() => {
+  const loadRecords = useCallback(async () => {
     if (!active) return;
     setLoading(true);
     setError(null);
-    getRecords(active, page, PAGE_SIZE)
-      .then(setResult)
-      .catch((err) => {
-        // Descarta o resultado anterior: sem isso a aba nova mostra as linhas
-        // da aba antiga, e o CSV sai nomeado com a entidade errada.
-        setResult(null);
-        setError((err as Error).message || "Erro ao carregar registros.");
-      })
-      .finally(() => setLoading(false));
+    try {
+      setResult(await getRecords(active, page, PAGE_SIZE));
+    } catch (err) {
+      // Descarta o resultado anterior: sem isso a aba nova mostra as linhas
+      // da aba antiga, e o CSV sai nomeado com a entidade errada.
+      setResult(null);
+      setError((err as Error).message || "Erro ao carregar registros.");
+    } finally {
+      setLoading(false);
+    }
   }, [active, page]);
+
+  useEffect(() => {
+    void loadRecords();
+  }, [loadRecords]);
 
   const columns = result?.columns ?? [];
   const rows = result?.data ?? [];
@@ -150,6 +160,11 @@ export default function DatabasePage() {
             <table className="min-w-full text-sm">
               <thead className="bg-border-soft sticky top-0 z-10">
                 <tr>
+                  {active === "users" ? (
+                    <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">
+                      Ações
+                    </th>
+                  ) : null}
                   {columns.map((c) => (
                     <th
                       key={c.label}
@@ -163,6 +178,41 @@ export default function DatabasePage() {
               <tbody>
                 {rows.map((row, i) => (
                   <tr key={i} className="border-t border-border-soft">
+                    {active === "users" ? (
+                      <td className="px-3 py-2 whitespace-nowrap align-top">
+                        <div className="flex flex-col items-start gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="px-2 py-1 text-xs"
+                            disabled={!result?.rowMeta[i]?.id}
+                            onClick={() =>
+                              setDialogState({
+                                userId: result!.rowMeta[i].id,
+                                mode: "role",
+                              })
+                            }
+                          >
+                            Alterar cargo
+                          </Button>
+                          {result?.rowMeta[i]?.role === "SPECIALIST" ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="px-2 py-1 text-xs"
+                              onClick={() =>
+                                setDialogState({
+                                  userId: result.rowMeta[i].id,
+                                  mode: "speciality",
+                                })
+                              }
+                            >
+                              Alterar especialidade
+                            </Button>
+                          ) : null}
+                        </div>
+                      </td>
+                    ) : null}
                     {row.map((cell, j) => {
                       const wide = columns[j]?.wide;
                       const text = cellText(cell);
@@ -224,6 +274,12 @@ export default function DatabasePage() {
           </div>
         </>
       )}
+
+      <AdminUserManagementDialog
+        state={dialogState}
+        onClose={() => setDialogState(null)}
+        onSuccess={loadRecords}
+      />
     </div>
   );
 }
