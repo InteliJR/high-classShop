@@ -6,6 +6,7 @@ import {
   changeSpeciality,
   createLatestRequestGuard,
   getManagementDialogInteractionPolicy,
+  getUserEditMode,
   getDialogRequirements,
   isSameRecordsOrigin,
   roleLabel,
@@ -15,6 +16,7 @@ import {
   validateSpecialityChange,
 } from "./admin-user-management";
 import api from "../services/api";
+import * as management from "./admin-user-management";
 
 vi.mock("../services/api", () => ({
   default: {
@@ -57,6 +59,12 @@ describe("admin-user-management", () => {
     expect(getDialogRequirements("CONSULTANT")).toEqual(["company"]);
     expect(getDialogRequirements("SPECIALIST")).toEqual(["speciality"]);
     expect(getDialogRequirements("ADMIN")).toEqual([]);
+  });
+
+  it("mantém a edição de especialista quando o cargo não muda e troca para edição de cargo quando muda", () => {
+    expect(getUserEditMode("specialist", "SPECIALIST")).toBe("specialist");
+    expect(getUserEditMode("specialist", "CONSULTANT")).toBe("role");
+    expect(getUserEditMode("role", "SPECIALIST")).toBe("role");
   });
 
   it("pede substituição quando escritório já tem gerente", () => {
@@ -108,6 +116,28 @@ describe("admin-user-management", () => {
     );
     expect(api.patch).toHaveBeenCalledWith(
       "admin/database/users/user-1/speciality-change",
+      payload,
+    );
+  });
+
+  it("valida e aplica especialidade e comissão juntas nas rotas protegidas", async () => {
+    const payload = { speciality: "BOAT" as const, commission_rate: 18 };
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { allowed: true } });
+    vi.mocked(api.patch).mockResolvedValueOnce({ data: { id: "user-1" } });
+
+    await expect(
+      (management as any).validateSpecialistDetailsChange("user-1", payload),
+    ).resolves.toEqual({ allowed: true });
+    await expect(
+      (management as any).changeSpecialistDetails("user-1", payload),
+    ).resolves.toEqual({ id: "user-1" });
+
+    expect(api.post).toHaveBeenCalledWith(
+      "admin/database/users/user-1/specialist-details-change/validate",
+      payload,
+    );
+    expect(api.patch).toHaveBeenCalledWith(
+      "admin/database/users/user-1/specialist-details-change",
       payload,
     );
   });

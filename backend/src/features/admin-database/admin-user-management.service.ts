@@ -12,6 +12,7 @@ import {
   OfficeManagerReplacementDto,
 } from './dto/change-role.dto';
 import { ChangeSpecialityDto } from './dto/change-speciality.dto';
+import { ChangeSpecialistDetailsDto } from './dto/change-specialist-details.dto';
 import {
   ChangeBlocker,
   ChangeBlockerCode,
@@ -37,6 +38,7 @@ type ManagedUser = {
   consultant_id: string | null;
   company_id: string | null;
   speciality: ProductType | null;
+  commission_rate: Prisma.Decimal | null;
 };
 
 @Injectable()
@@ -85,6 +87,36 @@ export class AdminUserManagementService {
           return tx.user.update({
             where: { id },
             data: { speciality: dto.speciality },
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (this.isConcurrentChange(error))
+        throw new ConflictException(this.result(['CONCURRENT_CHANGE']));
+      throw error;
+    }
+  }
+
+  async validateSpecialistDetailsChange(
+    id: string,
+    dto: ChangeSpecialistDetailsDto,
+  ): Promise<ChangeValidationResult> {
+    return this.analyzeSpecialistDetailsChange(this.prisma, id, dto);
+  }
+
+  async changeSpecialistDetails(id: string, dto: ChangeSpecialistDetailsDto) {
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const result = await this.analyzeSpecialistDetailsChange(tx, id, dto);
+          if (!result.allowed) throw new ConflictException(result);
+          return tx.user.update({
+            where: { id },
+            data: {
+              speciality: dto.speciality,
+              commission_rate: dto.commission_rate,
+            },
           });
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -171,6 +203,39 @@ export class AdminUserManagementService {
       blockers,
       true,
     );
+    return this.result(blockers);
+  }
+
+  private async analyzeSpecialistDetailsChange(
+    db: UserManagementDatabase,
+    id: string,
+    dto: ChangeSpecialistDetailsDto,
+  ): Promise<ChangeValidationResult> {
+    const subject = await this.findUser(db, id);
+    if (subject.role !== UserRole.SPECIALIST) {
+      throw new BadRequestException(
+        'Os dados só podem ser alterados para usuários Especialistas.',
+      );
+    }
+
+    const blockers: ChangeBlocker[] = [];
+    const specialityChanged = subject.speciality !== dto.speciality;
+    const commissionChanged =
+      subject.commission_rate === null ||
+      Number(subject.commission_rate) !== dto.commission_rate;
+
+    if (!specialityChanged && !commissionChanged) {
+      this.add(blockers, 'SPECIALIST_DETAILS_UNCHANGED');
+    }
+    if (specialityChanged) {
+      await this.addSpecialistBlockers(
+        db,
+        subject.id,
+        dto.speciality,
+        blockers,
+        true,
+      );
+    }
     return this.result(blockers);
   }
 
@@ -404,6 +469,7 @@ export class AdminUserManagementService {
       consultant_id: true,
       company_id: true,
       speciality: true,
+      commission_rate: true,
     };
   }
 

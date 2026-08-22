@@ -10,6 +10,7 @@ import {
   Download,
   FileText,
   Loader2,
+  Pencil,
 } from "lucide-react";
 import {
   getEntities,
@@ -223,39 +224,29 @@ export default function DatabasePage() {
                   <tr key={i} className="border-t border-border-soft">
                     {active === "users" ? (
                       <td className="px-3 py-2 whitespace-nowrap align-top">
-                        <div className="flex flex-col items-start gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            className="px-2 py-1 text-xs"
-                            disabled={!result?.rowMeta[i]?.id}
-                            onClick={() => {
-                              setSuccessMessage(null);
-                              setDialogState({
-                                userId: result!.rowMeta[i].id,
-                                mode: "role",
-                              });
-                            }}
-                          >
-                            Alterar cargo
-                          </Button>
-                          {result?.rowMeta[i]?.role === "SPECIALIST" ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              className="px-2 py-1 text-xs"
-                              onClick={() => {
-                                setSuccessMessage(null);
-                                setDialogState({
-                                  userId: result.rowMeta[i].id,
-                                  mode: "speciality",
-                                });
-                              }}
-                            >
-                              Alterar especialidade
-                            </Button>
-                          ) : null}
-                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="p-2"
+                          disabled={!result?.rowMeta[i]?.id}
+                          aria-label="Editar usuário"
+                          title="Editar usuário"
+                          onClick={() => {
+                            const user = result!.rowMeta[i];
+                            setSuccessMessage(null);
+                            setDialogState({
+                              userId: user.id,
+                              mode:
+                                user.role === "SPECIALIST"
+                                  ? "specialist"
+                                  : "role",
+                              speciality: user.speciality,
+                              commissionRate: user.commission_rate,
+                            });
+                          }}
+                        >
+                          <Pencil className="w-4 h-4" aria-hidden="true" />
+                        </Button>
                       </td>
                     ) : null}
                     {row.map((cell, j) => {

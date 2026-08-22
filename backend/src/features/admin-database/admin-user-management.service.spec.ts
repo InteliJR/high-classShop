@@ -15,6 +15,7 @@ type User = {
   consultant_id?: string | null;
   company_id?: string | null;
   speciality?: ProductType | null;
+  commission_rate?: number | null;
 };
 
 function user(id: string, role: UserRole, overrides: Partial<User> = {}): User {
@@ -25,6 +26,7 @@ function user(id: string, role: UserRole, overrides: Partial<User> = {}): User {
     consultant_id: null,
     company_id: null,
     speciality: null,
+    commission_rate: null,
     ...overrides,
   };
 }
@@ -422,6 +424,44 @@ describe('AdminUserManagementService', () => {
         ],
       },
     });
+  });
+
+  it('altera especialidade e comissão do especialista na mesma transação', async () => {
+    const { prisma, service } = makeService([
+      user(specialistId, UserRole.SPECIALIST, {
+        speciality: ProductType.CAR,
+        commission_rate: 12.5,
+      }),
+    ]);
+
+    await (service as any).changeSpecialistDetails(specialistId, {
+      speciality: ProductType.BOAT,
+      commission_rate: 18,
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    });
+    expect(prisma.transactionUser.update).toHaveBeenCalledWith({
+      where: { id: specialistId },
+      data: { speciality: ProductType.BOAT, commission_rate: 18 },
+    });
+  });
+
+  it('permite definir comissão de 0% quando o especialista ainda não tem comissão', async () => {
+    const { service } = makeService([
+      user(specialistId, UserRole.SPECIALIST, {
+        speciality: ProductType.CAR,
+        commission_rate: null,
+      }),
+    ]);
+
+    await expect(
+      service.validateSpecialistDetailsChange(specialistId, {
+        speciality: ProductType.CAR,
+        commission_rate: 0,
+      }),
+    ).resolves.toMatchObject({ allowed: true, blockers: [] });
   });
 
   it('revalida e bloqueia a mutação quando a transação encontra um conflito', async () => {

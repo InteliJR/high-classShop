@@ -45,6 +45,8 @@ const blockerMessages: Record<ChangeBlockerCode, (count?: number) => string> = {
   ROLE_UNCHANGED: () => 'O cargo selecionado já está atribuído a este usuário.',
   SPECIALITY_UNCHANGED: () =>
     'A especialidade selecionada já está atribuída a este especialista.',
+  SPECIALIST_DETAILS_UNCHANGED: () =>
+    'A especialidade e a taxa de comissão informadas já estão atribuídas a este especialista.',
   COMPANY_REQUIRED: () => 'Informe o escritório para o cargo selecionado.',
   COMPANY_NOT_FOUND: () => 'O escritório informado não foi encontrado.',
   SPECIALITY_REQUIRED: () =>

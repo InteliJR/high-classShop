@@ -7,17 +7,24 @@ import { AdminDatabaseService } from './admin-database.service';
 import { AdminUserManagementService } from './admin-user-management.service';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { ChangeSpecialityDto } from './dto/change-speciality.dto';
+import { ChangeSpecialistDetailsDto } from './dto/change-specialist-details.dto';
 import { localizedValidationExceptionFactory } from '../../shared/validation/localized-validation-exception';
 
 describe('AdminDatabaseController — gestão de usuários', () => {
   const userId = 'a3e72de0-41b0-4468-a866-c5aac1a7a55e';
   const roleDto: ChangeRoleDto = { role: UserRole.SPECIALIST };
   const specialityDto: ChangeSpecialityDto = { speciality: ProductType.CAR };
+  const specialistDetailsDto: ChangeSpecialistDetailsDto = {
+    speciality: ProductType.BOAT,
+    commission_rate: 18,
+  };
   const management = {
     validateRoleChange: jest.fn(),
     changeRole: jest.fn(),
     validateSpecialityChange: jest.fn(),
     changeSpeciality: jest.fn(),
+    validateSpecialistDetailsChange: jest.fn(),
+    changeSpecialistDetails: jest.fn(),
   } as unknown as AdminUserManagementService;
   const controller = new AdminDatabaseController(
     {} as AdminDatabaseService,
@@ -70,6 +77,43 @@ describe('AdminDatabaseController — gestão de usuários', () => {
       userId,
       specialityDto,
     );
+  });
+
+  it('valida e aplica os dados do especialista somente para ADMIN', async () => {
+    const validation = { allowed: true, blockers: [] };
+    const result = {
+      id: userId,
+      speciality: ProductType.BOAT,
+      commission_rate: 18,
+    };
+    management.validateSpecialistDetailsChange = jest
+      .fn()
+      .mockResolvedValue(validation);
+    management.changeSpecialistDetails = jest.fn().mockResolvedValue(result);
+
+    await expect(
+      (controller as any).validateSpecialistDetailsChange(
+        userId,
+        specialistDetailsDto,
+      ),
+    ).resolves.toBe(validation);
+    await expect(
+      (controller as any).changeSpecialistDetails(userId, specialistDetailsDto),
+    ).resolves.toBe(result);
+    expect(management.validateSpecialistDetailsChange).toHaveBeenCalledWith(
+      userId,
+      specialistDetailsDto,
+    );
+    expect(management.changeSpecialistDetails).toHaveBeenCalledWith(
+      userId,
+      specialistDetailsDto,
+    );
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        (controller as any).changeSpecialistDetails,
+      ),
+    ).toEqual([UserRole.ADMIN]);
   });
 
   it.each([

@@ -167,7 +167,14 @@ describe('AdminDatabaseService — usuários', () => {
       role: UserRole.SPECIALIST,
     });
 
-    expect(result.rowMeta).toEqual([{ id: userId, role: UserRole.SPECIALIST }]);
+    expect(result.rowMeta).toEqual([
+      {
+        id: userId,
+        role: UserRole.SPECIALIST,
+        speciality: 'AIRCRAFT',
+        commission_rate: 15,
+      },
+    ]);
     expect(result.columns.map((column) => column.label)).not.toContain('ID');
     expect(prisma.user.findMany.mock.calls[0][0].select.id).toBe(true);
   });

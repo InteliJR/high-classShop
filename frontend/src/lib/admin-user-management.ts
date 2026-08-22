@@ -64,9 +64,15 @@ export type ChangeSpecialityPayload = {
   speciality: SpecialityCode;
 };
 
+export type ChangeSpecialistDetailsPayload = ChangeSpecialityPayload & {
+  commission_rate: number;
+};
+
 export type RecordRowMeta = {
   id: string;
   role?: UserRoleCode;
+  speciality?: SpecialityCode | null;
+  commission_rate?: number | null;
 };
 
 export type RecordsOrigin = {
@@ -86,6 +92,7 @@ export type ManagementDialogInteractionPolicy = {
 };
 
 export type DialogRequirement = "company" | "speciality" | "replacement";
+export type UserEditMode = "role" | "specialist";
 
 export const ROLE_LABELS: Record<UserRoleCode, string> = {
   CUSTOMER: "Cliente",
@@ -174,6 +181,15 @@ export function getDialogRequirements(
   return [];
 }
 
+export function getUserEditMode(
+  initialMode: UserEditMode,
+  targetRole: UserRoleCode | "",
+): UserEditMode {
+  return initialMode === "specialist" && targetRole === "SPECIALIST"
+    ? "specialist"
+    : "role";
+}
+
 export function createLatestRequestGuard(): LatestRequestGuard {
   let latestRequestId = 0;
 
@@ -255,6 +271,31 @@ export async function changeSpeciality(
   return requestChange(() =>
     api
       .patch(`admin/database/users/${id}/speciality-change`, payload)
+      .then((response) => response.data),
+  );
+}
+
+export async function validateSpecialistDetailsChange(
+  id: string,
+  payload: ChangeSpecialistDetailsPayload,
+): Promise<ChangeValidationResult> {
+  return requestChange(() =>
+    api
+      .post<ChangeValidationResult>(
+        `admin/database/users/${id}/specialist-details-change/validate`,
+        payload,
+      )
+      .then((response) => response.data),
+  );
+}
+
+export async function changeSpecialistDetails(
+  id: string,
+  payload: ChangeSpecialistDetailsPayload,
+): Promise<unknown> {
+  return requestChange(() =>
+    api
+      .patch(`admin/database/users/${id}/specialist-details-change`, payload)
       .then((response) => response.data),
   );
 }

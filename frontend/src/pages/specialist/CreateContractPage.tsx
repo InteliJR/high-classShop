@@ -34,6 +34,7 @@ import {
 import DocuSignPreviewModal from "../../components/contracts/DocuSignPreviewModal";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
+import { getCommissionPreview } from "../../lib/contract-commission";
 
 interface ContractFormData {
   // Vendedor
@@ -117,6 +118,24 @@ function extractBackendMessage(error: any): string {
   if (typeof candidate === "string") return candidate;
   if (candidate == null) return "";
   return String(candidate);
+}
+
+function CommissionPreviewCard({
+  label,
+  value,
+  description,
+}: {
+  label: string;
+  value: string;
+  description?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-border-soft px-4 py-3">
+      <p className="text-sm text-muted">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-ink">{value}</p>
+      {description ? <p className="mt-1 text-xs text-subtle">{description}</p> : null}
+    </div>
+  );
 }
 
 export default function CreateContractPage() {
@@ -209,19 +228,18 @@ export default function CreateContractPage() {
   const vehiclePrice = watch("vehicle_price");
   const totalCommissionRate = watch("total_commission_rate");
 
-  // Plataforma e escritório vêm travados (pré-preenchidos, somente leitura);
-  // o especialista edita só o total, e o próprio corte é o resíduo.
+  // A porcentagem total é a única entrada: a API preserva as regras de split
+  // cadastradas e o especialista só confere o próprio repasse.
   const platformRate = prefillData?.platform?.rate ?? 0;
   const officeRate = prefillData?.office?.rate ?? 0;
-  const specialistRate = Math.max(
-    0,
-    (totalCommissionRate || 0) - platformRate - officeRate,
-  );
+  const specialistRate = prefillData?.specialist?.rate ?? 0;
   const platformValue = ((vehiclePrice || 0) * platformRate) / 100;
   const officeValue = ((vehiclePrice || 0) * officeRate) / 100;
-  const totalCommissionValue =
-    ((vehiclePrice || 0) * (totalCommissionRate || 0)) / 100;
-  const specialistValue = totalCommissionValue - platformValue - officeValue;
+  const { totalCommissionValue, specialistValue } = getCommissionPreview({
+    saleValue: vehiclePrice,
+    totalCommissionRate,
+    specialistShareRate: specialistRate,
+  });
   const sellerNetPreviewValue = (vehiclePrice || 0) - totalCommissionValue;
 
   // Load prefill data on mount
@@ -1278,6 +1296,60 @@ export default function CreateContractPage() {
           </section>
           </div>{/* end Dados do produto */}
 
+          {/* ── Etapa: Comissão da venda ── */}
+          <div>
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-subtle mb-3 px-1">
+              Comissão da venda
+            </h2>
+            <section className="bg-surface rounded-lg border border-border p-6 mb-6">
+              <div className="border-b pb-2 mb-4">
+                <h3 className="text-base font-semibold text-ink">
+                  Definição da comissão
+                </h3>
+                <p className="text-sm text-muted mt-1">
+                  Informe somente a porcentagem total da venda. Os repasses são
+                  calculados automaticamente pelas regras cadastradas.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-ink-soft mb-1">
+                    Comissão total da venda (%)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    {...register("total_commission_rate", {
+                      required: "Taxa de comissão é obrigatória",
+                      valueAsNumber: true,
+                      min: { value: 0, message: "Valor deve ser positivo" },
+                      max: { value: 100, message: "Valor deve ser de até 100%" },
+                    })}
+                    className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
+                  />
+                  {errors.total_commission_rate && (
+                    <p className="text-status-bad text-sm mt-1">
+                      {errors.total_commission_rate.message}
+                    </p>
+                  )}
+                </div>
+
+                <CommissionPreviewCard
+                  label="Comissão total"
+                  value={formatBRL(totalCommissionValue)}
+                />
+                <CommissionPreviewCard
+                  label="Sua comissão"
+                  value={formatBRL(specialistValue)}
+                  description={`${specialistRate.toFixed(2)}% da comissão total`}
+                />
+              </div>
+            </section>
+          </div>
+
           {/* ── Grupo: Condições comerciais ── */}
           <div>
             <h2 className="text-xs font-semibold uppercase tracking-widest text-subtle mb-3 px-1">
@@ -1307,36 +1379,6 @@ export default function CreateContractPage() {
                 {errors.vehicle_price && (
                   <p className="text-status-bad text-sm mt-1">
                     {errors.vehicle_price.message}
-                  </p>
-                )}
-              </div>
-
-              <div className="hidden">
-                <label className="block text-sm font-medium text-ink-soft mb-1">
-                  Comissão Total da Venda (%) *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register("total_commission_rate", {
-                    required: "Taxa de comissão é obrigatória",
-                    valueAsNumber: true,
-                    min: { value: 0, message: "Valor deve ser positivo" },
-                  })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
-                />
-                <p className="text-xs text-subtle mt-1">
-                  Único valor editável — plataforma e escritório ficam travados nas
-                  taxas cadastradas; seu corte é o restante.
-                </p>
-                {totalCommissionValue > 0 && (
-                  <p className="text-sm text-muted mt-1">
-                    {formatBRL(totalCommissionValue)}
-                  </p>
-                )}
-                {errors.total_commission_rate && (
-                  <p className="text-status-bad text-sm mt-1">
-                    {errors.total_commission_rate.message}
                   </p>
                 )}
               </div>

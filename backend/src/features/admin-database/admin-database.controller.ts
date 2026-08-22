@@ -13,6 +13,7 @@ import { AdminDatabaseService } from './admin-database.service';
 import { AdminUserManagementService } from './admin-user-management.service';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { ChangeSpecialityDto } from './dto/change-speciality.dto';
+import { ChangeSpecialistDetailsDto } from './dto/change-specialist-details.dto';
 
 // Navegador read-only da base de dados — só ADMIN.
 @Controller('admin/database')
@@ -63,5 +64,23 @@ export class AdminDatabaseController {
   @Roles(UserRole.ADMIN)
   changeSpeciality(@Param('id') id: string, @Body() dto: ChangeSpecialityDto) {
     return this.management.changeSpeciality(id, dto);
+  }
+
+  @Post('users/:id/specialist-details-change/validate')
+  @Roles(UserRole.ADMIN)
+  validateSpecialistDetailsChange(
+    @Param('id') id: string,
+    @Body() dto: ChangeSpecialistDetailsDto,
+  ) {
+    return this.management.validateSpecialistDetailsChange(id, dto);
+  }
+
+  @Patch('users/:id/specialist-details-change')
+  @Roles(UserRole.ADMIN)
+  changeSpecialistDetails(
+    @Param('id') id: string,
+    @Body() dto: ChangeSpecialistDetailsDto,
+  ) {
+    return this.management.changeSpecialistDetails(id, dto);
   }
 }

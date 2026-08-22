@@ -3,16 +3,17 @@ import {
   blockerMessage,
   ChangeValidationError,
   changeRole,
-  changeSpeciality,
+  changeSpecialistDetails,
   createLatestRequestGuard,
   getManagementDialogInteractionPolicy,
   getDialogRequirements,
+  getUserEditMode,
   ROLE_LABELS,
   SPECIALITY_LABELS,
   validateRoleChange,
-  validateSpecialityChange,
+  validateSpecialistDetailsChange,
   type ChangeRolePayload,
-  type ChangeSpecialityPayload,
+  type ChangeSpecialistDetailsPayload,
   type ChangeValidationResult,
   type SpecialityCode,
   type UserRoleCode,
@@ -27,7 +28,9 @@ import { Dialog, DialogContent } from "../ui/dialog";
 
 export type AdminUserManagementDialogState = {
   userId: string;
-  mode: "role" | "speciality";
+  mode: "role" | "specialist";
+  speciality?: SpecialityCode | null;
+  commissionRate?: number | null;
 };
 
 type Props = {
@@ -44,8 +47,8 @@ type ChangeSnapshot =
     }
   | {
       userId: string;
-      mode: "speciality";
-      payload: ChangeSpecialityPayload;
+      mode: "specialist";
+      payload: ChangeSpecialistDetailsPayload;
     };
 
 type ValidatedChange = ChangeSnapshot & {
@@ -70,7 +73,9 @@ export default function AdminUserManagementDialog({
   onClose,
   onSuccess,
 }: Props) {
-  const sessionKey = state ? `${state.userId}:${state.mode}` : "closed";
+  const sessionKey = state
+    ? `${state.userId}:${state.mode}:${state.speciality ?? ""}:${state.commissionRate ?? ""}`
+    : "closed";
 
   return (
     <AdminUserManagementDialogSession
@@ -87,9 +92,16 @@ function AdminUserManagementDialogSession({
   onClose,
   onSuccess,
 }: Props) {
-  const [targetRole, setTargetRole] = useState<UserRoleCode | "">("");
+  const [targetRole, setTargetRole] = useState<UserRoleCode | "">(
+    state?.mode === "specialist" ? "SPECIALIST" : "",
+  );
   const [companyId, setCompanyId] = useState("");
-  const [speciality, setSpeciality] = useState<SpecialityCode | "">("");
+  const [speciality, setSpeciality] = useState<SpecialityCode | "">(
+    state?.speciality ?? "",
+  );
+  const [commissionRate, setCommissionRate] = useState(
+    state?.commissionRate?.toString() ?? "",
+  );
   const [replacementRole, setReplacementRole] =
     useState<UserRoleCode | "">("");
   const [replacementCompanyId, setReplacementCompanyId] = useState("");
@@ -106,6 +118,7 @@ function AdminUserManagementDialogSession({
   const requestGuard = useRef(createLatestRequestGuard());
   const validatedChange = useRef<ValidatedChange | null>(null);
   const interactionPolicy = getManagementDialogInteractionPolicy(submitting);
+  const editMode = getUserEditMode(state?.mode ?? "role", targetRole);
 
   const requirements = useMemo(
     () =>
@@ -123,7 +136,7 @@ function AdminUserManagementDialogSession({
   useEffect(() => {
     let ignore = false;
     const needsCompanies =
-      state?.mode === "role" && requirements.includes("company");
+      editMode === "role" && requirements.includes("company");
 
     if (!needsCompanies || companies !== null) return;
 
@@ -148,7 +161,7 @@ function AdminUserManagementDialogSession({
     return () => {
       ignore = true;
     };
-  }, [companies, requirements, state?.mode]);
+  }, [companies, editMode, requirements]);
 
   function reset() {
     requestGuard.current.invalidate();
@@ -156,6 +169,7 @@ function AdminUserManagementDialogSession({
     setTargetRole("");
     setCompanyId("");
     setSpeciality("");
+    setCommissionRate("");
     setReplacementRole("");
     setReplacementCompanyId("");
     setReplacementSpeciality("");
@@ -184,6 +198,18 @@ function AdminUserManagementDialogSession({
     setValidation(null);
     setVerifying(false);
     setError(null);
+  }
+
+  function changeTargetRole(role: UserRoleCode | "") {
+    setTargetRole(role);
+    setCompanyId("");
+    setSpeciality("");
+    setCommissionRate("");
+    setReplacementRole("");
+    setReplacementCompanyId("");
+    setReplacementSpeciality("");
+    setHasOfficeConflict(false);
+    invalidateValidation();
   }
 
   function applyValidation(
@@ -239,23 +265,32 @@ function AdminUserManagementDialogSession({
     return payload;
   }
 
-  function specialityPayload(): ChangeSpecialityPayload | null {
+  function specialistDetailsPayload(): ChangeSpecialistDetailsPayload | null {
     if (!speciality) {
       setError("Selecione a nova especialidade.");
       return null;
     }
-    return { speciality };
+    if (!commissionRate.trim()) {
+      setError("Informe a taxa de comissão.");
+      return null;
+    }
+    const rate = Number(commissionRate);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+      setError("A taxa de comissão deve estar entre 0 e 100.");
+      return null;
+    }
+    return { speciality, commission_rate: rate };
   }
 
   async function verify() {
     if (!state) return;
 
     const payload =
-      state.mode === "role" ? rolePayload() : specialityPayload();
+      editMode === "role" ? rolePayload() : specialistDetailsPayload();
     if (!payload) return;
 
     const snapshot: ChangeSnapshot =
-      state.mode === "role"
+      editMode === "role"
         ? {
             userId: state.userId,
             mode: "role",
@@ -263,8 +298,8 @@ function AdminUserManagementDialogSession({
           }
         : {
             userId: state.userId,
-            mode: "speciality",
-            payload: payload as ChangeSpecialityPayload,
+            mode: "specialist",
+            payload: payload as ChangeSpecialistDetailsPayload,
           };
     const requestId = requestGuard.current.begin();
 
@@ -272,14 +307,14 @@ function AdminUserManagementDialogSession({
     setError(null);
     try {
       const result =
-        state.mode === "role"
+        editMode === "role"
           ? await validateRoleChange(
               state.userId,
               payload as ChangeRolePayload,
             )
-          : await validateSpecialityChange(
+          : await validateSpecialistDetailsChange(
               state.userId,
-              payload as ChangeSpecialityPayload,
+              payload as ChangeSpecialistDetailsPayload,
             );
       applyValidation(snapshot, requestId, result);
     } catch (caught) {
@@ -299,7 +334,7 @@ function AdminUserManagementDialogSession({
       !approved?.result.allowed ||
       !requestGuard.current.isCurrent(approved.requestId) ||
       approved.userId !== state.userId ||
-      approved.mode !== state.mode
+      approved.mode !== editMode
     ) {
       return;
     }
@@ -313,7 +348,7 @@ function AdminUserManagementDialogSession({
       if (approved.mode === "role") {
         await changeRole(approved.userId, approved.payload);
       } else {
-        await changeSpeciality(approved.userId, approved.payload);
+        await changeSpecialistDetails(approved.userId, approved.payload);
       }
       if (!requestGuard.current.isCurrent(requestId)) return;
       closeDialog();
@@ -331,7 +366,7 @@ function AdminUserManagementDialogSession({
   }
 
   const title =
-    state?.mode === "speciality" ? "Alterar especialidade" : "Alterar cargo";
+    editMode === "specialist" ? "Editar especialista" : "Alterar cargo";
 
   return (
     <Dialog
@@ -347,38 +382,60 @@ function AdminUserManagementDialogSession({
           className="space-y-4"
           disabled={interactionPolicy.controlsDisabled}
         >
-          {state?.mode === "role" ? (
+          {state?.mode === "specialist" ? (
+            <div>
+              <label
+                htmlFor="admin-specialist-target-role"
+                className="mb-1 block text-sm font-medium text-ink-soft"
+              >
+                Cargo
+              </label>
+              <select
+                id="admin-specialist-target-role"
+                value={targetRole}
+                onChange={(event) =>
+                  changeTargetRole(event.target.value as UserRoleCode | "")
+                }
+                className={selectClassName}
+              >
+                {ROLE_OPTIONS.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {editMode === "role" ? (
             <>
-              <div>
-                <label
-                  htmlFor="admin-user-target-role"
-                  className="mb-1 block text-sm font-medium text-ink-soft"
-                >
-                  Novo cargo
-                </label>
-                <select
-                  id="admin-user-target-role"
-                  value={targetRole}
-                  onChange={(event) => {
-                    setTargetRole(event.target.value as UserRoleCode | "");
-                    setCompanyId("");
-                    setSpeciality("");
-                    setReplacementRole("");
-                    setReplacementCompanyId("");
-                    setReplacementSpeciality("");
-                    setHasOfficeConflict(false);
-                    invalidateValidation();
-                  }}
-                  className={selectClassName}
-                >
-                  <option value="">Selecione um cargo</option>
-                  {ROLE_OPTIONS.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {state?.mode === "role" ? (
+                <div>
+                  <label
+                    htmlFor="admin-user-target-role"
+                    className="mb-1 block text-sm font-medium text-ink-soft"
+                  >
+                    Novo cargo
+                  </label>
+                  <select
+                    id="admin-user-target-role"
+                    value={targetRole}
+                    onChange={(event) =>
+                      changeTargetRole(
+                        event.target.value as UserRoleCode | "",
+                      )
+                    }
+                    className={selectClassName}
+                  >
+                    <option value="">Selecione um cargo</option>
+                    {ROLE_OPTIONS.map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
 
               {requirements.includes("company") ? (
                 <CompanySelect
@@ -473,15 +530,38 @@ function AdminUserManagementDialogSession({
               ) : null}
             </>
           ) : (
-            <SpecialitySelect
-              id="admin-user-speciality"
-              label="Nova especialidade"
-              value={speciality}
-              onChange={(value) => {
-                setSpeciality(value);
-                invalidateValidation();
-              }}
-            />
+            <>
+              <SpecialitySelect
+                id="admin-user-speciality"
+                label="Nova especialidade"
+                value={speciality}
+                onChange={(value) => {
+                  setSpeciality(value);
+                  invalidateValidation();
+                }}
+              />
+              <div>
+                <label
+                  htmlFor="admin-user-commission-rate"
+                  className="mb-1 block text-sm font-medium text-ink-soft"
+                >
+                  Taxa de comissão (%)
+                </label>
+                <input
+                  id="admin-user-commission-rate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={commissionRate}
+                  onChange={(event) => {
+                    setCommissionRate(event.target.value);
+                    invalidateValidation();
+                  }}
+                  className={selectClassName}
+                />
+              </div>
+            </>
           )}
 
           {validation?.blockers.length ? (

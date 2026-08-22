@@ -41,7 +41,15 @@ export class AdminDatabaseService {
   ): Promise<{
     columns: ColumnMeta[];
     data: Cell[][];
-    rowMeta: ({ id: string; role: string } | { id: string })[];
+    rowMeta: (
+      | {
+          id: string;
+          role: string;
+          speciality: string | null;
+          commission_rate: number | null;
+        }
+      | { id: string }
+    )[];
     total: number;
     page: number;
     pageSize: number;
@@ -80,7 +88,15 @@ export class AdminDatabaseService {
       ...(c.wide ? { wide: true } : {}),
     }));
     const rowMeta = rows.map((row: any) =>
-      entity === 'users' ? { id: row.id, role: row.role } : { id: row.id },
+      entity === 'users'
+        ? {
+            id: row.id,
+            role: row.role,
+            speciality: row.speciality,
+            commission_rate:
+              row.commission_rate === null ? null : Number(row.commission_rate),
+          }
+        : { id: row.id },
     );
 
     return { columns, data, rowMeta, total, page: currentPage, pageSize: take };
