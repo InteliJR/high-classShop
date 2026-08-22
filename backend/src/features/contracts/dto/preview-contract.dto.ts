@@ -19,6 +19,26 @@ import {
  *
  * O preview cria um envelope em modo DRAFT que pode ser visualizado
  * e editado antes do envio definitivo.
+ *
+ * ## Campos obrigatórios
+ *
+ * Os dados do contrato (CPF, endereço, CEP, banco, dados do veículo, valores,
+ * cidade) são OPCIONAIS de propósito: nem sempre estão todos disponíveis na
+ * hora de montar o contrato, e travar o preenchimento impedia gerar o
+ * documento. Campos ausentes chegam vazios no template do DocuSign.
+ *
+ * Continuam obrigatórios apenas os que quebram o fluxo se faltarem:
+ *
+ * - `return_url`, `process_id` — encanamento, não são conteúdo do contrato.
+ * - `seller_name`/`seller_email`, `buyer_name`/`buyer_email` — viram
+ *   destinatários do envelope; o DocuSign recusa criar envelope sem eles, e
+ *   `buyer_email` ainda é usado para localizar o usuário signatário.
+ * - `total_commission_rate` — base do cálculo de comissão. Sem ele o split
+ *   vira NaN e é persistido assim; um erro de validação é preferível a um
+ *   contrato com valores corrompidos.
+ *
+ * Se o PO decidir afrouxar `total_commission_rate` também, trate a ausência
+ * como zero em resolveCommissionFromTotal antes de remover a validação daqui.
  */
 export class PreviewContractDto {
   /**
@@ -60,32 +80,32 @@ export class PreviewContractDto {
   seller_email: string;
 
   @IsString({ message: 'seller_cpf deve ser uma string' })
-  @IsNotEmpty({ message: 'seller_cpf é obrigatório' })
-  seller_cpf: string;
+  @IsOptional()
+  seller_cpf?: string;
 
   @IsString({ message: 'seller_rg deve ser uma string' })
   @IsOptional()
   seller_rg?: string;
 
   @IsString({ message: 'seller_address deve ser uma string' })
-  @IsNotEmpty({ message: 'seller_address é obrigatório' })
-  seller_address: string;
+  @IsOptional()
+  seller_address?: string;
 
   @IsString({ message: 'seller_cep deve ser uma string' })
-  @IsNotEmpty({ message: 'seller_cep é obrigatório' })
-  seller_cep: string;
+  @IsOptional()
+  seller_cep?: string;
 
   @IsString({ message: 'seller_bank deve ser uma string' })
-  @IsNotEmpty({ message: 'seller_bank é obrigatório' })
-  seller_bank: string;
+  @IsOptional()
+  seller_bank?: string;
 
   @IsString({ message: 'seller_agency deve ser uma string' })
-  @IsNotEmpty({ message: 'seller_agency é obrigatório' })
-  seller_agency: string;
+  @IsOptional()
+  seller_agency?: string;
 
   @IsString({ message: 'seller_checking_account deve ser uma string' })
-  @IsNotEmpty({ message: 'seller_checking_account é obrigatório' })
-  seller_checking_account: string;
+  @IsOptional()
+  seller_checking_account?: string;
 
   // === COMPRADOR (BUYER) ===
 
@@ -99,54 +119,54 @@ export class PreviewContractDto {
   buyer_email: string;
 
   @IsString({ message: 'buyer_cpf deve ser uma string' })
-  @IsNotEmpty({ message: 'buyer_cpf é obrigatório' })
-  buyer_cpf: string;
+  @IsOptional()
+  buyer_cpf?: string;
 
   @IsString({ message: 'buyer_rg deve ser uma string' })
   @IsOptional()
   buyer_rg?: string;
 
   @IsString({ message: 'buyer_address deve ser uma string' })
-  @IsNotEmpty({ message: 'buyer_address é obrigatório' })
-  buyer_address: string;
+  @IsOptional()
+  buyer_address?: string;
 
   @IsString({ message: 'buyer_cep deve ser uma string' })
-  @IsNotEmpty({ message: 'buyer_cep é obrigatório' })
-  buyer_cep: string;
+  @IsOptional()
+  buyer_cep?: string;
 
   // === VEÍCULO/PRODUTO ===
 
   @IsString({ message: 'vehicle_model deve ser uma string' })
-  @IsNotEmpty({ message: 'vehicle_model é obrigatório' })
-  vehicle_model: string;
+  @IsOptional()
+  vehicle_model?: string;
 
   @IsString({ message: 'vehicle_year deve ser uma string' })
-  @IsNotEmpty({ message: 'vehicle_year é obrigatório' })
-  vehicle_year: string;
+  @IsOptional()
+  vehicle_year?: string;
 
   @IsString({ message: 'vehicle_registration_id deve ser uma string' })
-  @IsNotEmpty({ message: 'vehicle_registration_id é obrigatório' })
-  vehicle_registration_id: string;
+  @IsOptional()
+  vehicle_registration_id?: string;
 
   @IsString({ message: 'vehicle_serial_number deve ser uma string' })
-  @IsNotEmpty({ message: 'vehicle_serial_number é obrigatório' })
-  vehicle_serial_number: string;
+  @IsOptional()
+  vehicle_serial_number?: string;
 
   @IsString({ message: 'vehicle_technical_info deve ser uma string' })
   @IsOptional()
   vehicle_technical_info?: string;
 
   @IsNumber({}, { message: 'vehicle_price deve ser um número' })
-  @IsNotEmpty({ message: 'vehicle_price é obrigatório' })
+  @IsOptional()
   @Min(0, { message: 'vehicle_price deve ser maior ou igual a zero' })
-  vehicle_price: number;
+  vehicle_price?: number;
 
   // === PAGAMENTO AO VENDEDOR ===
 
   @IsNumber({}, { message: 'payment_seller_value deve ser um número' })
-  @IsNotEmpty({ message: 'payment_seller_value é obrigatório' })
+  @IsOptional()
   @Min(0, { message: 'payment_seller_value deve ser maior ou igual a zero' })
-  payment_seller_value: number;
+  payment_seller_value?: number;
 
   // === COMISSÃO TOTAL DA VENDA ===
   // Único valor de comissão editável pelo especialista. O backend trava as taxas
@@ -257,8 +277,8 @@ export class PreviewContractDto {
   // === CIDADE DE ASSINATURA ===
 
   @IsString({ message: 'city deve ser uma string' })
-  @IsNotEmpty({ message: 'city é obrigatório' })
-  city: string;
+  @IsOptional()
+  city?: string;
 
   // === DESCRIÇÃO OPCIONAL ===
 
