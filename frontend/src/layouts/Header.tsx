@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import UserDropdown from "../components/ui/UserDropdown";
 import { resolveCompanyLogo, getUserCompany } from "../utils/branding";
 import { useWhitelabel } from "../store/whitelabelStore";
+import { getRoleBasedRoute } from "../utils/roleUtils";
 
 export default function Header() {
   const { isSidebarCollapsed, setSidebarCollapsed } = useContext(AppContext);
@@ -17,6 +18,9 @@ export default function Header() {
   const whitelabelCompany = useWhitelabel((s) => s.company);
   const company = getUserCompany(user) ?? whitelabelCompany;
   const brandLogo = resolveCompanyLogo(company) ?? Logo;
+  const handleLogoClick = () => {
+    navigate(user ? getRoleBasedRoute(user.role) : "/");
+  };
 
   // Lista de itens do menu para visitantes
   const menuItems = [
@@ -83,17 +87,31 @@ export default function Header() {
 
           {user ? (
             <div className="flex items-center w-full justify-between">
-              <img
-                src={brandLogo}
-                alt={company?.name ?? "BMF Lux Brokerage"}
-                className="max-h-14 w-auto max-w-36 object-contain"
-              />
+              <button
+                type="button"
+                onClick={handleLogoClick}
+                className="cursor-pointer"
+                aria-label="Ir para o início"
+              >
+                <img
+                  src={brandLogo}
+                  alt={company?.name ?? "BMF Lux Brokerage"}
+                  className="max-h-14 w-auto max-w-36 object-contain"
+                />
+              </button>
               <div className="ml-2 mr-2 sm:mr-4 shrink-0">
                 <UserDropdown />
               </div>
             </div>
           ) : (
-            <img src={brandLogo} alt="BMF Lux Brokerage" className="w-25 sm:w-35 h-auto" />
+            <button
+              type="button"
+              onClick={handleLogoClick}
+              className="cursor-pointer"
+              aria-label="Ir para a página inicial"
+            >
+              <img src={brandLogo} alt="BMF Lux Brokerage" className="w-25 sm:w-35 h-auto" />
+            </button>
           )}
         </div>
       </header>
