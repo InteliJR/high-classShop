@@ -11,6 +11,7 @@ import { UpdateClientDto } from './dto/update-client.dto';
 import { SendInvitationDto } from './dto/send-invitation.dto';
 import { CreateConsultantProcessDto } from './dto/create-consultant-process.dto';
 import { SesService } from 'src/aws/ses.service';
+import { ProcessesService } from 'src/features/processes/processes.service';
 
 @Injectable()
 export class ConsultantService {
@@ -18,6 +19,7 @@ export class ConsultantService {
     private prismaService: PrismaService,
     private sesService: SesService,
     private jwtService: JwtService,
+    private processesService: ProcessesService,
   ) {}
 
   /**
@@ -213,117 +215,17 @@ export class ConsultantService {
       );
     }
 
-    const specialist = await this.prismaService.user.findFirst({
-      where: { id: dto.specialist_id, role: 'SPECIALIST' },
+    // A criação em si (Appointment + Process + histórico) vive em
+    // ProcessesService.createOnBehalfOfClient, compartilhada com o fluxo do
+    // escritório. Aqui fica só a autorização: o cliente é deste consultor.
+    return this.processesService.createOnBehalfOfClient({
+      client_id: dto.client_id,
+      specialist_id: dto.specialist_id,
+      product_type: dto.product_type,
+      product_id: dto.product_id,
+      createdBy: consultantId,
+      actorLabel: 'consultor',
     });
-
-    if (!specialist) {
-      throw new NotFoundException('Especialista não encontrado');
-    }
-
-    const productFieldMap = {
-      CAR: 'car_id',
-      BOAT: 'boat_id',
-      AIRCRAFT: 'aircraft_id',
-    } as const;
-    const productField = dto.product_id
-      ? productFieldMap[dto.product_type]
-      : undefined;
-
-    const activeStatuses = [
-      'SCHEDULING',
-      'NEGOTIATION',
-      'PROCESSING_CONTRACT',
-      'DOCUMENTATION',
-    ] as const;
-
-    if (productField && dto.product_id) {
-      // Só bloqueia se houver processo ATIVO; processos encerrados
-      // (COMPLETED/REJECTED) permitem novo processo para o mesmo produto.
-      const existing = await this.prismaService.process.findFirst({
-        where: {
-          client_id: dto.client_id,
-          specialist_id: dto.specialist_id,
-          [productField]: dto.product_id,
-          status: { in: [...activeStatuses] as any },
-        },
-      });
-      if (existing) {
-        throw new ConflictException(
-          'Já existe processo ativo para este cliente com este produto.',
-        );
-      }
-    } else {
-      const activeConsultancy = await this.prismaService.process.findFirst({
-        where: {
-          client_id: dto.client_id,
-          specialist_id: dto.specialist_id,
-          product_type: null,
-          status: { in: [...activeStatuses] as any },
-        },
-      });
-      if (activeConsultancy) {
-        throw new ConflictException(
-          'Já existe consultoria ativa entre este cliente e este especialista.',
-        );
-      }
-    }
-
-    const pendingExpiresAt = new Date();
-    pendingExpiresAt.setDate(pendingExpiresAt.getDate() + 7);
-
-    const isConsultancy = !productField || !dto.product_id;
-
-    const [, process] = await this.prismaService.$transaction(async (tx) => {
-      const appointmentData: any = {
-        client_id: dto.client_id,
-        specialist_id: dto.specialist_id,
-        appointment_datetime: null,
-        status: 'PENDING',
-        notes: isConsultancy
-          ? `Consultoria criada pelo consultor em nome do cliente (${new Date().toISOString()})`
-          : `Processo criado pelo consultor em nome do cliente (${new Date().toISOString()})`,
-        user_clicked_at: new Date(),
-        pending_expires_at: pendingExpiresAt,
-      };
-      if (!isConsultancy) {
-        appointmentData.product_type = dto.product_type;
-        appointmentData.product_id = dto.product_id;
-      }
-
-      const createdAppointment = await tx.appointment.create({
-        data: appointmentData,
-      });
-
-      const processData: any = {
-        client_id: dto.client_id,
-        specialist_id: dto.specialist_id,
-        appointment_id: createdAppointment.id,
-        product_type: isConsultancy ? null : dto.product_type,
-        status: 'SCHEDULING',
-        notes: isConsultancy
-          ? `Consultoria iniciada pelo consultor (${new Date().toISOString()})`
-          : `Processo iniciado pelo consultor (${new Date().toISOString()})`,
-      };
-      if (!isConsultancy && productField && dto.product_id) {
-        processData[productField] = dto.product_id;
-      }
-
-      const createdProcess = await tx.process.create({ data: processData });
-
-      await tx.processStatusHistory.create({
-        data: {
-          processId: createdProcess.id,
-          status: 'SCHEDULING',
-          changed_by: consultantId,
-          changed_at: new Date(),
-        },
-      });
-
-      return [createdAppointment, createdProcess];
-    });
-
-    return process;
   }
 
   /**
