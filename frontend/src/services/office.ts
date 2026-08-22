@@ -132,6 +132,24 @@ export const officeService = {
     params: { consultantId?: string; q?: string; companyId?: string } = {},
   ) => api.get<OfficeClient[]>('office/clients', { params }).then((r) => r.data),
 
+  /**
+   * Abre um processo em nome de um cliente do escritório.
+   * A empresa não vai no payload: o backend resolve pelo escopo de quem está
+   * autenticado, então não há como pedir processo para cliente de outra.
+   */
+  createProcess: (payload: {
+    client_id: string;
+    specialist_id: string;
+    product_type: 'CAR' | 'BOAT' | 'AIRCRAFT';
+    product_id?: string;
+  }) =>
+    api
+      .post<{ data: { id: string; appointment_id?: string } }>(
+        'office/processes',
+        payload,
+      )
+      .then((r) => r.data.data),
+
   // Company
   getCompany: () => api.get<OfficeCompany>('office/company').then((r) => r.data),
   updateCompany: (payload: Partial<OfficeCompany>) =>

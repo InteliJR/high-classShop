@@ -61,8 +61,9 @@ function mkSvc(
   jwt: any = mkJwt(),
   s3: any = {},
   logoSanitizer: any = {},
+  processes: any = { createOnBehalfOfClient: jest.fn() },
 ) {
-  return new OfficeService(prisma, jwt, ses, s3, logoSanitizer);
+  return new OfficeService(prisma, jwt, ses, s3, logoSanitizer, processes);
 }
 
 describe('OfficeService — tenant isolation', () => {

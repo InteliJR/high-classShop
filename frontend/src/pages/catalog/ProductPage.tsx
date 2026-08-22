@@ -22,7 +22,7 @@ import { Card } from "../../components/ui/card";
 import { Alert } from "../../components/ui/alert";
 import { Dialog, DialogContent } from "../../components/ui/dialog";
 import { PageHeader } from "../../components/patterns/PageHeader";
-import StartProcessForClientModal from "../consultant/StartProcessForClientModal";
+import StartProcessForClientModal from "../../components/processes/StartProcessForClientModal";
 import { useAuth } from "../../store/authStateManager";
 import { useCheckAppointment } from "../../hooks/useCheckAppointment";
 import { useCalendlyScheduling } from "../../hooks/useCalendlyScheduling";
@@ -504,6 +504,22 @@ export default function ProductPage() {
                 Iniciar processo para cliente
               </Button>
             </div>
+          ) : user.role === "OFFICE" ? (
+            /* Gerente de escritório — inicia processo para cliente da empresa */
+            <div className="space-y-4">
+              <Alert variant="info">
+                <p className="text-sm">
+                  <strong>Modo Escritório:</strong> Você não pode agendar uma reunião em seu próprio nome. Selecione qual cliente do escritório terá o processo criado para este produto.
+                </p>
+              </Alert>
+
+              <Button
+                onClick={() => setIsStartProcessModalOpen(true)}
+                className="w-full"
+              >
+                Iniciar processo para cliente
+              </Button>
+            </div>
           ) : user.role !== "CUSTOMER" ? (
             /* SPECIALIST / ADMIN — apenas clientes podem agendar */
             <div className="bg-border-soft border border-border rounded-lg p-4">
@@ -670,6 +686,7 @@ export default function ProductPage() {
               productId={id}
               specialistId={specialist.id}
               productLabel={`${product.marca} ${product.modelo}`.trim()}
+              mode={user?.role === "OFFICE" ? "OFFICE" : "CONSULTANT"}
               onClose={() => setIsStartProcessModalOpen(false)}
             />
           </DialogContent>
