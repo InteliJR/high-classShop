@@ -87,8 +87,8 @@ export default function ContractCommissionStep({
               className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
             />
             <p className="text-xs text-subtle mt-1">
-              Único valor editável — plataforma e escritório ficam travados nas
-              taxas cadastradas; seu corte é o restante.
+              Único valor editável — as três partes são recalculadas a partir
+              deste total e das taxas cadastradas.
             </p>
             {commissionError && (
               <p className="text-status-bad text-sm mt-1">

@@ -342,7 +342,7 @@ export default function CompaniesPage() {
             <TableHeader>
               <tr>
                 <TableHead>Empresa</TableHead>
-                <TableHead>Escritório (% restante)</TableHead>
+                <TableHead>Escritório (% comissão total)</TableHead>
                 <TableHead>Consultores</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </tr>

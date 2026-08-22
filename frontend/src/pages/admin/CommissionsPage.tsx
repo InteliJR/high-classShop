@@ -192,9 +192,9 @@ export default function CommissionsPage() {
                 Escritórios
               </h2>
               <p className="text-sm text-muted mb-4">
-                Fatia de cada escritório sobre o <b>restante</b> da comissão
-                (depois da fatia do especialista). A plataforma fica com o que
-                sobrar.
+                Fatia de cada escritório sobre a <b>comissão total</b>. A soma
+                das fatias do escritório e do especialista não pode ultrapassar
+                100%; a plataforma fica com o saldo.
               </p>
               <div className="flex flex-col gap-4">
                 {companies.length === 0 ? (
@@ -213,13 +213,13 @@ export default function CommissionsPage() {
                           {company.name}
                         </p>
                         <RateRow
-                          label="Fatia do escritório (% do restante)"
+                          label="Fatia do escritório (% da comissão total)"
                           initialRate={officeRate}
                           onSave={(rate) => saveCompanyRate(company.id, rate)}
                         />
                         <p className="text-xs text-subtle mt-2">
-                          → Plataforma fica com {Math.max(0, 100 - officeRate)}% do
-                          restante
+                          → Antes da fatia do especialista, restam {Math.max(0, 100 - officeRate)}%
+                          da comissão total para a plataforma e o especialista.
                         </p>
                       </div>
                     );
@@ -363,15 +363,19 @@ function SaleCard({
   focused?: boolean;
 }) {
   const hasOffice = sale.officeValue > 0 || !!sale.officeName;
-  // Fatia do especialista sobre o total; escritório/plataforma sobre o restante.
+  // As três partes são exibidas como fatias da comissão total.
   const specialistShareOfPool =
     sale.totalCommission > 0
       ? (sale.specialistValue / sale.totalCommission) * 100
       : 0;
-  const officeShareOfRest =
-    sale.restante > 0 ? (sale.officeValue / sale.restante) * 100 : 0;
-  const platformShareOfRest =
-    sale.restante > 0 ? (sale.platformValue / sale.restante) * 100 : 0;
+  const officeShareOfPool =
+    sale.totalCommission > 0
+      ? (sale.officeValue / sale.totalCommission) * 100
+      : 0;
+  const platformShareOfPool =
+    sale.totalCommission > 0
+      ? (sale.platformValue / sale.totalCommission) * 100
+      : 0;
 
   return (
     <Card
@@ -413,28 +417,22 @@ function SaleCard({
           color="bg-emerald-500"
         />
 
-        <div className="pl-3 border-l-2 border-border ml-1 flex flex-col gap-3">
-          <p className="text-xs text-subtle">
-            restante {brl(sale.restante)}
-            {!hasOffice && " (sem escritório → 100% plataforma)"}
-          </p>
-          {hasOffice && (
-            <SplitBar
-              label={`Escritório${sale.officeName ? ` (${sale.officeName})` : ""}`}
-              value={sale.officeValue}
-              share={officeShareOfRest}
-              shareLabel="do restante"
-              color="bg-sky-500"
-            />
-          )}
+        {hasOffice && (
           <SplitBar
-            label="Plataforma"
-            value={sale.platformValue}
-            share={platformShareOfRest}
-            shareLabel="do restante"
-            color="bg-violet-500"
+            label={`Escritório${sale.officeName ? ` (${sale.officeName})` : ""}`}
+            value={sale.officeValue}
+            share={officeShareOfPool}
+            shareLabel="do total"
+            color="bg-sky-500"
           />
-        </div>
+        )}
+        <SplitBar
+          label="Plataforma"
+          value={sale.platformValue}
+          share={platformShareOfPool}
+          shareLabel="do total"
+          color="bg-violet-500"
+        />
       </div>
     </Card>
   );
