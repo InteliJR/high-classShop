@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -16,6 +17,8 @@ import { resolveCompanyLogoUrl } from 'src/auth/utils/company-logo.util';
 import { InviteConsultantDto } from './dto/invite-consultant.dto';
 import { OfficeUpdateCompanyDto } from './dto/update-company.dto';
 import { OfficeUpdateConsultantDto } from './dto/update-consultant.dto';
+import { OfficeCreateProcessDto } from './dto/create-process.dto';
+import { ProcessesService } from 'src/features/processes/processes.service';
 
 interface Scope {
   companyId: string | null;
@@ -32,7 +35,57 @@ export class OfficeService {
     private readonly ses: SesService,
     private readonly s3: S3Service,
     private readonly logoSanitizer: LogoSanitizerService,
+    private readonly processes: ProcessesService,
   ) {}
+
+  /**
+   * Abre um processo em nome de um cliente do escritório.
+   *
+   * A autorização é o ponto da operação: só passa cliente que pertence à
+   * mesma Company de quem pede, pela mesma regra de listClients (ligado a um
+   * consultor da empresa OU vinculado direto a ela). ADMIN não tem atalho
+   * aqui — precisa de uma empresa alvo, senão "cliente do escritório" perde
+   * sentido e a checagem vira decorativa.
+   *
+   * @throws {ForbiddenException} - Cliente não pertence à empresa
+   */
+  async createProcessForCompanyClient(
+    scope: Scope,
+    actorId: string,
+    dto: OfficeCreateProcessDto,
+  ) {
+    const companyId = this.resolveCompanyId(scope, dto.company_id);
+
+    const client = await this.prisma.user.findFirst({
+      where: {
+        id: dto.client_id,
+        role: UserRole.CUSTOMER,
+        OR: [
+          { consultant: { company_id: companyId } },
+          { company_id: companyId },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (!client) {
+      this.logger.warn(
+        `[createProcessForCompanyClient] acesso negado actor=${actorId} client=${dto.client_id} company=${companyId}`,
+      );
+      throw new ForbiddenException(
+        'Cliente não encontrado ou não pertence a este escritório',
+      );
+    }
+
+    return this.processes.createOnBehalfOfClient({
+      client_id: dto.client_id,
+      specialist_id: dto.specialist_id,
+      product_type: dto.product_type,
+      product_id: dto.product_id,
+      createdBy: actorId,
+      actorLabel: 'gerente do escritório',
+    });
+  }
 
   /** ADMIN vê todas Companies; OFFICE só a própria. */
   private resolveCompanyId(scope: Scope, requestedCompanyId?: string): string {

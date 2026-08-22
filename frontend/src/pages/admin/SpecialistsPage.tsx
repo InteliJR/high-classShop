@@ -14,6 +14,9 @@ import { EmptyState } from "../../components/patterns/EmptyState";
 import NewSpecialistForm from "./NewSpecialistForm";
 import { AppContext } from "../../contexts/AppContext";
 import { Pencil, Trash2, UserCog } from "lucide-react";
+import AdminUserManagementDialog, {
+  type AdminUserManagementDialogState,
+} from "../../components/admin/AdminUserManagementDialog";
 
 // Interface para armazenar os dados de cada especialista
 interface SpecialistWithStats extends Specialist {
@@ -28,9 +31,8 @@ export default function SpecialistsPage() {
 
   const [isNewSpecialistModalOpen, setIsNewSpecialistModalOpen] =
     useState(false);
-  const [specialistToEdit, setSpecialistToEdit] = useState<Specialist | null>(
-    null
-  );
+  const [dialogState, setDialogState] =
+    useState<AdminUserManagementDialogState | null>(null);
   const [specialistToDelete, setSpecialistToDelete] =
     useState<Specialist | null>(null);
 
@@ -83,7 +85,6 @@ export default function SpecialistsPage() {
 
   const handleFormSuccess = () => {
     setIsNewSpecialistModalOpen(false);
-    setSpecialistToEdit(null);
     fetchData();
   };
 
@@ -162,7 +163,14 @@ export default function SpecialistsPage() {
                   <TableCell className="text-right">
                     <div className="flex justify-end items-center gap-4 text-subtle">
                       <button
-                        onClick={() => setSpecialistToEdit(specialist)}
+                        onClick={() =>
+                          setDialogState({
+                            userId: specialist.id,
+                            mode: "specialist",
+                            speciality: specialist.speciality,
+                            commissionRate: specialist.commission_rate,
+                          })
+                        }
                         className="p-1.5 rounded hover:bg-border-soft text-ink-soft"
                         title="Editar"
                       >
@@ -186,25 +194,29 @@ export default function SpecialistsPage() {
 
       {/* Modal criação/edição */}
       <Dialog
-        open={isNewSpecialistModalOpen || !!specialistToEdit}
+        open={isNewSpecialistModalOpen}
         onOpenChange={(open) => {
           if (!open) {
             setIsNewSpecialistModalOpen(false);
-            setSpecialistToEdit(null);
           }
         }}
       >
         <DialogContent
-          open={isNewSpecialistModalOpen || !!specialistToEdit}
-          title={specialistToEdit ? "Editar Especialista" : "Novo Especialista"}
+          open={isNewSpecialistModalOpen}
+          title="Novo Especialista"
           hideTitle
         >
           <NewSpecialistForm
             onSuccess={handleFormSuccess}
-            specialistToEdit={specialistToEdit}
           />
         </DialogContent>
       </Dialog>
+
+      <AdminUserManagementDialog
+        state={dialogState}
+        onClose={() => setDialogState(null)}
+        onSuccess={fetchData}
+      />
 
       {/* Modal exclusão */}
       <Dialog open={!!specialistToDelete} onOpenChange={(open) => !open && setSpecialistToDelete(null)}>

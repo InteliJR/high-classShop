@@ -25,7 +25,7 @@ export const USER_ROLE: Record<string, string> = {
   CONSULTANT: 'Consultor',
   SPECIALIST: 'Especialista',
   ADMIN: 'Administrador',
-  OFFICE: 'Escritório',
+  OFFICE: 'Gerente de escritório',
 };
 
 export const PRODUCT_TYPE: Record<string, string> = {

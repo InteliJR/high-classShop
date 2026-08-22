@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { AdminDatabaseService } from './admin-database.service';
 
 function mkPrisma(overrides: Record<string, any> = {}) {
@@ -156,6 +157,26 @@ describe('AdminDatabaseService — usuários', () => {
     expect(args.select).toBeDefined();
     expect(args.select.password_hash).toBeUndefined();
     expect(JSON.stringify(args.select)).not.toContain('password_hash');
+  });
+
+  it('retorna metadados não visuais de usuário', async () => {
+    const userId = 'a3e72de0-41b0-4468-a866-c5aac1a7a55e';
+    const { prisma, result } = await listarUsuarios({
+      ...usuario,
+      id: userId,
+      role: UserRole.SPECIALIST,
+    });
+
+    expect(result.rowMeta).toEqual([
+      {
+        id: userId,
+        role: UserRole.SPECIALIST,
+        speciality: 'AIRCRAFT',
+        commission_rate: 15,
+      },
+    ]);
+    expect(result.columns.map((column) => column.label)).not.toContain('ID');
+    expect(prisma.user.findMany.mock.calls[0][0].select.id).toBe(true);
   });
 
   it('devolve travessão para relação e campos ausentes', async () => {

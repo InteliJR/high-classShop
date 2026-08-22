@@ -26,6 +26,7 @@ import { RejectProcessDto } from './dto/reject-process.dto';
 import { ProcessWithHistory } from './entity/process-history.response';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { GetProcessesFilterDto } from './dto/get-processes-filter.dto';
+import { UserEntity } from 'src/auth/entities/user.entity';
 
 @Controller('processes')
 export class ProcessesController {
@@ -42,8 +43,18 @@ export class ProcessesController {
   @Post()
   async create(
     @Body() createProcessDto: CreateProcessDTO,
+    @Req() req: { user?: UserEntity },
   ): Promise<ApiResponseDto<ProcessResponse>> {
-    const process = await this.processesService.create(createProcessDto);
+    const user = req.user;
+    if (!user) {
+      throw new UnauthorizedException('Usuário autenticado não identificado');
+    }
+
+    const process = await this.processesService.create(createProcessDto, {
+      id: user.id,
+      role: user.role,
+      companyId: user.company_id,
+    });
 
     return {
       success: true,
@@ -54,19 +65,32 @@ export class ProcessesController {
 
   /**
    * GET /api/processes
-   * Retorna os processos de maneira paginada com filtros opcionais
+   * Retorna os processos de maneira paginada com filtros opcionais.
+   *
+   * O resultado é escopado pelo papel de quem pede (ver
+   * ProcessesService.buildVisibilityFilter): ADMIN vê tudo, gerente de
+   * escritório vê os processos dos clientes da própria empresa, e os demais
+   * papéis veem apenas os processos de que participam.
    *
    * @param {QueryDto} - Parâmetros de paginação
    * @param {GetProcessesFilterDto} - Parâmetros de filtro (status, search, etc)
    * @returns {Promise<ApiResponseDto<ProcessResponse[], unknown, ProcessSummary>>} - Listagem de processos de maneira paginada e sumário
+   * @throws {UnauthorizedException} - Usuário autenticado não identificado
+   * @throws {ForbiddenException} - Papel sem regra de visibilidade definida
    */
   @Get()
   async getAll(
     @Query() queryDto: QueryDto & GetProcessesFilterDto,
+    @Req() req: { user?: UserEntity },
   ): Promise<ApiResponseDto<ProcessResponse[], unknown, ProcessSummary>> {
     // Tratamento de variáveis do front
     const page = Number(queryDto.page);
     const perPage = Number(queryDto.perPage);
+
+    const user = req.user;
+    if (!user) {
+      throw new UnauthorizedException('Usuário autenticado não identificado');
+    }
 
     const { count, processes, byStatus } = await this.processesService.getAll({
       perPage,
@@ -75,6 +99,11 @@ export class ProcessesController {
       search: queryDto.search,
       sortBy: queryDto.sortBy,
       order: queryDto.order,
+      requester: {
+        id: user.id,
+        role: user.role,
+        companyId: user.company_id,
+      },
     });
 
     // Criação do objeto de pagination

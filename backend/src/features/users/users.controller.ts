@@ -59,7 +59,7 @@ export class UsersController {
 
   /**
    * PATCH /api/users/:id
-   * Update user data (name, surname, cpf, rg, calendly_url)
+   * Update user data (name, surname, cpf, rg, phone, calendly_url)
    *
    * @param userId - The ID of the user to update
    * @param updateUserDto - Data to update

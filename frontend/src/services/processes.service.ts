@@ -80,16 +80,49 @@ export interface ProcessFilters {
   order?: "asc" | "desc";
 }
 
+export interface ProcessesPage {
+  processes: Process[];
+  total: number;
+  totalPages: number;
+  byStatus: Record<string, number>;
+}
+
 /**
- * Get all processes
- * Filters based on user role and permissions
+ * Lista processos. O backend escopa o resultado pelo papel de quem pede:
+ * ADMIN vê tudo, gerente de escritório vê os processos dos clientes da própria
+ * empresa, e os demais papéis veem apenas os processos de que participam —
+ * não há parâmetro de cliente/empresa a enviar daqui.
  */
-export async function getProcesses(page = 1, perPage = 20): Promise<Process[]> {
-  const response = await api.get<ApiResponse<Process[]>>("/processes", {
+export async function getProcesses(
+  page = 1,
+  perPage = 20,
+  filters?: ProcessFilters,
+): Promise<ProcessesPage> {
+  const response = await api.get<
+    ApiResponse<Process[]> & {
+      meta?: {
+        pagination?: { total?: number; total_pages?: number };
+        summary?: { by_status?: Record<string, number> };
+      };
+    }
+  >("/processes", {
     withCredentials: true,
-    params: { page, perPage },
+    params: {
+      page,
+      perPage,
+      ...(filters?.status && { status: filters.status }),
+      ...(filters?.search && { search: filters.search }),
+      ...(filters?.sortBy && { sortBy: filters.sortBy }),
+      ...(filters?.order && { order: filters.order }),
+    },
   });
-  return response.data.data;
+
+  return {
+    processes: response.data.data,
+    total: response.data.meta?.pagination?.total ?? 0,
+    totalPages: response.data.meta?.pagination?.total_pages ?? 0,
+    byStatus: response.data.meta?.summary?.by_status ?? {},
+  };
 }
 
 /**

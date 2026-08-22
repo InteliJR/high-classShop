@@ -559,6 +559,15 @@ export class ContractsService {
       );
     }
 
+    // Os demais campos do contrato são opcionais, mas a taxa não pode ser:
+    // undefined/NaN aqui propaga NaN para platform/office/specialist value e
+    // esses valores são gravados no banco. Falhar aqui é o mal menor.
+    if (!Number.isFinite(totalCommissionRate)) {
+      throw new BadRequestException(
+        'total_commission_rate ausente ou inválido — não é possível calcular a comissão.',
+      );
+    }
+
     // Split aninhado — ver commission-split.ts. Soma exata por construção.
     const split = computeNestedCommissionSplit({
       proposalValue,
@@ -799,24 +808,24 @@ export class ContractsService {
               seller_name: dto.seller_name,
               seller_cpf: cleanDocs.seller_cpf,
               seller_rg: cleanDocs.seller_rg,
-              seller_address: dto.seller_address,
+              seller_address: dto.seller_address ?? '',
               seller_cep: cleanDocs.seller_cep,
-              seller_bank: dto.seller_bank,
-              seller_agency: dto.seller_agency,
-              seller_checking_account: dto.seller_checking_account,
+              seller_bank: dto.seller_bank ?? '',
+              seller_agency: dto.seller_agency ?? '',
+              seller_checking_account: dto.seller_checking_account ?? '',
 
               // Dados do comprador
               buyer_name: dto.buyer_name,
               buyer_cpf: cleanDocs.buyer_cpf,
               buyer_rg: cleanDocs.buyer_rg,
-              buyer_address: dto.buyer_address,
+              buyer_address: dto.buyer_address ?? '',
               buyer_cep: cleanDocs.buyer_cep,
 
               // Dados do veículo
-              vehicle_model: dto.vehicle_model,
-              vehicle_year: dto.vehicle_year,
-              vehicle_registration_id: dto.vehicle_registration_id,
-              vehicle_serial_number: dto.vehicle_serial_number,
+              vehicle_model: dto.vehicle_model ?? '',
+              vehicle_year: dto.vehicle_year ?? '',
+              vehicle_registration_id: dto.vehicle_registration_id ?? '',
+              vehicle_serial_number: dto.vehicle_serial_number ?? '',
               vehicle_technical_information: dto.vehicle_technical_info,
               vehicle_price: dto.vehicle_price,
               vehicle_price_written: numberToWords(dto.vehicle_price),
@@ -866,7 +875,7 @@ export class ContractsService {
               testimonial2_email: dto.testimonial2_email || null,
 
               // Cidade
-              city: dto.city,
+              city: dto.city ?? '',
 
               // Template usado
               template_id: templateId,
@@ -1007,24 +1016,24 @@ export class ContractsService {
       seller_name: dto.seller_name,
       seller_cpf: formatCpf(dto.seller_cpf),
       seller_rg: dto.seller_rg ? formatRg(dto.seller_rg) : '',
-      seller_address: dto.seller_address,
+      seller_address: dto.seller_address ?? '',
       seller_cep: formatCep(dto.seller_cep),
-      seller_bank: dto.seller_bank,
-      seller_agency: dto.seller_agency,
-      seller_checking_account: dto.seller_checking_account,
+      seller_bank: dto.seller_bank ?? '',
+      seller_agency: dto.seller_agency ?? '',
+      seller_checking_account: dto.seller_checking_account ?? '',
 
       // Comprador
       buyer_name: dto.buyer_name,
       buyer_cpf: formatCpf(dto.buyer_cpf),
       buyer_rg: dto.buyer_rg ? formatRg(dto.buyer_rg) : '',
-      buyer_address: dto.buyer_address,
+      buyer_address: dto.buyer_address ?? '',
       buyer_cep: formatCep(dto.buyer_cep),
 
       // Veículo
-      vehicle_model: dto.vehicle_model,
-      vehicle_year: dto.vehicle_year,
-      vehicle_registration_id: dto.vehicle_registration_id,
-      vehicle_serial_number: dto.vehicle_serial_number,
+      vehicle_model: dto.vehicle_model ?? '',
+      vehicle_year: dto.vehicle_year ?? '',
+      vehicle_registration_id: dto.vehicle_registration_id ?? '',
+      vehicle_serial_number: dto.vehicle_serial_number ?? '',
       // ATENÇÃO: typo no template - "techinical" com 'i' antes de 'n'
       vehicle_techinical_information: dto.vehicle_technical_info || '',
       vehicle_price: formatBRL(dto.vehicle_price),
@@ -1087,7 +1096,7 @@ export class ContractsService {
         : '',
 
       // Cidade
-      city: dto.city,
+      city: dto.city ?? '',
     };
 
     this.logger.debug(
@@ -1208,21 +1217,21 @@ export class ContractsService {
         seller_email: dto.seller_email,
         seller_cpf: dto.seller_cpf,
         seller_rg: dto.seller_rg,
-        seller_address: dto.seller_address,
+        seller_address: dto.seller_address ?? '',
         seller_cep: dto.seller_cep,
-        seller_bank: dto.seller_bank,
-        seller_agency: dto.seller_agency,
-        seller_checking_account: dto.seller_checking_account,
+        seller_bank: dto.seller_bank ?? '',
+        seller_agency: dto.seller_agency ?? '',
+        seller_checking_account: dto.seller_checking_account ?? '',
         buyer_name: dto.buyer_name,
         buyer_email: dto.buyer_email,
         buyer_cpf: dto.buyer_cpf,
         buyer_rg: dto.buyer_rg,
-        buyer_address: dto.buyer_address,
+        buyer_address: dto.buyer_address ?? '',
         buyer_cep: dto.buyer_cep,
-        vehicle_model: dto.vehicle_model,
-        vehicle_year: dto.vehicle_year,
-        vehicle_registration_id: dto.vehicle_registration_id,
-        vehicle_serial_number: dto.vehicle_serial_number,
+        vehicle_model: dto.vehicle_model ?? '',
+        vehicle_year: dto.vehicle_year ?? '',
+        vehicle_registration_id: dto.vehicle_registration_id ?? '',
+        vehicle_serial_number: dto.vehicle_serial_number ?? '',
         vehicle_technical_info: dto.vehicle_technical_info,
         vehicle_price: dto.vehicle_price,
         payment_seller_value: dto.payment_seller_value,
@@ -1250,7 +1259,7 @@ export class ContractsService {
         testimonial1_email: dto.testimonial1_email,
         testimonial2_cpf: dto.testimonial2_cpf,
         testimonial2_email: dto.testimonial2_email,
-        city: dto.city,
+        city: dto.city ?? '',
         description: dto.description,
       };
 
@@ -1455,24 +1464,24 @@ export class ContractsService {
               seller_name: dto.seller_name,
               seller_cpf: cleanDocs.seller_cpf,
               seller_rg: cleanDocs.seller_rg,
-              seller_address: dto.seller_address,
+              seller_address: dto.seller_address ?? '',
               seller_cep: cleanDocs.seller_cep,
-              seller_bank: dto.seller_bank,
-              seller_agency: dto.seller_agency,
-              seller_checking_account: dto.seller_checking_account,
+              seller_bank: dto.seller_bank ?? '',
+              seller_agency: dto.seller_agency ?? '',
+              seller_checking_account: dto.seller_checking_account ?? '',
 
               // Dados do comprador
               buyer_name: dto.buyer_name,
               buyer_cpf: cleanDocs.buyer_cpf,
               buyer_rg: cleanDocs.buyer_rg,
-              buyer_address: dto.buyer_address,
+              buyer_address: dto.buyer_address ?? '',
               buyer_cep: cleanDocs.buyer_cep,
 
               // Dados do veículo
-              vehicle_model: dto.vehicle_model,
-              vehicle_year: dto.vehicle_year,
-              vehicle_registration_id: dto.vehicle_registration_id,
-              vehicle_serial_number: dto.vehicle_serial_number,
+              vehicle_model: dto.vehicle_model ?? '',
+              vehicle_year: dto.vehicle_year ?? '',
+              vehicle_registration_id: dto.vehicle_registration_id ?? '',
+              vehicle_serial_number: dto.vehicle_serial_number ?? '',
               vehicle_technical_information: dto.vehicle_technical_info,
               vehicle_price: dto.vehicle_price,
               vehicle_price_written: numberToWords(dto.vehicle_price),
@@ -1522,7 +1531,7 @@ export class ContractsService {
               testimonial2_email: dto.testimonial2_email || null,
 
               // Cidade
-              city: dto.city,
+              city: dto.city ?? '',
 
               // Template usado
               template_id: templateId,

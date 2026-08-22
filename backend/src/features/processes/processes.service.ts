@@ -22,6 +22,31 @@ import { UpdateProcessDto } from './dto/update-process.dto';
 import { ProcessWithHistory } from './entity/process-history.response';
 import { NotificationService } from 'src/features/notifications/notification.service';
 
+/**
+ * Quem está pedindo a operação. `companyId` só é usado por OFFICE.
+ */
+export type ProcessesRequester = {
+  id: string;
+  role: UserRole;
+  companyId?: string | null;
+};
+
+/**
+ * Dados para abrir um processo em nome de um cliente.
+ *
+ * `actorLabel` entra nas notas do Appointment e do Process ("consultor",
+ * "gerente do escritório") — é o que permite saber depois quem abriu o
+ * processo em nome de quem.
+ */
+export type CreateOnBehalfInput = {
+  client_id: string;
+  specialist_id: string;
+  product_type: 'CAR' | 'BOAT' | 'AIRCRAFT';
+  product_id?: string;
+  createdBy: string;
+  actorLabel: string;
+};
+
 @Injectable()
 export class ProcessesService {
   private readonly logger = new Logger(ProcessesService.name);
@@ -165,15 +190,105 @@ export class ProcessesService {
   }
 
   /**
+   * Autoriza a criação de um processo para um `client_id`.
+   *
+   * Antes disso o endpoint aceitava qualquer `client_id` de qualquer usuário
+   * autenticado: dava para abrir processo em nome de um cliente alheio.
+   *
+   * O especialista não é restringido a clientes com quem já tem relação —
+   * abrir o primeiro processo de um cliente novo é justamente o caso de uso
+   * da tela dele. O que se exige é que ele seja o especialista do processo.
+   *
+   * @throws {ForbiddenException} - Sem vínculo com o cliente informado
+   */
+  private async assertCanCreateFor(
+    requester: ProcessesRequester,
+    dto: CreateProcessDTO,
+  ): Promise<void> {
+    const deny = (motivo: string): never => {
+      this.logger.warn(
+        `[create] acesso negado role=${requester.role} user=${requester.id} client=${dto.client_id}: ${motivo}`,
+      );
+      throw new ForbiddenException({
+        success: false,
+        error: {
+          code: 403,
+          message: 'Você não pode criar processo para este cliente',
+          details: { user_id: requester.id, client_id: dto.client_id },
+        },
+      });
+    };
+
+    switch (requester.role) {
+      case UserRole.ADMIN:
+        return;
+
+      case UserRole.SPECIALIST:
+        if (dto.specialist_id !== requester.id) {
+          deny('especialista só cria processo para si mesmo');
+        }
+        return;
+
+      case UserRole.CUSTOMER:
+        if (dto.client_id !== requester.id) {
+          deny('cliente só cria processo para si mesmo');
+        }
+        return;
+
+      case UserRole.CONSULTANT: {
+        const client = await this.prismaService.user.findFirst({
+          where: {
+            id: dto.client_id,
+            role: UserRole.CUSTOMER,
+            consultant_id: requester.id,
+          },
+          select: { id: true },
+        });
+        if (!client) deny('cliente não pertence a este consultor');
+        return;
+      }
+
+      case UserRole.OFFICE: {
+        if (!requester.companyId) deny('escritório sem empresa vinculada');
+
+        // Mesma regra de "cliente do escritório" de OfficeService.listClients.
+        const client = await this.prismaService.user.findFirst({
+          where: {
+            id: dto.client_id,
+            role: UserRole.CUSTOMER,
+            OR: [
+              { consultant: { company_id: requester.companyId } },
+              { company_id: requester.companyId },
+            ],
+          },
+          select: { id: true },
+        });
+        if (!client) deny('cliente não pertence a este escritório');
+        return;
+      }
+
+      default:
+        deny('papel sem regra de criação definida');
+    }
+  }
+
+  /**
    * Cria um processo, normalmente no status de agendamento
    *
    * @param {CreateProcessDTO} createProcessDto - Dto para criar o processo
+   * @param {ProcessesRequester} requester - Quem está criando (autorização)
    * @returns {Promise<ProcessResponse>} - Entidade do processo
    */
-  async create(createProcessDto: CreateProcessDTO): Promise<ProcessResponse> {
+  async create(
+    createProcessDto: CreateProcessDTO,
+    requester: ProcessesRequester,
+  ): Promise<ProcessResponse> {
     this.logger.log(
       `[create] Iniciando criação de processo para cliente ${createProcessDto.client_id}`,
     );
+
+    await this.assertCanCreateFor(requester, createProcessDto);
+
     const { product_id, client_id, specialist_id, ...dataToSave } =
       createProcessDto;
 
@@ -323,6 +438,134 @@ export class ProcessesService {
   }
 
   /**
+   * Abre um processo em nome de um cliente, junto com o Appointment pendente
+   * que permite marcar o horário depois (Calendly).
+   *
+   * Diferente de `create`, que só grava o Process: sem Appointment o
+   * especialista não consegue confirmar o agendamento
+   * (`confirmAppointment` exige um) e o processo fica sem caminho natural.
+   *
+   * Quem chama é responsável por autorizar o vínculo com o cliente ANTES —
+   * este método não sabe se o cliente pertence ao consultor ou ao escritório.
+   *
+   * @throws {NotFoundException} - Especialista inexistente
+   * @throws {ConflictException} - Já existe processo/consultoria ativa equivalente
+   */
+  async createOnBehalfOfClient(input: CreateOnBehalfInput) {
+    const specialist = await this.prismaService.user.findFirst({
+      where: { id: input.specialist_id, role: UserRole.SPECIALIST },
+    });
+
+    if (!specialist) {
+      throw new NotFoundException('Especialista não encontrado');
+    }
+
+    const productFieldMap = {
+      CAR: 'car_id',
+      BOAT: 'boat_id',
+      AIRCRAFT: 'aircraft_id',
+    } as const;
+    const productField = input.product_id
+      ? productFieldMap[input.product_type]
+      : undefined;
+
+    const activeStatuses = [
+      'SCHEDULING',
+      'NEGOTIATION',
+      'PROCESSING_CONTRACT',
+      'DOCUMENTATION',
+    ] as const;
+
+    if (productField && input.product_id) {
+      // Só bloqueia se houver processo ATIVO; processos encerrados
+      // (COMPLETED/REJECTED) permitem novo processo para o mesmo produto.
+      const existing = await this.prismaService.process.findFirst({
+        where: {
+          client_id: input.client_id,
+          specialist_id: input.specialist_id,
+          [productField]: input.product_id,
+          status: { in: [...activeStatuses] as any },
+        },
+      });
+      if (existing) {
+        throw new ConflictException(
+          'Já existe processo ativo para este cliente com este produto.',
+        );
+      }
+    } else {
+      const activeConsultancy = await this.prismaService.process.findFirst({
+        where: {
+          client_id: input.client_id,
+          specialist_id: input.specialist_id,
+          product_type: null,
+          status: { in: [...activeStatuses] as any },
+        },
+      });
+      if (activeConsultancy) {
+        throw new ConflictException(
+          'Já existe consultoria ativa entre este cliente e este especialista.',
+        );
+      }
+    }
+
+    const pendingExpiresAt = new Date();
+    pendingExpiresAt.setDate(pendingExpiresAt.getDate() + 7);
+
+    const isConsultancy = !productField || !input.product_id;
+
+    const [, process] = await this.prismaService.$transaction(async (tx) => {
+      const appointmentData: any = {
+        client_id: input.client_id,
+        specialist_id: input.specialist_id,
+        appointment_datetime: null,
+        status: 'PENDING',
+        notes: isConsultancy
+          ? `Consultoria criada pelo ${input.actorLabel} em nome do cliente (${new Date().toISOString()})`
+          : `Processo criado pelo ${input.actorLabel} em nome do cliente (${new Date().toISOString()})`,
+        user_clicked_at: new Date(),
+        pending_expires_at: pendingExpiresAt,
+      };
+      if (!isConsultancy) {
+        appointmentData.product_type = input.product_type;
+        appointmentData.product_id = input.product_id;
+      }
+
+      const createdAppointment = await tx.appointment.create({
+        data: appointmentData,
+      });
+
+      const processData: any = {
+        client_id: input.client_id,
+        specialist_id: input.specialist_id,
+        appointment_id: createdAppointment.id,
+        product_type: isConsultancy ? null : input.product_type,
+        status: 'SCHEDULING',
+        notes: isConsultancy
+          ? `Consultoria iniciada pelo ${input.actorLabel} (${new Date().toISOString()})`
+          : `Processo iniciado pelo ${input.actorLabel} (${new Date().toISOString()})`,
+      };
+      if (!isConsultancy && productField && input.product_id) {
+        processData[productField] = input.product_id;
+      }
+
+      const createdProcess = await tx.process.create({ data: processData });
+
+      await tx.processStatusHistory.create({
+        data: {
+          processId: createdProcess.id,
+          status: 'SCHEDULING',
+          changed_by: input.createdBy,
+          changed_at: new Date(),
+        },
+      });
+
+      return [createdAppointment, createdProcess];
+    });
+
+    return process;
+  }
+
+  /**
    * Retorna os processos de com a contagem total de elementos no banco de dados
    *
    * @param {QueryDto} - Parâmetros de paginação
@@ -332,6 +575,78 @@ export class ProcessesService {
    *  byStatus: Record<ProcessStatus, number>
    * }>} - Objeto com numero total de elementos, array de processos e contagem de processos por status
    */
+  /**
+   * Monta o filtro de visibilidade da listagem de processos.
+   *
+   * ADMIN enxerga tudo. Os demais papéis enxergam só o que lhes diz respeito,
+   * usando a mesma noção de "participante" já aplicada em getById (cliente,
+   * especialista ou consultor do cliente), somada ao gerente de escritório —
+   * que vê os processos dos clientes da própria empresa.
+   *
+   * Papel desconhecido cai no default e é barrado: sem regra explícita de
+   * visibilidade, negar é o único padrão seguro.
+   *
+   * @returns filtro Prisma, ou null quando não há restrição (ADMIN)
+   */
+  private buildVisibilityFilter(requester: ProcessesRequester): any | null {
+    switch (requester.role) {
+      case UserRole.ADMIN:
+        return null;
+
+      case UserRole.OFFICE: {
+        if (!requester.companyId) {
+          this.logger.error(
+            `[getAll] OFFICE user=${requester.id} sem company_id — config inválida`,
+          );
+          throw new ForbiddenException({
+            success: false,
+            error: {
+              code: 403,
+              message: 'Escritório sem empresa vinculada',
+              details: { user_id: requester.id },
+            },
+          });
+        }
+
+        // Mesma definição de "cliente do escritório" usada em
+        // OfficeService.listClients: cliente ligado a um consultor da empresa
+        // OU vinculado direto à empresa (sem consultor). Se as duas regras
+        // divergirem, a aba Clientes e a aba Processos passam a discordar.
+        return {
+          client: {
+            role: UserRole.CUSTOMER,
+            OR: [
+              { consultant: { company_id: requester.companyId } },
+              { company_id: requester.companyId },
+            ],
+          },
+        };
+      }
+
+      case UserRole.SPECIALIST:
+        return { specialist_id: requester.id };
+
+      case UserRole.CONSULTANT:
+        return { client: { consultant_id: requester.id } };
+
+      case UserRole.CUSTOMER:
+        return { client_id: requester.id };
+
+      default:
+        this.logger.warn(
+          `[getAll] acesso negado role=${requester.role} user=${requester.id}`,
+        );
+        throw new ForbiddenException({
+          success: false,
+          error: {
+            code: 403,
+            message: 'Acesso negado',
+            details: { user_id: requester.id },
+          },
+        });
+    }
+  }
+
   async getAll({
     page,
     perPage,
@@ -339,11 +654,13 @@ export class ProcessesService {
     search,
     sortBy = 'created_at',
     order = 'desc',
+    requester,
   }: QueryDto & {
     status?: ProcessStatus;
     search?: string;
     sortBy?: 'created_at' | 'updated_at' | 'status';
     order?: 'asc' | 'desc';
+    requester: ProcessesRequester;
   }): Promise<{
     count: number;
     processes: ProcessResponse[];
@@ -353,17 +670,23 @@ export class ProcessesService {
     const take = perPage;
     const skip = page && take ? (page - 1) * take : 0;
 
-    // Construir filtros WHERE
-    const where: any = {};
+    // Filtros compartilhados entre a listagem e o sumário por status.
+    // O status fica de fora daqui de propósito: o sumário existe para mostrar
+    // quantos processos há em CADA status, então filtrar por um deles zeraria
+    // os demais e o contador das abas iria a zero ao selecionar uma.
+    const scopedWhere: any = {};
 
-    // Filtro de status
-    if (status) {
-      where.status = status;
+    // Filtro de visibilidade por papel. Vai em AND porque a busca textual
+    // abaixo ocupa o OR do nível raiz — se o escopo fosse escrito ali, a busca
+    // sobrescreveria o filtro e vazaria processos de outros escritórios.
+    const visibilityFilter = this.buildVisibilityFilter(requester);
+    if (visibilityFilter) {
+      scopedWhere.AND = [visibilityFilter];
     }
 
     // Filtro de busca textual (nome cliente, email, marca/modelo produto)
     if (search && search.trim()) {
-      where.OR = [
+      scopedWhere.OR = [
         {
           client: {
             OR: [
@@ -399,6 +722,9 @@ export class ProcessesService {
       ];
     }
 
+    // Escopo + status: usado pela listagem e pela contagem total, não pelo sumário.
+    const where: any = status ? { ...scopedWhere, status } : scopedWhere;
+
     // Construir ordenação
     const orderBy: any = {};
     orderBy[sortBy] = order;
@@ -423,8 +749,12 @@ export class ProcessesService {
           },
         }),
         this.prismaService.process.count({ where }),
+        // Escopo sem o filtro de status: sem o `where` o sumário contava os
+        // processos da plataforma inteira, entregando números de fora do
+        // escopo de quem pede.
         this.prismaService.process.groupBy({
           by: ['status'],
+          where: scopedWhere,
           orderBy: {
             status: 'asc',
           },

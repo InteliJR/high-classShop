@@ -11,6 +11,7 @@ import {
   Check,
 } from "lucide-react";
 import { useIsMobile } from "../../hooks/use-is-mobile";
+import ContractCommissionStep from "./ContractCommissionStep";
 import {
   prefillContract,
   previewContract,
@@ -34,6 +35,7 @@ import {
 import DocuSignPreviewModal from "../../components/contracts/DocuSignPreviewModal";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
+import { getCommissionPreview } from "../../lib/contract-commission";
 
 interface ContractFormData {
   // Vendedor
@@ -131,6 +133,7 @@ export default function CreateContractPage() {
     control,
     setValue,
     watch,
+    trigger,
     formState: { errors },
   } = useForm<ContractFormData>({
     defaultValues: {
@@ -201,6 +204,11 @@ export default function CreateContractPage() {
     useState<PreviewContractData | null>(null);
   const [isSendingAfterPreview, setIsSendingAfterPreview] = useState(false);
 
+  // Wizard: a comissão é decidida antes de o especialista ver o resto do
+  // contrato. Um único useForm cobre as duas etapas, então o payload final
+  // continua sendo montado exatamente como antes.
+  const [step, setStep] = useState<1 | 2>(1);
+
   const [templates, setTemplates] = useState<ContractTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [isTemplateDropdownOpen, setIsTemplateDropdownOpen] = useState(false);
@@ -209,19 +217,14 @@ export default function CreateContractPage() {
   const vehiclePrice = watch("vehicle_price");
   const totalCommissionRate = watch("total_commission_rate");
 
-  // Plataforma e escritório vêm travados (pré-preenchidos, somente leitura);
-  // o especialista edita só o total, e o próprio corte é o resíduo.
-  const platformRate = prefillData?.platform?.rate ?? 0;
-  const officeRate = prefillData?.office?.rate ?? 0;
-  const specialistRate = Math.max(
-    0,
-    (totalCommissionRate || 0) - platformRate - officeRate,
-  );
-  const platformValue = ((vehiclePrice || 0) * platformRate) / 100;
-  const officeValue = ((vehiclePrice || 0) * officeRate) / 100;
-  const totalCommissionValue =
-    ((vehiclePrice || 0) * (totalCommissionRate || 0)) / 100;
-  const specialistValue = totalCommissionValue - platformValue - officeValue;
+  // A porcentagem total é a única entrada: a API preserva as regras de split
+  // cadastradas e o especialista só confere o próprio repasse.
+  const specialistRate = prefillData?.specialist?.rate ?? 0;
+  const { totalCommissionValue, specialistValue } = getCommissionPreview({
+    saleValue: vehiclePrice,
+    totalCommissionRate,
+    specialistShareRate: specialistRate,
+  });
   const sellerNetPreviewValue = (vehiclePrice || 0) - totalCommissionValue;
 
   // Load prefill data on mount
@@ -761,7 +764,26 @@ export default function CreateContractPage() {
           </Alert>
         )}
 
-        {/* Form */}
+        {/* Etapa 1: comissão */}
+        {step === 1 && (
+          <ContractCommissionStep
+            register={register}
+            errors={errors}
+            productLabel={getProductTypeLabel(prefillData?.product_type)}
+            vehiclePrice={vehiclePrice || 0}
+            totalCommissionValue={totalCommissionValue}
+            sellerNetPreviewValue={sellerNetPreviewValue}
+            onCancel={() => navigate(-1)}
+            onContinue={async () => {
+              // Valida só a comissão: o resto do contrato ainda nem foi exibido.
+              const ok = await trigger("total_commission_rate");
+              if (ok) setStep(2);
+            }}
+          />
+        )}
+
+        {/* Etapa 2: demais dados do contrato */}
+        {step === 2 && (
         <form onSubmit={handleSubmit(onPreview)} className="space-y-8">
 
           {/* Seção: Modelo de contrato */}
@@ -897,7 +919,6 @@ export default function CreateContractPage() {
                 <Controller
                   name="seller_cpf"
                   control={control}
-                  rules={{ required: "CPF é obrigatório" }}
                   render={({ field }) => (
                     <input
                       type="text"
@@ -945,7 +966,6 @@ export default function CreateContractPage() {
                 <Controller
                   name="seller_cep"
                   control={control}
-                  rules={{ required: "CEP é obrigatório" }}
                   render={({ field }) => (
                     <input
                       type="text"
@@ -973,7 +993,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("seller_address", {
-                    required: "Endereço é obrigatório",
                   })}
                   placeholder="Rua, número, complemento, bairro, cidade - UF"
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
@@ -998,7 +1017,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("seller_bank", {
-                    required: "Banco é obrigatório",
                   })}
                   placeholder="Ex: Itaú, Bradesco, Nubank"
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
@@ -1017,7 +1035,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("seller_agency", {
-                    required: "Agência é obrigatória",
                   })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1035,7 +1052,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("seller_checking_account", {
-                    required: "Conta é obrigatória",
                   })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1099,7 +1115,6 @@ export default function CreateContractPage() {
                 <Controller
                   name="buyer_cpf"
                   control={control}
-                  rules={{ required: "CPF é obrigatório" }}
                   render={({ field }) => (
                     <input
                       type="text"
@@ -1146,7 +1161,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("buyer_cep", { required: "CEP é obrigatório" })}
+                  {...register("buyer_cep")}
                   placeholder="00000-000"
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1163,7 +1178,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("buyer_address", { required: "Endereço é obrigatório" })}
+                  {...register("buyer_address")}
                   placeholder="Rua, número, bairro, cidade — UF"
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1202,7 +1217,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("vehicle_model", {
-                    required: "Modelo é obrigatório",
                   })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1220,7 +1234,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("vehicle_year", {
-                    required: "Ano é obrigatório",
                   })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1238,7 +1251,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("vehicle_registration_id", {
-                    required: "Identificação é obrigatória",
                   })}
                   placeholder={
                     prefillData?.product_type === "CAR"
@@ -1263,7 +1275,6 @@ export default function CreateContractPage() {
                 <input
                   type="text"
                   {...register("vehicle_serial_number", {
-                    required: "Número serial é obrigatório",
                   })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1305,8 +1316,15 @@ export default function CreateContractPage() {
                 Calculado automaticamente
               </span>
             </div>
-            <input type="hidden" {...register("vehicle_price", { required: "Valor é obrigatório", valueAsNumber: true, min: { value: 0, message: "Valor deve ser positivo" } })} />
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <input
+              type="hidden"
+              {...register("vehicle_price", { valueAsNumber: true })}
+            />
+            <input
+              type="hidden"
+              {...register("payment_seller_value", { valueAsNumber: true })}
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-muted mb-1">
                   Valor Total do{" "}
@@ -1322,102 +1340,34 @@ export default function CreateContractPage() {
                 )}
               </div>
 
-              <div className="hidden">
+              <div>
                 <label className="block text-sm font-medium text-ink-soft mb-1">
-                  Comissão Total da Venda (%) *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register("total_commission_rate", {
-                    valueAsNumber: true,
-                    min: { value: 0, message: "Valor deve ser positivo" },
-                  })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
-                />
-                <p className="text-xs text-subtle mt-1">
-                  Único valor editável — plataforma e escritório ficam travados nas
-                  taxas cadastradas; seu corte é o restante.
-                </p>
-                {totalCommissionValue > 0 && (
-                  <p className="text-sm text-muted mt-1">
-                    {formatBRL(totalCommissionValue)}
-                  </p>
-                )}
-                {errors.total_commission_rate && (
-                  <p className="text-status-bad text-sm mt-1">
-                    {errors.total_commission_rate.message}
-                  </p>
-                )}
-              </div>
-
-              <div className="hidden">
-                <label className="block text-sm font-medium text-ink-soft mb-1">
-                  Comissão da Plataforma
-                  {prefillData?.platform?.rate != null && (
-                    <span className="text-xs text-muted ml-1">
-                      ({prefillData.platform.rate}%)
-                    </span>
-                  )}
+                  Valor do Vendedor
                 </label>
                 <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
-                  {formatBRL(platformValue)}
+                  {formatBRL(sellerNetPreviewValue)}
                 </div>
-                <p className="text-xs text-subtle mt-1">
-                  Taxa travada — não editável neste formulário.
-                </p>
               </div>
 
-              <div className="hidden">
+              <div>
                 <label className="block text-sm font-medium text-ink-soft mb-1">
-                  Comissão do Escritório
-                  {prefillData?.office?.rate != null && (
-                    <span className="text-xs text-muted ml-1">
-                      ({prefillData.office.rate}%)
-                    </span>
-                  )}
+                  Comissão Total
                 </label>
                 <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
-                  {formatBRL(officeValue)}
+                  {formatBRL(totalCommissionValue)}
                 </div>
-                <p className="text-xs text-subtle mt-1">
-                  Taxa travada — não editável neste formulário.
-                </p>
               </div>
 
-              <div className="hidden">
+              <div>
                 <label className="block text-sm font-medium text-ink-soft mb-1">
-                  Comissão do Especialista
+                  Valor do Especialista
                   <span className="text-xs text-muted ml-1">
-                    ({specialistRate.toFixed(2)}%)
+                    ({specialistRate.toFixed(2)}% da comissão)
                   </span>
                 </label>
                 <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
                   {formatBRL(specialistValue)}
                 </div>
-                <p className="text-xs text-subtle mt-1">
-                  Resíduo do total — plataforma e escritório subtraídos.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-ink-soft mb-1">
-                  Valor Líquido do Vendedor
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register("payment_seller_value", { valueAsNumber: true })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
-                />
-                <p className="text-xs text-subtle mt-1">
-                  Calculado automaticamente, edite se necessário.
-                </p>
-                {sellerNetPreviewValue > 0 && (
-                  <p className="text-sm text-status-ok mt-1">
-                    {formatBRL(sellerNetPreviewValue)}
-                  </p>
-                )}
               </div>
             </div>
           </section>
@@ -1868,7 +1818,7 @@ export default function CreateContractPage() {
                 </label>
                 <input
                   type="text"
-                  {...register("city", { required: "Cidade é obrigatória" })}
+                  {...register("city")}
                   placeholder="Ex: São Paulo"
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                 />
@@ -1955,6 +1905,15 @@ export default function CreateContractPage() {
               <Button
                 type="button"
                 variant="light"
+                onClick={() => setStep(1)}
+                disabled={isSubmitting}
+                className="sm:w-auto px-8 py-4"
+              >
+                Voltar
+              </Button>
+              <Button
+                type="button"
+                variant="light"
                 onClick={() => navigate(-1)}
                 disabled={isSubmitting}
                 className="sm:w-auto px-8 py-4"
@@ -1964,6 +1923,7 @@ export default function CreateContractPage() {
             </div>
           </div>
         </form>
+        )}
       </div>
 
       {/* Modal de Preview do Contrato */}

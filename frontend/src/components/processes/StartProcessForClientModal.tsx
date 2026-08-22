@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PopupModal, useCalendlyEventListener } from "react-calendly";
 import { getClients, createConsultantProcess, type Client } from "../../services/consultant.service";
+import { officeService } from "../../services/office";
 import { getUserById } from "../../services/users.service";
 import {
   registerCalendlyScheduledEvent,
@@ -10,11 +11,34 @@ import {
 import Button from "../../components/ui/button";
 import { Loader2, Search } from "lucide-react";
 
+/**
+ * Consultor e gerente de escritório abrem processo em nome de um cliente pelo
+ * mesmo fluxo; o que muda é de onde vem a lista de clientes, qual endpoint
+ * cria o processo e para onde o usuário volta depois.
+ */
+const MODES = {
+  CONSULTANT: {
+    listClients: () => getClients(),
+    createProcess: createConsultantProcess,
+    redirectTo: "/consultant/processes",
+    emptyMessage:
+      'Você ainda não tem clientes. Convide um cliente primeiro em "Meus Clientes".',
+  },
+  OFFICE: {
+    listClients: () => officeService.listClients(),
+    createProcess: officeService.createProcess,
+    redirectTo: "/office/processes",
+    emptyMessage:
+      "Nenhum cliente vinculado ao escritório ainda.",
+  },
+} as const;
+
 interface Props {
   productType: "CAR" | "BOAT" | "AIRCRAFT";
   productId: string;
   specialistId: string;
   productLabel?: string;
+  mode?: keyof typeof MODES;
   onClose: () => void;
 }
 
@@ -23,8 +47,10 @@ export default function StartProcessForClientModal({
   productId,
   specialistId,
   productLabel,
+  mode = "CONSULTANT",
   onClose,
 }: Props) {
+  const config = MODES[mode];
   const navigate = useNavigate();
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
@@ -46,12 +72,15 @@ export default function StartProcessForClientModal({
   const [calendlyMessage, setCalendlyMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    getClients()
-      .then(setClients)
+    config
+      .listClients()
+      .then((list) => setClients(list as Client[]))
       .catch(() => setClients([]))
       .finally(() => setIsLoadingClients(false));
     searchRef.current?.focus();
-  }, []);
+    // MODES é constante de módulo, então `config` só muda se `mode` mudar —
+    // não recarrega a lista a cada render.
+  }, [config]);
 
   // Carrega o link do Calendly do especialista para permitir agendar a reunião
   useEffect(() => {
@@ -92,7 +121,7 @@ export default function StartProcessForClientModal({
         console.error("Erro ao sincronizar evento do Calendly:", err);
       } finally {
         setIsCalendlyOpen(false);
-        navigate("/consultant/processes");
+        navigate(config.redirectTo);
       }
     },
   });
@@ -105,7 +134,7 @@ export default function StartProcessForClientModal({
     setError(null);
     setIsSubmitting(true);
     try {
-      const process = await createConsultantProcess({
+      const process = await config.createProcess({
         client_id: selectedClient.id,
         specialist_id: specialistId,
         product_type: productType,
@@ -126,7 +155,7 @@ export default function StartProcessForClientModal({
           "Conclua o agendamento no Calendly para marcar o horário da reunião.",
         );
       } else {
-        navigate("/consultant/processes");
+        navigate(config.redirectTo);
       }
     } catch (err) {
       setError((err as Error).message || "Erro ao criar processo. Tente novamente.");
@@ -168,7 +197,7 @@ export default function StartProcessForClientModal({
           </div>
         ) : clients.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-8">
-            Você ainda não tem clientes. Convide um cliente primeiro em "Meus Clientes".
+            {config.emptyMessage}
           </p>
         ) : (
           <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-md divide-y divide-gray-100">
@@ -219,7 +248,7 @@ export default function StartProcessForClientModal({
           open={isCalendlyOpen}
           onModalClose={() => {
             setIsCalendlyOpen(false);
-            navigate("/consultant/processes");
+            navigate(config.redirectTo);
           }}
           rootElement={document.getElementById("root") ?? document.body}
           prefill={{
