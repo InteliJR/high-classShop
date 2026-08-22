@@ -492,15 +492,13 @@ export class ContractsService {
    * Deriva o split de comissão a partir do total informado pelo especialista.
    *
    * Único valor editável é `totalCommissionRate` (comissão total da venda, em %).
-   * Plataforma e escritório permanecem travados nas taxas já cadastradas
-   * (nunca aceitos do cliente); o corte do especialista é o resíduo:
-   * total_arredondado - platform_arredondado - office_arredondado. Plataforma
-   * e escritório são arredondados PRIMEIRO, e o especialista fica com o que
-   * sobra do total (também arredondado) — só assim a soma dos três valores
-   * persistidos bate exatamente com o total, sem drift de centavos.
+   * A comissão total vira o bolo; o especialista recebe a sua fatia dele. A
+   * taxa cadastrada do escritório incide apenas sobre o restante e a
+   * plataforma recebe o resíduo. Nenhum valor de repartição recebido do
+   * cliente é aceito.
    *
-   * @throws BadRequestException se o total for menor que platform + office,
-   * ou se o processo não tiver valor de referência (proposta aceita ou produto)
+   * @throws BadRequestException se o processo não tiver valor de referência
+   * (proposta aceita ou produto)
    */
   private async resolveCommissionFromTotal(
     processId: string,

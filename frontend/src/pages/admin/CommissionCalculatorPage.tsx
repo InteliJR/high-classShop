@@ -43,6 +43,8 @@ export default function CommissionCalculatorPage() {
   const [totalCommissionRate, setTotalCommissionRate] = useState("10");
   const [specialistShareRate, setSpecialistShareRate] = useState("0");
   const [officeShareRate, setOfficeShareRate] = useState("0");
+  const [selectedSpecialistId, setSelectedSpecialistId] = useState("");
+  const [selectedOfficeId, setSelectedOfficeId] = useState("");
 
   const [specialists, setSpecialists] = useState<Specialist[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -210,15 +212,16 @@ export default function CommissionCalculatorPage() {
                 <select
                   id="calculator-specialist"
                   onChange={(e) => {
+                    const specialistId = e.target.value;
                     const specialist = specialists.find(
-                      (s) => s.id === e.target.value,
+                      (s) => s.id === specialistId,
                     );
-                    if (specialist) {
-                      setSpecialistShareRate(
-                        String(specialist.commission_rate ?? 0),
-                      );
-                    }
+                    setSelectedSpecialistId(specialistId);
+                    setSpecialistShareRate(
+                      String(specialist?.commission_rate ?? 0),
+                    );
                   }}
+                  value={selectedSpecialistId}
                   className={selectClass}
                 >
                   <option value="">Nenhum — fatia manual</option>
@@ -257,11 +260,12 @@ export default function CommissionCalculatorPage() {
                 <select
                   id="calculator-office"
                   onChange={(e) => {
-                    const company = companies.find((c) => c.id === e.target.value);
-                    if (company) {
-                      setOfficeShareRate(String(company.commission_rate ?? 0));
-                    }
+                    const companyId = e.target.value;
+                    const company = companies.find((c) => c.id === companyId);
+                    setSelectedOfficeId(companyId);
+                    setOfficeShareRate(String(company?.commission_rate ?? 0));
                   }}
+                  value={selectedOfficeId}
                   className={selectClass}
                 >
                   <option value="">Nenhum</option>

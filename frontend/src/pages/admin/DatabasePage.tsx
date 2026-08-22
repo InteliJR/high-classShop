@@ -110,6 +110,10 @@ export default function DatabasePage() {
 
   const columns = result?.columns ?? [];
   const rows = result?.data ?? [];
+  // `rowMeta` foi adicionado depois do navegador inicial. Enquanto frontend e
+  // backend não estão no mesmo deploy, a resposta antiga não o possui.
+  // Mantemos a tabela navegável e apenas desabilitamos a edição de usuários.
+  const rowMeta = result?.rowMeta ?? [];
   const totalPages = result
     ? Math.max(1, Math.ceil(result.total / result.pageSize))
     : 1;
@@ -228,11 +232,12 @@ export default function DatabasePage() {
                           type="button"
                           variant="ghost"
                           className="p-2"
-                          disabled={!result?.rowMeta[i]?.id}
+                          disabled={!rowMeta[i]?.id}
                           aria-label="Editar usuário"
                           title="Editar usuário"
                           onClick={() => {
-                            const user = result!.rowMeta[i];
+                            const user = rowMeta[i];
+                            if (!user?.id) return;
                             setSuccessMessage(null);
                             setDialogState({
                               userId: user.id,
