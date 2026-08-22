@@ -169,9 +169,9 @@ export class PreviewContractDto {
   payment_seller_value?: number;
 
   // === COMISSÃO TOTAL DA VENDA ===
-  // Único valor de comissão editável pelo especialista. O backend trava as taxas
-  // de plataforma e escritório (já cadastradas) e deriva o corte do especialista
-  // como o resíduo: total_commission_rate - platform_rate - office_rate.
+  // Único valor de comissão editável pelo especialista. O backend usa este
+  // valor como o bolo: aplica a fatia do especialista, aplica a do escritório
+  // sobre o restante e destina o resíduo à plataforma.
   @IsNumber({}, { message: 'total_commission_rate deve ser um número' })
   @IsNotEmpty({ message: 'total_commission_rate é obrigatório' })
   @Min(0, { message: 'total_commission_rate deve ser maior ou igual a zero' })
