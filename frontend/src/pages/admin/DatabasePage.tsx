@@ -2,7 +2,7 @@
 // A formatação toda (labels pt-BR, máscaras, moeda, enums) vive no backend,
 // em admin-database.columns.ts — aqui só renderizamos o que chega, e o export
 // consome exatamente a mesma matriz da tela.
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -22,8 +22,22 @@ import { downloadCsv, openPrintablePdf } from "../../utils/export";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
 import { EmptyState } from "../../components/patterns/EmptyState";
+import AdminUserManagementDialog, {
+  type AdminUserManagementDialogState,
+} from "../../components/admin/AdminUserManagementDialog";
+import {
+  createLatestRequestGuard,
+  isSameRecordsOrigin,
+  shouldInvalidateRecordsRequest,
+  type RecordsOrigin,
+} from "../../lib/admin-user-management";
 
 const PAGE_SIZE = 20;
+
+type LoadedRecords = {
+  origin: RecordsOrigin;
+  records: RecordsPage;
+};
 
 /** Versão textual da célula — usada no CSV e no PDF. Imagem vira Sim/—. */
 function cellText(cell: Cell): string {
@@ -35,35 +49,63 @@ export default function DatabasePage() {
   const [entities, setEntities] = useState<EntityInfo[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [result, setResult] = useState<RecordsPage | null>(null);
+  const [loadedRecords, setLoadedRecords] = useState<LoadedRecords | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [dialogState, setDialogState] =
+    useState<AdminUserManagementDialogState | null>(null);
+  const recordsRequestGuard = useRef(createLatestRequestGuard());
 
   useEffect(() => {
     getEntities()
       .then((list) => {
         setEntities(list);
         setActive(list[0]?.key ?? null);
+        if (list.length === 0) setLoading(false);
       })
-      .catch((err) =>
-        setError((err as Error).message || "Erro ao carregar entidades."),
-      );
+      .catch((err) => {
+        setError((err as Error).message || "Erro ao carregar entidades.");
+        setLoading(false);
+      });
   }, []);
 
-  useEffect(() => {
+  const loadRecords = useCallback(async () => {
     if (!active) return;
+    const origin = { entity: active, page };
+    const requestId = recordsRequestGuard.current.begin();
     setLoading(true);
     setError(null);
-    getRecords(active, page, PAGE_SIZE)
-      .then(setResult)
-      .catch((err) => {
-        // Descarta o resultado anterior: sem isso a aba nova mostra as linhas
-        // da aba antiga, e o CSV sai nomeado com a entidade errada.
-        setResult(null);
-        setError((err as Error).message || "Erro ao carregar registros.");
-      })
-      .finally(() => setLoading(false));
+    try {
+      const records = await getRecords(active, page, PAGE_SIZE);
+      if (!recordsRequestGuard.current.isCurrent(requestId)) return;
+      setLoadedRecords({ origin, records });
+    } catch (err) {
+      if (!recordsRequestGuard.current.isCurrent(requestId)) return;
+      // Descarta o resultado anterior: sem isso a aba nova mostra as linhas
+      // da aba antiga, e o CSV sai nomeado com a entidade errada.
+      setLoadedRecords(null);
+      setError((err as Error).message || "Erro ao carregar registros.");
+    } finally {
+      if (recordsRequestGuard.current.isCurrent(requestId)) setLoading(false);
+    }
   }, [active, page]);
+
+  useEffect(() => {
+    const requestGuard = recordsRequestGuard.current;
+    void loadRecords();
+    return () => requestGuard.invalidate();
+  }, [loadRecords]);
+
+  const currentOrigin = active ? { entity: active, page } : null;
+  const result =
+    loadedRecords &&
+    currentOrigin &&
+    isSameRecordsOrigin(loadedRecords.origin, currentOrigin)
+      ? loadedRecords.records
+      : null;
 
   const columns = result?.columns ?? [];
   const rows = result?.data ?? [];
@@ -93,8 +135,13 @@ export default function DatabasePage() {
             key={e.key}
             type="button"
             onClick={() => {
+              const current = active ? { entity: active, page } : null;
+              const next = { entity: e.key, page: 1 };
+              if (!shouldInvalidateRecordsRequest(current, next)) return;
+              recordsRequestGuard.current.invalidate();
               setActive(e.key);
               setPage(1);
+              setSuccessMessage(null);
             }}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               active === e.key
@@ -110,6 +157,12 @@ export default function DatabasePage() {
       {error && (
         <Alert variant="danger" className="mb-4">
           {error}
+        </Alert>
+      )}
+
+      {successMessage && (
+        <Alert variant="success" className="mb-4">
+          {successMessage}
         </Alert>
       )}
 
@@ -150,6 +203,11 @@ export default function DatabasePage() {
             <table className="min-w-full text-sm">
               <thead className="bg-border-soft sticky top-0 z-10">
                 <tr>
+                  {active === "users" ? (
+                    <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">
+                      Ações
+                    </th>
+                  ) : null}
                   {columns.map((c) => (
                     <th
                       key={c.label}
@@ -163,6 +221,43 @@ export default function DatabasePage() {
               <tbody>
                 {rows.map((row, i) => (
                   <tr key={i} className="border-t border-border-soft">
+                    {active === "users" ? (
+                      <td className="px-3 py-2 whitespace-nowrap align-top">
+                        <div className="flex flex-col items-start gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="px-2 py-1 text-xs"
+                            disabled={!result?.rowMeta[i]?.id}
+                            onClick={() => {
+                              setSuccessMessage(null);
+                              setDialogState({
+                                userId: result!.rowMeta[i].id,
+                                mode: "role",
+                              });
+                            }}
+                          >
+                            Alterar cargo
+                          </Button>
+                          {result?.rowMeta[i]?.role === "SPECIALIST" ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="px-2 py-1 text-xs"
+                              onClick={() => {
+                                setSuccessMessage(null);
+                                setDialogState({
+                                  userId: result.rowMeta[i].id,
+                                  mode: "speciality",
+                                });
+                              }}
+                            >
+                              Alterar especialidade
+                            </Button>
+                          ) : null}
+                        </div>
+                      </td>
+                    ) : null}
                     {row.map((cell, j) => {
                       const wide = columns[j]?.wide;
                       const text = cellText(cell);
@@ -205,7 +300,10 @@ export default function DatabasePage() {
                 type="button"
                 variant="light"
                 disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
+                onClick={() => {
+                  recordsRequestGuard.current.invalidate();
+                  setPage((p) => p - 1);
+                }}
               >
                 <ChevronLeft className="w-4 h-4" /> Anterior
               </Button>
@@ -216,7 +314,10 @@ export default function DatabasePage() {
                 type="button"
                 variant="light"
                 disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => {
+                  recordsRequestGuard.current.invalidate();
+                  setPage((p) => p + 1);
+                }}
               >
                 Próxima <ChevronRight className="w-4 h-4" />
               </Button>
@@ -224,6 +325,15 @@ export default function DatabasePage() {
           </div>
         </>
       )}
+
+      <AdminUserManagementDialog
+        state={dialogState}
+        onClose={() => setDialogState(null)}
+        onSuccess={async () => {
+          setSuccessMessage("Alteração realizada com sucesso.");
+          await loadRecords();
+        }}
+      />
     </div>
   );
 }

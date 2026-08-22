@@ -1,4 +1,5 @@
 import api from "./api";
+import type { RecordRowMeta } from "../lib/admin-user-management";
 
 export type EntityInfo = { key: string; label: string };
 
@@ -12,6 +13,7 @@ export type ColumnMeta = { label: string; wide?: boolean };
 export type RecordsPage = {
   columns: ColumnMeta[];
   data: Cell[][];
+  rowMeta: RecordRowMeta[];
   total: number;
   page: number;
   pageSize: number;

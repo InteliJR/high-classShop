@@ -9,6 +9,7 @@ import {
 import cookieParser from 'cookie-parser';
 import express, { Express } from 'express';
 import { getFrontendUrl, stripEnvQuotes } from './shared/utils/frontend-url';
+import { localizedValidationExceptionFactory } from './shared/validation/localized-validation-exception';
 
 export async function createApp(): Promise<Express> {
   const server = express();
@@ -69,6 +70,7 @@ export async function createApp(): Promise<Express> {
       forbidNonWhitelisted: true,
       transform: true,
       disableErrorMessages: process.env.NODE_ENV === 'production',
+      exceptionFactory: localizedValidationExceptionFactory,
     }),
   );
 

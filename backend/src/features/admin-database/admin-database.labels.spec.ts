@@ -11,7 +11,7 @@ describe('admin-database.labels', () => {
   it('traduz papel de usuário', () => {
     const fn = enumLabel(USER_ROLE);
     expect(fn('CONSULTANT')).toBe('Consultor');
-    expect(fn('OFFICE')).toBe('Escritório');
+    expect(fn('OFFICE')).toBe('Gerente de escritório');
   });
 
   it('traduz status de processo', () => {
