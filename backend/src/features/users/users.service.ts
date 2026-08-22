@@ -108,6 +108,7 @@ export class UsersService {
     role: string;
     cpf: string | null;
     rg: string;
+    phone: string | null;
     civil_state: string | null;
     speciality: string | null;
     calendly_url: string | null;
@@ -123,6 +124,10 @@ export class UsersService {
         role: true,
         cpf: true,
         rg: true,
+        // O telefone é editável no perfil (PATCH /users/:id aceita `phone`).
+        // Sem ele no select o campo voltava vazio a cada carregamento da tela
+        // e passava a impressão de que o valor não tinha sido salvo.
+        phone: true,
         civil_state: true,
         speciality: true,
         calendly_url: true,
@@ -156,6 +161,7 @@ export class UsersService {
     role: string;
     cpf: string | null;
     rg: string;
+    phone: string | null;
     calendly_url: string | null;
   }> {
     // Verificar se o usuário existe
@@ -195,6 +201,11 @@ export class UsersService {
         ...(updateUserDto.surname && { surname: updateUserDto.surname }),
         ...(updateUserDto.cpf && { cpf: updateUserDto.cpf }),
         ...(updateUserDto.rg && { rg: updateUserDto.rg }),
+        // O DTO já validava `phone`, mas ele não era gravado: a edição do
+        // telefone no perfil era descartada em silêncio.
+        ...(updateUserDto.phone !== undefined && {
+          phone: updateUserDto.phone?.trim() || null,
+        }),
         ...(updateUserDto.calendly_url !== undefined && {
           calendly_url: updateUserDto.calendly_url?.trim() || null,
         }),
@@ -208,6 +219,7 @@ export class UsersService {
         role: true,
         cpf: true,
         rg: true,
+        phone: true,
         calendly_url: true,
       },
     });
