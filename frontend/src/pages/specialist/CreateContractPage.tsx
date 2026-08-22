@@ -121,24 +121,6 @@ function extractBackendMessage(error: any): string {
   return String(candidate);
 }
 
-function CommissionPreviewCard({
-  label,
-  value,
-  description,
-}: {
-  label: string;
-  value: string;
-  description?: string;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-border-soft px-4 py-3">
-      <p className="text-sm text-muted">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-ink">{value}</p>
-      {description ? <p className="mt-1 text-xs text-subtle">{description}</p> : null}
-    </div>
-  );
-}
-
 export default function CreateContractPage() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -237,11 +219,7 @@ export default function CreateContractPage() {
 
   // A porcentagem total é a única entrada: a API preserva as regras de split
   // cadastradas e o especialista só confere o próprio repasse.
-  const platformRate = prefillData?.platform?.rate ?? 0;
-  const officeRate = prefillData?.office?.rate ?? 0;
   const specialistRate = prefillData?.specialist?.rate ?? 0;
-  const platformValue = ((vehiclePrice || 0) * platformRate) / 100;
-  const officeValue = ((vehiclePrice || 0) * officeRate) / 100;
   const { totalCommissionValue, specialistValue } = getCommissionPreview({
     saleValue: vehiclePrice,
     totalCommissionRate,
@@ -1322,60 +1300,6 @@ export default function CreateContractPage() {
           </section>
           </div>{/* end Dados do produto */}
 
-          {/* ── Etapa: Comissão da venda ── */}
-          <div>
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-subtle mb-3 px-1">
-              Comissão da venda
-            </h2>
-            <section className="bg-surface rounded-lg border border-border p-6 mb-6">
-              <div className="border-b pb-2 mb-4">
-                <h3 className="text-base font-semibold text-ink">
-                  Definição da comissão
-                </h3>
-                <p className="text-sm text-muted mt-1">
-                  Informe somente a porcentagem total da venda. Os repasses são
-                  calculados automaticamente pelas regras cadastradas.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-ink-soft mb-1">
-                    Comissão total da venda (%)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="100"
-                    {...register("total_commission_rate", {
-                      required: "Taxa de comissão é obrigatória",
-                      valueAsNumber: true,
-                      min: { value: 0, message: "Valor deve ser positivo" },
-                      max: { value: 100, message: "Valor deve ser de até 100%" },
-                    })}
-                    className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
-                  />
-                  {errors.total_commission_rate && (
-                    <p className="text-status-bad text-sm mt-1">
-                      {errors.total_commission_rate.message}
-                    </p>
-                  )}
-                </div>
-
-                <CommissionPreviewCard
-                  label="Comissão total"
-                  value={formatBRL(totalCommissionValue)}
-                />
-                <CommissionPreviewCard
-                  label="Sua comissão"
-                  value={formatBRL(specialistValue)}
-                  description={`${specialistRate.toFixed(2)}% da comissão total`}
-                />
-              </div>
-            </section>
-          </div>
-
           {/* ── Grupo: Condições comerciais ── */}
           <div>
             <h2 className="text-xs font-semibold uppercase tracking-widest text-subtle mb-3 px-1">
@@ -1392,8 +1316,15 @@ export default function CreateContractPage() {
                 Calculado automaticamente
               </span>
             </div>
-            <input type="hidden" {...register("vehicle_price", { valueAsNumber: true, min: { value: 0, message: "Valor deve ser positivo" } })} />
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <input
+              type="hidden"
+              {...register("vehicle_price", { valueAsNumber: true })}
+            />
+            <input
+              type="hidden"
+              {...register("payment_seller_value", { valueAsNumber: true })}
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-muted mb-1">
                   Valor Total do{" "}
@@ -1409,73 +1340,34 @@ export default function CreateContractPage() {
                 )}
               </div>
 
-              <div className="hidden">
+              <div>
                 <label className="block text-sm font-medium text-ink-soft mb-1">
-                  Comissão da Plataforma
-                  {prefillData?.platform?.rate != null && (
-                    <span className="text-xs text-muted ml-1">
-                      ({prefillData.platform.rate}%)
-                    </span>
-                  )}
+                  Valor do Vendedor
                 </label>
                 <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
-                  {formatBRL(platformValue)}
+                  {formatBRL(sellerNetPreviewValue)}
                 </div>
-                <p className="text-xs text-subtle mt-1">
-                  Taxa travada — não editável neste formulário.
-                </p>
               </div>
 
-              <div className="hidden">
+              <div>
                 <label className="block text-sm font-medium text-ink-soft mb-1">
-                  Comissão do Escritório
-                  {prefillData?.office?.rate != null && (
-                    <span className="text-xs text-muted ml-1">
-                      ({prefillData.office.rate}%)
-                    </span>
-                  )}
+                  Comissão Total
                 </label>
                 <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
-                  {formatBRL(officeValue)}
+                  {formatBRL(totalCommissionValue)}
                 </div>
-                <p className="text-xs text-subtle mt-1">
-                  Taxa travada — não editável neste formulário.
-                </p>
               </div>
 
-              <div className="hidden">
+              <div>
                 <label className="block text-sm font-medium text-ink-soft mb-1">
-                  Comissão do Especialista
+                  Valor do Especialista
                   <span className="text-xs text-muted ml-1">
-                    ({specialistRate.toFixed(2)}%)
+                    ({specialistRate.toFixed(2)}% da comissão)
                   </span>
                 </label>
                 <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
                   {formatBRL(specialistValue)}
                 </div>
-                <p className="text-xs text-subtle mt-1">
-                  Resíduo do total — plataforma e escritório subtraídos.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-ink-soft mb-1">
-                  Valor Líquido do Vendedor
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register("payment_seller_value", { valueAsNumber: true })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
-                />
-                <p className="text-xs text-subtle mt-1">
-                  Calculado automaticamente, edite se necessário.
-                </p>
-                {sellerNetPreviewValue > 0 && (
-                  <p className="text-sm text-status-ok mt-1">
-                    {formatBRL(sellerNetPreviewValue)}
-                  </p>
-                )}
               </div>
             </div>
           </section>
