@@ -11,6 +11,7 @@ import {
   Check,
 } from "lucide-react";
 import { useIsMobile } from "../../hooks/use-is-mobile";
+import ContractCommissionStep from "./ContractCommissionStep";
 import {
   prefillContract,
   previewContract,
@@ -150,6 +151,7 @@ export default function CreateContractPage() {
     control,
     setValue,
     watch,
+    trigger,
     formState: { errors },
   } = useForm<ContractFormData>({
     defaultValues: {
@@ -219,6 +221,11 @@ export default function CreateContractPage() {
   const [previewFormData, setPreviewFormData] =
     useState<PreviewContractData | null>(null);
   const [isSendingAfterPreview, setIsSendingAfterPreview] = useState(false);
+
+  // Wizard: a comissão é decidida antes de o especialista ver o resto do
+  // contrato. Um único useForm cobre as duas etapas, então o payload final
+  // continua sendo montado exatamente como antes.
+  const [step, setStep] = useState<1 | 2>(1);
 
   const [templates, setTemplates] = useState<ContractTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
@@ -779,7 +786,26 @@ export default function CreateContractPage() {
           </Alert>
         )}
 
-        {/* Form */}
+        {/* Etapa 1: comissão */}
+        {step === 1 && (
+          <ContractCommissionStep
+            register={register}
+            errors={errors}
+            productLabel={getProductTypeLabel(prefillData?.product_type)}
+            vehiclePrice={vehiclePrice || 0}
+            totalCommissionValue={totalCommissionValue}
+            sellerNetPreviewValue={sellerNetPreviewValue}
+            onCancel={() => navigate(-1)}
+            onContinue={async () => {
+              // Valida só a comissão: o resto do contrato ainda nem foi exibido.
+              const ok = await trigger("total_commission_rate");
+              if (ok) setStep(2);
+            }}
+          />
+        )}
+
+        {/* Etapa 2: demais dados do contrato */}
+        {step === 2 && (
         <form onSubmit={handleSubmit(onPreview)} className="space-y-8">
 
           {/* Seção: Modelo de contrato */}
@@ -1987,6 +2013,15 @@ export default function CreateContractPage() {
               <Button
                 type="button"
                 variant="light"
+                onClick={() => setStep(1)}
+                disabled={isSubmitting}
+                className="sm:w-auto px-8 py-4"
+              >
+                Voltar
+              </Button>
+              <Button
+                type="button"
+                variant="light"
                 onClick={() => navigate(-1)}
                 disabled={isSubmitting}
                 className="sm:w-auto px-8 py-4"
@@ -1996,6 +2031,7 @@ export default function CreateContractPage() {
             </div>
           </div>
         </form>
+        )}
       </div>
 
       {/* Modal de Preview do Contrato */}
