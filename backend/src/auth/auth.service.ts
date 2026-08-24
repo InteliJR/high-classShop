@@ -300,6 +300,19 @@ export class AuthService {
   }
 
   // Verificar se o refreshToken é válido
+  /**
+   * Conta desativada ou excluída não renova sessão.
+   *
+   * O login já barrava, e o AuthGuard barra cada request, mas o refresh não
+   * checava: quem tivesse um refresh token válido seguia trocando por access
+   * tokens novos depois de perder o acesso.
+   */
+  private assertContaAtiva(user: { is_active: boolean }): void {
+    if (user.is_active === false) {
+      throw new UnauthorizedException('Conta desativada');
+    }
+  }
+
   private async verifyRefreshToken(refresh_token: string) {
     const refreshToken = refresh_token;
 
@@ -338,6 +351,7 @@ export class AuthService {
           where: { id: payload.sub },
         });
         if (!graceUser) throw new UnauthorizedException('Unauthorized');
+        this.assertContaAtiva(graceUser);
         return graceUser;
       }
 
@@ -358,8 +372,17 @@ export class AuthService {
         throw new NotFoundException('Not found');
       }
 
+      this.assertContaAtiva(user);
+
       return user;
     } catch (error) {
+      // As exceções lançadas aqui dentro já dizem o motivo ("Conta
+      // desativada", "Refresh token expired"). Sem esta guarda o catch
+      // abaixo as reembrulhava como UnauthorizedException('UnauthorizedException'),
+      // trocando o diagnóstico por ruído.
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
       if (error.name === 'JsonWebTokenError') {
         throw new UnauthorizedException('Unauthorized');
       }
