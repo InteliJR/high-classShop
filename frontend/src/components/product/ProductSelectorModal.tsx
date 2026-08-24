@@ -18,7 +18,8 @@ import {
   assignProductToProcess,
   type Process,
 } from "../../services/processes.service";
-import type { SpecialityType } from "../../types/types";
+import type { ProductCurrency, SpecialityType } from "../../types/types";
+import { formatCurrency } from "../../lib/currency";
 import Button from "../ui/button";
 
 interface ProductSelectorModalProps {
@@ -44,6 +45,7 @@ interface ProductItem {
   marca: string;
   modelo: string;
   valor: number;
+  currency?: ProductCurrency;
   ano: number;
   imageUrl?: string;
 }
@@ -120,6 +122,7 @@ export default function ProductSelectorModal({
             marca: car.marca,
             modelo: car.modelo,
             valor: car.valor,
+            currency: car.currency,
             ano: car.ano ?? 0,
             imageUrl: car.imageUrl,
           }));
@@ -135,6 +138,7 @@ export default function ProductSelectorModal({
             marca: boat.marca,
             modelo: boat.modelo,
             valor: boat.valor,
+            currency: boat.currency,
             ano: boat.ano ?? 0,
             imageUrl: boat.imageUrl,
           }));
@@ -150,6 +154,7 @@ export default function ProductSelectorModal({
             marca: aircraft.marca,
             modelo: aircraft.modelo,
             valor: aircraft.valor,
+            currency: aircraft.currency,
             ano: aircraft.ano ?? 0,
             imageUrl: aircraft.imageUrl,
           }));
@@ -219,13 +224,6 @@ export default function ProductSelectorModal({
     setSelectedProduct(null);
     setErrorMessage("");
     onClose();
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(value);
   };
 
   if (!isOpen) return null;
@@ -378,7 +376,7 @@ export default function ProductSelectorModal({
                             Ano: {product.ano}
                           </p>
                           <p className="text-sm font-semibold text-primary mt-1">
-                            {formatCurrency(product.valor)}
+                            {formatCurrency(product.valor, product.currency)}
                           </p>
                         </div>
 

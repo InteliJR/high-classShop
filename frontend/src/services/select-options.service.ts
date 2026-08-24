@@ -1,5 +1,5 @@
 import api from "./api";
-import type { Product } from "../types/types";
+import type { Product, ProductCurrency } from "../types/types";
 import type { UserRole } from "../types/types";
 
 export interface SelectOption {
@@ -19,6 +19,7 @@ export interface ProductOption extends Omit<SelectOption, "id"> {
   modelo: string;
   ano: number;
   valor: number;
+  currency?: ProductCurrency;
   imageUrl?: string;
 }
 
@@ -95,6 +96,7 @@ export async function fetchAvailableProducts(
         modelo: string;
         ano: number;
         valor: number;
+        currency?: ProductCurrency;
         imageUrl?: string;
       }) => ({
         id: product.id,
@@ -104,6 +106,7 @@ export async function fetchAvailableProducts(
         modelo: product.modelo,
         ano: product.ano,
         valor: product.valor,
+        currency: product.currency,
         imageUrl: product.imageUrl,
       })
     );
@@ -150,6 +153,7 @@ export async function fetchProductDetails(
       modelo: product.modelo,
       descricao: product.descricao || "",
       valor: product.valor,
+      currency: product.currency,
       imageUrl: product.images?.[0]?.image_url || undefined,
       ano: product.ano,
       estado: product.estado || "Seminovo",

@@ -6,7 +6,8 @@ import { AppContext } from "../../contexts/AppContext";
 import { getCars, deleteCar } from "../../services/cars.service";
 import { getBoats, deleteBoat } from "../../services/boats.service";
 import { getAircrafts, deleteAircraft } from "../../services/aircrafts.service";
-import type { SpecialityType } from "../../types/types";
+import type { ProductCurrency, SpecialityType } from "../../types/types";
+import { formatCurrency } from "../../lib/currency";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
 import { Card } from "../../components/ui/card";
@@ -20,6 +21,7 @@ interface Product {
   modelo: string;
   ano?: number;
   valor: number;
+  currency?: ProductCurrency;
   estado?: string;
   descricao?: string;
   imageUrl?: string;
@@ -232,7 +234,7 @@ export default function ProductsPage() {
                     <td className="py-3">{product.marca}</td>
                     <td className="py-3">{product.modelo}</td>
                     <td className="py-3">{product.ano || "-"}</td>
-                    <td className="py-3">R$ {product.valor?.toLocaleString("pt-BR") || "0"}</td>
+                    <td className="py-3">{formatCurrency(product.valor ?? 0, product.currency)}</td>
                     <td className="py-3 capitalize">{product.estado || "-"}</td>
                     <td className="py-3">
                       <div className="flex gap-1 justify-end">

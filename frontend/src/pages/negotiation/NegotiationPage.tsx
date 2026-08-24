@@ -26,6 +26,7 @@ import { ProposalStatusBadge } from "../../components/patterns/ProposalStatusBad
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
 import { EmptyState } from "../../components/patterns/EmptyState";
+import { formatCurrency } from "../../lib/currency";
 
 /**
  * Página de Negociação
@@ -136,6 +137,7 @@ export default function NegotiationPage() {
       setFormError(
         `O valor mínimo permitido é ${formatCurrency(
           processInfo.minimum_value,
+          processInfo.currency,
         )}`,
       );
       return;
@@ -200,16 +202,6 @@ export default function NegotiationPage() {
     } finally {
       setIsRejecting(false);
     }
-  };
-
-  /**
-   * Formata valor como moeda
-   */
-  const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(value);
   };
 
   /**
@@ -338,14 +330,14 @@ export default function NegotiationPage() {
                 <DollarSign size={16} className="text-green-600" />
                 <span className="text-muted">Valor do produto:</span>
                 <span className="font-semibold text-ink">
-                  {formatCurrency(processInfo.product_value)}
+                  {formatCurrency(processInfo.product_value, processInfo.currency)}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <AlertCircle size={16} className="text-orange-500" />
                 <span className="text-muted">Valor mínimo:</span>
                 <span className="font-semibold text-orange-600">
-                  {formatCurrency(processInfo.minimum_value)}
+                  {formatCurrency(processInfo.minimum_value, processInfo.currency)}
                 </span>
               </div>
             </div>
@@ -428,7 +420,7 @@ export default function NegotiationPage() {
                           isOwnProposal ? "text-white" : "text-ink"
                         }`}
                       >
-                        {formatCurrency(proposal.proposed_value)}
+                        {formatCurrency(proposal.proposed_value, processInfo?.currency)}
                       </span>
                     </div>
 
@@ -564,7 +556,7 @@ export default function NegotiationPage() {
             {processInfo && (
               <p className="mt-2 text-xs text-muted text-center md:text-left">
                 O valor mínimo aceito é{" "}
-                {formatCurrency(processInfo.minimum_value)}
+                {formatCurrency(processInfo.minimum_value, processInfo.currency)}
               </p>
             )}
           </div>

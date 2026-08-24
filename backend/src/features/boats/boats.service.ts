@@ -313,6 +313,7 @@ export class BoatsService {
       'Azimut',
       '55 Fly',
       '3500000',
+      'BRL',
       'São Paulo',
       '2022',
       'Azimut',

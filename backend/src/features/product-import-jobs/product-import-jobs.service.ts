@@ -11,6 +11,7 @@ import {
   ProductImportItemStatus,
   ProductImportJobStatus,
   ProductType,
+  ProductCurrency,
   Prisma,
   UserRole,
 } from '@prisma/client';
@@ -556,6 +557,9 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         modelo: row.modelo,
         identificador,
         valor: Number(row.valor),
+        currency: (row.currency || ProductCurrency.BRL)
+          .trim()
+          .toUpperCase() as ProductCurrency,
         estado: row.estado,
         ano: Number(row.ano),
         cor: row.cor || undefined,
@@ -602,6 +606,9 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         modelo: row.modelo,
         identificador,
         valor: Number(row.valor),
+        currency: (row.currency || ProductCurrency.BRL)
+          .trim()
+          .toUpperCase() as ProductCurrency,
         estado: row.estado,
         ano: Number(row.ano),
         fabricante: row.fabricante || undefined,
@@ -650,6 +657,9 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       modelo: row.modelo,
       identificador,
       valor: Number(row.valor),
+      currency: (row.currency || ProductCurrency.BRL)
+        .trim()
+        .toUpperCase() as ProductCurrency,
       estado: row.estado,
       ano: Number(row.ano),
       categoria: row.categoria || undefined,

@@ -293,6 +293,7 @@ export class CarsService {
       'BMW',
       'X5',
       '450000',
+      'BRL',
       'São Paulo',
       '2023',
       'Preto',

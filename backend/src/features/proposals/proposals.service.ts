@@ -88,9 +88,9 @@ export class ProposalsService {
             role: true,
           },
         },
-        car: { select: { id: true, valor: true, is_active: true } },
-        boat: { select: { id: true, valor: true, is_active: true } },
-        aircraft: { select: { id: true, valor: true, is_active: true } },
+        car: { select: { id: true, valor: true, currency: true, is_active: true } },
+        boat: { select: { id: true, valor: true, currency: true, is_active: true } },
+        aircraft: { select: { id: true, valor: true, currency: true, is_active: true } },
         proposals: {
           orderBy: { created_at: 'desc' },
           take: 1,
@@ -376,6 +376,7 @@ export class ProposalsService {
           select: {
             id: true,
             valor: true,
+            currency: true,
             marca: true,
             modelo: true,
             is_active: true,
@@ -385,6 +386,7 @@ export class ProposalsService {
           select: {
             id: true,
             valor: true,
+            currency: true,
             marca: true,
             modelo: true,
             is_active: true,
@@ -394,6 +396,7 @@ export class ProposalsService {
           select: {
             id: true,
             valor: true,
+            currency: true,
             marca: true,
             modelo: true,
             is_active: true,
@@ -507,6 +510,7 @@ export class ProposalsService {
             ? Boolean((product as any).is_active)
             : undefined,
         product_value: productValue,
+        currency: product.currency,
         minimum_value: minimumValue,
         client: {
           id: process.client.id,

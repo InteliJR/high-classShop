@@ -38,19 +38,13 @@ import { Alert } from "../../components/ui/alert";
 import { PageHeader } from "../../components/patterns/PageHeader";
 import { StatusBadge } from "../../components/patterns/StatusBadge";
 import { ProposalStatusBadge } from "../../components/patterns/ProposalStatusBadge";
+import { formatCurrency } from "../../lib/currency";
 
 const PRODUCT_LABELS: Record<string, string> = {
   CAR: "Carro",
   BOAT: "Embarcação",
   AIRCRAFT: "Aeronave",
 };
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-}
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString("pt-BR", {
@@ -199,7 +193,7 @@ export default function ConsultantProcessDetailPage() {
 
     if (value < processInfo.minimum_value) {
       setFormError(
-        `O valor mínimo permitido é ${formatCurrency(processInfo.minimum_value)}.`,
+        `O valor mínimo permitido é ${formatCurrency(processInfo.minimum_value, processInfo.currency)}.`,
       );
       return;
     }
@@ -407,7 +401,7 @@ export default function ConsultantProcessDetailPage() {
             <DollarSign size={16} className="text-status-ok" />
             <span className="text-muted">Valor do produto:</span>
             <span className="font-semibold text-ink">
-              {formatCurrency(processInfo.product_value)}
+              {formatCurrency(processInfo.product_value, processInfo.currency)}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -415,7 +409,7 @@ export default function ConsultantProcessDetailPage() {
             <AlertCircle size={16} className="text-orange-500" />
             <span className="text-muted">Valor mínimo:</span>
             <span className="font-semibold text-orange-600">
-              {formatCurrency(processInfo.minimum_value)}
+              {formatCurrency(processInfo.minimum_value, processInfo.currency)}
             </span>
           </div>
           {acceptedProposal && (
@@ -423,7 +417,7 @@ export default function ConsultantProcessDetailPage() {
               <Check size={16} className="text-status-ok" />
               <span className="text-muted">Valor aceito:</span>
               <span className="font-semibold text-status-ok">
-                {formatCurrency(acceptedProposal.proposed_value)}
+                {formatCurrency(acceptedProposal.proposed_value, processInfo.currency)}
               </span>
             </div>
           )}
@@ -556,7 +550,7 @@ export default function ConsultantProcessDetailPage() {
                 <div className="flex items-center gap-2 mb-1">
                   <DollarSign size={16} className="text-green-600" />
                   <span className="text-lg font-bold text-ink">
-                    {formatCurrency(proposal.proposed_value)}
+                    {formatCurrency(proposal.proposed_value, processInfo?.currency)}
                   </span>
                 </div>
                 {proposal.message && (
@@ -651,7 +645,7 @@ export default function ConsultantProcessDetailPage() {
             </form>
             {processInfo && (
               <p className="mt-2 text-xs text-muted">
-                Valor mínimo aceito: {formatCurrency(processInfo.minimum_value)}
+                Valor mínimo aceito: {formatCurrency(processInfo.minimum_value, processInfo.currency)}
               </p>
             )}
           </div>

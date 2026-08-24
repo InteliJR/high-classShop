@@ -90,12 +90,15 @@ export interface PaginationMeta {
 }
 
 // Informações essenciais dos produtos
+export type ProductCurrency = "BRL" | "USD";
+
 export interface Product {
   id: string;
   marca: string;
   modelo: string;
   descricao?: string;
   valor: number;
+  currency?: ProductCurrency;
   imageUrl?: string;
   images?: {
     id: number;

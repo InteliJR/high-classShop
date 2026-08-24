@@ -41,6 +41,7 @@ export class AircraftsService {
       estado: aircraftData.estado,
       descricao: aircraftData.descricao,
       valor: aircraftData.valor,
+      currency: aircraftData.currency,
       tipo_aeronave: aircraftData.tipo_aeronave,
       specialist_id: specialist_id ?? null,
     };
@@ -295,6 +296,9 @@ export class AircraftsService {
     if (aircraftData.valor !== undefined) {
       payload.valor = aircraftData.valor;
     }
+    if (aircraftData.currency !== undefined) {
+      payload.currency = aircraftData.currency;
+    }
     if (aircraftData.tipo_aeronave !== undefined) {
       payload.tipo_aeronave = aircraftData.tipo_aeronave;
     }
@@ -377,6 +381,7 @@ export class AircraftsService {
       'Embraer',
       'Phenom 300',
       '15000000',
+      'BRL',
       'São Paulo',
       '2021',
       'Light Jet',

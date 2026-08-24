@@ -177,6 +177,7 @@ export default function ProductPage() {
           marca: rawProduct.marca,
           modelo: rawProduct.modelo,
           valor: rawProduct.valor,
+          currency: rawProduct.currency,
           descricao: descricao,
           ano: rawProduct.ano,
           estado: rawProduct.estado,

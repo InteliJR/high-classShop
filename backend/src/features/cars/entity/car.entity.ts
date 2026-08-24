@@ -1,5 +1,6 @@
 import { CarImage } from './car-image.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
+import { ProductCurrency } from '@prisma/client';
 export class Car {
   id: string;
   specialist_id: string | null;
@@ -9,6 +10,7 @@ export class Car {
   marca: string;
   modelo: string;
   valor: number;
+  currency: ProductCurrency;
   estado: string;
   ano: number;
   cor: string | null;

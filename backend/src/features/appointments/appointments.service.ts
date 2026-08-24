@@ -912,6 +912,7 @@ export class AppointmentsService {
           ? parseFloat(product.valor)
           : Number(product.valor);
       productDto.valor = valorNum;
+      productDto.currency = product.currency;
       entity.product = productDto;
     }
 

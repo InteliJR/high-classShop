@@ -3,6 +3,7 @@ import type {
   FiltersMeta,
   PaginationMeta,
   Product,
+  ProductCurrency,
   ResponseAPI,
 } from "../types/types";
 import api from "./api";
@@ -18,6 +19,7 @@ export interface RawBoat {
   modelo: string;
   identificador: string;
   valor: number;
+  currency: ProductCurrency;
   estado: string;
   ano: number;
   fabricante?: string;
@@ -55,6 +57,7 @@ export interface CreateBoatDto {
   modelo: string;
   identificador: string;
   valor: number;
+  currency?: ProductCurrency;
   estado: string;
   ano: number;
   fabricante?: string;
@@ -109,6 +112,7 @@ export async function getBoats(
         imageUrl: primaryImage ?? "",
         images: rawBoat.images,
         valor: rawBoat.valor,
+        currency: rawBoat.currency,
         ano: rawBoat.ano,
         estado: rawBoat.estado,
         specialist_id: rawBoat.specialist_id,

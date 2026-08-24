@@ -34,7 +34,7 @@ import {
   type CsvImportResponse,
 } from "../../components/shared/XlsxImporter";
 import { Dialog, DialogContent } from "../../components/ui/dialog";
-import type { SpecialityType, UserRole } from "../../types/types";
+import type { ProductCurrency, SpecialityType, UserRole } from "../../types/types";
 
 type ProductType = "CAR" | "BOAT" | "AIRCRAFT";
 
@@ -43,6 +43,7 @@ interface ProductFormData {
   modelo: string;
   ano: number;
   valor: number;
+  currency: ProductCurrency;
   estado: string;
   [key: string]: any;
 }
@@ -208,6 +209,7 @@ export default function ProductForm({
         identificador: data.identificador,
         ano: Number(data.ano),
         valor: Number(data.valor),
+        currency: data.currency ?? "BRL",
         estado: data.estado,
       };
 
