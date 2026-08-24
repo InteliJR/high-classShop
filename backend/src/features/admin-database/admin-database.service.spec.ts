@@ -657,3 +657,103 @@ describe('AdminDatabaseService — contratos', () => {
     expect(result.data[0][col(result.columns, 'Processo')]).toBe('João Silva');
   });
 });
+
+describe('AdminDatabaseService — imagem dos produtos', () => {
+  const carro = {
+    id: 'car-1',
+    marca: 'Porsche',
+    modelo: '911',
+    images: [{ image_url: 'cars/car-1/foto-principal.jpg' }],
+  };
+
+  async function listarProdutos(
+    entidade: 'cars' | 'boats' | 'aircrafts',
+    row: any,
+    s3 = mkS3(),
+  ) {
+    const model = { cars: 'car', boats: 'boat', aircrafts: 'aircraft' }[
+      entidade
+    ];
+    const prisma = mkPrisma({
+      [model]: {
+        count: jest.fn().mockResolvedValue(1),
+        findMany: jest.fn().mockResolvedValue([row]),
+      },
+    });
+    return {
+      prisma,
+      s3,
+      result: await mkSvc(prisma, s3).list(entidade, 1, 20),
+    };
+  }
+
+  it.each(['cars', 'boats', 'aircrafts'] as const)(
+    '%s expõe a coluna Imagem com a URL assinada',
+    async (entidade) => {
+      const { s3, result } = await listarProdutos(entidade, carro);
+
+      expect(result.data[0][col(result.columns, 'Imagem')]).toEqual({
+        kind: 'image',
+        url: 'https://s3.example/assinada',
+        alt: 'Foto de Porsche 911',
+      });
+      // A key do produto é assinada direto, sem a heurística de `companies/`
+      // que vale para logo de escritório.
+      expect(s3.getSignedUrl).toHaveBeenCalledWith(
+        'cars/car-1/foto-principal.jpg',
+      );
+    },
+  );
+
+  // Critério de aceite: a principal é preferida, senão a primeira disponível.
+  // A escolha é feita no banco — o serviço só lê images[0].
+  it('pede ao banco a principal primeiro e só uma imagem', async () => {
+    const { prisma } = await listarProdutos('cars', carro);
+
+    const { select } = prisma.car.findMany.mock.calls[0][0];
+    expect(select.images).toEqual({
+      select: { image_url: true },
+      orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
+      take: 1,
+    });
+  });
+
+  it('produto sem imagem devolve célula vazia sem chamar o S3', async () => {
+    const { s3, result } = await listarProdutos('cars', {
+      ...carro,
+      images: [],
+    });
+
+    expect(result.data[0][col(result.columns, 'Imagem')]).toEqual({
+      kind: 'image',
+      url: null,
+      alt: 'Foto de Porsche 911',
+    });
+    expect(s3.getSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('S3 fora do ar não derruba a listagem', async () => {
+    const s3 = {
+      getSignedUrl: jest.fn().mockRejectedValue(new Error('S3 fora do ar')),
+    } as any;
+    const { result } = await listarProdutos('cars', carro, s3);
+
+    expect(result.data[0][col(result.columns, 'Imagem')]).toMatchObject({
+      kind: 'image',
+      url: null,
+    });
+    // as demais colunas seguem preenchidas
+    expect(result.data[0][col(result.columns, 'Marca')]).toBe('Porsche');
+  });
+
+  it('alt não quebra quando o produto está sem marca e modelo', async () => {
+    const { result } = await listarProdutos('cars', {
+      id: 'car-2',
+      images: [{ image_url: 'cars/car-2/foto.jpg' }],
+    });
+
+    expect(result.data[0][col(result.columns, 'Imagem')]).toMatchObject({
+      alt: 'Foto de produto',
+    });
+  });
+});
