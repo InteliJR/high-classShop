@@ -37,6 +37,12 @@ export const PUBLIC_SIDEBAR_LINKS: readonly NavigationItem[] = [
   { to: "/login", label: "Login", icon: "log-in" },
 ];
 
+const AUTHENTICATED_CATALOG_LINKS: readonly NavigationItem[] = [
+  { to: "/catalog/cars", label: "Carros", icon: "car" },
+  { to: "/catalog/boats", label: "Embarcações", icon: "ship" },
+  { to: "/catalog/aircrafts", label: "Aviões", icon: "plane" },
+];
+
 const ROLE_SIDEBAR_LINKS: Record<
   UserRole,
   readonly NavigationItem[]
@@ -49,7 +55,7 @@ const ROLE_SIDEBAR_LINKS: Record<
       label: "Meus Processos",
       icon: "file-pen",
     },
-    ...PUBLIC_CATALOG_LINKS,
+    ...AUTHENTICATED_CATALOG_LINKS,
   ],
   CONSULTANT: [
     {
@@ -67,7 +73,7 @@ const ROLE_SIDEBAR_LINKS: Record<
       label: "Processos",
       icon: "file-pen",
     },
-    ...PUBLIC_CATALOG_LINKS,
+    ...AUTHENTICATED_CATALOG_LINKS,
   ],
   SPECIALIST: [
     {

@@ -25,6 +25,17 @@ describe("getSidebarLinks", () => {
     ]);
   });
 
+  it.each(["CUSTOMER", "CONSULTANT"] as const)(
+    "preserva o rótulo autenticado de aeronaves para %s",
+    (role) => {
+      const aircraft = getSidebarLinks(role).find(
+        ({ to }) => to === "/catalog/aircrafts",
+      );
+
+      expect(aircraft?.label).toBe("Aviões");
+    },
+  );
+
   it("não concede rotas privilegiadas a papel desconhecido", () => {
     expect(getSidebarLinks("UNKNOWN" as UserRole)).toEqual([]);
   });
