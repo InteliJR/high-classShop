@@ -16,14 +16,42 @@ import {
   Calculator,
   PanelLeft,
   ClipboardList,
+  UserPlus,
+  LogIn,
+  type LucideIcon,
 } from "lucide-react";
-import { useContext } from "react";
-import { AppContext } from "../contexts/AppContext";
-import Logo from "../assets/logo_brokerage.png";
-import { useIsMobile } from "../hooks/use-is-mobile";
+import { useContext, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
+import Logo from "../assets/logo_brokerage.png";
+import { AppContext } from "../contexts/AppContext";
+import { useIsMobile } from "../hooks/use-is-mobile";
+import {
+  getSidebarLinks,
+  type NavigationIcon,
+} from "../lib/navigation";
 import { useAuth } from "../store/authStateManager";
-import { resolveCompanyLogo, getUserCompany } from "../utils/branding";
+import { useWhitelabel } from "../store/whitelabelStore";
+import { getActiveCompany, resolveCompanyLogo } from "../utils/branding";
+
+const NAVIGATION_ICONS: Record<NavigationIcon, LucideIcon> = {
+  home: Home,
+  dashboard: LayoutDashboard,
+  building: Building2,
+  users: Users,
+  "user-cog": UserCog,
+  car: Car,
+  ship: Ship,
+  plane: Plane,
+  package: Package,
+  "file-pen": FilePen,
+  settings: Settings,
+  percent: Percent,
+  database: Database,
+  calculator: Calculator,
+  "clipboard-list": ClipboardList,
+  "user-plus": UserPlus,
+  "log-in": LogIn,
+};
 
 export default function Sidebar() {
   const {
@@ -35,182 +63,64 @@ export default function Sidebar() {
   const isMobile = useIsMobile();
   const location = useLocation();
   const user = useAuth((state) => state.user);
-  const company = getUserCompany(user);
+  const whitelabelCompany = useWhitelabel((state) => state.company);
+  const company = getActiveCompany(user, whitelabelCompany);
   const brandLogo = resolveCompanyLogo(company) ?? Logo;
   const isDesktopCollapsed = !isMobile && isSidebarDesktopCollapsed;
+  const links = getSidebarLinks(user?.role);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
 
-  // Lista de links por cargo
-  const links = [];
+  useEffect(() => {
+    if (!isMobile) return;
 
-  if (user) {
-    switch (user.role) {
-      case "CUSTOMER":
-        links.push(
-          {
-            to: "/customer/home",
-            label: "Home",
-            icon: <Home size={20} />,
-          },
-          {
-            to: "/customer/consultoria",
-            label: "Consultoria",
-            icon: <Users size={20} />,
-          },
-          {
-            to: "/customer/processes",
-            label: "Meus Processos",
-            icon: <FilePen size={20} />,
-          },
-          {
-            to: "/catalog/cars",
-            label: "Carros",
-            icon: <Car size={20} />,
-          },
-          {
-            to: "/catalog/boats",
-            label: "Embarcações",
-            icon: <Ship size={20} />,
-          },
-          {
-            to: "/catalog/aircrafts",
-            label: "Aviões",
-            icon: <Plane size={20} />,
-          },
-        );
-        break;
-      case "CONSULTANT":
-        links.push(
-          {
-            to: "/consultant/dashboard",
-            label: "Dashboard",
-            icon: <LayoutDashboard size={20} />,
-          },
-          {
-            to: "/consultant/clients",
-            label: "Meus Clientes",
-            icon: <Users size={20} />,
-          },
-          {
-            to: "/consultant/processes",
-            label: "Processos",
-            icon: <FilePen size={20} />,
-          },
-          {
-            to: "/catalog/cars",
-            label: "Carros",
-            icon: <Car size={20} />,
-          },
-          {
-            to: "/catalog/boats",
-            label: "Embarcações",
-            icon: <Ship size={20} />,
-          },
-          {
-            to: "/catalog/aircrafts",
-            label: "Aviões",
-            icon: <Plane size={20} />,
-          },
-        );
-        break;
-      case "SPECIALIST":
-        links.push(
-          {
-            to: "/specialist/dashboard",
-            label: "Dashboard",
-            icon: <LayoutDashboard size={20} />,
-          },
-          {
-            to: "/specialist/products",
-            label: "Meus produtos",
-            icon: <Package size={20} />,
-          },
-          {
-            to: "/specialist/processes",
-            label: "Meus processos",
-            icon: <FilePen size={20} />,
-          },
-        );
-        break;
-      case "ADMIN":
-        links.push(
-          {
-            to: "/admin/dashboard",
-            label: "Dashboard",
-            icon: <LayoutDashboard size={20} />,
-          },
-          {
-            to: "/admin/companies",
-            label: "Escritórios",
-            icon: <Building2 size={20} />,
-          },
-          {
-            to: "/office/consultants",
-            label: "Consultores",
-            icon: <Users size={20} />,
-          },
-          {
-            to: "/admin/specialists",
-            label: "Especialistas",
-            icon: <UserCog size={20} />,
-          },
-          {
-            to: "/admin/commissions",
-            label: "Comissões",
-            icon: <Percent size={20} />,
-          },
-          {
-            to: "/admin/calculator",
-            label: "Calculadora",
-            icon: <Calculator size={20} />,
-          },
-          {
-            to: "/admin/database",
-            label: "Base de dados",
-            icon: <Database size={20} />,
-          },
-          {
-            to: "/admin/settings",
-            label: "Configurações",
-            icon: <Settings size={20} />,
-          },
-          {
-            to: "/admin/my-company",
-            label: "Minha Empresa",
-            icon: <Building2 size={20} />,
-          },
-        );
-        break;
-      case "OFFICE":
-        links.push(
-          {
-            to: "/office/dashboard",
-            label: "Dashboard",
-            icon: <LayoutDashboard size={20} />,
-          },
-          {
-            to: "/office/consultants",
-            label: "Consultores",
-            icon: <Users size={20} />,
-          },
-          {
-            to: "/office/clients",
-            label: "Clientes",
-            icon: <UserCog size={20} />,
-          },
-          {
-            to: "/office/processes",
-            label: "Processos",
-            icon: <ClipboardList size={20} />,
-          },
-          {
-            to: "/office/company",
-            label: "Minha Empresa",
-            icon: <Building2 size={20} />,
-          },
-        );
-        break;
+    if (!isSidebarCollapsed) {
+      if (wasOpenRef.current) {
+        document.getElementById("sidebar-menu-trigger")?.focus();
+      }
+      wasOpenRef.current = false;
+      return;
     }
-  }
+
+    wasOpenRef.current = true;
+    closeButtonRef.current?.focus();
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSidebarCollapsed(false);
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusableElements = Array.from(
+        sidebarRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled])',
+        ) ?? [],
+      );
+      const first = focusableElements[0];
+      const last = focusableElements.at(-1);
+
+      if (!first || !last) return;
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, [isMobile, isSidebarCollapsed, setSidebarCollapsed]);
 
   return (
     <>
@@ -221,6 +131,13 @@ export default function Sidebar() {
         />
       )}
       <aside
+        ref={sidebarRef}
+        id="main-sidebar"
+        role={isMobile ? "dialog" : undefined}
+        aria-label={isMobile ? "Menu principal" : undefined}
+        aria-modal={isMobile && isSidebarCollapsed ? true : undefined}
+        aria-hidden={isMobile && !isSidebarCollapsed ? true : undefined}
+        inert={isMobile && !isSidebarCollapsed ? true : undefined}
         className={`
           ${
             isMobile
@@ -229,9 +146,19 @@ export default function Sidebar() {
                 : "-translate-x-full opacity-0"
               : "translate-x-0 opacity-100"
           }
-          ${isMobile ? "w-2/5 fixed h-full" : isDesktopCollapsed ? "w-16 min-h-screen" : "w-64 min-h-screen"}
+          ${
+            isMobile
+              ? "w-72 max-w-[85vw] fixed h-full overflow-y-auto"
+              : isDesktopCollapsed
+                ? "w-16 min-h-screen"
+                : "w-64 min-h-screen"
+          }
           top-0 left-0 ease-out z-50 fixed text-brand-secondary-fg
-          ${isMobile ? "transition-normal duration-300" : "transition-[width] duration-200"}
+          ${
+            isMobile
+              ? "transition-normal duration-300"
+              : "transition-[width] duration-200"
+          }
         `}
         style={{ backgroundColor: "var(--brand-secondary)" }}
       >
@@ -239,6 +166,9 @@ export default function Sidebar() {
         {isMobile && (
           <div className="flex flex-col">
             <button
+              ref={closeButtonRef}
+              type="button"
+              aria-label="Fechar menu"
               className="p-4 self-end"
               onClick={() => setSidebarCollapsed(!isSidebarCollapsed)}
             >
@@ -249,10 +179,16 @@ export default function Sidebar() {
 
         {/* Botão de colapsar sidebar (desktop) */}
         {!isMobile && (
-          <div className={`flex p-3 ${isDesktopCollapsed ? "justify-center" : "justify-end"}`}>
+          <div
+            className={`flex p-3 ${
+              isDesktopCollapsed ? "justify-center" : "justify-end"
+            }`}
+          >
             <button
               onClick={toggleSidebarDesktopCollapsed}
-              aria-label={isDesktopCollapsed ? "Expandir menu" : "Recolher menu"}
+              aria-label={
+                isDesktopCollapsed ? "Expandir menu" : "Recolher menu"
+              }
               title={isDesktopCollapsed ? "Expandir menu" : undefined}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-brand-secondary-fg/60 transition-colors hover:bg-brand-secondary-fg/10 hover:text-brand-secondary-fg"
             >
@@ -277,31 +213,35 @@ export default function Sidebar() {
             isDesktopCollapsed ? "px-2 items-center" : "px-6"
           }`}
         >
-          {links.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              onClick={() => {
-                if (isMobile) setSidebarCollapsed(false);
-              }}
-              title={isDesktopCollapsed ? link.label : undefined}
-              className={`w-full flex gap-3 items-center p-3 rounded-md transition-colors ${
-                isDesktopCollapsed ? "justify-center px-2" : ""
-              } ${
-                location.pathname === link.to
-                  ? "text-brand-primary-fg"
-                  : "text-gray-300 hover:bg-white/10 hover:text-brand-secondary-fg"
-              }`}
-              style={
-                location.pathname === link.to
-                  ? { backgroundColor: "var(--brand-primary)" }
-                  : undefined
-              }
-            >
-              {link.icon}
-              {!isDesktopCollapsed && <p>{link.label}</p>}
-            </Link>
-          ))}
+          {links.map((link) => {
+            const Icon = NAVIGATION_ICONS[link.icon];
+
+            return (
+              <Link
+                key={link.to}
+                to={link.to}
+                onClick={() => {
+                  if (isMobile) setSidebarCollapsed(false);
+                }}
+                title={isDesktopCollapsed ? link.label : undefined}
+                className={`w-full flex gap-3 items-center p-3 rounded-md transition-colors ${
+                  isDesktopCollapsed ? "justify-center px-2" : ""
+                } ${
+                  location.pathname === link.to
+                    ? "text-brand-primary-fg"
+                    : "text-gray-300 hover:bg-white/10 hover:text-brand-secondary-fg"
+                }`}
+                style={
+                  location.pathname === link.to
+                    ? { backgroundColor: "var(--brand-primary)" }
+                    : undefined
+                }
+              >
+                <Icon size={20} />
+                {!isDesktopCollapsed && <p>{link.label}</p>}
+              </Link>
+            );
+          })}
         </nav>
       </aside>
     </>
