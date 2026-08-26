@@ -20,7 +20,7 @@ import {
   LogIn,
   type LucideIcon,
 } from "lucide-react";
-import { useContext } from "react";
+import { useContext, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import Logo from "../assets/logo_brokerage.png";
 import { AppContext } from "../contexts/AppContext";
@@ -68,6 +68,54 @@ export default function Sidebar() {
   const brandLogo = resolveCompanyLogo(company) ?? Logo;
   const isDesktopCollapsed = !isMobile && isSidebarDesktopCollapsed;
   const links = getSidebarLinks(user?.role);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (!isMobile) return;
+
+    if (!isSidebarCollapsed) {
+      if (wasOpenRef.current) {
+        document.getElementById("sidebar-menu-trigger")?.focus();
+      }
+      wasOpenRef.current = false;
+      return;
+    }
+
+    wasOpenRef.current = true;
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSidebarCollapsed(false);
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusableElements = Array.from(
+        sidebarRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled])',
+        ) ?? [],
+      );
+      const first = focusableElements[0];
+      const last = focusableElements.at(-1);
+
+      if (!first || !last) return;
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isMobile, isSidebarCollapsed, setSidebarCollapsed]);
 
   return (
     <>
@@ -78,6 +126,13 @@ export default function Sidebar() {
         />
       )}
       <aside
+        ref={sidebarRef}
+        id="main-sidebar"
+        role={isMobile ? "dialog" : undefined}
+        aria-label={isMobile ? "Menu principal" : undefined}
+        aria-modal={isMobile && isSidebarCollapsed ? true : undefined}
+        aria-hidden={isMobile && !isSidebarCollapsed ? true : undefined}
+        inert={isMobile && !isSidebarCollapsed ? true : undefined}
         className={`
           ${
             isMobile
@@ -106,6 +161,9 @@ export default function Sidebar() {
         {isMobile && (
           <div className="flex flex-col">
             <button
+              ref={closeButtonRef}
+              type="button"
+              aria-label="Fechar menu"
               className="p-4 self-end"
               onClick={() => setSidebarCollapsed(!isSidebarCollapsed)}
             >

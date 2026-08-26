@@ -21,16 +21,16 @@ vi.mock("../store/whitelabelStore", () => ({
   ) => selector({ company: state.whitelabelCompany }),
 }));
 
-const appContext: AppContextProps = {
-  isSidebarCollapsed: true,
-  setSidebarCollapsed: vi.fn(),
-  isSidebarDesktopCollapsed: false,
-  toggleSidebarDesktopCollapsed: vi.fn(),
-  searchTerm: "",
-  setSearchTerm: vi.fn(),
-};
+function renderSidebar(isOpen = true) {
+  const appContext: AppContextProps = {
+    isSidebarCollapsed: isOpen,
+    setSidebarCollapsed: vi.fn(),
+    isSidebarDesktopCollapsed: false,
+    toggleSidebarDesktopCollapsed: vi.fn(),
+    searchTerm: "",
+    setSearchTerm: vi.fn(),
+  };
 
-function renderSidebar() {
   return renderToStaticMarkup(
     <MemoryRouter initialEntries={["/catalog/cars"]}>
       <AppContext.Provider value={appContext}>
@@ -84,5 +84,13 @@ describe("Sidebar", () => {
     expect(html).toContain('href="/office/processes"');
     expect(html).toContain('href="/office/company"');
     expect(html).not.toContain('href="/login"');
+  });
+
+  it("remove o drawer mobile fechado da navegação assistiva", () => {
+    const html = renderSidebar(false);
+
+    expect(html).toContain('id="main-sidebar"');
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).toContain("inert");
   });
 });

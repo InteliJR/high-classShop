@@ -1,6 +1,6 @@
 import { ChevronDown, TextAlignJustifyIcon, UserCircle2 } from "lucide-react";
 import Logo from "../assets/logo_brokerage.png";
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
 import { useIsMobile } from "../hooks/use-is-mobile";
 import { useAuth } from "../store/authStateManager";
 import { AppContext } from "../contexts/AppContext";
@@ -23,6 +23,12 @@ export default function Header() {
     navigate(user ? getRoleBasedRoute(user.role) : "/");
   };
 
+  useEffect(() => {
+    if (!isMobile && isSidebarCollapsed) {
+      setSidebarCollapsed(false);
+    }
+  }, [isMobile, isSidebarCollapsed, setSidebarCollapsed]);
+
   return (
     <>
       <header
@@ -34,13 +40,19 @@ export default function Header() {
       >
         <div className="flex w-full justify-between sm:flex-row-reverse items-center">
           {isMobile && (
-            // Abrir a sidebar do header em mobiles
-            <TextAlignJustifyIcon
-              size={35}
+            <button
+              id="sidebar-menu-trigger"
+              type="button"
+              aria-label={isSidebarCollapsed ? "Fechar menu" : "Abrir menu"}
+              aria-expanded={isSidebarCollapsed}
+              aria-controls="main-sidebar"
               onClick={() => {
                 setSidebarCollapsed(!isSidebarCollapsed);
               }}
-            />
+              className="flex items-center justify-center"
+            >
+              <TextAlignJustifyIcon size={35} />
+            </button>
           )}
           {!isMobile && !user && (
             <div className="flex justify-between items-center text-base w-full pl-12">
@@ -104,7 +116,11 @@ export default function Header() {
               className="cursor-pointer"
               aria-label="Ir para a página inicial"
             >
-              <img src={brandLogo} alt="BMF Lux Brokerage" className="w-25 sm:w-35 h-auto" />
+              <img
+                src={brandLogo}
+                alt={company?.name ?? "BMF Lux Brokerage"}
+                className="w-25 sm:w-35 h-auto"
+              />
             </button>
           )}
         </div>
