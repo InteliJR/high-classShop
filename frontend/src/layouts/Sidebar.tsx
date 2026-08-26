@@ -85,6 +85,8 @@ export default function Sidebar() {
 
     wasOpenRef.current = true;
     closeButtonRef.current?.focus();
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -114,7 +116,10 @@ export default function Sidebar() {
     };
 
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
+    };
   }, [isMobile, isSidebarCollapsed, setSidebarCollapsed]);
 
   return (
