@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { Prisma, ProductCurrency, ProductType } from '@prisma/client';
 import {
   ContractsService,
   stripContractDocumentFields,
@@ -34,10 +35,128 @@ function mkSvc(prisma: any, platformCompanyService: any) {
   );
 }
 
+const carFixture = {
+  id: 'car-1',
+  marca: 'Marca',
+  modelo: 'Modelo',
+  ano: 2025,
+  valor: new Prisma.Decimal('999999.00'),
+  currency: ProductCurrency.BRL,
+  cor: 'Preto',
+  combustivel: 'Gasolina',
+  km: 100,
+};
+
+function processFixture(overrides: Record<string, any> = {}) {
+  return {
+    id: 'process-1',
+    product_type: ProductType.CAR,
+    negotiation_currency: ProductCurrency.BRL,
+    negotiation_product_value: new Prisma.Decimal('100000.00'),
+    client: {
+      id: 'client-1',
+      name: 'Cliente',
+      surname: 'Teste',
+      email: 'cliente@example.com',
+      cpf: null,
+      rg: null,
+      address: null,
+      consultant: null,
+      company_id: null,
+    },
+    specialist: {
+      id: 'specialist-1',
+      name: 'Especialista',
+      surname: 'Teste',
+      email: 'especialista@example.com',
+      cpf: null,
+      company_id: null,
+      commission_rate: 0,
+      bank: null,
+      agency: null,
+      checking_account: null,
+      address: null,
+    },
+    car: carFixture,
+    boat: null,
+    aircraft: null,
+    accepted_proposal: null,
+    ...overrides,
+  };
+}
+
+describe('ContractsService — prefillContract', () => {
+  it('prefills price and currency from the process snapshot', async () => {
+    const prisma = mkPrisma();
+    prisma.process.findUnique.mockResolvedValue(
+      processFixture({
+        negotiation_currency: ProductCurrency.USD,
+        negotiation_product_value: new Prisma.Decimal('120000.00'),
+        car: {
+          ...carFixture,
+          valor: new Prisma.Decimal('999999.00'),
+          currency: ProductCurrency.BRL,
+        },
+      }),
+    );
+    const service = mkSvc(prisma, mkPlatformCompanyService(10));
+
+    const result = await service.prefillContract('process-1');
+    const commission = await (service as any).resolveCommissionFromTotal(
+      'process-1',
+      10,
+    );
+
+    expect(commission.platformValue).toBe(12000);
+    expect(result.currency).toBe(ProductCurrency.USD);
+    expect(result.product.price).toBe(120000);
+  });
+
+  it('rejects contract prefill without a negotiation snapshot', async () => {
+    const prisma = mkPrisma();
+    prisma.process.findUnique.mockResolvedValue(
+      processFixture({
+        negotiation_currency: null,
+        negotiation_product_value: null,
+      }),
+    );
+    const service = mkSvc(prisma, mkPlatformCompanyService(10));
+
+    await expect(service.prefillContract('process-1')).rejects.toMatchObject({
+      response: {
+        error: { code: 'PROCESS_NEGOTIATION_SNAPSHOT_MISSING' },
+      },
+    });
+  });
+});
+
 describe('ContractsService — resolveCommissionFromTotal', () => {
+  it('mantém a proposta aceita como valor final quando ela existe', async () => {
+    const prisma = mkPrisma();
+    prisma.process.findUnique.mockResolvedValue({
+      negotiation_currency: ProductCurrency.USD,
+      negotiation_product_value: new Prisma.Decimal('120000'),
+      specialist: { id: 's1', commission_rate: 0, company_id: null },
+      client: { consultant: null, company_id: null },
+      car: { valor: new Prisma.Decimal('999999') },
+      boat: null,
+      aircraft: null,
+      accepted_proposal: {
+        proposed_value: new Prisma.Decimal('80000'),
+      },
+    });
+    const svc = mkSvc(prisma, mkPlatformCompanyService(10));
+
+    const result = await (svc as any).resolveCommissionFromTotal('p1', 10);
+
+    expect(result.platformValue).toBe(8000);
+  });
+
   it('aplica o escritório sobre a comissão total', async () => {
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue({
+      negotiation_currency: ProductCurrency.BRL,
+      negotiation_product_value: new Prisma.Decimal('100000'),
       specialist: { id: 's1', commission_rate: 70, company_id: null },
       client: { consultant: { company_id: 'c1' }, company_id: null },
       car: { valor: 100000 },
@@ -71,6 +190,8 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
   it('sem escritório, destina todo o saldo à plataforma', async () => {
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue({
+      negotiation_currency: ProductCurrency.BRL,
+      negotiation_product_value: new Prisma.Decimal('100000'),
       specialist: { id: 's1', commission_rate: 70, company_id: null },
       car: { valor: 100000 },
       boat: null,
@@ -89,6 +210,8 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
   it('rejeita taxas de especialista e escritório que ultrapassam a comissão total', async () => {
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue({
+      negotiation_currency: ProductCurrency.BRL,
+      negotiation_product_value: new Prisma.Decimal('100000'),
       specialist: { id: 's1', commission_rate: 70, company_id: null },
       client: { consultant: { company_id: 'c1' }, company_id: null },
       car: { valor: 100000 },
@@ -116,6 +239,8 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
   it('não usa a taxa configurada da plataforma como corte direto do produto', async () => {
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue({
+      negotiation_currency: ProductCurrency.BRL,
+      negotiation_product_value: new Prisma.Decimal('100000'),
       specialist: { id: 's1', commission_rate: 50, company_id: null },
       client: { consultant: { company_id: 'c1' }, company_id: null },
       car: { valor: 100000 },
@@ -145,6 +270,8 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
   it('aceita comissão total menor que taxas legadas de plataforma/escritório', async () => {
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue({
+      negotiation_currency: ProductCurrency.BRL,
+      negotiation_product_value: new Prisma.Decimal('100000'),
       specialist: { id: 's1', commission_rate: 0, company_id: null },
       client: { consultant: { company_id: 'c1' }, company_id: null },
       car: { valor: 100000 },
@@ -173,6 +300,8 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
     // escritório 30% do bolo, com a plataforma absorvendo o resíduo.
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue({
+      negotiation_currency: ProductCurrency.BRL,
+      negotiation_product_value: new Prisma.Decimal('333.33'),
       specialist: { id: 's1', commission_rate: 10, company_id: null },
       client: { consultant: { company_id: 'c1' }, company_id: null },
       car: { valor: 333.33 },
@@ -203,6 +332,8 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
   it('mantém a soma exata com taxas decimais', async () => {
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue({
+      negotiation_currency: ProductCurrency.BRL,
+      negotiation_product_value: new Prisma.Decimal('10000'),
       specialist: { id: 's1', commission_rate: 33.33, company_id: null },
       client: { consultant: { company_id: 'c1' }, company_id: null },
       car: { valor: 10000 },
@@ -233,6 +364,8 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
   it('processo sem proposta aceita e sem produto → BadRequestException (não gera comissão zerada silenciosa)', async () => {
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue({
+      negotiation_currency: ProductCurrency.BRL,
+      negotiation_product_value: new Prisma.Decimal('0'),
       specialist: { id: 's1', commission_rate: 50, company_id: null },
       car: null,
       boat: null,
@@ -249,6 +382,8 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
   it('cliente vinculado direto ao escritório (sem consultor) gera comissão de escritório', async () => {
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue({
+      negotiation_currency: ProductCurrency.BRL,
+      negotiation_product_value: new Prisma.Decimal('100000'),
       specialist: { id: 's1', commission_rate: 50, company_id: null },
       client: { consultant: null, company_id: 'c1' },
       car: { valor: 100000 },
@@ -281,6 +416,8 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
   it('consultor tem prioridade sobre o company_id direto do cliente', async () => {
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue({
+      negotiation_currency: ProductCurrency.BRL,
+      negotiation_product_value: new Prisma.Decimal('100000'),
       specialist: { id: 's1', commission_rate: null, company_id: null },
       client: { consultant: { company_id: 'consultantCo' }, company_id: 'directCo' },
       car: { valor: 100000 },

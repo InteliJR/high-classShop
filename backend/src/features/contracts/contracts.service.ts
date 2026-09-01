@@ -38,6 +38,7 @@ import { ProductType } from '@prisma/client';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { PlatformCompanyService } from 'src/features/platform-company/platform-company.service';
 import { computeNestedCommissionSplit } from './commission-split';
+import { requireNegotiationSnapshot } from 'src/features/processes/negotiation-snapshot';
 
 export interface ContractDocumentFields {
   seller_cpf?: string;
@@ -173,6 +174,9 @@ export class ContractsService {
       throw new ProcessNotFoundException(processId);
     }
 
+    const { currency, productValue } = requireNegotiationSnapshot(processData);
+    const frozenProductPrice = Number(productValue);
+
     // Determinar produto baseado no tipo
     let product: {
       id: string;
@@ -206,7 +210,7 @@ export class ContractsService {
           brand: processData.car.marca || '',
           model: processData.car.modelo || '',
           year: processData.car.ano || 0,
-          price: Number(processData.car.valor) || 0,
+          price: frozenProductPrice,
           registration_id: '', // Placa - preenchido pelo especialista
           serial_number: '', // Chassi - preenchido pelo especialista
           technical_info: `${processData.car.cor || ''} - ${processData.car.combustivel || ''} - ${processData.car.km || 0}km`,
@@ -233,7 +237,7 @@ export class ContractsService {
           brand: processData.boat.marca || '',
           model: processData.boat.modelo || '',
           year: processData.boat.ano || 0,
-          price: Number(processData.boat.valor) || 0,
+          price: frozenProductPrice,
           registration_id: '', // Inscrição - preenchido pelo especialista
           serial_number: '', // Hull number - preenchido pelo especialista
           technical_info: `${processData.boat.motor || ''} - ${processData.boat.tamanho || ''}`,
@@ -260,7 +264,7 @@ export class ContractsService {
           brand: processData.aircraft.marca || '',
           model: processData.aircraft.modelo || '',
           year: processData.aircraft.ano || 0,
-          price: Number(processData.aircraft.valor) || 0,
+          price: frozenProductPrice,
           registration_id: '', // Prefixo - preenchido pelo especialista
           serial_number: '', // Serial number - preenchido pelo especialista
           technical_info: `${processData.aircraft.categoria || ''} - ${processData.aircraft.assentos || 0} assentos`,
@@ -317,6 +321,7 @@ export class ContractsService {
     return {
       process_id: processData.id,
       product_type: processData.product_type,
+      currency,
       buyer: {
         id: processData.client.id,
         name: `${processData.client.name || ''} ${processData.client.surname || ''}`.trim(),
@@ -527,6 +532,9 @@ export class ContractsService {
       throw new ProcessNotFoundException(processId);
     }
 
+    const { productValue: snapshotValue } =
+      requireNegotiationSnapshot(process);
+
     const platformCompany = await this.platformCompanyService.findOne();
     // specialistRate e officeRate são fatias independentes do BOLO. A
     // plataforma é derivada do saldo após as duas fatias.
@@ -543,12 +551,7 @@ export class ContractsService {
 
     const proposalValue = process.accepted_proposal
       ? Number(process.accepted_proposal.proposed_value)
-      : Number(
-          process.car?.valor ??
-            process.boat?.valor ??
-            process.aircraft?.valor ??
-            0,
-        );
+      : Number(snapshotValue);
 
     if (proposalValue <= 0) {
       throw new BadRequestException(
