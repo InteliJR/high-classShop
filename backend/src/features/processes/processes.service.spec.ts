@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   Prisma,
   ProcessStatus,
@@ -526,11 +530,33 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
             : { car: null, boat: null, aircraft: usdProduct };
       return Promise.resolve({ ...process, ...data, ...selectedProduct });
     });
+    let claimedData: Record<string, unknown> = {};
+    const processUpdateMany = jest.fn().mockImplementation(({ data }) => {
+      claimedData = data;
+      return Promise.resolve({ count: 1 });
+    });
+    const processFindUniqueOrThrow = jest.fn().mockImplementation(() => {
+      const selectedProduct =
+        claimedData.product_type === ProductType.CAR
+          ? { car: usdProduct, boat: null, aircraft: null }
+          : claimedData.product_type === ProductType.BOAT
+            ? { car: null, boat: usdProduct, aircraft: null }
+            : { car: null, boat: null, aircraft: usdProduct };
+      return Promise.resolve({
+        ...process,
+        ...claimedData,
+        ...selectedProduct,
+      });
+    });
     const historyCreate = jest.fn().mockResolvedValue({});
     const txProductFindUnique = jest.fn().mockResolvedValue(usdProduct);
     const rootProductFindUnique = jest.fn();
     const tx = {
-      process: { update: processUpdate },
+      process: {
+        update: processUpdate,
+        updateMany: processUpdateMany,
+        findUniqueOrThrow: processFindUniqueOrThrow,
+      },
       processStatusHistory: { create: historyCreate },
       appointment: {
         findUnique: jest.fn().mockResolvedValue({
@@ -563,6 +589,8 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       service: new ProcessesService(prisma, {} as any),
       prisma,
       processUpdate,
+      processUpdateMany,
+      processFindUniqueOrThrow,
       historyCreate,
       txProductFindUnique,
       rootProductFindUnique,
@@ -579,6 +607,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       const {
         service,
         processUpdate,
+        processUpdateMany,
         historyCreate,
         txProductFindUnique,
         rootProductFindUnique,
@@ -591,9 +620,16 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
         UserRole.SPECIALIST,
       );
 
-      expect(processUpdate).toHaveBeenCalledWith(
+      expect(processUpdateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'process-1' },
+          where: expect.objectContaining({
+            id: 'process-1',
+            status: ProcessStatus.NEGOTIATION,
+            product_type: null,
+            car_id: null,
+            boat_id: null,
+            aircraft_id: null,
+          }),
           data: expect.objectContaining({
             [foreignKey]: 'product-1',
             status: ProcessStatus.NEGOTIATION,
@@ -606,12 +642,13 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
         where: { id: 'product-1' },
       });
       expect(rootProductFindUnique).not.toHaveBeenCalled();
+      expect(processUpdate).not.toHaveBeenCalled();
       expect(historyCreate).not.toHaveBeenCalled();
     },
   );
 
   it('preserva snapshot BRL existente na associação tardia', async () => {
-    const { service, processUpdate } = makeAssignProductService({
+    const { service, processUpdateMany } = makeAssignProductService({
       negotiation_currency: ProductCurrency.BRL,
       negotiation_product_value: new Prisma.Decimal('90000.00'),
     });
@@ -623,15 +660,72 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       UserRole.SPECIALIST,
     );
 
-    expect(processUpdate.mock.calls[0][0].data).not.toEqual(
+    expect(processUpdateMany.mock.calls[0][0].data).not.toEqual(
       expect.objectContaining({
         negotiation_currency: ProductCurrency.USD,
       }),
     );
-    expect(processUpdate.mock.calls[0][0].data).not.toEqual(
+    expect(processUpdateMany.mock.calls[0][0].data).not.toEqual(
       expect.objectContaining({
         negotiation_product_value: new Prisma.Decimal('120000.00'),
       }),
+    );
+  });
+
+  it('rejeita associação quando outro fluxo reivindica o processo antes da gravação', async () => {
+    const {
+      service,
+      processUpdate,
+      processUpdateMany,
+      processFindUniqueOrThrow,
+      historyCreate,
+    } = makeAssignProductService({ status: ProcessStatus.SCHEDULING });
+    processUpdateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      service.assignProduct(
+        'process-1',
+        { product_type: ProductType.CAR, product_id: 'product-1' },
+        'specialist-1',
+        UserRole.SPECIALIST,
+      ),
+    ).rejects.toThrow(ConflictException);
+
+    expect(processUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'process-1',
+          status: ProcessStatus.SCHEDULING,
+          product_type: null,
+          car_id: null,
+          boat_id: null,
+          aircraft_id: null,
+          negotiation_currency: null,
+          negotiation_product_value: null,
+          updated_at: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      }),
+    );
+    expect(processUpdate).not.toHaveBeenCalled();
+    expect(processFindUniqueOrThrow).not.toHaveBeenCalled();
+    expect(historyCreate).not.toHaveBeenCalled();
+  });
+
+  it('cria histórico somente depois de reivindicar SCHEDULING', async () => {
+    const { service, processUpdateMany, historyCreate } =
+      makeAssignProductService({ status: ProcessStatus.SCHEDULING });
+
+    await service.assignProduct(
+      'process-1',
+      { product_type: ProductType.CAR, product_id: 'product-1' },
+      'specialist-1',
+      UserRole.SPECIALIST,
+    );
+
+    expect(processUpdateMany).toHaveBeenCalledTimes(1);
+    expect(historyCreate).toHaveBeenCalledTimes(1);
+    expect(processUpdateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      historyCreate.mock.invocationCallOrder[0],
     );
   });
 });

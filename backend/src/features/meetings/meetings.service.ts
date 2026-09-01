@@ -255,7 +255,7 @@ export class MeetingsService {
       };
     }
 
-    const updated = await this.prismaService.$transaction(async (tx) => {
+    const transition = await this.prismaService.$transaction(async (tx) => {
       const processForTransition = await tx.process.findUniqueOrThrow({
         where: { id: process.id },
         include: {
@@ -264,9 +264,15 @@ export class MeetingsService {
           aircraft: { select: { valor: true, currency: true } },
         },
       });
+      if (processForTransition.status !== ProcessStatus.SCHEDULING) {
+        return {
+          advanced: false,
+          status: processForTransition.status as ProcessStatus,
+        };
+      }
       const snapshotData = buildNegotiationSnapshotUpdate(processForTransition);
-      const updatedProcess = await tx.process.update({
-        where: { id: processId },
+      const claim = await tx.process.updateMany({
+        where: { id: processId, status: ProcessStatus.SCHEDULING },
         data: {
           status: ProcessStatus.NEGOTIATION,
           notes: processForTransition.notes
@@ -275,10 +281,18 @@ export class MeetingsService {
           updated_at: new Date(),
           ...snapshotData,
         },
-        select: {
-          status: true,
-        },
       });
+
+      if (claim.count !== 1) {
+        const latestProcess = await tx.process.findUniqueOrThrow({
+          where: { id: processId },
+          select: { status: true },
+        });
+        return {
+          advanced: false,
+          status: latestProcess.status as ProcessStatus,
+        };
+      }
 
       await tx.processStatusHistory.create({
         data: {
@@ -288,8 +302,18 @@ export class MeetingsService {
         },
       });
 
-      return updatedProcess;
+      return { advanced: true, status: ProcessStatus.NEGOTIATION };
     });
+
+    if (!transition.advanced) {
+      return {
+        advanced: false,
+        previous_status: previousStatus,
+        status: transition.status,
+        requires_product_selection: false,
+        message: 'Conversa concluída. O processo já está em etapa posterior.',
+      };
+    }
 
     setImmediate(() => {
       const recipients = [
@@ -329,7 +353,7 @@ export class MeetingsService {
     return {
       advanced: true,
       previous_status: previousStatus,
-      status: updated.status as ProcessStatus,
+      status: transition.status,
       requires_product_selection: false,
       message: 'Conversa concluída. Processo avançado para negociação.',
     };

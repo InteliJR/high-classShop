@@ -716,6 +716,9 @@ export class AppointmentsService {
               aircraft: { select: { valor: true, currency: true } },
             },
           });
+          if (processForTransition.status !== ProcessStatus.SCHEDULING) {
+            return updatedAppointment;
+          }
           const hasProduct =
             processForTransition.car_id ||
             processForTransition.boat_id ||
@@ -724,8 +727,11 @@ export class AppointmentsService {
           if (hasProduct) {
             const snapshotData =
               buildNegotiationSnapshotUpdate(processForTransition);
-            await tx.process.update({
-              where: { id: process.id },
+            const claim = await tx.process.updateMany({
+              where: {
+                id: process.id,
+                status: ProcessStatus.SCHEDULING,
+              },
               data: {
                 status: ProcessStatus.NEGOTIATION,
                 notes: `${processForTransition.notes || ''}\n[AUTO] Transição automática: SCHEDULING → NEGOTIATION (agendamento concluído em ${new Date().toISOString()})`,
@@ -733,30 +739,37 @@ export class AppointmentsService {
                 ...snapshotData,
               },
             });
-            await tx.processStatusHistory.create({
-              data: {
-                processId: process.id,
-                status: ProcessStatus.NEGOTIATION,
-                changed_by: userId,
-                changed_at: new Date(),
-              },
-            });
+            if (claim.count === 1) {
+              await tx.processStatusHistory.create({
+                data: {
+                  processId: process.id,
+                  status: ProcessStatus.NEGOTIATION,
+                  changed_by: userId,
+                  changed_at: new Date(),
+                },
+              });
 
-            this.logger.log(
-              `[updateStatus] Process ${process.id} avançado para NEGOTIATION (agendamento concluído)`,
-            );
+              this.logger.log(
+                `[updateStatus] Process ${process.id} avançado para NEGOTIATION (agendamento concluído)`,
+              );
+            }
           } else {
-            await tx.process.update({
-              where: { id: process.id },
+            const claim = await tx.process.updateMany({
+              where: {
+                id: process.id,
+                status: ProcessStatus.SCHEDULING,
+              },
               data: {
                 notes: `${processForTransition.notes || ''}\n[AUTO] Reunião concluída em ${new Date().toISOString()}. Aguardando especialista selecionar produto para avançar para NEGOTIATION.`,
                 updated_at: new Date(),
               },
             });
 
-            this.logger.log(
-              `[updateStatus] Process ${process.id} mantido em SCHEDULING (consultoria - aguardando seleção de produto)`,
-            );
+            if (claim.count === 1) {
+              this.logger.log(
+                `[updateStatus] Process ${process.id} mantido em SCHEDULING (consultoria - aguardando seleção de produto)`,
+              );
+            }
           }
         } else if (
           !(

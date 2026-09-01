@@ -178,21 +178,24 @@ describe('MeetingsService.markConversationDone — snapshot da negociação', ()
         ended_at: null,
       },
     });
-    const processUpdate = jest.fn().mockResolvedValue({
+    const txProcessUpdate = jest.fn().mockResolvedValue({
       status: ProcessStatus.NEGOTIATION,
     });
+    const txProcessUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const rootProcessUpdate = jest.fn();
     const historyCreate = jest.fn().mockResolvedValue({});
     const tx = {
       process: {
         findUniqueOrThrow: jest.fn().mockResolvedValue(process),
-        update: processUpdate,
+        update: txProcessUpdate,
+        updateMany: txProcessUpdateMany,
       },
       processStatusHistory: { create: historyCreate },
     };
     const prisma = {
       process: {
         findUnique: jest.fn().mockResolvedValue(process),
-        update: processUpdate,
+        update: rootProcessUpdate,
       },
       meetingSession: {
         update: jest
@@ -222,9 +225,11 @@ describe('MeetingsService.markConversationDone — snapshot da negociação', ()
         aircraft: { select: { valor: true, currency: true } },
       },
     });
-    expect(processUpdate).toHaveBeenCalledWith(
+    expect(rootProcessUpdate).not.toHaveBeenCalled();
+    expect(txProcessUpdate).not.toHaveBeenCalled();
+    expect(txProcessUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'proc-1' },
+        where: { id: 'proc-1', status: ProcessStatus.SCHEDULING },
         data: expect.objectContaining({
           status: ProcessStatus.NEGOTIATION,
           negotiation_currency: ProductCurrency.USD,
@@ -240,5 +245,107 @@ describe('MeetingsService.markConversationDone — snapshot da negociação', ()
         }),
       }),
     );
+    expect(txProcessUpdateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      historyCreate.mock.invocationCallOrder[0],
+    );
   });
+
+  it.each([
+    [ProcessStatus.PROCESSING_CONTRACT, false],
+    [ProcessStatus.SCHEDULING, true],
+  ])(
+    'não regride etapa concorrente com estado transacional %s',
+    async (transactionalStatus, expectsClaim) => {
+      const product = {
+        id: 'product-1',
+        marca: 'Porsche',
+        modelo: '911',
+        valor: new Prisma.Decimal('120000.00'),
+        currency: ProductCurrency.USD,
+      };
+      const process = mkProcess({
+        status: ProcessStatus.SCHEDULING,
+        product_type: ProductType.CAR,
+        car_id: product.id,
+        boat_id: null,
+        aircraft_id: null,
+        negotiation_currency: null,
+        negotiation_product_value: null,
+        notes: null,
+        car: product,
+        boat: null,
+        aircraft: null,
+        meeting_session: {
+          id: 'meeting-1',
+          process_id: 'proc-1',
+          meet_link: 'https://meet.google.com/abc-defg-hij',
+          started_at: new Date('2026-01-01T10:00:00.000Z'),
+          ended_at: null,
+        },
+      });
+      const concurrentProcess = {
+        ...process,
+        status: transactionalStatus,
+      };
+      const txProcessUpdate = jest.fn();
+      const rootProcessUpdate = jest.fn();
+      const processUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
+      const historyCreate = jest.fn();
+      const tx = {
+        process: {
+          findUniqueOrThrow: jest
+            .fn()
+            .mockResolvedValueOnce(concurrentProcess)
+            .mockResolvedValueOnce({
+              ...concurrentProcess,
+              status: ProcessStatus.PROCESSING_CONTRACT,
+            }),
+          update: txProcessUpdate,
+          updateMany: processUpdateMany,
+        },
+        processStatusHistory: { create: historyCreate },
+      };
+      const prisma = {
+        process: {
+          findUnique: jest.fn().mockResolvedValue(process),
+          update: rootProcessUpdate,
+        },
+        meetingSession: {
+          update: jest
+            .fn()
+            .mockImplementation(({ data }) =>
+              Promise.resolve({ ...process.meeting_session, ...data }),
+            ),
+        },
+        $transaction: jest.fn(async (callback) => callback(tx)),
+      } as any;
+      const service = new MeetingsService(
+        prisma,
+        mkConfig(),
+        notification,
+        {} as any,
+      );
+
+      const result = await service.markConversationDone('proc-1', 'spec-1');
+
+      expect(rootProcessUpdate).not.toHaveBeenCalled();
+      expect(txProcessUpdate).not.toHaveBeenCalled();
+      if (expectsClaim) {
+        expect(processUpdateMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'proc-1', status: ProcessStatus.SCHEDULING },
+          }),
+        );
+      } else {
+        expect(processUpdateMany).not.toHaveBeenCalled();
+      }
+      expect(historyCreate).not.toHaveBeenCalled();
+      expect(result.processTransition).toEqual(
+        expect.objectContaining({
+          advanced: false,
+          status: ProcessStatus.PROCESSING_CONTRACT,
+        }),
+      );
+    },
+  );
 });

@@ -1418,8 +1418,18 @@ export class ProcessesService {
           '\n[AUTO] Avançado para NEGOTIATION (produto atribuído após confirmação da reunião)';
       }
 
-      const updated = await tx.process.update({
-        where: { id: processId },
+      const claim = await tx.process.updateMany({
+        where: {
+          id: processId,
+          status: process.status,
+          product_type: null,
+          car_id: null,
+          boat_id: null,
+          aircraft_id: null,
+          negotiation_currency: process.negotiation_currency,
+          negotiation_product_value: process.negotiation_product_value,
+          updated_at: process.updated_at,
+        },
         data: {
           product_type: productType,
           car_id: productType === 'CAR' ? product.id : null,
@@ -1430,14 +1440,18 @@ export class ProcessesService {
           updated_at: new Date(),
           ...snapshotData,
         },
-        include: {
-          client: true,
-          specialist: true,
-          car: true,
-          boat: true,
-          aircraft: true,
-        },
       });
+
+      if (claim.count !== 1) {
+        throw new ConflictException({
+          success: false,
+          error: {
+            code: 409,
+            message: 'O processo foi alterado durante a associação do produto',
+            details: { process_id: processId },
+          },
+        });
+      }
 
       if (process.status === ProcessStatus.SCHEDULING) {
         await tx.processStatusHistory.create({
@@ -1450,7 +1464,16 @@ export class ProcessesService {
         });
       }
 
-      return updated;
+      return tx.process.findUniqueOrThrow({
+        where: { id: processId },
+        include: {
+          client: true,
+          specialist: true,
+          car: true,
+          boat: true,
+          aircraft: true,
+        },
+      });
     });
 
     this.logger.log(
