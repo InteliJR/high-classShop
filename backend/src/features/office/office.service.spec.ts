@@ -18,6 +18,13 @@ jest.mock('src/shared/services/logo-sanitizer.service', () => ({
 
 import { OfficeService } from './office.service';
 
+// inviteConsultant assina o convite com jwtConstants.referral. O JwtService é
+// mockado, então o valor em si não importa — mas o segredo precisa existir:
+// desde que a leitura passou a ser tardia, ausência vira erro explícito em vez
+// de assinar com `undefined`.
+process.env.JWT_SECRET_REFERRAL =
+  process.env.JWT_SECRET_REFERRAL || 'test-referral-secret';
+
 const SCOPE_OFFICE_A = { companyId: 'companyA', isAdmin: false };
 const SCOPE_OFFICE_B = { companyId: 'companyB', isAdmin: false };
 const SCOPE_ADMIN = { companyId: null, isAdmin: true };
