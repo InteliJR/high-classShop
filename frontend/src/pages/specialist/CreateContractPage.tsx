@@ -23,7 +23,6 @@ import {
   type PreviewContractData,
   type PreviewContractResponse,
   type ContractTemplate,
-  formatBRL,
 } from "../../services/contracts.service";
 import {
   applyCpfMask,
@@ -36,6 +35,7 @@ import DocuSignPreviewModal from "../../components/contracts/DocuSignPreviewModa
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
 import { getCommissionPreview } from "../../lib/contract-commission";
+import { formatCurrency } from "../../lib/currency";
 
 interface ContractFormData {
   // Vendedor
@@ -742,9 +742,10 @@ export default function CreateContractPage() {
               ? `${getProductTypeLabel(prefillData.product_type)}: ${prefillData.product.brand} ${prefillData.product.model} | Cliente: ${prefillData.buyer.name}`
               : "Carregando..."}
           </p>
-          {prefillData?.proposal && (
+          {prefillData.proposal && (
             <p className="text-sm text-status-ok mt-1">
-              Proposta aceita: {formatBRL(prefillData.proposal.value)}
+              Proposta aceita:{" "}
+              {formatCurrency(prefillData.proposal.value, prefillData.currency)}
             </p>
           )}
         </div>
@@ -769,7 +770,8 @@ export default function CreateContractPage() {
           <ContractCommissionStep
             register={register}
             errors={errors}
-            productLabel={getProductTypeLabel(prefillData?.product_type)}
+            productLabel={getProductTypeLabel(prefillData.product_type)}
+            currency={prefillData.currency}
             vehiclePrice={vehiclePrice || 0}
             totalCommissionValue={totalCommissionValue}
             sellerNetPreviewValue={sellerNetPreviewValue}
@@ -1331,7 +1333,11 @@ export default function CreateContractPage() {
                   {getProductTypeLabel(prefillData?.product_type)}
                 </label>
                 <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
-                  {vehiclePrice > 0 ? formatBRL(vehiclePrice) : <span className="text-subtle">—</span>}
+                  {vehiclePrice > 0 ? (
+                    formatCurrency(vehiclePrice, prefillData.currency)
+                  ) : (
+                    <span className="text-subtle">—</span>
+                  )}
                 </div>
                 {errors.vehicle_price && (
                   <p className="text-status-bad text-sm mt-1">
@@ -1345,7 +1351,7 @@ export default function CreateContractPage() {
                   Valor do Vendedor
                 </label>
                 <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
-                  {formatBRL(sellerNetPreviewValue)}
+                  {formatCurrency(sellerNetPreviewValue, prefillData.currency)}
                 </div>
               </div>
 
@@ -1354,7 +1360,7 @@ export default function CreateContractPage() {
                   Comissão Total
                 </label>
                 <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
-                  {formatBRL(totalCommissionValue)}
+                  {formatCurrency(totalCommissionValue, prefillData.currency)}
                 </div>
               </div>
 
@@ -1366,7 +1372,7 @@ export default function CreateContractPage() {
                   </span>
                 </label>
                 <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
-                  {formatBRL(specialistValue)}
+                  {formatCurrency(specialistValue, prefillData.currency)}
                 </div>
               </div>
             </div>
@@ -1676,15 +1682,12 @@ export default function CreateContractPage() {
                 <label className="block text-sm font-medium text-ink-soft mb-1">
                   Valor da Comissão *
                 </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">
-                    R$
-                  </span>
+                <div>
                   <input
                     type="text"
-                    value={formatBRL(specialistValue)}
+                    value={formatCurrency(specialistValue, prefillData.currency)}
                     readOnly
-                    className="w-full pl-10 pr-3 py-2 border border-border rounded-lg bg-border-soft cursor-not-allowed"
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-border-soft cursor-not-allowed"
                   />
                 </div>
               </div>

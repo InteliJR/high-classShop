@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { formatCurrency } from "./currency";
+import { currencySymbol, formatCurrency } from "./currency";
 
-describe("formatCurrency", () => {
-  it("formats BRL by default", () => {
-    expect(formatCurrency(2500)).toBe("R$ 2.500,00");
+describe("currency UI", () => {
+  it("uses pt-BR symbols without conversion", () => {
+    expect(currencySymbol("BRL")).toBe("R$");
+    expect(currencySymbol("USD")).toBe("US$");
+    expect(formatCurrency(120000, "USD")).toBe("US$ 120.000,00");
   });
 
-  it("formats USD without converting the original amount", () => {
-    expect(formatCurrency(2500, "USD")).toBe("US$ 2.500,00");
+  it("formats BRL only when it is explicitly requested", () => {
+    expect(formatCurrency(2500, "BRL")).toBe("R$ 2.500,00");
   });
 });

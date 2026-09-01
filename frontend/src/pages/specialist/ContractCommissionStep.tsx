@@ -4,7 +4,7 @@ import type {
   UseFormRegister,
 } from "react-hook-form";
 import Button from "../../components/ui/button";
-import { formatBRL } from "../../services/contracts.service";
+import { formatCurrency, type ProductCurrency } from "../../lib/currency";
 
 /**
  * Etapa 1 do contrato: a comissão, isolada do resto.
@@ -19,6 +19,7 @@ interface Props {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   errors: FieldErrors<any>;
   productLabel: string;
+  currency: ProductCurrency;
   vehiclePrice: number;
   totalCommissionValue: number;
   sellerNetPreviewValue: number;
@@ -30,6 +31,7 @@ export default function ContractCommissionStep({
   register,
   errors,
   productLabel,
+  currency,
   vehiclePrice,
   totalCommissionValue,
   sellerNetPreviewValue,
@@ -59,7 +61,7 @@ export default function ContractCommissionStep({
             </label>
             <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
               {vehiclePrice > 0 ? (
-                formatBRL(vehiclePrice)
+                formatCurrency(vehiclePrice, currency)
               ) : (
                 <span className="text-subtle">—</span>
               )}
@@ -104,13 +106,13 @@ export default function ContractCommissionStep({
             <div>
               <p className="text-xs text-subtle">Comissão total</p>
               <p className="text-sm font-medium text-ink mt-0.5">
-                {formatBRL(totalCommissionValue)}
+                {formatCurrency(totalCommissionValue, currency)}
               </p>
             </div>
             <div>
               <p className="text-xs text-subtle">Valor líquido do vendedor</p>
               <p className="text-sm font-medium text-ink mt-0.5">
-                {formatBRL(sellerNetPreviewValue)}
+                {formatCurrency(sellerNetPreviewValue, currency)}
               </p>
             </div>
           </div>

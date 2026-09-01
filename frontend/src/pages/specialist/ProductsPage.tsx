@@ -21,7 +21,7 @@ interface Product {
   modelo: string;
   ano?: number;
   valor: number;
-  currency?: ProductCurrency;
+  currency: ProductCurrency;
   estado?: string;
   descricao?: string;
   imageUrl?: string;

@@ -35,6 +35,7 @@ import {
 } from "../../components/shared/XlsxImporter";
 import { Dialog, DialogContent } from "../../components/ui/dialog";
 import type { ProductCurrency, SpecialityType, UserRole } from "../../types/types";
+import { getProductSaveErrorMessage } from "../../lib/product-error-message";
 
 type ProductType = "CAR" | "BOAT" | "AIRCRAFT";
 
@@ -304,19 +305,7 @@ export default function ProductForm({
     } catch (error: any) {
       console.error("Erro ao salvar produto:", error);
 
-      let errorMessage = "Erro ao salvar produto. Tente novamente.";
-
-      if (error.response?.data?.message) {
-        if (Array.isArray(error.response.data.message)) {
-          errorMessage = error.response.data.message.join(", ");
-        } else {
-          errorMessage = error.response.data.message;
-        }
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
-      window.alert(`Erro: ${errorMessage}`);
+      window.alert(`Erro: ${getProductSaveErrorMessage(error)}`);
     } finally {
       setIsSubmitting(false);
     }

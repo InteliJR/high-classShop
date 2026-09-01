@@ -156,7 +156,7 @@ export default function CommissionCalculatorPage() {
                     );
                     if (product) {
                       setSaleValue(String(product.valor));
-                      setSaleCurrency(product.currency ?? "BRL");
+                      setSaleCurrency(product.currency);
                     }
                   }}
                   className={selectClass}

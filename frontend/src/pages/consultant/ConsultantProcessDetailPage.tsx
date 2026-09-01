@@ -38,7 +38,8 @@ import { Alert } from "../../components/ui/alert";
 import { PageHeader } from "../../components/patterns/PageHeader";
 import { StatusBadge } from "../../components/patterns/StatusBadge";
 import { ProposalStatusBadge } from "../../components/patterns/ProposalStatusBadge";
-import { formatCurrency } from "../../lib/currency";
+import { currencySymbol, formatCurrency } from "../../lib/currency";
+import { getMinimumPresentation } from "../../lib/negotiation-money";
 
 const PRODUCT_LABELS: Record<string, string> = {
   CAR: "Carro",
@@ -191,7 +192,11 @@ export default function ConsultantProcessDetailPage() {
       return;
     }
 
-    if (value < processInfo.minimum_value) {
+    if (
+      processInfo.minimum_enabled &&
+      processInfo.minimum_value !== null &&
+      value < processInfo.minimum_value
+    ) {
       setFormError(
         `O valor mínimo permitido é ${formatCurrency(processInfo.minimum_value, processInfo.currency)}.`,
       );
@@ -303,6 +308,9 @@ export default function ConsultantProcessDetailPage() {
   const isAppointmentConfirmed =
     process.appointment_status === "SCHEDULED" ||
     process.appointment_status === "COMPLETED";
+  const minimum = processInfo
+    ? getMinimumPresentation(processInfo)
+    : { visible: false, formattedValue: null };
 
   return (
     <div className="text-text-main w-full">
@@ -404,14 +412,16 @@ export default function ConsultantProcessDetailPage() {
               {formatCurrency(processInfo.product_value, processInfo.currency)}
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            {/* laranja mantido de propósito — destaque de atenção ao valor, não é um dos 6 status de processo */}
-            <AlertCircle size={16} className="text-orange-500" />
-            <span className="text-muted">Valor mínimo:</span>
-            <span className="font-semibold text-orange-600">
-              {formatCurrency(processInfo.minimum_value, processInfo.currency)}
-            </span>
-          </div>
+          {minimum.visible && minimum.formattedValue && (
+            <div className="flex items-center gap-2">
+              {/* laranja mantido de propósito — destaque de atenção ao valor, não é um dos 6 status de processo */}
+              <AlertCircle size={16} className="text-orange-500" />
+              <span className="text-muted">Valor mínimo:</span>
+              <span className="font-semibold text-orange-600">
+                {minimum.formattedValue}
+              </span>
+            </div>
+          )}
           {acceptedProposal && (
             <div className="flex items-center gap-2">
               <Check size={16} className="text-status-ok" />
@@ -529,7 +539,7 @@ export default function ConsultantProcessDetailPage() {
             ref={timelineRef}
             className="flex flex-col gap-3 max-h-[520px] overflow-y-auto pr-1"
           >
-            {proposals.map((proposal) => (
+            {processInfo && proposals.map((proposal) => (
               <div
                 key={proposal.id}
                 className="border border-border rounded-lg p-3"
@@ -550,7 +560,7 @@ export default function ConsultantProcessDetailPage() {
                 <div className="flex items-center gap-2 mb-1">
                   <DollarSign size={16} className="text-green-600" />
                   <span className="text-lg font-bold text-ink">
-                    {formatCurrency(proposal.proposed_value, processInfo?.currency)}
+                    {formatCurrency(proposal.proposed_value, processInfo.currency)}
                   </span>
                 </div>
                 {proposal.message && (
@@ -596,7 +606,7 @@ export default function ConsultantProcessDetailPage() {
           </div>
         )}
 
-        {showCreateForm && (
+        {showCreateForm && processInfo && (
           <div className="mt-6 pt-4 border-t border-border">
             <h3 className="text-sm font-semibold text-ink mb-3">
               Enviar nova proposta
@@ -614,7 +624,9 @@ export default function ConsultantProcessDetailPage() {
               <div className="flex-1 flex flex-col md:flex-row gap-3">
                 <div className="relative flex-1 min-w-0">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-muted">R$</span>
+                    <span className="text-muted">
+                      {currencySymbol(processInfo.currency)}
+                    </span>
                   </div>
                   <input
                     type="text"
@@ -643,9 +655,9 @@ export default function ConsultantProcessDetailPage() {
                 Enviar proposta
               </Button>
             </form>
-            {processInfo && (
+            {minimum.visible && minimum.formattedValue && (
               <p className="mt-2 text-xs text-muted">
-                Valor mínimo aceito: {formatCurrency(processInfo.minimum_value, processInfo.currency)}
+                Valor mínimo aceito: {minimum.formattedValue}
               </p>
             )}
           </div>

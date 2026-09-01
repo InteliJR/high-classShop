@@ -1,3 +1,6 @@
+import type { ProductCurrency } from "../lib/currency";
+export type { ProductCurrency } from "../lib/currency";
+
 // Substituto do tipo ENUM nos postgres
 // Carro
 export type estadoValues = 'novo'| 'seminovo'| 'colecao';
@@ -90,15 +93,13 @@ export interface PaginationMeta {
 }
 
 // Informações essenciais dos produtos
-export type ProductCurrency = "BRL" | "USD";
-
 export interface Product {
   id: string;
   marca: string;
   modelo: string;
   descricao?: string;
   valor: number;
-  currency?: ProductCurrency;
+  currency: ProductCurrency;
   imageUrl?: string;
   images?: {
     id: number;
