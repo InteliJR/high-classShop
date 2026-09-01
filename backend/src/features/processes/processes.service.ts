@@ -21,6 +21,7 @@ import { ProcessesByStatus } from 'src/shared/dto/summary.dto';
 import { UpdateProcessDto } from './dto/update-process.dto';
 import { ProcessWithHistory } from './entity/process-history.response';
 import { NotificationService } from 'src/features/notifications/notification.service';
+import { buildNegotiationSnapshotUpdate } from './negotiation-snapshot';
 
 /**
  * Quem está pedindo a operação. `companyId` só é usado por OFFICE.
@@ -1137,11 +1138,16 @@ export class ProcessesService {
           if (existingProcess.status === updateProcessDto.status) {
             throw new BadRequestException();
           }
+          const snapshotData =
+            updateProcessDto.status === ProcessStatus.NEGOTIATION
+              ? buildNegotiationSnapshotUpdate(existingProcess)
+              : {};
           const process = await tx.process.update({
             data: {
               status: updateProcessDto.status,
               notes: updateProcessDto.notes,
               updated_at: new Date(),
+              ...snapshotData,
             },
             where: {
               id: processId,
@@ -1252,14 +1258,17 @@ export class ProcessesService {
       });
     }
 
-    // 3. Verificar que processo está em SCHEDULING
-    if (process.status !== 'SCHEDULING') {
+    // 3. Verificar que processo está antes ou durante a negociação
+    if (
+      process.status !== ProcessStatus.SCHEDULING &&
+      process.status !== ProcessStatus.NEGOTIATION
+    ) {
       throw new BadRequestException({
         success: false,
         error: {
           code: 400,
           message:
-            'Produto só pode ser associado em processos no status SCHEDULING',
+            'Produto só pode ser associado antes ou durante a negociação',
           details: { current_status: process.status },
         },
       });
@@ -1287,84 +1296,83 @@ export class ProcessesService {
       });
     }
 
-    // 5. Validar que produto existe
+    // 5. Validar tipo de produto
     const productType = dto.product_type as 'CAR' | 'BOAT' | 'AIRCRAFT';
-    let product: any = null;
-
-    switch (productType) {
-      case 'CAR':
-        product = await this.prismaService.car.findUnique({
-          where: { id: dto.product_id },
-        });
-        break;
-      case 'BOAT':
-        product = await this.prismaService.boat.findUnique({
-          where: { id: dto.product_id },
-        });
-        break;
-      case 'AIRCRAFT':
-        product = await this.prismaService.aircraft.findUnique({
-          where: { id: dto.product_id },
-        });
-        break;
-      default:
-        throw new BadRequestException({
-          success: false,
-          error: {
-            code: 400,
-            message: 'Tipo de produto inválido',
-            details: { product_type: dto.product_type },
-          },
-        });
-    }
-
-    if (!product) {
-      throw new NotFoundException({
-        success: false,
-        error: {
-          code: 404,
-          message: 'Produto não encontrado',
-          details: { product_type: productType, product_id: dto.product_id },
-        },
-      });
-    }
-
-    if (product.is_active === false) {
+    if (!['CAR', 'BOAT', 'AIRCRAFT'].includes(productType)) {
       throw new BadRequestException({
         success: false,
         error: {
           code: 400,
-          message:
-            'Produto inativo no catálogo. Selecione um produto ativo para continuar.',
-          details: { product_type: productType, product_id: dto.product_id },
+          message: 'Tipo de produto inválido',
+          details: { product_type: dto.product_type },
         },
       });
     }
 
-    // 6. Verificar que produto pertence ao especialista
-    if (product.specialist_id !== process.specialist_id) {
-      throw new ForbiddenException({
-        success: false,
-        error: {
-          code: 403,
-          message: 'O produto deve pertencer ao especialista do processo',
-          details: {
-            product_specialist_id: product.specialist_id,
-            process_specialist_id: process.specialist_id,
+    // 6. Ler produto, validar e atualizar processo atomicamente
+    const updatedProcess = await this.prismaService.$transaction(async (tx) => {
+      let product: any;
+      if (productType === 'CAR') {
+        product = await tx.car.findUnique({ where: { id: dto.product_id } });
+      } else if (productType === 'BOAT') {
+        product = await tx.boat.findUnique({ where: { id: dto.product_id } });
+      } else {
+        product = await tx.aircraft.findUnique({
+          where: { id: dto.product_id },
+        });
+      }
+
+      if (!product) {
+        throw new NotFoundException({
+          success: false,
+          error: {
+            code: 404,
+            message: 'Produto não encontrado',
+            details: { product_type: productType, product_id: dto.product_id },
           },
-        },
-      });
-    }
+        });
+      }
 
-    // 7. Verificar se agendamento foi confirmado pelo especialista
-    // Regra de negócio: processo só avança para NEGOTIATION no momento da atribuição do produto,
-    // desde que o appointment já esteja confirmado (SCHEDULED ou COMPLETED).
-    let shouldAdvanceToNegotiation = false;
-    if (process.appointment_id) {
-      const appointment = await this.prismaService.appointment.findUnique({
+      if (product.is_active === false) {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message:
+              'Produto inativo no catálogo. Selecione um produto ativo para continuar.',
+            details: { product_type: productType, product_id: dto.product_id },
+          },
+        });
+      }
+
+      if (product.specialist_id !== process.specialist_id) {
+        throw new ForbiddenException({
+          success: false,
+          error: {
+            code: 403,
+            message: 'O produto deve pertencer ao especialista do processo',
+            details: {
+              product_specialist_id: product.specialist_id,
+              process_specialist_id: process.specialist_id,
+            },
+          },
+        });
+      }
+
+      if (!process.appointment_id) {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message: 'Processo sem agendamento associado',
+            details: { process_id: processId },
+          },
+        });
+      }
+
+      const appointment = await tx.appointment.findUnique({
         where: { id: process.appointment_id },
       });
-
       if (!appointment) {
         throw new NotFoundException({
           success: false,
@@ -1375,16 +1383,10 @@ export class ProcessesService {
           },
         });
       }
-
       if (
-        appointment.status === StatusAgendamento.SCHEDULED ||
-        appointment.status === StatusAgendamento.COMPLETED
+        appointment.status !== StatusAgendamento.SCHEDULED &&
+        appointment.status !== StatusAgendamento.COMPLETED
       ) {
-        shouldAdvanceToNegotiation = true;
-        this.logger.log(
-          `[assignProduct] Appointment ${appointment.id} confirmado (${appointment.status}) - processo avançará para NEGOTIATION`,
-        );
-      } else {
         throw new BadRequestException({
           success: false,
           error: {
@@ -1401,44 +1403,33 @@ export class ProcessesService {
           },
         });
       }
-    } else {
-      throw new BadRequestException({
-        success: false,
-        error: {
-          code: 400,
-          message: 'Processo sem agendamento associado',
-          details: { process_id: processId },
-        },
+
+      const snapshotData = buildNegotiationSnapshotUpdate({
+        product_type: productType,
+        negotiation_currency: process.negotiation_currency,
+        negotiation_product_value: process.negotiation_product_value,
+        car: productType === 'CAR' ? product : null,
+        boat: productType === 'BOAT' ? product : null,
+        aircraft: productType === 'AIRCRAFT' ? product : null,
       });
-    }
+      let notes = `${process.notes || ''}\n[${new Date().toISOString()}] Produto associado: ${product.marca} ${product.modelo}`;
+      if (process.status === ProcessStatus.SCHEDULING) {
+        notes +=
+          '\n[AUTO] Avançado para NEGOTIATION (produto atribuído após confirmação da reunião)';
+      }
 
-    // 8. Atualizar processo com produto em transação
-    const productField =
-      productType === 'CAR'
-        ? 'car_id'
-        : productType === 'BOAT'
-          ? 'boat_id'
-          : 'aircraft_id';
-
-    const updateData: any = {
-      product_type: productType,
-      [productField]: dto.product_id,
-      notes: `${process.notes || ''}\n[${new Date().toISOString()}] Produto associado: ${product.marca} ${product.modelo}`,
-      updated_at: new Date(),
-    };
-
-    // Se appointment já foi confirmado, avançar para NEGOTIATION
-    if (shouldAdvanceToNegotiation) {
-      updateData.status = 'NEGOTIATION';
-      updateData.notes += `\n[AUTO] Avançado para NEGOTIATION (produto atribuído após confirmação da reunião)`;
-    }
-
-    const nextStatus = (updateData.status ?? process.status) as ProcessStatus;
-
-    const [updatedProcess] = await this.prismaService.$transaction([
-      this.prismaService.process.update({
+      const updated = await tx.process.update({
         where: { id: processId },
-        data: updateData,
+        data: {
+          product_type: productType,
+          car_id: productType === 'CAR' ? product.id : null,
+          boat_id: productType === 'BOAT' ? product.id : null,
+          aircraft_id: productType === 'AIRCRAFT' ? product.id : null,
+          status: ProcessStatus.NEGOTIATION,
+          notes,
+          updated_at: new Date(),
+          ...snapshotData,
+        },
         include: {
           client: true,
           specialist: true,
@@ -1446,19 +1437,24 @@ export class ProcessesService {
           boat: true,
           aircraft: true,
         },
-      }),
-      this.prismaService.processStatusHistory.create({
-        data: {
-          processId,
-          status: nextStatus,
-          changed_by: userId,
-          changed_at: new Date(),
-        },
-      }),
-    ]);
+      });
+
+      if (process.status === ProcessStatus.SCHEDULING) {
+        await tx.processStatusHistory.create({
+          data: {
+            processId,
+            status: ProcessStatus.NEGOTIATION,
+            changed_by: userId,
+            changed_at: new Date(),
+          },
+        });
+      }
+
+      return updated;
+    });
 
     this.logger.log(
-      `[assignProduct] Produto ${productType}/${dto.product_id} associado ao processo ${processId}${shouldAdvanceToNegotiation ? ' - Avançado para NEGOTIATION' : ''}`,
+      `[assignProduct] Produto ${productType}/${dto.product_id} associado ao processo ${processId}${process.status === ProcessStatus.SCHEDULING ? ' - Avançado para NEGOTIATION' : ''}`,
     );
 
     if (process.status !== updatedProcess.status) {

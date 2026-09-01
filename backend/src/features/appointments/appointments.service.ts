@@ -28,6 +28,7 @@ import {
   Car,
   Boat,
   Aircraft,
+  ProcessStatus,
 } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import {
@@ -38,6 +39,7 @@ import {
 } from 'src/shared/utils/date.utils';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { CalendlyIntegrationService } from './calendly-integration.service';
+import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
 
 /**
  * AppointmentsService
@@ -684,84 +686,96 @@ export class AppointmentsService {
       });
     }
 
-    // Atualizar appointment
-    const updated = await this.prisma.appointment.update({
-      where: { id },
-      data: {
-        status: dto.status,
-        notes: dto.notes || appointment.notes,
-        updated_at: new Date(),
-      },
-      include: {
-        client: true,
-        specialist: true,
-        process: true,
-      },
-    });
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updatedAppointment = await tx.appointment.update({
+        where: { id },
+        data: {
+          status: dto.status,
+          notes: dto.notes || appointment.notes,
+          updated_at: new Date(),
+        },
+        include: {
+          client: true,
+          specialist: true,
+          process: true,
+        },
+      });
 
-    // LÓGICA CRÍTICA: Se status muda para COMPLETED, atualizar Process vinculado
-    if (dto.status === StatusAgendamento.COMPLETED && appointment.process) {
-      const process = appointment.process;
+      // LÓGICA CRÍTICA: Se status muda para COMPLETED, atualizar Process vinculado
+      if (dto.status === StatusAgendamento.COMPLETED && appointment.process) {
+        const process = appointment.process;
 
-      // Só move para NEGOTIATION se Process está em SCHEDULING
-      // Evita conflito se já está em NEGOTIATION+ (não retrocede)
-      if (process.status === 'SCHEDULING') {
-        // Verificar se processo tem produto associado
-        const hasProduct =
-          process.car_id || process.boat_id || process.aircraft_id;
-
-        if (hasProduct) {
-          // Processo com produto: avançar para NEGOTIATION
-          await this.prisma.process.update({
+        // Só move para NEGOTIATION se Process está em SCHEDULING
+        // Evita conflito se já está em NEGOTIATION+ (não retrocede)
+        if (process.status === ProcessStatus.SCHEDULING) {
+          const processForTransition = await tx.process.findUniqueOrThrow({
             where: { id: process.id },
-            data: {
-              status: 'NEGOTIATION',
-              notes: `${process.notes || ''}\n[AUTO] Transição automática: SCHEDULING → NEGOTIATION (agendamento concluído em ${new Date().toISOString()})`,
-              updated_at: new Date(),
+            include: {
+              car: { select: { valor: true, currency: true } },
+              boat: { select: { valor: true, currency: true } },
+              aircraft: { select: { valor: true, currency: true } },
             },
           });
+          const hasProduct =
+            processForTransition.car_id ||
+            processForTransition.boat_id ||
+            processForTransition.aircraft_id;
 
-          // Registrar mudança de status no histórico
-          await this.prisma.processStatusHistory.create({
-            data: {
-              processId: process.id,
-              status: 'NEGOTIATION',
-              changed_at: new Date(),
-            },
-          });
+          if (hasProduct) {
+            const snapshotData =
+              buildNegotiationSnapshotUpdate(processForTransition);
+            await tx.process.update({
+              where: { id: process.id },
+              data: {
+                status: ProcessStatus.NEGOTIATION,
+                notes: `${processForTransition.notes || ''}\n[AUTO] Transição automática: SCHEDULING → NEGOTIATION (agendamento concluído em ${new Date().toISOString()})`,
+                updated_at: new Date(),
+                ...snapshotData,
+              },
+            });
+            await tx.processStatusHistory.create({
+              data: {
+                processId: process.id,
+                status: ProcessStatus.NEGOTIATION,
+                changed_by: userId,
+                changed_at: new Date(),
+              },
+            });
 
-          this.logger.log(
-            `[updateStatus] Process ${process.id} avançado para NEGOTIATION (agendamento concluído)`,
-          );
-        } else {
-          // Consultoria (sem produto): manter em SCHEDULING até produto ser selecionado
-          await this.prisma.process.update({
-            where: { id: process.id },
-            data: {
-              notes: `${process.notes || ''}\n[AUTO] Reunião concluída em ${new Date().toISOString()}. Aguardando especialista selecionar produto para avançar para NEGOTIATION.`,
-              updated_at: new Date(),
-            },
-          });
+            this.logger.log(
+              `[updateStatus] Process ${process.id} avançado para NEGOTIATION (agendamento concluído)`,
+            );
+          } else {
+            await tx.process.update({
+              where: { id: process.id },
+              data: {
+                notes: `${processForTransition.notes || ''}\n[AUTO] Reunião concluída em ${new Date().toISOString()}. Aguardando especialista selecionar produto para avançar para NEGOTIATION.`,
+                updated_at: new Date(),
+              },
+            });
 
-          this.logger.log(
-            `[updateStatus] Process ${process.id} mantido em SCHEDULING (consultoria - aguardando seleção de produto)`,
+            this.logger.log(
+              `[updateStatus] Process ${process.id} mantido em SCHEDULING (consultoria - aguardando seleção de produto)`,
+            );
+          }
+        } else if (
+          !(
+            [
+              ProcessStatus.NEGOTIATION,
+              ProcessStatus.PROCESSING_CONTRACT,
+              ProcessStatus.DOCUMENTATION,
+              ProcessStatus.COMPLETED,
+            ] as ProcessStatus[]
+          ).includes(process.status)
+        ) {
+          console.warn(
+            `[WARNING] Appointment ${id} marked COMPLETED but Process ${process.id} is in unexpected status: ${process.status}`,
           );
         }
-      } else if (
-        ![
-          'NEGOTIATION',
-          'PROCESSING_CONTRACT',
-          'DOCUMENTATION',
-          'COMPLETED',
-        ].includes(process.status)
-      ) {
-        // Warn se Process está em estado inesperado
-        console.warn(
-          `[WARNING] Appointment ${id} marked COMPLETED but Process ${process.id} is in unexpected status: ${process.status}`,
-        );
       }
-      // Se Process já está em NEGOTIATION ou além, não faz nada (mantém integridade lógica)
-    }
+
+      return updatedAppointment;
+    });
 
     // Retornar appointment atualizado
     const product = await this.getProductByType(

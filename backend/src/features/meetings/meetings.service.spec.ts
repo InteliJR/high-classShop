@@ -1,4 +1,10 @@
 import { ServiceUnavailableException } from '@nestjs/common';
+import {
+  Prisma,
+  ProcessStatus,
+  ProductCurrency,
+  ProductType,
+} from '@prisma/client';
 import { MeetingsService } from './meetings.service';
 
 function mkProcess(overrides: any = {}) {
@@ -57,6 +63,7 @@ function mkConfig(accessType = 'OPEN') {
 const notification = {
   sendMeetingStartedEmail: jest.fn().mockResolvedValue({}),
   sendMeetingAdvancedEmail: jest.fn().mockResolvedValue({}),
+  sendProcessStatusChangedEmail: jest.fn().mockResolvedValue({}),
 } as any;
 
 describe('MeetingsService — criação via Meet REST API', () => {
@@ -139,5 +146,99 @@ describe('MeetingsService — criação via Meet REST API', () => {
     await expect(
       svc.startMeetingForProcess('proc-1', 'client-1'),
     ).rejects.toThrow(/especialista/i);
+  });
+});
+
+describe('MeetingsService.markConversationDone — snapshot da negociação', () => {
+  it('grava snapshot USD, status e histórico na mesma transação', async () => {
+    const product = {
+      id: 'product-1',
+      marca: 'Porsche',
+      modelo: '911',
+      valor: new Prisma.Decimal('120000.00'),
+      currency: ProductCurrency.USD,
+    };
+    const process = mkProcess({
+      status: ProcessStatus.SCHEDULING,
+      product_type: ProductType.CAR,
+      car_id: product.id,
+      boat_id: null,
+      aircraft_id: null,
+      negotiation_currency: null,
+      negotiation_product_value: null,
+      notes: null,
+      car: product,
+      boat: null,
+      aircraft: null,
+      meeting_session: {
+        id: 'meeting-1',
+        process_id: 'proc-1',
+        meet_link: 'https://meet.google.com/abc-defg-hij',
+        started_at: new Date('2026-01-01T10:00:00.000Z'),
+        ended_at: null,
+      },
+    });
+    const processUpdate = jest.fn().mockResolvedValue({
+      status: ProcessStatus.NEGOTIATION,
+    });
+    const historyCreate = jest.fn().mockResolvedValue({});
+    const tx = {
+      process: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue(process),
+        update: processUpdate,
+      },
+      processStatusHistory: { create: historyCreate },
+    };
+    const prisma = {
+      process: {
+        findUnique: jest.fn().mockResolvedValue(process),
+        update: processUpdate,
+      },
+      meetingSession: {
+        update: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ ...process.meeting_session, ...data }),
+          ),
+      },
+      processStatusHistory: { create: historyCreate },
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    } as any;
+    const service = new MeetingsService(
+      prisma,
+      mkConfig(),
+      notification,
+      {} as any,
+    );
+
+    await service.markConversationDone('proc-1', 'spec-1');
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(tx.process.findUniqueOrThrow).toHaveBeenCalledWith({
+      where: { id: 'proc-1' },
+      include: {
+        car: { select: { valor: true, currency: true } },
+        boat: { select: { valor: true, currency: true } },
+        aircraft: { select: { valor: true, currency: true } },
+      },
+    });
+    expect(processUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'proc-1' },
+        data: expect.objectContaining({
+          status: ProcessStatus.NEGOTIATION,
+          negotiation_currency: ProductCurrency.USD,
+          negotiation_product_value: new Prisma.Decimal('120000.00'),
+        }),
+      }),
+    );
+    expect(historyCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          processId: 'proc-1',
+          status: ProcessStatus.NEGOTIATION,
+        }),
+      }),
+    );
   });
 });

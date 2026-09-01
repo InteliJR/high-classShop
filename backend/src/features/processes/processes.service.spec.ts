@@ -1,4 +1,12 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  Prisma,
+  ProcessStatus,
+  ProductCurrency,
+  ProductType,
+  StatusAgendamento,
+  UserRole,
+} from '@prisma/client';
 import { validate } from 'class-validator';
 import { CreateProcessDTO } from './dto/create-process.dto';
 import { AssignProductToProcessDto } from './dto/assign-product.dto';
@@ -80,8 +88,16 @@ describe('ProcessesService — produto UUID', () => {
     createDto.product_id = 1 as never;
     assignDto.product_id = 1 as never;
 
-    expect((await validate(createDto)).some((error) => error.property === 'product_id')).toBe(true);
-    expect((await validate(assignDto)).some((error) => error.property === 'product_id')).toBe(true);
+    expect(
+      (await validate(createDto)).some(
+        (error) => error.property === 'product_id',
+      ),
+    ).toBe(true);
+    expect(
+      (await validate(assignDto)).some(
+        (error) => error.property === 'product_id',
+      ),
+    ).toBe(true);
   });
 });
 
@@ -402,5 +418,220 @@ describe('ProcessesService.getAll — escopo de visibilidade', () => {
 
     expect(findMany.mock.calls[0][0].where.status).toBe('NEGOTIATION');
     expect(groupBy.mock.calls[0][0].where.status).toBeUndefined();
+  });
+});
+
+describe('ProcessesService — snapshot de entrada na negociação', () => {
+  const usdProduct = {
+    id: 'product-1',
+    marca: 'Porsche',
+    modelo: '911',
+    valor: new Prisma.Decimal('120000.00'),
+    currency: ProductCurrency.USD,
+    specialist_id: 'specialist-1',
+    is_active: true,
+  };
+
+  function baseProcess(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'process-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: ProcessStatus.SCHEDULING,
+      product_type: ProductType.CAR,
+      car_id: 'product-1',
+      boat_id: null,
+      aircraft_id: null,
+      appointment_id: 'appointment-1',
+      negotiation_currency: null,
+      negotiation_product_value: null,
+      notes: null,
+      client: { id: 'client-1', email: null, name: 'Cliente' },
+      specialist: {
+        id: 'specialist-1',
+        email: null,
+        name: 'Especialista',
+        surname: null,
+        speciality: ProductType.CAR,
+      },
+      car: usdProduct,
+      boat: null,
+      aircraft: null,
+      created_at: new Date('2026-01-01T00:00:00.000Z'),
+      updated_at: new Date('2026-01-01T00:00:00.000Z'),
+      ...overrides,
+    };
+  }
+
+  it('grava snapshot USD na transição manual para negociação', async () => {
+    const processUpdate = jest.fn().mockImplementation(({ data }) =>
+      Promise.resolve({
+        ...baseProcess(),
+        ...data,
+        updated_at: new Date('2026-01-02T00:00:00.000Z'),
+      }),
+    );
+    const tx = {
+      process: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue(baseProcess()),
+        update: processUpdate,
+      },
+      processStatusHistory: {
+        create: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    } as any;
+    const service = new ProcessesService(prisma, {} as any);
+
+    await service.update(
+      'process-1',
+      { status: ProcessStatus.NEGOTIATION, notes: 'Negociando' },
+      'admin-1',
+      UserRole.ADMIN,
+    );
+
+    expect(processUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'process-1' },
+        data: expect.objectContaining({
+          status: ProcessStatus.NEGOTIATION,
+          negotiation_currency: ProductCurrency.USD,
+          negotiation_product_value: new Prisma.Decimal('120000.00'),
+        }),
+      }),
+    );
+  });
+
+  function makeAssignProductService(
+    processOverrides: Record<string, unknown> = {},
+  ) {
+    const process = baseProcess({
+      status: ProcessStatus.NEGOTIATION,
+      product_type: null,
+      car_id: null,
+      boat_id: null,
+      aircraft_id: null,
+      car: null,
+      ...processOverrides,
+    });
+    const processUpdate = jest.fn().mockImplementation(({ data }) => {
+      const selectedProduct =
+        data.product_type === ProductType.CAR
+          ? { car: usdProduct, boat: null, aircraft: null }
+          : data.product_type === ProductType.BOAT
+            ? { car: null, boat: usdProduct, aircraft: null }
+            : { car: null, boat: null, aircraft: usdProduct };
+      return Promise.resolve({ ...process, ...data, ...selectedProduct });
+    });
+    const historyCreate = jest.fn().mockResolvedValue({});
+    const txProductFindUnique = jest.fn().mockResolvedValue(usdProduct);
+    const rootProductFindUnique = jest.fn();
+    const tx = {
+      process: { update: processUpdate },
+      processStatusHistory: { create: historyCreate },
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'appointment-1',
+          status: StatusAgendamento.COMPLETED,
+        }),
+      },
+      car: { findUnique: txProductFindUnique },
+      boat: { findUnique: txProductFindUnique },
+      aircraft: { findUnique: txProductFindUnique },
+    };
+    const prisma = {
+      process: { findUnique: jest.fn().mockResolvedValue(process) },
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'appointment-1',
+          status: StatusAgendamento.COMPLETED,
+        }),
+      },
+      car: { findUnique: rootProductFindUnique },
+      boat: { findUnique: rootProductFindUnique },
+      aircraft: { findUnique: rootProductFindUnique },
+      processStatusHistory: { create: historyCreate },
+      $transaction: jest.fn(async (operation) =>
+        Array.isArray(operation) ? Promise.all(operation) : operation(tx),
+      ),
+    } as any;
+
+    return {
+      service: new ProcessesService(prisma, {} as any),
+      prisma,
+      processUpdate,
+      historyCreate,
+      txProductFindUnique,
+      rootProductFindUnique,
+    };
+  }
+
+  it.each([
+    [ProductType.CAR, 'car_id'],
+    [ProductType.BOAT, 'boat_id'],
+    [ProductType.AIRCRAFT, 'aircraft_id'],
+  ])(
+    'grava snapshot na associação tardia de %s',
+    async (productType, foreignKey) => {
+      const {
+        service,
+        processUpdate,
+        historyCreate,
+        txProductFindUnique,
+        rootProductFindUnique,
+      } = makeAssignProductService();
+
+      await service.assignProduct(
+        'process-1',
+        { product_type: productType, product_id: 'product-1' },
+        'specialist-1',
+        UserRole.SPECIALIST,
+      );
+
+      expect(processUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'process-1' },
+          data: expect.objectContaining({
+            [foreignKey]: 'product-1',
+            status: ProcessStatus.NEGOTIATION,
+            negotiation_currency: ProductCurrency.USD,
+            negotiation_product_value: new Prisma.Decimal('120000.00'),
+          }),
+        }),
+      );
+      expect(txProductFindUnique).toHaveBeenCalledWith({
+        where: { id: 'product-1' },
+      });
+      expect(rootProductFindUnique).not.toHaveBeenCalled();
+      expect(historyCreate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserva snapshot BRL existente na associação tardia', async () => {
+    const { service, processUpdate } = makeAssignProductService({
+      negotiation_currency: ProductCurrency.BRL,
+      negotiation_product_value: new Prisma.Decimal('90000.00'),
+    });
+
+    await service.assignProduct(
+      'process-1',
+      { product_type: ProductType.CAR, product_id: 'product-1' },
+      'specialist-1',
+      UserRole.SPECIALIST,
+    );
+
+    expect(processUpdate.mock.calls[0][0].data).not.toEqual(
+      expect.objectContaining({
+        negotiation_currency: ProductCurrency.USD,
+      }),
+    );
+    expect(processUpdate.mock.calls[0][0].data).not.toEqual(
+      expect.objectContaining({
+        negotiation_product_value: new Prisma.Decimal('120000.00'),
+      }),
+    );
   });
 });

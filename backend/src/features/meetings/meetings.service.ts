@@ -12,6 +12,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { ProcessStatus, StatusAgendamento } from '@prisma/client';
 import { GoogleMeetOAuthService } from './google-meet-oauth.service';
+import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
 
 @Injectable()
 export class MeetingsService {
@@ -193,15 +194,23 @@ export class MeetingsService {
         car_id: true,
         boat_id: true,
         aircraft_id: true,
+        negotiation_currency: true,
+        negotiation_product_value: true,
         client: {
           select: { email: true, name: true, surname: true },
         },
         specialist: {
           select: { email: true, name: true, surname: true },
         },
-        car: { select: { marca: true, modelo: true } },
-        boat: { select: { marca: true, modelo: true } },
-        aircraft: { select: { marca: true, modelo: true } },
+        car: {
+          select: { marca: true, modelo: true, valor: true, currency: true },
+        },
+        boat: {
+          select: { marca: true, modelo: true, valor: true, currency: true },
+        },
+        aircraft: {
+          select: { marca: true, modelo: true, valor: true, currency: true },
+        },
       },
     });
 
@@ -247,13 +256,24 @@ export class MeetingsService {
     }
 
     const updated = await this.prismaService.$transaction(async (tx) => {
+      const processForTransition = await tx.process.findUniqueOrThrow({
+        where: { id: process.id },
+        include: {
+          car: { select: { valor: true, currency: true } },
+          boat: { select: { valor: true, currency: true } },
+          aircraft: { select: { valor: true, currency: true } },
+        },
+      });
+      const snapshotData = buildNegotiationSnapshotUpdate(processForTransition);
       const updatedProcess = await tx.process.update({
         where: { id: processId },
         data: {
           status: ProcessStatus.NEGOTIATION,
-          notes: process.notes
-            ? `${process.notes}\n\nConversa concluída com cliente (${new Date().toISOString()}). Processo avançado para NEGOTIATION.`
+          notes: processForTransition.notes
+            ? `${processForTransition.notes}\n\nConversa concluída com cliente (${new Date().toISOString()}). Processo avançado para NEGOTIATION.`
             : `Conversa concluída com cliente (${new Date().toISOString()}). Processo avançado para NEGOTIATION.`,
+          updated_at: new Date(),
+          ...snapshotData,
         },
         select: {
           status: true,
