@@ -118,3 +118,89 @@ describe('AuthService.registerSpecialist — auto-login', () => {
     );
   });
 });
+
+describe('AuthService.refresh — conta desativada ou excluída', () => {
+  const USER = 'user-1';
+  const TOKEN = 'refresh-token-valido';
+
+  function mkRefreshPrisma(is_active: boolean, temTokenNoBanco = true) {
+    return {
+      refreshToken: {
+        findUnique: jest.fn().mockResolvedValue(
+          temTokenNoBanco
+            ? {
+                token: TOKEN,
+                user_id: USER,
+                expires_at: new Date(Date.now() + 60_000),
+              }
+            : null,
+        ),
+        findFirst: jest.fn().mockResolvedValue({ id: 'recente' }),
+        delete: jest.fn(),
+        deleteMany: jest.fn(),
+        create: jest.fn().mockResolvedValue({}),
+      },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: USER,
+          email: 'joao@example.dev',
+          role: 'CUSTOMER',
+          is_active,
+        }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          id: USER,
+          email: 'joao@example.dev',
+          role: 'CUSTOMER',
+          is_active,
+        }),
+      },
+    } as any;
+  }
+
+  const mkJwtRefresh = () => ({
+    verify: jest.fn().mockReturnValue({ sub: USER }),
+    signAsync: jest.fn().mockResolvedValue('novo-token'),
+    sign: jest.fn().mockReturnValue('novo-token'),
+  });
+
+  const mkConfig = () => ({
+    getOrThrow: jest.fn().mockReturnValue('segredo'),
+    get: jest.fn().mockReturnValue('segredo'),
+  });
+
+  // O login já barrava e o AuthGuard barra cada request, mas o refresh não
+  // checava: com um refresh token na mão, a conta seguia renovando sessão.
+  it('não renova sessão de conta inativa', async () => {
+    const svc = new AuthService(
+      mkRefreshPrisma(false),
+      mkJwtRefresh() as any,
+      mkConfig() as any,
+      {} as any,
+    );
+
+    await expect(svc.refresh(TOKEN)).rejects.toThrow('Conta desativada');
+  });
+
+  // Mesmo caminho pela janela de graça de 30s, quando o token já rotacionou.
+  it('não renova pela janela de graça se a conta está inativa', async () => {
+    const svc = new AuthService(
+      mkRefreshPrisma(false, false),
+      mkJwtRefresh() as any,
+      mkConfig() as any,
+      {} as any,
+    );
+
+    await expect(svc.refresh(TOKEN)).rejects.toThrow('Conta desativada');
+  });
+
+  it('conta ativa continua renovando normalmente', async () => {
+    const svc = new AuthService(
+      mkRefreshPrisma(true),
+      mkJwtRefresh() as any,
+      mkConfig() as any,
+      {} as any,
+    );
+
+    await expect(svc.refresh(TOKEN)).resolves.toBeDefined();
+  });
+});

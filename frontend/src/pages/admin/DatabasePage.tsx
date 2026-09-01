@@ -11,6 +11,7 @@ import {
   FileText,
   Loader2,
   Pencil,
+  Trash2,
 } from "lucide-react";
 import {
   getEntities,
@@ -22,12 +23,14 @@ import {
 import { downloadCsv, openPrintablePdf } from "../../utils/export";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
+import { Dialog, DialogContent } from "../../components/ui/dialog";
 import { EmptyState } from "../../components/patterns/EmptyState";
 import AdminUserManagementDialog, {
   type AdminUserManagementDialogState,
 } from "../../components/admin/AdminUserManagementDialog";
 import {
   createLatestRequestGuard,
+  deleteUser,
   isSameRecordsOrigin,
   shouldInvalidateRecordsRequest,
   type RecordsOrigin,
@@ -56,6 +59,12 @@ export default function DatabasePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  // Exclusão é irreversível e libera documentos: confirma antes, sempre.
+  const [userToDelete, setUserToDelete] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [dialogState, setDialogState] =
     useState<AdminUserManagementDialogState | null>(null);
   const recordsRequestGuard = useRef(createLatestRequestGuard());
@@ -252,6 +261,24 @@ export default function DatabasePage() {
                         >
                           <Pencil className="w-4 h-4" aria-hidden="true" />
                         </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="p-2 text-status-bad"
+                          disabled={!rowMeta[i]?.id}
+                          aria-label="Excluir usuário"
+                          title="Excluir usuário"
+                          onClick={() => {
+                            const user = rowMeta[i];
+                            if (!user?.id) return;
+                            setSuccessMessage(null);
+                            // O nome vem da primeira coluna da aba Usuários.
+                            const nome = cellText(row[0] ?? "");
+                            setUserToDelete({ id: user.id, label: nome });
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
+                        </Button>
                       </td>
                     ) : null}
                     {row.map((cell, j) => {
@@ -330,6 +357,77 @@ export default function DatabasePage() {
           await loadRecords();
         }}
       />
+
+      <Dialog
+        open={!!userToDelete}
+        onOpenChange={(aberto) => {
+          if (!aberto && !deleting) setUserToDelete(null);
+        }}
+      >
+        <DialogContent open={!!userToDelete} title="Excluir usuário">
+          <div className="space-y-4">
+            <p className="text-sm text-ink-soft">
+              Excluir a conta de <strong>{userToDelete?.label}</strong>?
+            </p>
+            <Alert variant="warning">
+              <div className="text-sm space-y-1">
+                <p>
+                  O e-mail, CPF, RG e matrícula voltam a ficar livres, e a
+                  pessoa poderá se cadastrar de novo com os mesmos dados.
+                </p>
+                <p>
+                  Processos, propostas e contratos vinculados continuam
+                  consultáveis. Esta ação não pode ser desfeita.
+                </p>
+              </div>
+            </Alert>
+            {error && <Alert variant="danger">{error}</Alert>}
+            <div className="flex justify-end gap-3 pt-1">
+              <Button
+                type="button"
+                variant="light"
+                disabled={deleting}
+                onClick={() => setUserToDelete(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                disabled={deleting}
+                onClick={async () => {
+                  if (!userToDelete) return;
+                  setDeleting(true);
+                  setError(null);
+                  try {
+                    await deleteUser(userToDelete.id);
+                    setUserToDelete(null);
+                    setSuccessMessage(
+                      "Conta excluída. E-mail e documentos liberados para novo cadastro.",
+                    );
+                    await loadRecords();
+                  } catch (err) {
+                    setError(
+                      (err as { friendlyMessage?: string })?.friendlyMessage ??
+                        "Não foi possível excluir a conta.",
+                    );
+                  } finally {
+                    setDeleting(false);
+                  }
+                }}
+              >
+                {deleting ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Excluindo...
+                  </span>
+                ) : (
+                  "Excluir conta"
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

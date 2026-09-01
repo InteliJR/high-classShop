@@ -363,3 +363,16 @@ function extractConflictValidation(
 
   return candidate as ChangeValidationResult;
 }
+
+/**
+ * Exclui a conta liberando e-mail, CPF, RG e matrícula para novo cadastro.
+ *
+ * A linha do usuário permanece no banco — processos, propostas e contratos
+ * apontam para ela e continuam consultáveis. O que sai é a identidade.
+ */
+export async function deleteUser(
+  id: string,
+): Promise<{ id: string; name: string; message: string }> {
+  const { data } = await api.delete(`admin/database/users/${id}`);
+  return data;
+}
