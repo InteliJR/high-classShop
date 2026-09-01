@@ -27,7 +27,10 @@ import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
 import { EmptyState } from "../../components/patterns/EmptyState";
 import { currencySymbol, formatCurrency } from "../../lib/currency";
-import { getMinimumPresentation } from "../../lib/negotiation-money";
+import {
+  getMinimumPresentation,
+  normalizeMinimumFormError,
+} from "../../lib/negotiation-money";
 
 /**
  * Página de Negociação
@@ -91,6 +94,9 @@ export default function NegotiationPage() {
       if (response.success) {
         setProposals(response.data);
         setProcessInfo(response.process);
+        setFormError((currentError) =>
+          normalizeMinimumFormError(currentError, response.process),
+        );
         setMeta(response.meta);
       } else {
         setError(response.message || "Erro ao carregar propostas");

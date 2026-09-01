@@ -19,3 +19,18 @@ export function getMinimumPresentation(source: MinimumSource): {
     formattedValue: formatCurrency(source.minimum_value, source.currency),
   };
 }
+
+export function normalizeMinimumFormError(
+  error: string | null,
+  source: MinimumSource,
+): string | null {
+  if (
+    error === null ||
+    getMinimumPresentation(source).visible ||
+    !error.startsWith("O valor mínimo permitido é ")
+  ) {
+    return error;
+  }
+
+  return null;
+}

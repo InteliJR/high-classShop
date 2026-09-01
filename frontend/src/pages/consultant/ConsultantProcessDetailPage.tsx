@@ -39,7 +39,10 @@ import { PageHeader } from "../../components/patterns/PageHeader";
 import { StatusBadge } from "../../components/patterns/StatusBadge";
 import { ProposalStatusBadge } from "../../components/patterns/ProposalStatusBadge";
 import { currencySymbol, formatCurrency } from "../../lib/currency";
-import { getMinimumPresentation } from "../../lib/negotiation-money";
+import {
+  getMinimumPresentation,
+  normalizeMinimumFormError,
+} from "../../lib/negotiation-money";
 
 const PRODUCT_LABELS: Record<string, string> = {
   CAR: "Carro",
@@ -135,6 +138,9 @@ export default function ConsultantProcessDetailPage() {
           if (response.success) {
             setProposals(response.data);
             setProcessInfo(response.process);
+            setFormError((currentError) =>
+              normalizeMinimumFormError(currentError, response.process),
+            );
             setMeta(response.meta);
           }
         } catch (err) {
