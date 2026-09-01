@@ -1,3 +1,4 @@
+import TipoComSugestoes from "./TipoComSugestoes";
 import type { UseFormRegister, FieldErrors } from "react-hook-form";
 
 interface CarFieldsProps {
@@ -98,28 +99,20 @@ export default function CarFields({ register, errors }: CarFieldsProps) {
         )}
       </div>
 
-      {/* Tipo/Categoria */}
-      <div className="flex flex-col gap-2">
-        <label htmlFor="tipo_categoria" className="text-sm font-medium text-text-primary">
-          Tipo/Categoria
-        </label>
-        <select
-          id="tipo_categoria"
-          {...register("tipo_categoria")}
-          className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">Selecione a categoria</option>
-          <option value="SUV">SUV</option>
-          <option value="sedan">Sedan</option>
-          <option value="coupe">Coupé</option>
-          <option value="conversivel">Conversível</option>
-          <option value="esportivo">Esportivo</option>
-          <option value="supercarro">Supercarro</option>
-        </select>
-        {errors.tipo_categoria && (
-          <span className="text-sm text-red-500">{errors.tipo_categoria.message as string}</span>
-        )}
-      </div>
+      <TipoComSugestoes
+        id="tipo_categoria"
+        label="Tipo/Categoria"
+        opcoes={[
+          { value: "SUV", label: "SUV" },
+          { value: "sedan", label: "Sedan" },
+          { value: "coupe", label: "Coupé" },
+          { value: "conversivel", label: "Conversível" },
+          { value: "esportivo", label: "Esportivo" },
+          { value: "supercarro", label: "Supercarro" },
+        ]}
+        registro={register("tipo_categoria")}
+        erro={errors.tipo_categoria?.message as string | undefined}
+      />
 
       {/* Descrição */}
       <div className="flex flex-col gap-2 col-span-2">

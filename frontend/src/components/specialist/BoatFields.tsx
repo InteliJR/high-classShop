@@ -1,3 +1,4 @@
+import TipoComSugestoes from "./TipoComSugestoes";
 import type { UseFormRegister, FieldErrors } from "react-hook-form";
 
 interface BoatFieldsProps {
@@ -126,28 +127,20 @@ export default function BoatFields({ register, errors }: BoatFieldsProps) {
         )}
       </div>
 
-      {/* Tipo de Embarcação */}
-      <div className="flex flex-col gap-2">
-        <label htmlFor="tipo_embarcacao" className="text-sm font-medium text-text-primary">
-          Tipo de Embarcação
-        </label>
-        <select
-          id="tipo_embarcacao"
-          {...register("tipo_embarcacao")}
-          className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">Selecione o tipo</option>
-          <option value="iate">Iate</option>
-          <option value="lancha">Lancha</option>
-          <option value="catamara">Catamarã</option>
-          <option value="veleiro">Veleiro</option>
-          <option value="jet_boat">Jet Boat</option>
-          <option value="outro">Outro</option>
-        </select>
-        {errors.tipo_embarcacao && (
-          <span className="text-sm text-red-500">{errors.tipo_embarcacao.message as string}</span>
-        )}
-      </div>
+      <TipoComSugestoes
+        id="tipo_embarcacao"
+        label="Tipo"
+        opcoes={[
+          { value: "iate", label: "Iate" },
+          { value: "lancha", label: "Lancha" },
+          { value: "catamara", label: "Catamarã" },
+          { value: "veleiro", label: "Veleiro" },
+          { value: "jet_boat", label: "Jet Boat" },
+          { value: "outro", label: "Outro" },
+        ]}
+        registro={register("tipo_embarcacao")}
+        erro={errors.tipo_embarcacao?.message as string | undefined}
+      />
 
       {/* Descrição Completa */}
       <div className="flex flex-col gap-2 col-span-2">
