@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, ProductType } from '@prisma/client';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -14,6 +14,7 @@ import {
 import { Boat } from './entity/boat.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { BOAT_COLUMNS } from 'src/shared/constants/product-columns';
+import { assertProductMonetaryFieldsUnlocked } from '../products/product-monetary-lock';
 
 @Injectable()
 export class BoatsService {
@@ -237,7 +238,15 @@ export class BoatsService {
   }
 
   async update(id: string, updateBoatDto: UpdateBoatDto) {
-    await this.findOne(id);
+    const currentProduct = await this.findOne(id);
+    await assertProductMonetaryFieldsUnlocked(this.prismaService, {
+      productType: ProductType.BOAT,
+      productId: id,
+      currentValue: currentProduct.valor,
+      currentCurrency: currentProduct.currency,
+      nextValue: updateBoatDto.valor,
+      nextCurrency: updateBoatDto.currency,
+    });
 
     const { images, ...boatData } = updateBoatDto;
 

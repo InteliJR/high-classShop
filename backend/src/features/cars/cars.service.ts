@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, ProductType } from '@prisma/client';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -14,6 +14,7 @@ import {
 import { Car } from './entity/car.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { CAR_COLUMNS } from 'src/shared/constants/product-columns';
+import { assertProductMonetaryFieldsUnlocked } from '../products/product-monetary-lock';
 
 @Injectable()
 export class CarsService {
@@ -217,7 +218,15 @@ export class CarsService {
   }
 
   async update(id: string, updateCarDto: UpdateCarDto) {
-    await this.findOne(id);
+    const currentProduct = await this.findOne(id);
+    await assertProductMonetaryFieldsUnlocked(this.prismaService, {
+      productType: ProductType.CAR,
+      productId: id,
+      currentValue: currentProduct.valor,
+      currentCurrency: currentProduct.currency,
+      nextValue: updateCarDto.valor,
+      nextCurrency: updateCarDto.currency,
+    });
 
     const { images, ...carData } = updateCarDto;
 

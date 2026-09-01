@@ -10,10 +10,11 @@ import {
   FiltersAircraftMeta,
   RangeAircraftFilters,
 } from 'src/shared/dto/filters.dto';
-import { Prisma } from '@prisma/client';
+import { Prisma, ProductType } from '@prisma/client';
 import { Aircraft } from './entity/aircraft.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { AIRCRAFT_COLUMNS } from 'src/shared/constants/product-columns';
+import { assertProductMonetaryFieldsUnlocked } from '../products/product-monetary-lock';
 
 @Injectable()
 export class AircraftsService {
@@ -264,7 +265,15 @@ export class AircraftsService {
   // }
 
   async update(id: string, updateAircraftDto: UpdateAircraftDto) {
-    await this.findOne(id);
+    const currentProduct = await this.findOne(id);
+    await assertProductMonetaryFieldsUnlocked(this.prismaService, {
+      productType: ProductType.AIRCRAFT,
+      productId: id,
+      currentValue: currentProduct.valor,
+      currentCurrency: currentProduct.currency,
+      nextValue: updateAircraftDto.valor,
+      nextCurrency: updateAircraftDto.currency,
+    });
 
     const { specialist_id, images, ...aircraftData } = updateAircraftDto;
     const payload: Prisma.AircraftUncheckedUpdateInput = {};
