@@ -38,6 +38,17 @@ export type Column = {
   wide?: boolean;
   /** get() devolve uma key do S3 que vira URL assinada. */
   image?: true;
+  /**
+   * Como interpretar a key devolvida por get().
+   *
+   * 'company-logo' (padrão) aplica a heurística de prefixo `companies/`:
+   * logos legados, gravados em base64 sem path, viram célula vazia.
+   *
+   * 's3-key' assina a key direto. É o caso das imagens de produto, cujo
+   * campo `image_url` guarda a key (o nome engana) e é assinado do mesmo
+   * jeito nos endpoints públicos de catálogo.
+   */
+  imageSource?: 'company-logo' | 's3-key';
   /** Texto alternativo da imagem. Obrigatório quando image. */
   alt?: (row: any) => string;
 };
@@ -66,6 +77,25 @@ const produto = (r: any) => {
   const p = r.car ?? r.boat ?? r.aircraft;
   return p ? `${p.marca ?? ''} ${p.modelo ?? ''}`.trim() : undefined;
 };
+
+/** Projeção da imagem de capa de um produto.
+ *
+ * `orderBy` resolve a preferência no banco: is_primary desc traz a principal
+ * primeiro e, quando nenhuma está marcada, created_at asc devolve a mais
+ * antiga — a "primeira disponível". `take: 1` evita arrastar a galeria
+ * inteira só para mostrar uma miniatura.
+ *
+ * Apesar do nome, `image_url` guarda a key do S3, e é assim que os endpoints
+ * de catálogo a tratam.
+ */
+const imagemDeCapa = {
+  select: { image_url: true },
+  orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
+  take: 1,
+} as const;
+
+/** Key da imagem de capa, ou undefined para o guarda de vazio. */
+const capa = (r: any) => r.images?.[0]?.image_url ?? undefined;
 
 /** Identifica um processo por gente e coisa, não por UUID:
  *  "João Silva — Ferrari F8 Tributo". Sem produto (consultoria), só o cliente. */
@@ -135,8 +165,16 @@ export const ENTITIES: Record<string, EntityConfig> = {
       tipo_categoria: true, cor: true, km: true, cambio: true,
       combustivel: true, identificador: true, is_active: true, created_at: true,
       specialist: { select: { name: true, surname: true } },
+      images: imagemDeCapa,
     },
     columns: [
+      {
+        label: 'Imagem',
+        get: capa,
+        image: true,
+        imageSource: 's3-key',
+        alt: (r) => `Foto de ${[r.marca, r.modelo].filter(Boolean).join(' ') || 'produto'}`,
+      },
       { label: 'Marca', get: (r) => r.marca },
       { label: 'Modelo', get: (r) => r.modelo },
       { label: 'Ano', get: (r) => r.ano },
@@ -163,8 +201,16 @@ export const ENTITIES: Record<string, EntityConfig> = {
       motor: true, ano_motor: true, combustivel: true, identificador: true,
       is_active: true, created_at: true,
       specialist: { select: { name: true, surname: true } },
+      images: imagemDeCapa,
     },
     columns: [
+      {
+        label: 'Imagem',
+        get: capa,
+        image: true,
+        imageSource: 's3-key',
+        alt: (r) => `Foto de ${[r.marca, r.modelo].filter(Boolean).join(' ') || 'produto'}`,
+      },
       { label: 'Marca', get: (r) => r.marca },
       { label: 'Modelo', get: (r) => r.modelo },
       { label: 'Ano', get: (r) => r.ano },
@@ -192,8 +238,16 @@ export const ENTITIES: Record<string, EntityConfig> = {
       tipo_aeronave: true, categoria: true, assentos: true,
       identificador: true, is_active: true, created_at: true,
       specialist: { select: { name: true, surname: true } },
+      images: imagemDeCapa,
     },
     columns: [
+      {
+        label: 'Imagem',
+        get: capa,
+        image: true,
+        imageSource: 's3-key',
+        alt: (r) => `Foto de ${[r.marca, r.modelo].filter(Boolean).join(' ') || 'produto'}`,
+      },
       { label: 'Marca', get: (r) => r.marca },
       { label: 'Modelo', get: (r) => r.modelo },
       { label: 'Ano', get: (r) => r.ano },

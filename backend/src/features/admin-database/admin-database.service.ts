@@ -109,10 +109,16 @@ export class AdminDatabaseService {
         const raw = col.get(row);
 
         if (col.image) {
-          const key = typeof raw === 'string' ? raw : null;
+          const key = typeof raw === 'string' && raw ? raw : null;
           let url: string | null = null;
           try {
-            url = await resolveCompanyLogoUrl(this.s3, key);
+            // Imagem de produto guarda a key crua; logo de empresa passa pela
+            // heurística de prefixo, que descarta os logos legados em base64.
+            if (col.imageSource === 's3-key') {
+              url = key ? await this.s3.getSignedUrl(key) : null;
+            } else {
+              url = await resolveCompanyLogoUrl(this.s3, key);
+            }
           } catch {
             // célula feia (sem logo) é infinitamente melhor que uma página de 500.
           }
