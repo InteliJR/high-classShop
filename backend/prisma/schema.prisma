@@ -857,6 +857,8 @@ model Process {
   active_contract_id String?       @unique @db.Uuid
   status             ProcessStatus @default(SCHEDULING)
   notes              String?
+  negotiation_currency      ProductCurrency?
+  negotiation_product_value Decimal?         @db.Decimal(15, 2)
   created_at         DateTime      @default(now())
   updated_at         DateTime      @updatedAt
 
