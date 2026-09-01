@@ -14,7 +14,9 @@ export interface SaleCommission {
   officeName: string | null;
   officeValue: number; // 0 quando não há escritório
   platformValue: number;
-  restante: number; // parte da comissão após o especialista (escritório + plataforma)
+  // Mantido no contrato da API para consumidores existentes; não é a base da
+  // taxa do escritório, que agora incide sobre a comissão total.
+  restante: number;
   signedAt: Date | null;
 }
 

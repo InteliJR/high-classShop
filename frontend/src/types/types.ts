@@ -1,15 +1,19 @@
 // Substituto do tipo ENUM nos postgres
 // Carro
 export type estadoValues = 'novo'| 'seminovo'| 'colecao';
-export type tipoCategoriaCarValues = 'SUV'| 'sedan'| 'coupe'| 'conversivel'| 'esportivo'| 'supercarro';
+// Tipo/classificação específica é texto livre: existem produtos fora das
+// classificações previstas, e travar a união rejeitaria em tempo de
+// compilação um valor que o banco e a API aceitam. Os valores abaixo seguem
+// como sugestão nos formulários (ver TipoComSugestoes), não como limite.
+export type tipoCategoriaCarValues = string;
 export type cambioCarValues = 'manual'| 'automatico'| 'cvt';
 export type combustivelCarValues = 'gasolina'| 'alcool'| 'flex'| 'diesel'| 'eletrico'| 'hibrido';
 // Barco
 export type combustivelBoatsValues = 'diesel'| 'gasolina'| 'eletrico'| 'hibrido';
-export type tipoEmbarcacaoBoatsValues = 'iate'| 'lancha'| 'catamara'| 'veleiro'| 'jet_boat'| 'outro';
+export type tipoEmbarcacaoBoatsValues = string;
 export type tamanhoBoatsValues = 'ate_30_pes'|'30_50_pes'|'acima_50_pes';
 // Aeronave
-export type tipoAeronaveValues = 'VLJ'| 'executivo_medio'| 'intercontinental'| 'turbohelice'| 'helicoptero'
+export type tipoAeronaveValues = string
 
 // Filtros
 // Carro

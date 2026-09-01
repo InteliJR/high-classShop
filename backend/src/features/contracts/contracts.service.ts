@@ -307,9 +307,9 @@ export class ContractsService {
       `Prefill data loaded successfully for process ${processId}`,
     );
 
-    // No modelo aninhado, os valores dependem da comissão total que o
-    // especialista ainda vai digitar no formulário. As taxas agora são fatias
-    // (do bolo/restante), não % da venda — então o prefill não sugere valores.
+    // Os valores dependem da comissão total que o especialista ainda vai
+    // digitar no formulário. As taxas são fatias do bolo, não % da venda —
+    // então o prefill não sugere valores.
     const platformValue = 0;
     const officeValue = 0;
     const specialistValue = 0;
@@ -493,7 +493,7 @@ export class ContractsService {
    *
    * Único valor editável é `totalCommissionRate` (comissão total da venda, em %).
    * A comissão total vira o bolo; o especialista recebe a sua fatia dele. A
-   * taxa cadastrada do escritório incide apenas sobre o restante e a
+   * taxa cadastrada do escritório incide sobre a própria comissão total, e a
    * plataforma recebe o resíduo. Nenhum valor de repartição recebido do
    * cliente é aceito.
    *
@@ -528,9 +528,8 @@ export class ContractsService {
     }
 
     const platformCompany = await this.platformCompanyService.findOne();
-    // No modelo aninhado: specialistRate = fatia do especialista sobre o BOLO;
-    // officeRate = fatia do escritório sobre o RESTANTE (reinterpretação dos
-    // cadastros). A plataforma é derivada (o que sobra do restante).
+    // specialistRate e officeRate são fatias independentes do BOLO. A
+    // plataforma é derivada do saldo após as duas fatias.
     const { officeRate, specialistRate: specialistShareRate } =
       await this.calculateCommissionSplit(
         process.specialist,
@@ -566,7 +565,13 @@ export class ContractsService {
       );
     }
 
-    // Split aninhado — ver commission-split.ts. Soma exata por construção.
+    if (specialistShareRate + officeRate > 100) {
+      throw new BadRequestException(
+        'A soma das taxas do especialista e do escritório não pode ultrapassar 100% da comissão total.',
+      );
+    }
+
+    // Split sobre a comissão total — ver commission-split.ts. Soma exata por construção.
     const split = computeNestedCommissionSplit({
       proposalValue,
       totalCommissionRate,

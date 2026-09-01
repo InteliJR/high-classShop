@@ -1,3 +1,4 @@
+import TipoComSugestoes from "./TipoComSugestoes";
 import type { UseFormRegister, FieldErrors } from "react-hook-form";
 
 interface AircraftFieldsProps {
@@ -8,26 +9,18 @@ interface AircraftFieldsProps {
 export default function AircraftFields({ register, errors }: AircraftFieldsProps) {
   return (
     <>
-      {/* Categoria */}
-      <div className="flex flex-col gap-2">
-        <label htmlFor="categoria" className="text-sm font-medium text-text-primary">
-          Categoria
-        </label>
-        <select
-          id="categoria"
-          {...register("categoria")}
-          className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">Selecione a categoria</option>
-          <option value="Executivo">Executivo</option>
-          <option value="Particular">Particular</option>
-          <option value="Comercial">Comercial</option>
-          <option value="Utilitário">Utilitário</option>
-        </select>
-        {errors.categoria && (
-          <span className="text-sm text-red-500">{errors.categoria.message as string}</span>
-        )}
-      </div>
+      <TipoComSugestoes
+        id="categoria"
+        label="Categoria"
+        opcoes={[
+          { value: "Executivo", label: "Executivo" },
+          { value: "Particular", label: "Particular" },
+          { value: "Comercial", label: "Comercial" },
+          { value: "Utilitário", label: "Utilitário" },
+        ]}
+        registro={register("categoria")}
+        erro={errors.categoria?.message as string | undefined}
+      />
 
       {/* Assentos */}
       <div className="flex flex-col gap-2">
@@ -48,27 +41,19 @@ export default function AircraftFields({ register, errors }: AircraftFieldsProps
         )}
       </div>
 
-      {/* Tipo de Aeronave */}
-      <div className="flex flex-col gap-2">
-        <label htmlFor="tipo_aeronave" className="text-sm font-medium text-text-primary">
-          Tipo de Aeronave
-        </label>
-        <select
-          id="tipo_aeronave"
-          {...register("tipo_aeronave")}
-          className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">Selecione o tipo</option>
-          <option value="VLJ">VLJ (Very Light Jet)</option>
-          <option value="executivo_medio">Executivo Médio</option>
-          <option value="intercontinental">Intercontinental</option>
-          <option value="turbohelice">Turboélice</option>
-          <option value="helicoptero">Helicóptero</option>
-        </select>
-        {errors.tipo_aeronave && (
-          <span className="text-sm text-red-500">{errors.tipo_aeronave.message as string}</span>
-        )}
-      </div>
+      <TipoComSugestoes
+        id="tipo_aeronave"
+        label="Tipo de Aeronave"
+        opcoes={[
+          { value: "VLJ", label: "VLJ (Very Light Jet)" },
+          { value: "executivo_medio", label: "Executivo Médio" },
+          { value: "intercontinental", label: "Intercontinental" },
+          { value: "turbohelice", label: "Turboélice" },
+          { value: "helicoptero", label: "Helicóptero" },
+        ]}
+        registro={register("tipo_aeronave")}
+        erro={errors.tipo_aeronave?.message as string | undefined}
+      />
 
       {/* Descrição */}
       <div className="flex flex-col gap-2 col-span-2">

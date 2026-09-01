@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getCommissionPreview } from "./contract-commission";
 
 describe("getCommissionPreview", () => {
-  it("mostra o total da venda e o repasse do especialista pelo split aninhado", () => {
+  it("mostra o total da venda e o repasse do especialista pelo split", () => {
     const preview = getCommissionPreview({
       saleValue: 100_000,
       totalCommissionRate: 10,

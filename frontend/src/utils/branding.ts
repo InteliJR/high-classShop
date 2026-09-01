@@ -9,6 +9,13 @@ export function getUserCompany(user: UserProps | null): CompanyBranding | null {
   return user?.company ?? user?.consultant?.company ?? null;
 }
 
+export function getActiveCompany(
+  user: UserProps | null,
+  whitelabelCompany: CompanyBranding | null,
+): CompanyBranding | null {
+  return getUserCompany(user) ?? whitelabelCompany;
+}
+
 export function getBrandColors(company: CompanyBranding | null) {
   const primary =
     company?.primary_color ?? company?.color_identity?.[0] ?? DEFAULT_BRAND_PRIMARY;

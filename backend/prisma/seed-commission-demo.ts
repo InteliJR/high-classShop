@@ -147,11 +147,11 @@ async function createSale(params: {
 async function main() {
   const passwordHash = bcrypt.hashSync(DEMO_PASSWORD, 10);
 
-  // Escritório DEMO (fica com 40% do restante)
+  // Escritório DEMO (fica com 20% da comissão total)
   const company = await prisma.company.upsert({
     where: { cnpj: COMPANY_CNPJ },
-    update: { commission_rate: 40 },
-    create: { name: 'DEMO — Escritório Genius', cnpj: COMPANY_CNPJ, commission_rate: 40 },
+    update: { commission_rate: 20 },
+    create: { name: 'DEMO — Escritório Genius', cnpj: COMPANY_CNPJ, commission_rate: 20 },
   });
 
   const client = await upsertUser({
@@ -187,7 +187,7 @@ async function main() {
 
   const s1 = await createSale({
     client, specialist: { id: carlos.id, name: `${carlos.name} ${carlos.surname}`, cpf: carlos.cpf!, commission_rate: 70 },
-    company: { name: company.name, cnpj: company.cnpj, commission_rate: 40 },
+    company: { name: company.name, cnpj: company.cnpj, commission_rate: 20 },
     productType: 'CAR', productId: car.id, saleValue: 100_000, totalCommissionRate: 10,
   });
   const s2 = await createSale({

@@ -1,14 +1,18 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
   Post,
   Query,
+  Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { Roles } from 'src/shared/decorators/roles.decorator';
+import { UserEntity } from 'src/auth/entities/user.entity';
 import { AdminDatabaseService } from './admin-database.service';
 import { AdminUserManagementService } from './admin-user-management.service';
 import { ChangeRoleDto } from './dto/change-role.dto';
@@ -37,6 +41,21 @@ export class AdminDatabaseController {
     @Query('pageSize') pageSize = '20',
   ) {
     return this.service.list(entity, Number(page) || 1, Number(pageSize) || 20);
+  }
+
+  /**
+   * DELETE /api/admin/database/users/:id
+   * Exclui a conta liberando e-mail, CPF, RG e matrícula para novo cadastro.
+   * Processos, propostas e contratos vinculados continuam consultáveis.
+   */
+  @Delete('users/:id')
+  @Roles(UserRole.ADMIN)
+  deleteUser(@Param('id') id: string, @Req() req: { user?: UserEntity }) {
+    const actor = req.user;
+    if (!actor) {
+      throw new UnauthorizedException('Usuário autenticado não identificado');
+    }
+    return this.management.deleteUser(id, actor.id);
   }
 
   @Post('users/:id/role-change/validate')

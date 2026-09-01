@@ -13,7 +13,8 @@ export type SaleCommission = {
   officeName: string | null;
   officeValue: number; // 0 quando não há escritório
   platformValue: number;
-  restante: number; // escritório + plataforma
+  /** Mantido para compatibilidade; não é a base da taxa do escritório. */
+  restante: number;
   signedAt: string | null;
 };
 

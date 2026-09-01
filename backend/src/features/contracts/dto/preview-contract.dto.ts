@@ -170,8 +170,8 @@ export class PreviewContractDto {
 
   // === COMISSÃO TOTAL DA VENDA ===
   // Único valor de comissão editável pelo especialista. O backend usa este
-  // valor como o bolo: aplica a fatia do especialista, aplica a do escritório
-  // sobre o restante e destina o resíduo à plataforma.
+  // valor como o bolo: aplica as fatias do especialista e do escritório sobre
+  // ele e destina o resíduo à plataforma.
   @IsNumber({}, { message: 'total_commission_rate deve ser um número' })
   @IsNotEmpty({ message: 'total_commission_rate é obrigatório' })
   @Min(0, { message: 'total_commission_rate deve ser maior ou igual a zero' })

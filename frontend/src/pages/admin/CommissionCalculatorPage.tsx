@@ -105,6 +105,10 @@ export default function CommissionCalculatorPage() {
     [calculationInput],
   );
 
+  const sharesExceedTotal =
+    calculationInput.specialistShareRate + calculationInput.officeShareRate >
+    100;
+
   return (
     <div className="w-full">
       <PageHeader title="Calculadora de comissões" />
@@ -282,7 +286,7 @@ export default function CommissionCalculatorPage() {
                   htmlFor="calculator-office-share-rate"
                   className={labelClass}
                 >
-                  Fatia do escritório sobre o restante (%)
+                  Fatia do escritório sobre a comissão total (%)
                 </label>
                 <Input
                   id="calculator-office-share-rate"
@@ -301,10 +305,17 @@ export default function CommissionCalculatorPage() {
         <div className="lg:sticky lg:top-6 h-fit">
           <Card>
             <h2 className="text-lg font-semibold text-ink mb-4">Resultado</h2>
-            <CommissionSplitResult
-              saleValue={calculationInput.saleValue}
-              split={split}
-            />
+            {sharesExceedTotal ? (
+              <p className="text-sm text-red-600">
+                As fatias do especialista e do escritório não podem ultrapassar
+                100% da comissão total.
+              </p>
+            ) : (
+              <CommissionSplitResult
+                saleValue={calculationInput.saleValue}
+                split={split}
+              />
+            )}
           </Card>
         </div>
       </div>

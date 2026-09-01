@@ -9,7 +9,7 @@ export interface NestedCommissionInput {
   totalCommissionRate: number;
   /** Fatia do especialista SOBRE O BOLO, 0–100. */
   specialistShareRate: number;
-  /** Fatia do escritório SOBRE O RESTANTE, 0–100; 0 quando não há escritório. */
+  /** Fatia do escritório SOBRE A COMISSÃO TOTAL, 0–100; 0 quando não há escritório. */
   officeShareRate: number;
 }
 
@@ -23,21 +23,19 @@ export interface NestedCommissionSplit {
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /**
- * Split aninhado da comissão:
+ * Split da comissão total:
  *   bolo         = venda × total%
  *   especialista = bolo × fatiaEspecialista%
- *   restante     = bolo − especialista
- *   escritório   = restante × fatiaEscritório%
- *   plataforma   = restante − escritório   (resíduo)
+ *   escritório   = bolo × fatiaEscritório%
+ *   plataforma   = bolo − especialista − escritório (resíduo)
  */
 export function computeNestedCommissionSplit(
   input: NestedCommissionInput,
 ): NestedCommissionSplit {
   const bolo = round2((input.proposalValue * input.totalCommissionRate) / 100);
   const specialistValue = round2((bolo * input.specialistShareRate) / 100);
-  const restante = round2(bolo - specialistValue);
-  const officeValue = round2((restante * input.officeShareRate) / 100);
-  const platformValue = round2(restante - officeValue);
+  const officeValue = round2((bolo * input.officeShareRate) / 100);
+  const platformValue = round2(bolo - specialistValue - officeValue);
   return { bolo, specialistValue, officeValue, platformValue };
 }
 

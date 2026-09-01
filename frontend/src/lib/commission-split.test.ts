@@ -2,20 +2,20 @@ import { describe, it, expect } from "vitest";
 import { computeNestedCommissionSplit, effectiveRate } from "./commission-split";
 
 describe("computeNestedCommissionSplit", () => {
-  it("divide bolo em especialista / escritório / plataforma (aninhado)", () => {
+  it("calcula as fatias de especialista e escritório sobre a comissão total", () => {
     const r = computeNestedCommissionSplit({
       proposalValue: 100_000,
       totalCommissionRate: 10, // bolo = 10.000
       specialistShareRate: 70, // 70% do bolo
-      officeShareRate: 40, // 40% do restante
+      officeShareRate: 20, // 20% do bolo
     });
     expect(r.bolo).toBe(10_000);
     expect(r.specialistValue).toBe(7_000);
-    expect(r.officeValue).toBe(1_200); // 40% de 3.000
-    expect(r.platformValue).toBe(1_800); // resto do restante
+    expect(r.officeValue).toBe(2_000); // 20% de 10.000
+    expect(r.platformValue).toBe(1_000); // saldo do bolo
   });
 
-  it("sem escritório: restante inteiro vai pra plataforma", () => {
+  it("sem escritório: o saldo inteiro vai pra plataforma", () => {
     const r = computeNestedCommissionSplit({
       proposalValue: 100_000,
       totalCommissionRate: 10,
@@ -31,7 +31,7 @@ describe("computeNestedCommissionSplit", () => {
       proposalValue: 99_999.99,
       totalCommissionRate: 7.33,
       specialistShareRate: 63.5,
-      officeShareRate: 41.7,
+      officeShareRate: 31.7,
     });
     expect(
       Math.round((r.specialistValue + r.officeValue + r.platformValue) * 100),
@@ -57,7 +57,7 @@ describe("computeNestedCommissionSplit", () => {
       proposalValue: 50_000,
       totalCommissionRate: 8,
       specialistShareRate: 100,
-      officeShareRate: 50,
+      officeShareRate: 0,
     });
     expect(r.specialistValue).toBe(r.bolo);
     expect(r.officeValue).toBe(0);
@@ -68,7 +68,7 @@ describe("computeNestedCommissionSplit", () => {
 describe("effectiveRate", () => {
   it("calcula a taxa efetiva sobre a venda", () => {
     expect(effectiveRate(7_000, 100_000)).toBe(7);
-    expect(effectiveRate(1_200, 100_000)).toBe(1.2);
+    expect(effectiveRate(2_000, 100_000)).toBe(2);
   });
 
   it("retorna 0 quando a venda é 0", () => {

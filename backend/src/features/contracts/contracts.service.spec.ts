@@ -35,7 +35,58 @@ function mkSvc(prisma: any, platformCompanyService: any) {
 }
 
 describe('ContractsService — resolveCommissionFromTotal', () => {
-  it('aplica o escritório sobre o restante da fatia do especialista', async () => {
+  it('aplica o escritório sobre a comissão total', async () => {
+    const prisma = mkPrisma();
+    prisma.process.findUnique.mockResolvedValue({
+      specialist: { id: 's1', commission_rate: 70, company_id: null },
+      client: { consultant: { company_id: 'c1' }, company_id: null },
+      car: { valor: 100000 },
+      boat: null,
+      aircraft: null,
+      accepted_proposal: null,
+    });
+    prisma.company.findUnique.mockResolvedValue({
+      name: 'Escritório X',
+      cnpj: '11222333000181',
+      bank: null,
+      agency: null,
+      checking_account: null,
+      commission_rate: 20,
+    });
+    const svc = mkSvc(prisma, mkPlatformCompanyService(10));
+
+    const result = await (svc as any).resolveCommissionFromTotal('p1', 10);
+
+    // Produto 100.000 × 10% = bolo 10.000.
+    // Especialista recebe 70% do bolo (7.000); escritório recebe 20% dele
+    // (2.000), e a plataforma recebe o saldo (1.000).
+    expect(result.specialistValue).toBe(7000);
+    expect(result.officeValue).toBe(2000);
+    expect(result.platformValue).toBe(1000);
+    expect(result.specialistRate).toBe(7);
+    expect(result.officeRate).toBe(2);
+    expect(result.platformRate).toBe(1);
+  });
+
+  it('sem escritório, destina todo o saldo à plataforma', async () => {
+    const prisma = mkPrisma();
+    prisma.process.findUnique.mockResolvedValue({
+      specialist: { id: 's1', commission_rate: 70, company_id: null },
+      car: { valor: 100000 },
+      boat: null,
+      aircraft: null,
+      accepted_proposal: null,
+    });
+    const svc = mkSvc(prisma, mkPlatformCompanyService(10));
+
+    const result = await (svc as any).resolveCommissionFromTotal('p1', 10);
+
+    expect(result.specialistValue).toBe(7000);
+    expect(result.officeValue).toBe(0);
+    expect(result.platformValue).toBe(3000);
+  });
+
+  it('rejeita taxas de especialista e escritório que ultrapassam a comissão total', async () => {
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue({
       specialist: { id: 's1', commission_rate: 70, company_id: null },
@@ -55,35 +106,11 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
     });
     const svc = mkSvc(prisma, mkPlatformCompanyService(10));
 
-    const result = await (svc as any).resolveCommissionFromTotal('p1', 10);
-
-    // Produto 100.000 × 10% = bolo 10.000.
-    // Especialista recebe 70% do bolo (7.000); escritório recebe 40% do
-    // restante (3.000), e a plataforma recebe o resíduo (1.800).
-    expect(result.specialistValue).toBe(7000);
-    expect(result.officeValue).toBe(1200);
-    expect(result.platformValue).toBe(1800);
-    expect(result.specialistRate).toBe(7);
-    expect(result.officeRate).toBe(1.2);
-    expect(result.platformRate).toBe(1.8);
-  });
-
-  it('sem escritório, destina todo o restante à plataforma', async () => {
-    const prisma = mkPrisma();
-    prisma.process.findUnique.mockResolvedValue({
-      specialist: { id: 's1', commission_rate: 70, company_id: null },
-      car: { valor: 100000 },
-      boat: null,
-      aircraft: null,
-      accepted_proposal: null,
-    });
-    const svc = mkSvc(prisma, mkPlatformCompanyService(10));
-
-    const result = await (svc as any).resolveCommissionFromTotal('p1', 10);
-
-    expect(result.specialistValue).toBe(7000);
-    expect(result.officeValue).toBe(0);
-    expect(result.platformValue).toBe(3000);
+    await expect(
+      (svc as any).resolveCommissionFromTotal('p1', 10),
+    ).rejects.toThrow(
+      'A soma das taxas do especialista e do escritório não pode ultrapassar 100% da comissão total.',
+    );
   });
 
   it('não usa a taxa configurada da plataforma como corte direto do produto', async () => {
@@ -109,10 +136,10 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
 
     const result = await (svc as any).resolveCommissionFromTotal('p1', 10);
 
-    // A plataforma é o resíduo: 10.000 − 5.000 − 25% de 5.000 = 3.750.
+    // A plataforma é o resíduo: 10.000 − 5.000 − 25% de 10.000 = 2.500.
     expect(result.specialistValue).toBe(5000);
-    expect(result.officeValue).toBe(1250);
-    expect(result.platformValue).toBe(3750);
+    expect(result.officeValue).toBe(2500);
+    expect(result.platformValue).toBe(2500);
   });
 
   it('aceita comissão total menor que taxas legadas de plataforma/escritório', async () => {
@@ -142,8 +169,8 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
   });
 
   it('valor de proposta gera resto fracionário: soma exata (sem drift de centavos)', async () => {
-    // proposalValue=333.33; bolo=100.00. O especialista recebe 10% do bolo
-    // e o escritório 30% do restante, com a plataforma absorvendo o centavo.
+    // proposalValue=333.33; bolo=100.00. O especialista recebe 10% e o
+    // escritório 30% do bolo, com a plataforma absorvendo o resíduo.
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue({
       specialist: { id: 's1', commission_rate: 10, company_id: null },
@@ -166,8 +193,8 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
     const result = await (svc as any).resolveCommissionFromTotal('p1', 30);
 
     expect(result.specialistValue).toBe(10);
-    expect(result.officeValue).toBe(27);
-    expect(result.platformValue).toBe(63);
+    expect(result.officeValue).toBe(30);
+    expect(result.platformValue).toBe(60);
     expect(
       result.platformValue + result.officeValue + result.specialistValue,
     ).toBe(100);
@@ -241,11 +268,11 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
 
     const result = await (svc as any).resolveCommissionFromTotal('p1', 20);
 
-    // officeRate aqui é a taxa EFETIVA sobre a venda (modelo aninhado):
-    // bolo = 100000 * 20% = 20000; restante = 10000 (especialista recebe 50%);
-    // officeValue = 10000 * 8% = 800 → efetivo = 800/100000*100 = 0.8.
+    // officeRate aqui é a taxa EFETIVA sobre a venda:
+    // bolo = 100000 * 20% = 20000; officeValue = 20000 * 8% = 1600
+    // → efetivo = 1600/100000*100 = 1.6.
     // O que importa pro fallback é: office != 0 e a company certa foi buscada.
-    expect(result.officeRate).toBe(0.8);
+    expect(result.officeRate).toBe(1.6);
     expect(prisma.company.findUnique).toHaveBeenCalledWith({
       where: { id: 'c1' },
     });

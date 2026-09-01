@@ -13,6 +13,8 @@ export function getRoleBasedRoute(role: UserRole): string {
       return '/specialist/dashboard';
     case 'CUSTOMER':
       return '/customer/home';
+    case 'OFFICE':
+      return '/office/dashboard';
     default:
       return '/customer/home';
   }
