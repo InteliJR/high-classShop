@@ -14,6 +14,7 @@ import {
 import { ProposalStatus, ProcessStatus } from '@prisma/client';
 import { SettingsService } from 'src/features/settings/settings.service';
 import { NotificationService } from 'src/features/notifications/notification.service';
+import { requireNegotiationSnapshot } from 'src/features/processes/negotiation-snapshot';
 
 /**
  * ProposalsService
@@ -37,9 +38,6 @@ import { NotificationService } from 'src/features/notifications/notification.ser
 @Injectable()
 export class ProposalsService {
   private readonly logger = new Logger(ProposalsService.name);
-
-  // Porcentagem mínima padrão (usado como fallback)
-  private readonly DEFAULT_MINIMUM_PERCENTAGE = 0.8; // 80%
 
   constructor(
     private prisma: PrismaService,
@@ -88,9 +86,15 @@ export class ProposalsService {
             role: true,
           },
         },
-        car: { select: { id: true, valor: true, currency: true, is_active: true } },
-        boat: { select: { id: true, valor: true, currency: true, is_active: true } },
-        aircraft: { select: { id: true, valor: true, currency: true, is_active: true } },
+        car: {
+          select: { id: true, is_active: true },
+        },
+        boat: {
+          select: { id: true, is_active: true },
+        },
+        aircraft: {
+          select: { id: true, is_active: true },
+        },
         proposals: {
           orderBy: { created_at: 'desc' },
           take: 1,
@@ -197,35 +201,36 @@ export class ProposalsService {
       });
     }
 
-    const productValue = Number(product.valor);
+    const { currency, productValue: snapshotValue } =
+      requireNegotiationSnapshot(process);
+    const productValue = Number(snapshotValue);
 
     // 6. Validar valor mínimo (se ativado nas configurações)
-    const isMinimumEnabled =
+    const minimumEnabled =
       await this.settingsService.isMinimumProposalEnabled();
+    const minimumPercentage = minimumEnabled
+      ? await this.settingsService.getMinimumProposalPercentage()
+      : null;
+    const minimumValue =
+      minimumPercentage === null ? null : productValue * minimumPercentage;
 
-    if (isMinimumEnabled) {
-      const minimumPercentage =
-        await this.settingsService.getMinimumProposalPercentage();
-      const minimumValue = productValue * minimumPercentage;
-
-      if (dto.proposed_value < minimumValue) {
-        this.logger.warn(
-          `[create] Valor proposto ${dto.proposed_value} abaixo do mínimo ${minimumValue}`,
-        );
-        throw new BadRequestException({
-          success: false,
-          error: {
-            code: 400,
-            message: `Valor proposto deve ser no mínimo ${Math.round(minimumPercentage * 100)}% do valor do produto`,
-            details: {
-              proposed_value: dto.proposed_value,
-              minimum_value: minimumValue,
-              product_value: productValue,
-              minimum_percentage: `${Math.round(minimumPercentage * 100)}%`,
-            },
+    if (minimumValue !== null && dto.proposed_value < minimumValue) {
+      this.logger.warn(
+        `[create] Valor proposto ${dto.proposed_value} abaixo do mínimo ${minimumValue}`,
+      );
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message: `Valor proposto deve ser no mínimo ${Math.round(minimumPercentage! * 100)}% do valor do produto`,
+          details: {
+            proposed_value: dto.proposed_value,
+            minimum_value: minimumValue,
+            product_value: productValue,
+            minimum_percentage: `${Math.round(minimumPercentage! * 100)}%`,
           },
-        });
-      }
+        },
+      });
     }
 
     // 7. Validar counter_to_id se fornecido
@@ -326,6 +331,7 @@ export class ProposalsService {
           proposerName,
           proposedValue: dto.proposed_value,
           originalValue: productValue,
+          currency,
           message: dto.message,
           processId: dto.process_id,
         })
@@ -375,30 +381,18 @@ export class ProposalsService {
         car: {
           select: {
             id: true,
-            valor: true,
-            currency: true,
-            marca: true,
-            modelo: true,
             is_active: true,
           },
         },
         boat: {
           select: {
             id: true,
-            valor: true,
-            currency: true,
-            marca: true,
-            modelo: true,
             is_active: true,
           },
         },
         aircraft: {
           select: {
             id: true,
-            valor: true,
-            currency: true,
-            marca: true,
-            modelo: true,
             is_active: true,
           },
         },
@@ -463,15 +457,18 @@ export class ProposalsService {
       });
     }
 
-    const productValue = product ? Number(product.valor) : 0;
+    const { currency, productValue: snapshotValue } =
+      requireNegotiationSnapshot(process);
+    const productValue = Number(snapshotValue);
 
     // Get minimum value based on settings (async)
-    const isMinimumEnabled =
+    const minimumEnabled =
       await this.settingsService.isMinimumProposalEnabled();
-    const minimumPercentage = isMinimumEnabled
+    const minimumPercentage = minimumEnabled
       ? await this.settingsService.getMinimumProposalPercentage()
-      : 0;
-    const minimumValue = productValue * minimumPercentage;
+      : null;
+    const minimumValue =
+      minimumPercentage === null ? null : productValue * minimumPercentage;
 
     // 4. Determinar quem deve responder
     const lastPendingProposal = process.proposals.find(
@@ -510,7 +507,8 @@ export class ProposalsService {
             ? Boolean((product as any).is_active)
             : undefined,
         product_value: productValue,
-        currency: product.currency,
+        currency,
+        minimum_enabled: minimumEnabled,
         minimum_value: minimumValue,
         client: {
           id: process.client.id,
@@ -561,9 +559,17 @@ export class ProposalsService {
           proposed_to: {
             select: { id: true, email: true, name: true, surname: true },
           },
+          process: {
+            select: {
+              negotiation_currency: true,
+              negotiation_product_value: true,
+            },
+          },
         },
       },
     );
+
+    const { currency } = requireNegotiationSnapshot(proposal.process);
 
     // Atualizar proposta e processo em transação
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -617,6 +623,7 @@ export class ProposalsService {
             proposerName: `${proposer.name} ${proposer.surname || ''}`.trim(),
             recipientName: `${accepter.name} ${accepter.surname || ''}`.trim(),
             acceptedValue: Number(proposal.proposed_value),
+            currency,
             processId: proposal.process_id,
           })
           .catch((err) => {
@@ -712,9 +719,17 @@ export class ProposalsService {
           proposed_to: {
             select: { id: true, email: true, name: true, surname: true },
           },
+          process: {
+            select: {
+              negotiation_currency: true,
+              negotiation_product_value: true,
+            },
+          },
         },
       },
     );
+
+    const { currency } = requireNegotiationSnapshot(proposal.process);
 
     const updated = await this.prisma.negotiationProposal.update({
       where: { id: proposalId },
@@ -745,6 +760,7 @@ export class ProposalsService {
             proposerName: `${proposer.name} ${proposer.surname || ''}`.trim(),
             recipientName: `${rejecter.name} ${rejecter.surname || ''}`.trim(),
             rejectedValue: Number(proposal.proposed_value),
+            currency,
             processId: proposal.process_id,
           })
           .catch((err) => {
@@ -840,6 +856,8 @@ export class ProposalsService {
             car_id: true,
             boat_id: true,
             aircraft_id: true,
+            negotiation_currency: true,
+            negotiation_product_value: true,
             client: { select: { consultant_id: true } },
           },
         },
