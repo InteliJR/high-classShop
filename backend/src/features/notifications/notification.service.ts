@@ -4,6 +4,7 @@ import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { SesService } from 'src/aws/ses.service';
 import { randomUUID } from 'crypto';
 import { validateEmail } from 'src/shared/email-validator';
+import { formatCurrency } from 'src/shared/utils/format.utils';
 import {
   AppointmentConfirmedEmailDto,
   AppointmentCreatedEmailDto,
@@ -518,6 +519,8 @@ Se você não solicitou essa alteração, ignore este email.
       (data.proposedValue / data.originalValue) *
       100
     ).toFixed(1);
+    const proposedValue = formatCurrency(data.proposedValue, data.currency);
+    const originalValue = formatCurrency(data.originalValue, data.currency);
     const subject = `Nova Proposta Recebida | BMF Lux Brokerage`;
 
     const html = `
@@ -535,8 +538,8 @@ Se você não solicitou essa alteração, ignore este email.
             <strong>${data.proposerName}</strong> enviou uma nova proposta de valor.
           </p>
           <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #334155;"><strong>Valor Proposto:</strong> R$ ${data.proposedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-            <p style="margin: 8px 0; color: #334155;"><strong>Valor Original:</strong> R$ ${data.originalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Valor Proposto:</strong> ${proposedValue}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Valor Original:</strong> ${originalValue}</p>
             <p style="margin: 8px 0; color: #334155;"><strong>Percentual:</strong> ${percentageOfOriginal}% do valor original</p>
             ${data.message ? `<p style="margin: 12px 0 8px 0; color: #334155;"><strong>Mensagem:</strong></p><p style="margin: 0; padding: 12px; background-color: #f1f5f9; border-radius: 4px; color: #334155;">${data.message}</p>` : ''}
           </div>
@@ -564,8 +567,8 @@ Olá ${data.recipientName},
 
 ${data.proposerName} enviou uma nova proposta!
 
-Valor Proposto: R$ ${data.proposedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-Valor Original: R$ ${data.originalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+Valor Proposto: ${proposedValue}
+Valor Original: ${originalValue}
 Percentual: ${percentageOfOriginal}% do valor original
 
 ${data.message ? `Mensagem: ${data.message}` : ''}
@@ -1222,6 +1225,7 @@ BMF Lux Brokerage
       return;
     }
 
+    const acceptedValue = formatCurrency(data.acceptedValue, data.currency);
     const subject = `Proposta Aceita | BMF Lux Brokerage`;
 
     const html = `
@@ -1239,7 +1243,7 @@ BMF Lux Brokerage
             Excelente notícia! <strong>${data.recipientName}</strong> aceitou sua proposta!
           </p>
           <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #334155;"><strong>Valor Aceito:</strong> R$ ${data.acceptedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Valor Aceito:</strong> ${acceptedValue}</p>
           </div>
           <p style="font-size: 16px; color: #334155;">
             O próximo passo é a geração e assinatura do contrato. Em breve você receberá os documentos via DocuSign.
@@ -1267,7 +1271,7 @@ Olá ${data.proposerName},
 
 Excelente notícia! ${data.recipientName} aceitou sua proposta!
 
-Valor Aceito: R$ ${data.acceptedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+Valor Aceito: ${acceptedValue}
 
 O próximo passo é a geração e assinatura do contrato. Em breve você receberá os documentos via DocuSign.
 
@@ -1299,6 +1303,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
       return;
     }
 
+    const rejectedValue = formatCurrency(data.rejectedValue, data.currency);
     const subject = `Proposta Não Aceita | BMF Lux Brokerage`;
 
     const html = `
@@ -1314,7 +1319,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
           <p style="font-size: 16px; color: #334155;">Olá <strong>${data.proposerName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
             Informamos que <strong>${data.recipientName}</strong> não aceitou a proposta de 
-            R$ ${data.rejectedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.
+            ${rejectedValue}.
           </p>
           <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
             <p style="margin: 8px 0; color: #334155;">
@@ -1346,7 +1351,7 @@ BMF Lux Brokerage - Proposta Não Aceita
 
 Olá ${data.proposerName},
 
-${data.recipientName} não aceitou a proposta de R$ ${data.rejectedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.
+${data.recipientName} não aceitou a proposta de ${rejectedValue}.
 
 A negociação continua aberta! Você pode enviar uma nova proposta ajustando o valor ou aguardar uma contraproposta.
 

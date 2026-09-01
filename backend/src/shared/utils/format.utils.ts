@@ -1,3 +1,5 @@
+import { ProductCurrency } from '@prisma/client';
+
 /**
  * Utilitários de formatação para dados do contrato
  *
@@ -91,17 +93,30 @@ export function formatRg(value?: string | null): string {
 }
 
 /**
+ * Formata valor monetário de acordo com sua moeda em pt-BR.
+ * @param value - Valor numérico
+ * @param currency - Moeda do valor
+ * @returns Valor formatado na moeda informada
+ */
+export function formatCurrency(
+  value: number | null | undefined,
+  currency: ProductCurrency,
+): string {
+  if (value === null || value === undefined || isNaN(value)) return '';
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency,
+  }).format(value);
+}
+
+/**
  * Formata valor monetário em BRL: R$ #.###.###,##
  * @param value - Valor numérico
  * @returns Valor formatado em reais
  * @example formatBRL(1234567.89) => 'R$ 1.234.567,89'
  */
 export function formatBRL(value?: number | null): string {
-  if (value === null || value === undefined || isNaN(value)) return '';
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
+  return formatCurrency(value, ProductCurrency.BRL);
 }
 
 /**
