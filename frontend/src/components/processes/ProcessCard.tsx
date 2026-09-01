@@ -12,6 +12,8 @@ import {
   XCircle,
   Package,
   Video,
+  Mail,
+  Phone,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -19,6 +21,8 @@ import type { Process } from "../../services/processes.service";
 import type { Product, SpecialityType } from "../../types/types";
 import React from "react";
 import UpdateProcessStatusModal from "./UpdateProcessStatusModal";
+import CopyableContact from "./CopyableContact";
+import { applyPhoneMask } from "../../utils/mask";
 import { getContextualStatusMessage } from "../../utils/processStatusMessages";
 import {
   getProcessCompletionReason,
@@ -109,6 +113,14 @@ export default function ProcessCard({
 
   // Verifica se é um processo de consultoria (sem produto atribuído)
   const isConsultancy = !process.product_type || !process.product_id;
+
+  // Contraparte do processo: quem esta olhando quer o contato do outro lado.
+  // Nao ha fallback entre os dois — se o dado da contraparte nao veio, a
+  // linha simplesmente nao aparece, em vez de mostrar o contato errado.
+  const counterpart = isClientView ? process.specialist : process.client;
+  const counterpartLabel = isClientView ? "especialista" : "cliente";
+  const counterpartEmail = counterpart?.email?.trim() || null;
+  const counterpartPhone = counterpart?.phone?.trim() || null;
   const isAppointmentConfirmed =
     process.appointment_status === "SCHEDULED" ||
     process.appointment_status === "COMPLETED";
@@ -353,6 +365,32 @@ export default function ProcessCard({
               ? "Aguardando produto"
               : product?.modelo || "Produto"}
           </h3>
+          {/* Contatos da contraparte: quem olha o card quer falar com o outro
+              lado. Cliente vê o especialista; especialista e demais papeis
+              veem o cliente. Cada linha so aparece se a API mandou o dado —
+              telefone do especialista, por exemplo, vem null enquanto o
+              agendamento nao esta confirmado. */}
+          {(counterpartEmail || counterpartPhone) && (
+            <div className="mt-1 flex flex-col items-start gap-0.5">
+              {counterpartEmail && (
+                <CopyableContact
+                  icon={<Mail size={12} />}
+                  label={counterpartEmail}
+                  value={counterpartEmail}
+                  description={`e-mail do ${counterpartLabel}`}
+                />
+              )}
+              {counterpartPhone && (
+                <CopyableContact
+                  icon={<Phone size={12} />}
+                  label={applyPhoneMask(counterpartPhone)}
+                  value={counterpartPhone}
+                  description={`telefone do ${counterpartLabel}`}
+                />
+              )}
+            </div>
+          )}
+
           {isConsultancy && (
             <p className="text-xs text-slate-600 mt-1">
               {isClientView

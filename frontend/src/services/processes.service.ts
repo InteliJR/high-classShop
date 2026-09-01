@@ -28,6 +28,9 @@ export interface Process {
     id: string;
     email?: string;
     name?: string;
+    // Opcionais porque nem toda rota de processo devolve contato: hoje só
+    // GET /processes/:id monta telefone, e sob regra de permissão.
+    phone?: string | null;
   };
   product?: {
     id: string;
@@ -41,6 +44,10 @@ export interface Process {
     id: string;
     name?: string;
     especialidade?: string;
+    email?: string;
+    // Backend oculta o telefone do especialista para o cliente enquanto o
+    // agendamento não está confirmado — aqui chega null nesse caso.
+    phone?: string | null;
   };
   // Flag para identificar consultoria (sem produto ainda)
   isConsultancy?: boolean;
