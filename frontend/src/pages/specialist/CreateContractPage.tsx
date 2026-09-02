@@ -513,25 +513,8 @@ export default function CreateContractPage() {
       console.error("Erro ao criar preview:", error);
 
       const backendMessage = extractBackendMessage(error);
-      const lowerMessage = backendMessage.toLowerCase();
 
-      const isEmailConflict =
-        (lowerMessage.includes("vendedor") &&
-          lowerMessage.includes("especialista")) ||
-        lowerMessage.includes("same") ||
-        (error.response?.data?.error?.code === 400 &&
-          error.response?.data?.error?.details?.seller_email != null);
-
-      if (isEmailConflict) {
-        // A regra do backend é vendedor ≠ especialista: o especialista
-        // intermedeia a venda, não é o dono do bem. A mensagem antiga culpava
-        // o comprador, mandando o usuário corrigir o campo errado.
-        setSubmitStatus({
-          type: "error",
-          message:
-            "O e-mail do vendedor não pode ser o mesmo do especialista. O vendedor é o dono do produto — preencha os dados dele, não os seus.",
-        });
-      } else if (
+      if (
         error.response?.status === 409 ||
         error.response?.data?.error === "CONTRACT_ALREADY_EXISTS"
       ) {
