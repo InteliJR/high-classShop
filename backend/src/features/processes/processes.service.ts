@@ -16,12 +16,21 @@ import {
   Product,
 } from './entity/process.response.entity';
 import { QueryDto } from 'src/shared/dto/query.dto';
-import { ProcessStatus, StatusAgendamento, UserRole } from '@prisma/client';
+import {
+  ProcessStatus,
+  ProductType,
+  StatusAgendamento,
+  UserRole,
+} from '@prisma/client';
 import { ProcessesByStatus } from 'src/shared/dto/summary.dto';
 import { UpdateProcessDto } from './dto/update-process.dto';
 import { ProcessWithHistory } from './entity/process-history.response';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { buildNegotiationSnapshotUpdate } from './negotiation-snapshot';
+import {
+  acquireProductMonetaryLock,
+  lockNegotiationProductMoney,
+} from '../products/product-monetary-lock';
 
 /**
  * Quem está pedindo a operação. `companyId` só é usado por OFFICE.
@@ -1104,7 +1113,7 @@ export class ProcessesService {
       const [updatedProcess, updatedStatusHistory] =
         await this.prismaService.$transaction(async (tx) => {
           // Verificar se o processo realmente existe
-          const existingProcess = await tx.process.findUniqueOrThrow({
+          let existingProcess = await tx.process.findUniqueOrThrow({
             where: { id: processId },
             include: {
               client: {
@@ -1138,26 +1147,67 @@ export class ProcessesService {
           if (existingProcess.status === updateProcessDto.status) {
             throw new BadRequestException();
           }
+
+          if (updateProcessDto.status === ProcessStatus.NEGOTIATION) {
+            await lockNegotiationProductMoney(tx, existingProcess);
+            existingProcess = await tx.process.findUniqueOrThrow({
+              where: { id: processId },
+              include: {
+                client: {
+                  select: { email: true, name: true, surname: true },
+                },
+                specialist: {
+                  select: { email: true, name: true, surname: true },
+                },
+                car: true,
+                boat: true,
+                aircraft: true,
+              },
+            });
+            if (existingProcess.status === updateProcessDto.status) {
+              throw new BadRequestException();
+            }
+          }
+
           const snapshotData =
             updateProcessDto.status === ProcessStatus.NEGOTIATION
               ? buildNegotiationSnapshotUpdate(existingProcess)
               : {};
-          const process = await tx.process.update({
+          const nextUpdatedAt = new Date();
+          const claim = await tx.process.updateMany({
             data: {
               status: updateProcessDto.status,
               notes: updateProcessDto.notes,
-              updated_at: new Date(),
+              updated_at: nextUpdatedAt,
               ...snapshotData,
             },
             where: {
               id: processId,
+              status: existingProcess.status,
+              updated_at: existingProcess.updated_at,
             },
+          });
+
+          if (claim.count !== 1) {
+            throw new ConflictException({
+              success: false,
+              error: {
+                code: 'PROCESS_STATUS_TRANSITION_CONFLICT',
+                message:
+                  'O processo foi alterado por outra operação. Recarregue e tente novamente.',
+                details: { process_id: processId },
+              },
+            });
+          }
+
+          const process = await tx.process.findUniqueOrThrow({
+            where: { id: processId },
           });
           await tx.processStatusHistory.create({
             data: {
               processId,
               status: updateProcessDto.status,
-              changed_at: process.updated_at,
+              changed_at: nextUpdatedAt,
             },
           });
           const statusHistory = await tx.processStatusHistory.findMany({
@@ -1311,6 +1361,43 @@ export class ProcessesService {
 
     // 6. Ler produto, validar e atualizar processo atomicamente
     const updatedProcess = await this.prismaService.$transaction(async (tx) => {
+      await acquireProductMonetaryLock(tx, {
+        productType: productType as ProductType,
+        productId: dto.product_id,
+      });
+
+      const processForAssignment = await tx.process.findUniqueOrThrow({
+        where: { id: processId },
+        include: {
+          client: true,
+          specialist: true,
+          car: true,
+          boat: true,
+          aircraft: true,
+        },
+      });
+
+      const assignmentStateChanged =
+        ![ProcessStatus.SCHEDULING, ProcessStatus.NEGOTIATION].includes(
+          processForAssignment.status,
+        ) ||
+        Boolean(
+          processForAssignment.product_type ||
+            processForAssignment.car_id ||
+            processForAssignment.boat_id ||
+            processForAssignment.aircraft_id,
+        );
+      if (assignmentStateChanged) {
+        throw new ConflictException({
+          success: false,
+          error: {
+            code: 409,
+            message: 'O processo foi alterado durante a associação do produto',
+            details: { process_id: processId },
+          },
+        });
+      }
+
       let product: any;
       if (productType === 'CAR') {
         product = await tx.car.findUnique({ where: { id: dto.product_id } });
@@ -1345,7 +1432,7 @@ export class ProcessesService {
         });
       }
 
-      if (product.specialist_id !== process.specialist_id) {
+      if (product.specialist_id !== processForAssignment.specialist_id) {
         throw new ForbiddenException({
           success: false,
           error: {
@@ -1353,13 +1440,13 @@ export class ProcessesService {
             message: 'O produto deve pertencer ao especialista do processo',
             details: {
               product_specialist_id: product.specialist_id,
-              process_specialist_id: process.specialist_id,
+              process_specialist_id: processForAssignment.specialist_id,
             },
           },
         });
       }
 
-      if (!process.appointment_id) {
+      if (!processForAssignment.appointment_id) {
         throw new BadRequestException({
           success: false,
           error: {
@@ -1371,7 +1458,7 @@ export class ProcessesService {
       }
 
       const appointment = await tx.appointment.findUnique({
-        where: { id: process.appointment_id },
+        where: { id: processForAssignment.appointment_id },
       });
       if (!appointment) {
         throw new NotFoundException({
@@ -1379,7 +1466,7 @@ export class ProcessesService {
           error: {
             code: 404,
             message: 'Agendamento não encontrado para este processo',
-            details: { appointment_id: process.appointment_id },
+            details: { appointment_id: processForAssignment.appointment_id },
           },
         });
       }
@@ -1406,14 +1493,15 @@ export class ProcessesService {
 
       const snapshotData = buildNegotiationSnapshotUpdate({
         product_type: productType,
-        negotiation_currency: process.negotiation_currency,
-        negotiation_product_value: process.negotiation_product_value,
+        negotiation_currency: processForAssignment.negotiation_currency,
+        negotiation_product_value:
+          processForAssignment.negotiation_product_value,
         car: productType === 'CAR' ? product : null,
         boat: productType === 'BOAT' ? product : null,
         aircraft: productType === 'AIRCRAFT' ? product : null,
       });
-      let notes = `${process.notes || ''}\n[${new Date().toISOString()}] Produto associado: ${product.marca} ${product.modelo}`;
-      if (process.status === ProcessStatus.SCHEDULING) {
+      let notes = `${processForAssignment.notes || ''}\n[${new Date().toISOString()}] Produto associado: ${product.marca} ${product.modelo}`;
+      if (processForAssignment.status === ProcessStatus.SCHEDULING) {
         notes +=
           '\n[AUTO] Avançado para NEGOTIATION (produto atribuído após confirmação da reunião)';
       }
@@ -1421,14 +1509,15 @@ export class ProcessesService {
       const claim = await tx.process.updateMany({
         where: {
           id: processId,
-          status: process.status,
+          status: processForAssignment.status,
           product_type: null,
           car_id: null,
           boat_id: null,
           aircraft_id: null,
-          negotiation_currency: process.negotiation_currency,
-          negotiation_product_value: process.negotiation_product_value,
-          updated_at: process.updated_at,
+          negotiation_currency: processForAssignment.negotiation_currency,
+          negotiation_product_value:
+            processForAssignment.negotiation_product_value,
+          updated_at: processForAssignment.updated_at,
         },
         data: {
           product_type: productType,
@@ -1453,7 +1542,7 @@ export class ProcessesService {
         });
       }
 
-      if (process.status === ProcessStatus.SCHEDULING) {
+      if (processForAssignment.status === ProcessStatus.SCHEDULING) {
         await tx.processStatusHistory.create({
           data: {
             processId,

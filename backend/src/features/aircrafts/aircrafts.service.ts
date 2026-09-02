@@ -14,7 +14,7 @@ import { Prisma, ProductType } from '@prisma/client';
 import { Aircraft } from './entity/aircraft.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { AIRCRAFT_COLUMNS } from 'src/shared/constants/product-columns';
-import { assertProductMonetaryFieldsUnlocked } from '../products/product-monetary-lock';
+import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 
 @Injectable()
 export class AircraftsService {
@@ -265,16 +265,6 @@ export class AircraftsService {
   // }
 
   async update(id: string, updateAircraftDto: UpdateAircraftDto) {
-    const currentProduct = await this.findOne(id);
-    await assertProductMonetaryFieldsUnlocked(this.prismaService, {
-      productType: ProductType.AIRCRAFT,
-      productId: id,
-      currentValue: currentProduct.valor,
-      currentCurrency: currentProduct.currency,
-      nextValue: updateAircraftDto.valor,
-      nextCurrency: updateAircraftDto.currency,
-    });
-
     const { specialist_id, images, ...aircraftData } = updateAircraftDto;
     const payload: Prisma.AircraftUncheckedUpdateInput = {};
 
@@ -315,14 +305,17 @@ export class AircraftsService {
       payload.specialist_id = specialist_id ?? null;
     }
 
-    try {
-      // 1. Atualizar dados da aeronave
-      await this.prismaService.aircraft.update({
-        where: { id },
-        data: payload,
-      });
+    await updateProductWithMonetaryLock(this.prismaService, {
+      productType: ProductType.AIRCRAFT,
+      productId: id,
+      nextValue: updateAircraftDto.valor,
+      nextCurrency: updateAircraftDto.currency,
+      data: payload,
+      notFoundMessage: 'Aircraft not found',
+    });
 
-      // 2. Se houver novas imagens, processar
+    try {
+      // 1. Se houver novas imagens, processar
       if (images && images.length > 0) {
         // Remover imagens antigas
         await this.prismaService.aircraft_image.deleteMany({

@@ -37,6 +37,7 @@ import { CreateCarDto } from '../cars/dto/create-car.dto';
 import { CreateBoatDto } from '../boats/dto/create-boat.dto';
 import { CreateAircraftDto } from '../aircrafts/dto/create-aircraft.dto';
 import { DriveImportService } from '../drive-import/drive-import.service';
+import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 
 type UpsertResult = {
   productId: string;
@@ -190,7 +191,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
     const response = this.buildImportResponse(job.items, {
       deactivatedIds: Array.isArray(job.deactivated_product_ids)
-      ? (job.deactivated_product_ids as string[])
+        ? (job.deactivated_product_ids as string[])
         : [],
       reactivatedCount: job.reactivated_items,
     });
@@ -298,7 +299,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     });
 
     try {
-    const seenProductIds = new Set<string>();
+      const seenProductIds = new Set<string>();
       let reactivatedCount = 0;
 
       for (const item of job.items) {
@@ -583,8 +584,11 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       if (existing) {
         const { specialist_id, ...updateData } = data;
         const reactivated = !existing.is_active;
-        await this.prisma.car.update({
-          where: { id: existing.id },
+        await updateProductWithMonetaryLock(this.prisma, {
+          productType: ProductType.CAR,
+          productId: existing.id,
+          nextValue: data.valor,
+          nextCurrency: data.currency,
           data: {
             ...updateData,
             is_active: true,
@@ -635,8 +639,11 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       if (existing) {
         const { specialist_id, ...updateData } = data;
         const reactivated = !existing.is_active;
-        await this.prisma.boat.update({
-          where: { id: existing.id },
+        await updateProductWithMonetaryLock(this.prisma, {
+          productType: ProductType.BOAT,
+          productId: existing.id,
+          nextValue: data.valor,
+          nextCurrency: data.currency,
           data: {
             ...updateData,
             is_active: true,
@@ -681,8 +688,11 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     if (existing) {
       const { specialist_id, ...updateData } = data;
       const reactivated = !existing.is_active;
-      await this.prisma.aircraft.update({
-        where: { id: existing.id },
+      await updateProductWithMonetaryLock(this.prisma, {
+        productType: ProductType.AIRCRAFT,
+        productId: existing.id,
+        nextValue: data.valor,
+        nextCurrency: data.currency,
         data: {
           ...updateData,
           is_active: true,

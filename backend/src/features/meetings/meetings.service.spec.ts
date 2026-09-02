@@ -185,6 +185,7 @@ describe('MeetingsService.markConversationDone — snapshot da negociação', ()
     const rootProcessUpdate = jest.fn();
     const historyCreate = jest.fn().mockResolvedValue({});
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
       process: {
         findUniqueOrThrow: jest.fn().mockResolvedValue(process),
         update: txProcessUpdate,
@@ -217,6 +218,8 @@ describe('MeetingsService.markConversationDone — snapshot da negociação', ()
     await service.markConversationDone('proc-1', 'spec-1');
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw.mock.calls[0][1]).toBe('product-money:CAR:product-1');
     expect(tx.process.findUniqueOrThrow).toHaveBeenCalledWith({
       where: { id: 'proc-1' },
       include: {
@@ -292,6 +295,7 @@ describe('MeetingsService.markConversationDone — snapshot da negociação', ()
       const processUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
       const historyCreate = jest.fn();
       const tx = {
+        $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
         process: {
           findUniqueOrThrow: jest
             .fn()

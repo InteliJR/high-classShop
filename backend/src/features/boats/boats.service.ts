@@ -14,7 +14,7 @@ import {
 import { Boat } from './entity/boat.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { BOAT_COLUMNS } from 'src/shared/constants/product-columns';
-import { assertProductMonetaryFieldsUnlocked } from '../products/product-monetary-lock';
+import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 
 @Injectable()
 export class BoatsService {
@@ -238,23 +238,19 @@ export class BoatsService {
   }
 
   async update(id: string, updateBoatDto: UpdateBoatDto) {
-    const currentProduct = await this.findOne(id);
-    await assertProductMonetaryFieldsUnlocked(this.prismaService, {
-      productType: ProductType.BOAT,
-      productId: id,
-      currentValue: currentProduct.valor,
-      currentCurrency: currentProduct.currency,
-      nextValue: updateBoatDto.valor,
-      nextCurrency: updateBoatDto.currency,
-    });
-
     const { images, ...boatData } = updateBoatDto;
 
-    try {
-      // 1. Atualizar dados do barco
-      await this.prismaService.boat.update({ where: { id }, data: boatData });
+    await updateProductWithMonetaryLock(this.prismaService, {
+      productType: ProductType.BOAT,
+      productId: id,
+      nextValue: updateBoatDto.valor,
+      nextCurrency: updateBoatDto.currency,
+      data: boatData,
+      notFoundMessage: 'Boat not found',
+    });
 
-      // 2. Se houver novas imagens, processar
+    try {
+      // 1. Se houver novas imagens, processar
       if (images && images.length > 0) {
         // Remover imagens antigas
         await this.prismaService.boat_image.deleteMany({
@@ -284,7 +280,7 @@ export class BoatsService {
         }
       }
 
-      // 3. Retornar o barco atualizado com imagens
+      // 2. Retornar o barco atualizado com imagens
       return await this.prismaService.boat.findUnique({
         where: { id },
         include: { images: true },

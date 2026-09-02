@@ -475,10 +475,13 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
         updated_at: new Date('2026-01-02T00:00:00.000Z'),
       }),
     );
+    const processUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
       process: {
         findUniqueOrThrow: jest.fn().mockResolvedValue(baseProcess()),
         update: processUpdate,
+        updateMany: processUpdateMany,
       },
       processStatusHistory: {
         create: jest.fn().mockResolvedValue({}),
@@ -497,9 +500,13 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       UserRole.ADMIN,
     );
 
-    expect(processUpdate).toHaveBeenCalledWith(
+    expect(processUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'process-1' },
+        where: {
+          id: 'process-1',
+          status: ProcessStatus.SCHEDULING,
+          updated_at: new Date('2026-01-01T00:00:00.000Z'),
+        },
         data: expect.objectContaining({
           status: ProcessStatus.NEGOTIATION,
           negotiation_currency: ProductCurrency.USD,
@@ -507,6 +514,56 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
         }),
       }),
     );
+    expect(processUpdate).not.toHaveBeenCalled();
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw.mock.calls[0][1]).toBe('product-money:CAR:product-1');
+  });
+
+  it('returns conflict and creates no history when the manual transition loses its CAS claim', async () => {
+    const historyCreate = jest.fn();
+    const processUpdate = jest.fn().mockResolvedValue({
+      ...baseProcess(),
+      status: ProcessStatus.NEGOTIATION,
+      updated_at: new Date('2026-01-02T00:00:00.000Z'),
+    });
+    const processUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue(baseProcess()),
+        update: processUpdate,
+        updateMany: processUpdateMany,
+      },
+      processStatusHistory: {
+        create: historyCreate,
+        findMany: jest.fn(),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    } as any;
+    const service = new ProcessesService(prisma, {} as any);
+
+    await expect(
+      service.update(
+        'process-1',
+        { status: ProcessStatus.NEGOTIATION, notes: 'Negociando' },
+        'admin-1',
+        UserRole.ADMIN,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(processUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'process-1',
+          status: ProcessStatus.SCHEDULING,
+          updated_at: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      }),
+    );
+    expect(processUpdate).not.toHaveBeenCalled();
+    expect(historyCreate).not.toHaveBeenCalled();
   });
 
   function makeAssignProductService(
@@ -551,7 +608,9 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
     const historyCreate = jest.fn().mockResolvedValue({});
     const txProductFindUnique = jest.fn().mockResolvedValue(usdProduct);
     const rootProductFindUnique = jest.fn();
+    const txLock = jest.fn().mockResolvedValue([{ locked: null }]);
     const tx = {
+      $queryRaw: txLock,
       process: {
         update: processUpdate,
         updateMany: processUpdateMany,
@@ -594,6 +653,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       historyCreate,
       txProductFindUnique,
       rootProductFindUnique,
+      txLock,
     };
   }
 
@@ -611,6 +671,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
         historyCreate,
         txProductFindUnique,
         rootProductFindUnique,
+        txLock,
       } = makeAssignProductService();
 
       await service.assignProduct(
@@ -641,6 +702,10 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       expect(txProductFindUnique).toHaveBeenCalledWith({
         where: { id: 'product-1' },
       });
+      expect(txLock).toHaveBeenCalledTimes(1);
+      expect(txLock.mock.calls[0][1]).toBe(
+        `product-money:${productType}:product-1`,
+      );
       expect(rootProductFindUnique).not.toHaveBeenCalled();
       expect(processUpdate).not.toHaveBeenCalled();
       expect(historyCreate).not.toHaveBeenCalled();
@@ -707,7 +772,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       }),
     );
     expect(processUpdate).not.toHaveBeenCalled();
-    expect(processFindUniqueOrThrow).not.toHaveBeenCalled();
+    expect(processFindUniqueOrThrow).toHaveBeenCalledTimes(1);
     expect(historyCreate).not.toHaveBeenCalled();
   });
 

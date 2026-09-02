@@ -14,7 +14,7 @@ import {
 import { Car } from './entity/car.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { CAR_COLUMNS } from 'src/shared/constants/product-columns';
-import { assertProductMonetaryFieldsUnlocked } from '../products/product-monetary-lock';
+import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 
 @Injectable()
 export class CarsService {
@@ -218,23 +218,19 @@ export class CarsService {
   }
 
   async update(id: string, updateCarDto: UpdateCarDto) {
-    const currentProduct = await this.findOne(id);
-    await assertProductMonetaryFieldsUnlocked(this.prismaService, {
-      productType: ProductType.CAR,
-      productId: id,
-      currentValue: currentProduct.valor,
-      currentCurrency: currentProduct.currency,
-      nextValue: updateCarDto.valor,
-      nextCurrency: updateCarDto.currency,
-    });
-
     const { images, ...carData } = updateCarDto;
 
-    try {
-      // 1. Atualizar dados do carro
-      await this.prismaService.car.update({ where: { id }, data: carData });
+    await updateProductWithMonetaryLock(this.prismaService, {
+      productType: ProductType.CAR,
+      productId: id,
+      nextValue: updateCarDto.valor,
+      nextCurrency: updateCarDto.currency,
+      data: carData,
+      notFoundMessage: 'Car not found',
+    });
 
-      // 2. Se houver novas imagens, processar
+    try {
+      // 1. Se houver novas imagens, processar
       if (images && images.length > 0) {
         // Remover imagens antigas
         await this.prismaService.car_image.deleteMany({
@@ -264,7 +260,7 @@ export class CarsService {
         }
       }
 
-      // 3. Retornar o carro atualizado com imagens
+      // 2. Retornar o carro atualizado com imagens
       return await this.prismaService.car.findUnique({
         where: { id },
         include: { images: true },

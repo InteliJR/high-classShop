@@ -40,6 +40,7 @@ import {
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { CalendlyIntegrationService } from './calendly-integration.service';
 import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
+import { lockNegotiationProductMoney } from 'src/features/products/product-monetary-lock';
 
 /**
  * AppointmentsService
@@ -708,6 +709,7 @@ export class AppointmentsService {
         // Só move para NEGOTIATION se Process está em SCHEDULING
         // Evita conflito se já está em NEGOTIATION+ (não retrocede)
         if (process.status === ProcessStatus.SCHEDULING) {
+          await lockNegotiationProductMoney(tx, process);
           const processForTransition = await tx.process.findUniqueOrThrow({
             where: { id: process.id },
             include: {
@@ -1472,22 +1474,59 @@ export class AppointmentsService {
         });
       }
 
-      // Atualizar Process para NEGOTIATION
-      const updatedProcess = await tx.process.update({
+      await lockNegotiationProductMoney(tx, processToUpdate);
+      const processForTransition = await tx.process.findUniqueOrThrow({
         where: { id: processToUpdate.id },
-        data: {
-          status: 'NEGOTIATION',
-          notes:
-            processToUpdate.notes +
-            `\n\nAgendamento confirmado pelo especialista (${new Date().toISOString()})`,
+        include: {
+          car: { select: { valor: true, currency: true } },
+          boat: { select: { valor: true, currency: true } },
+          aircraft: { select: { valor: true, currency: true } },
         },
       });
+      const snapshotData = buildNegotiationSnapshotUpdate(processForTransition);
+      const nextUpdatedAt = new Date();
+      const nextNotes =
+        (processForTransition.notes || '') +
+        `\n\nAgendamento confirmado pelo especialista (${new Date().toISOString()})`;
+      const claim = await tx.process.updateMany({
+        where: {
+          id: processForTransition.id,
+          status: ProcessStatus.SCHEDULING,
+          updated_at: processForTransition.updated_at,
+        },
+        data: {
+          status: ProcessStatus.NEGOTIATION,
+          notes: nextNotes,
+          updated_at: nextUpdatedAt,
+          ...snapshotData,
+        },
+      });
+
+      if (claim.count !== 1) {
+        throw new ConflictException({
+          success: false,
+          error: {
+            code: 'PROCESS_STATUS_TRANSITION_CONFLICT',
+            message:
+              'O processo foi alterado durante a confirmação do agendamento.',
+            details: { process_id: processForTransition.id },
+          },
+        });
+      }
+
+      const updatedProcess = {
+        ...processForTransition,
+        ...snapshotData,
+        status: ProcessStatus.NEGOTIATION,
+        notes: nextNotes,
+        updated_at: nextUpdatedAt,
+      };
 
       // Criar histórico de mudança de status
       await tx.processStatusHistory.create({
         data: {
           processId: updatedProcess.id,
-          status: 'NEGOTIATION',
+          status: ProcessStatus.NEGOTIATION,
           changed_by: userId,
           changed_at: new Date(),
         },

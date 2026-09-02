@@ -13,6 +13,7 @@ import { NotificationService } from 'src/features/notifications/notification.ser
 import { ProcessStatus, StatusAgendamento } from '@prisma/client';
 import { GoogleMeetOAuthService } from './google-meet-oauth.service';
 import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
+import { lockNegotiationProductMoney } from 'src/features/products/product-monetary-lock';
 
 @Injectable()
 export class MeetingsService {
@@ -203,13 +204,13 @@ export class MeetingsService {
           select: { email: true, name: true, surname: true },
         },
         car: {
-          select: { marca: true, modelo: true, valor: true, currency: true },
+          select: { marca: true, modelo: true },
         },
         boat: {
-          select: { marca: true, modelo: true, valor: true, currency: true },
+          select: { marca: true, modelo: true },
         },
         aircraft: {
-          select: { marca: true, modelo: true, valor: true, currency: true },
+          select: { marca: true, modelo: true },
         },
       },
     });
@@ -256,6 +257,7 @@ export class MeetingsService {
     }
 
     const transition = await this.prismaService.$transaction(async (tx) => {
+      await lockNegotiationProductMoney(tx, process);
       const processForTransition = await tx.process.findUniqueOrThrow({
         where: { id: process.id },
         include: {
