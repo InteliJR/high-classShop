@@ -218,12 +218,19 @@ export default function CreateContractPage() {
   const totalCommissionRate = watch("total_commission_rate");
 
   // A porcentagem total é a única entrada: a API preserva as regras de split
-  // cadastradas e o especialista só confere o próprio repasse.
+  // cadastradas e o especialista confere todas as parcelas antes do envio.
   const specialistRate = prefillData?.specialist?.rate ?? 0;
-  const { totalCommissionValue, specialistValue } = getCommissionPreview({
+  const officeRate = prefillData?.office?.rate ?? 0;
+  const {
+    totalCommissionValue,
+    platformValue,
+    officeValue,
+    specialistValue,
+  } = getCommissionPreview({
     saleValue: vehiclePrice,
     totalCommissionRate,
     specialistShareRate: specialistRate,
+    officeShareRate: officeRate,
   });
   const sellerNetPreviewValue = (vehiclePrice || 0) - totalCommissionValue;
 
@@ -775,6 +782,10 @@ export default function CreateContractPage() {
             vehiclePrice={vehiclePrice || 0}
             totalCommissionValue={totalCommissionValue}
             sellerNetPreviewValue={sellerNetPreviewValue}
+            platformValue={platformValue}
+            officeValue={officeValue}
+            specialistValue={specialistValue}
+            showOffice={Boolean(prefillData.office)}
             onCancel={() => navigate(-1)}
             onContinue={async () => {
               // Valida só a comissão: o resto do contrato ainda nem foi exibido.
@@ -1363,6 +1374,29 @@ export default function CreateContractPage() {
                   {formatCurrency(totalCommissionValue, prefillData.currency)}
                 </div>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-ink-soft mb-1">
+                  Valor da Plataforma
+                </label>
+                <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
+                  {formatCurrency(platformValue, prefillData.currency)}
+                </div>
+              </div>
+
+              {prefillData.office && (
+                <div>
+                  <label className="block text-sm font-medium text-ink-soft mb-1">
+                    Valor do Escritório
+                    <span className="text-xs text-muted ml-1">
+                      ({officeRate.toFixed(2)}% da comissão)
+                    </span>
+                  </label>
+                  <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
+                    {formatCurrency(officeValue, prefillData.currency)}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-ink-soft mb-1">

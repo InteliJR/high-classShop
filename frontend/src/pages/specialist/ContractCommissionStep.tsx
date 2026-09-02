@@ -23,6 +23,10 @@ interface Props {
   vehiclePrice: number;
   totalCommissionValue: number;
   sellerNetPreviewValue: number;
+  platformValue: number;
+  officeValue: number;
+  specialistValue: number;
+  showOffice: boolean;
   onContinue: () => void;
   onCancel: () => void;
 }
@@ -35,6 +39,10 @@ export default function ContractCommissionStep({
   vehiclePrice,
   totalCommissionValue,
   sellerNetPreviewValue,
+  platformValue,
+  officeValue,
+  specialistValue,
+  showOffice,
   onContinue,
   onCancel,
 }: Props) {
@@ -102,18 +110,48 @@ export default function ContractCommissionStep({
 
         {/* Consequência do percentual, para a escolha não ser às cegas. */}
         {vehiclePrice > 0 && totalCommissionValue > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6 pt-5 border-t">
-            <div>
-              <p className="text-xs text-subtle">Comissão total</p>
-              <p className="text-sm font-medium text-ink mt-0.5">
-                {formatCurrency(totalCommissionValue, currency)}
-              </p>
+          <div className="mt-6 pt-5 border-t">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-subtle">Comissão total</p>
+                <p className="text-sm font-medium text-ink mt-0.5">
+                  {formatCurrency(totalCommissionValue, currency)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-subtle">
+                  Valor líquido do vendedor
+                </p>
+                <p className="text-sm font-medium text-ink mt-0.5">
+                  {formatCurrency(sellerNetPreviewValue, currency)}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-subtle">Valor líquido do vendedor</p>
-              <p className="text-sm font-medium text-ink mt-0.5">
-                {formatCurrency(sellerNetPreviewValue, currency)}
-              </p>
+
+            <p className="text-xs font-semibold uppercase tracking-wider text-subtle mt-5 mb-3">
+              Distribuição da comissão
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs text-subtle">Plataforma</p>
+                <p className="text-sm font-medium text-ink mt-0.5">
+                  {formatCurrency(platformValue, currency)}
+                </p>
+              </div>
+              {showOffice && (
+                <div>
+                  <p className="text-xs text-subtle">Escritório</p>
+                  <p className="text-sm font-medium text-ink mt-0.5">
+                    {formatCurrency(officeValue, currency)}
+                  </p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-subtle">Especialista</p>
+                <p className="text-sm font-medium text-ink mt-0.5">
+                  {formatCurrency(specialistValue, currency)}
+                </p>
+              </div>
             </div>
           </div>
         )}
