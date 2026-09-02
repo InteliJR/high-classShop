@@ -105,36 +105,6 @@ export class ContractsService {
     private readonly platformCompanyService: PlatformCompanyService,
   ) {}
 
-  private assertSellerIndependentFromSpecialist(
-    sellerEmail: string,
-    specialistEmail?: string,
-  ): void {
-    if (!specialistEmail) {
-      return;
-    }
-
-    const normalizedSellerEmail = sellerEmail.trim().toLowerCase();
-    const normalizedSpecialistEmail = specialistEmail.trim().toLowerCase();
-
-    if (
-      normalizedSellerEmail.length > 0 &&
-      normalizedSellerEmail === normalizedSpecialistEmail
-    ) {
-      throw new BadRequestException({
-        success: false,
-        error: {
-          code: 400,
-          message:
-            'O e-mail do vendedor deve ser diferente do e-mail do especialista.',
-          details: {
-            seller_email: sellerEmail,
-            specialist_email: specialistEmail,
-            hint: 'Preencha os dados do vendedor de forma independente do especialista.',
-          },
-        },
-      });
-    }
-  }
 
   /**
    * Pré-preenche dados do formulário de contrato
@@ -698,10 +668,6 @@ export class ContractsService {
       }
 
       // 1.5 Garantir que vendedor seja independente do especialista
-      this.assertSellerIndependentFromSpecialist(
-        dto.seller_email,
-        dto.specialist_email,
-      );
 
       // 1.6 Buscar dados do usuário que está criando
       const uploaderUser = await this.prismaService.user.findUnique({
@@ -1156,10 +1122,6 @@ export class ContractsService {
         throw new ProcessNotFoundException(dto.process_id);
       }
 
-      this.assertSellerIndependentFromSpecialist(
-        dto.seller_email,
-        dto.specialist_email,
-      );
 
       // 1.2 Validar status do processo
       const allowedStatuses = ['PROCESSING_CONTRACT', 'DOCUMENTATION'];
@@ -1417,10 +1379,6 @@ export class ContractsService {
         select: { id: true },
       });
 
-      this.assertSellerIndependentFromSpecialist(
-        dto.seller_email,
-        dto.specialist_email,
-      );
 
       // Recalcular o split de comissão (nunca confiar em valores vindos do preview)
       const commission = await this.resolveCommissionFromTotal(

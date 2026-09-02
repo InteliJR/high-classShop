@@ -48,9 +48,21 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       // Se é objeto customizado, extrair campos
       if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
         const obj = exceptionResponse as any;
-        message = obj.message || obj.error || exception.message;
-        errorCode = obj.error || errorCode;
-        details = obj.details || null;
+
+        // Dois formatos convivem no projeto:
+        //   { message, error, details }                 — padrão do Nest
+        //   { success, error: { code, message, details } } — usado por vários services
+        // Sem tratar o segundo, `obj.error` (um objeto) caía em `message` e a
+        // resposta saía com message sendo objeto em vez de texto — o cliente
+        // perdia o motivo do erro e mostrava algo genérico.
+        const aninhado =
+          obj.error && typeof obj.error === 'object' ? obj.error : null;
+
+        message = obj.message || aninhado?.message || exception.message;
+        errorCode = aninhado
+          ? (aninhado.code ?? errorCode)
+          : obj.error || errorCode;
+        details = obj.details || aninhado?.details || null;
       } else {
         message = exceptionResponse as string;
       }
