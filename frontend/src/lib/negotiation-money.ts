@@ -6,6 +6,14 @@ type MinimumSource = {
   minimum_value: number | null;
 };
 
+export function getProposalSubmissionError(value: number): string | null {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "Por favor, insira um valor válido";
+  }
+
+  return null;
+}
+
 export function getMinimumPresentation(source: MinimumSource): {
   visible: boolean;
   formattedValue: string | null;

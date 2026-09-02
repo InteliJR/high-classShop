@@ -40,6 +40,7 @@ import { StatusBadge } from "../../components/patterns/StatusBadge";
 import { ProposalStatusBadge } from "../../components/patterns/ProposalStatusBadge";
 import { currencySymbol, formatCurrency } from "../../lib/currency";
 import {
+  getProposalSubmissionError,
   getMinimumPresentation,
   normalizeMinimumFormError,
 } from "../../lib/negotiation-money";
@@ -193,19 +194,9 @@ export default function ConsultantProcessDetailPage() {
 
     const value = parseFloat(proposedValue.replace(/\D/g, "")) / 100;
 
-    if (isNaN(value) || value <= 0) {
-      setFormError("Informe um valor válido.");
-      return;
-    }
-
-    if (
-      processInfo.minimum_enabled &&
-      processInfo.minimum_value !== null &&
-      value < processInfo.minimum_value
-    ) {
-      setFormError(
-        `O valor mínimo permitido é ${formatCurrency(processInfo.minimum_value, processInfo.currency)}.`,
-      );
+    const submissionError = getProposalSubmissionError(value);
+    if (submissionError) {
+      setFormError(submissionError);
       return;
     }
 

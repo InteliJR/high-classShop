@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 /**
@@ -75,6 +80,21 @@ export class SettingsService {
   async update(key: string, value: string): Promise<SettingResponse> {
     this.logger.log(`[update] Atualizando configuração ${key} para ${value}`);
 
+    if (key === SettingKey.MINIMUM_PROPOSAL_PERCENTAGE) {
+      const percentage = Number(value);
+      if (!Number.isFinite(percentage) || percentage < 0 || percentage > 1) {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message:
+              'minimum_proposal_percentage deve ser uma fração entre 0 e 1',
+            details: { value },
+          },
+        });
+      }
+    }
+
     const updated = await this.prisma.settings.upsert({
       where: { key },
       update: { value },
@@ -110,7 +130,9 @@ export class SettingsService {
         SettingKey.MINIMUM_PROPOSAL_PERCENTAGE,
       );
       const percentage = parseFloat(setting.value);
-      return isNaN(percentage) ? 0.8 : percentage;
+      return Number.isFinite(percentage) && percentage >= 0 && percentage <= 1
+        ? percentage
+        : 0.8;
     } catch {
       // Se não encontrar, retorna 80% (comportamento padrão)
       return 0.8;

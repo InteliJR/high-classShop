@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  getProposalSubmissionError,
   getMinimumPresentation,
   normalizeMinimumFormError,
 } from "./negotiation-money";
@@ -66,5 +67,17 @@ describe("minimum form error normalization", () => {
     expect(
       normalizeMinimumFormError("Erro ao enviar proposta.", hiddenMinimum),
     ).toBe("Erro ao enviar proposta.");
+  });
+});
+
+describe("proposal submission decision", () => {
+  it("does not block a positive value using a cached minimum", () => {
+    expect(getProposalSubmissionError(1)).toBeNull();
+  });
+
+  it.each([Number.NaN, 0, -1])("rejects an invalid local value: %s", (value) => {
+    expect(getProposalSubmissionError(value)).toBe(
+      "Por favor, insira um valor válido",
+    );
   });
 });

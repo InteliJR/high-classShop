@@ -11,10 +11,11 @@ import {
   ProposalResponseEntity,
   ProposalListResponseEntity,
 } from './entities/proposal.entity';
-import { ProposalStatus, ProcessStatus } from '@prisma/client';
+import { Prisma, ProposalStatus, ProcessStatus } from '@prisma/client';
 import { SettingsService } from 'src/features/settings/settings.service';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { requireNegotiationSnapshot } from 'src/features/processes/negotiation-snapshot';
+import { calculateMinimumProposalValue } from './proposal-money';
 
 /**
  * ProposalsService
@@ -212,11 +213,16 @@ export class ProposalsService {
       ? await this.settingsService.getMinimumProposalPercentage()
       : null;
     const minimumValue =
-      minimumPercentage === null ? null : productValue * minimumPercentage;
+      minimumPercentage === null
+        ? null
+        : calculateMinimumProposalValue(snapshotValue, minimumPercentage);
 
-    if (minimumValue !== null && dto.proposed_value < minimumValue) {
+    if (
+      minimumValue !== null &&
+      new Prisma.Decimal(dto.proposed_value).lt(minimumValue)
+    ) {
       this.logger.warn(
-        `[create] Valor proposto ${dto.proposed_value} abaixo do mínimo ${minimumValue}`,
+        `[create] Valor proposto ${dto.proposed_value} abaixo do mínimo ${minimumValue.toFixed(2)}`,
       );
       throw new BadRequestException({
         success: false,
@@ -225,7 +231,7 @@ export class ProposalsService {
           message: `Valor proposto deve ser no mínimo ${Math.round(minimumPercentage! * 100)}% do valor do produto`,
           details: {
             proposed_value: dto.proposed_value,
-            minimum_value: minimumValue,
+            minimum_value: Number(minimumValue),
             product_value: productValue,
             minimum_percentage: `${Math.round(minimumPercentage! * 100)}%`,
           },
@@ -468,7 +474,9 @@ export class ProposalsService {
       ? await this.settingsService.getMinimumProposalPercentage()
       : null;
     const minimumValue =
-      minimumPercentage === null ? null : productValue * minimumPercentage;
+      minimumPercentage === null
+        ? null
+        : calculateMinimumProposalValue(snapshotValue, minimumPercentage);
 
     // 4. Determinar quem deve responder
     const lastPendingProposal = process.proposals.find(
@@ -509,7 +517,7 @@ export class ProposalsService {
         product_value: productValue,
         currency,
         minimum_enabled: minimumEnabled,
-        minimum_value: minimumValue,
+        minimum_value: minimumValue === null ? null : Number(minimumValue),
         client: {
           id: process.client.id,
           name: process.client.name,

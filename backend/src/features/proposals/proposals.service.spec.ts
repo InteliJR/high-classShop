@@ -171,6 +171,38 @@ describe('ProposalsService — snapshot e mínimo dinâmico', () => {
     });
   });
 
+  it('exposes the cent-rounded minimum used by proposal creation', async () => {
+    const { service, prisma, settings } = setup();
+    settings.getMinimumProposalPercentage.mockResolvedValue(0.8);
+    prisma.process.findUnique.mockResolvedValue(
+      processFixture({
+        negotiation_product_value: new Prisma.Decimal('333.33'),
+      }),
+    );
+
+    const response = await service.getByProcess('process-1', 'client-1');
+
+    expect(response.process.minimum_value).toBe(266.66);
+  });
+
+  it('accepts the exact cent-rounded minimum boundary', async () => {
+    const { service, prisma, settings, transactionProposalCreate } = setup();
+    settings.getMinimumProposalPercentage.mockResolvedValue(0.8);
+    prisma.process.findUnique.mockResolvedValue(
+      processFixture({
+        negotiation_product_value: new Prisma.Decimal('333.33'),
+      }),
+    );
+
+    await expect(
+      service.create(
+        { process_id: 'process-1', proposed_value: 266.66 },
+        'client-1',
+      ),
+    ).resolves.toBeDefined();
+    expect(transactionProposalCreate).toHaveBeenCalled();
+  });
+
   it('aceita qualquer proposta positiva e não busca percentual quando o mínimo está desligado', async () => {
     const { service, prisma, settings } = setup();
     settings.isMinimumProposalEnabled.mockResolvedValue(false);
