@@ -6,7 +6,64 @@ import {
   StatusAgendamento,
   UserRole,
 } from '@prisma/client';
+import { validate } from 'class-validator';
+import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { AppointmentsService } from './appointments.service';
+import { BadRequestException } from '@nestjs/common';
+
+describe('CreateAppointmentDto — seleção de produto', () => {
+  const base = {
+    client_id: '22222222-2222-4222-8222-222222222222',
+    specialist_id: '33333333-3333-4333-8333-333333333333',
+  };
+
+  it.each([
+    { product_type: ProductType.CAR },
+    { product_id: '11111111-1111-4111-8111-111111111111' },
+  ])('rejeita seleção parcial de produto: %o', async (partial) => {
+    const dto = Object.assign(new CreateAppointmentDto(), base, partial);
+
+    const errors = await validate(dto);
+
+    expect(errors.some((error) =>
+      ['product_type', 'product_id'].includes(error.property),
+    )).toBe(true);
+  });
+});
+
+describe('AppointmentsService.createPending — integridade das partes', () => {
+  it('não permite que CUSTOMER se informe como especialista', async () => {
+    const customer = {
+      id: '22222222-2222-4222-8222-222222222222',
+      name: 'Cliente',
+      role: UserRole.CUSTOMER,
+      speciality: null,
+    };
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue(customer) },
+      appointment: { findFirst: jest.fn().mockResolvedValue(null) },
+      $transaction: jest.fn(async (callback: any) =>
+        callback({
+          user: { findUnique: jest.fn().mockResolvedValue(customer) },
+          car: { findUnique: jest.fn() },
+          boat: { findUnique: jest.fn() },
+          aircraft: { findUnique: jest.fn() },
+        }),
+      ),
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await expect(
+      service.createPending(
+        {
+          client_id: customer.id,
+          specialist_id: customer.id,
+        } as CreateAppointmentDto,
+        customer.id,
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+});
 
 describe('AppointmentsService.updateStatus — snapshot da negociação', () => {
   it('grava appointment, snapshot USD, status e histórico na mesma transação', async () => {
@@ -143,6 +200,8 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
     async (transactionalStatus, expectsClaim) => {
       const product = {
         id: 'product-1',
+        specialist_id: 'specialist-1',
+        is_active: true,
         marca: 'Porsche',
         modelo: '911',
         valor: new Prisma.Decimal('120000.00'),
@@ -159,6 +218,7 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
         name: 'Especialista',
         surname: 'Teste',
         email: 'especialista@example.com',
+        role: UserRole.SPECIALIST,
         speciality: ProductType.CAR,
       };
       const process = {
@@ -269,6 +329,8 @@ describe('AppointmentsService.confirmPending — snapshot da negociação', () =
     async (hasExistingProcess, currency) => {
       const product = {
         id: 'product-1',
+        specialist_id: 'specialist-1',
+        is_active: true,
         marca: 'Porsche',
         modelo: '911',
         valor: new Prisma.Decimal('120000.00'),
@@ -285,6 +347,7 @@ describe('AppointmentsService.confirmPending — snapshot da negociação', () =
         name: 'Especialista',
         surname: 'Teste',
         email: 'especialista@example.com',
+        role: UserRole.SPECIALIST,
         speciality: ProductType.CAR,
       };
       const schedulingProcess = {
@@ -336,6 +399,10 @@ describe('AppointmentsService.confirmPending — snapshot da negociação', () =
         });
       const tx = {
         $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+        user: { findUnique: jest.fn().mockResolvedValue(specialist) },
+        car: { findUnique: jest.fn().mockResolvedValue(product) },
+        boat: { findUnique: jest.fn() },
+        aircraft: { findUnique: jest.fn() },
         appointment: {
           update: jest.fn().mockResolvedValue({
             ...appointment,

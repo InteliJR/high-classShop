@@ -161,7 +161,7 @@ describeWithPostgres('proposal responses — PostgreSQL concurrency', () => {
     });
     await observer.processStatusHistory.deleteMany({ where: { processId } });
     await observer.negotiationProposal.deleteMany({
-      where: { id: proposalId },
+      where: { process_id: processId },
     });
     await observer.process.deleteMany({ where: { id: processId } });
     await observer.car.deleteMany({ where: { id: carId } });
@@ -224,6 +224,94 @@ describeWithPostgres('proposal responses — PostgreSQL concurrency', () => {
       expect(process.status).toBe(ProcessStatus.NEGOTIATION);
       expect(process.accepted_proposal_id).toBeNull();
       expect(historyCount).toBe(0);
+    }
+  }, 15000);
+
+  it('commits only one concurrent accept/counterproposal response', async () => {
+    await observer.process.update({
+      where: { id: processId },
+      data: {
+        status: ProcessStatus.NEGOTIATION,
+        accepted_proposal_id: null,
+      },
+    });
+    await observer.processStatusHistory.deleteMany({ where: { processId } });
+    await observer.negotiationProposal.deleteMany({
+      where: { process_id: processId, id: { not: proposalId } },
+    });
+    await observer.negotiationProposal.update({
+      where: { id: proposalId },
+      data: { status: ProposalStatus.PENDING },
+    });
+
+    const waitForBothTransactions = validationBarrier(2);
+    const lockKey = `proposal-response:${proposalId}`;
+
+    const outcomes = await Promise.allSettled([
+      rejectClient.$transaction(async (tx) => {
+        await waitForBothTransactions();
+        await tx.$queryRaw`
+          SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
+        `;
+        const claim = await tx.negotiationProposal.updateMany({
+          where: { id: proposalId, status: ProposalStatus.PENDING },
+          data: { status: ProposalStatus.COUNTERED },
+        });
+        if (claim.count !== 1) throw new ConflictException();
+        await tx.negotiationProposal.create({
+          data: {
+            process_id: processId,
+            proposed_by_id: specialistId,
+            proposed_to_id: clientId,
+            proposed_value: 85000,
+            counter_to_id: proposalId,
+          },
+        });
+      }),
+      acceptClient.$transaction(async (tx) => {
+        await waitForBothTransactions();
+        await tx.$queryRaw`
+          SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
+        `;
+        const claim = await tx.negotiationProposal.updateMany({
+          where: { id: proposalId, status: ProposalStatus.PENDING },
+          data: { status: ProposalStatus.ACCEPTED },
+        });
+        if (claim.count !== 1) throw new ConflictException();
+        await tx.process.update({
+          where: { id: processId },
+          data: {
+            status: ProcessStatus.DOCUMENTATION,
+            accepted_proposal_id: proposalId,
+          },
+        });
+      }),
+    ]);
+
+    expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(
+      1,
+    );
+    expect(outcomes.find(({ status }) => status === 'rejected')).toMatchObject({
+      reason: expect.any(ConflictException),
+    });
+
+    const original = await observer.negotiationProposal.findUniqueOrThrow({
+      where: { id: proposalId },
+    });
+    const process = await observer.process.findUniqueOrThrow({
+      where: { id: processId },
+    });
+    const counters = await observer.negotiationProposal.count({
+      where: { process_id: processId, counter_to_id: proposalId },
+    });
+
+    if (original.status === ProposalStatus.ACCEPTED) {
+      expect(process.status).toBe(ProcessStatus.DOCUMENTATION);
+      expect(counters).toBe(0);
+    } else {
+      expect(original.status).toBe(ProposalStatus.COUNTERED);
+      expect(process.status).toBe(ProcessStatus.NEGOTIATION);
+      expect(counters).toBe(1);
     }
   }, 15000);
 });

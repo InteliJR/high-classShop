@@ -64,6 +64,15 @@ describe('negotiation snapshot', () => {
     ).toThrow(ConflictException);
   });
 
+  it('fails closed when a product type has no matching relation', () => {
+    expect(() =>
+      buildNegotiationSnapshotUpdate({
+        ...usdCar,
+        car: null,
+      }),
+    ).toThrow(ConflictException);
+  });
+
   it('requires both fields before monetary operations', () => {
     expect(() => requireNegotiationSnapshot(usdCar)).toThrow(
       BadRequestException,

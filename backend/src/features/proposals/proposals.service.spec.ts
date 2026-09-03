@@ -6,6 +6,11 @@ import {
   ProposalStatus,
   UserRole,
 } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { ProposalsService } from './proposals.service';
 
 const now = new Date('2026-01-01T00:00:00.000Z');
@@ -112,6 +117,7 @@ function setup() {
     },
     $transaction: jest.fn(async (callback) =>
       callback({
+        $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
         negotiationProposal: {
           create: transactionProposalCreate,
           findUnique: proposalFindUnique,
@@ -349,6 +355,78 @@ describe('ProposalsService — snapshot e mínimo dinâmico', () => {
     );
   });
 
+  it('rejects a counterproposal that references another process', async () => {
+    const { service, prisma, transactionProposalCreate } = setup();
+    prisma.process.findUnique.mockResolvedValue(processFixture());
+    prisma.negotiationProposal.findUnique.mockResolvedValue(
+      proposalFixture({
+        process_id: 'other-process',
+        proposed_to_id: 'specialist-1',
+      }),
+    );
+
+    await expect(
+      service.create(
+        {
+          process_id: 'process-1',
+          proposed_value: 90000,
+          counter_to_id: 'proposal-1',
+        },
+        'specialist-1',
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(transactionProposalCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a counterproposal when the referenced proposal targets another actor', async () => {
+    const { service, prisma, transactionProposalCreate } = setup();
+    prisma.process.findUnique.mockResolvedValue(processFixture());
+    prisma.negotiationProposal.findUnique.mockResolvedValue(
+      proposalFixture({ proposed_to_id: 'someone-else' }),
+    );
+
+    await expect(
+      service.create(
+        {
+          process_id: 'process-1',
+          proposed_value: 90000,
+          counter_to_id: 'proposal-1',
+        },
+        'specialist-1',
+      ),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(transactionProposalCreate).not.toHaveBeenCalled();
+  });
+
+  it('does not create a counterproposal when the conditional PENDING claim is lost', async () => {
+    const {
+      service,
+      prisma,
+      transactionProposalCreate,
+      transactionProposalUpdateMany,
+    } = setup();
+    prisma.process.findUnique.mockResolvedValue(processFixture());
+    prisma.negotiationProposal.findUnique.mockResolvedValue(
+      proposalFixture({ proposed_to_id: 'specialist-1' }),
+    );
+    transactionProposalUpdateMany.mockResolvedValueOnce({ count: 0 });
+
+    await expect(
+      service.create(
+        {
+          process_id: 'process-1',
+          proposed_value: 90000,
+          counter_to_id: 'proposal-1',
+        },
+        'specialist-1',
+      ),
+    ).rejects.toThrow(ConflictException);
+
+    expect(transactionProposalCreate).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['accept', 'sendProposalAcceptedEmail', 'acceptedValue'],
     ['reject', 'sendProposalRejectedEmail', 'rejectedValue'],
@@ -516,6 +594,7 @@ describe('ProposalsService — snapshot e mínimo dinâmico', () => {
       },
       $transaction: jest.fn(async (callback) =>
         callback({
+          $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
           negotiationProposal,
           process,
           processStatusHistory: {

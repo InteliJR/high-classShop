@@ -41,6 +41,7 @@ import { NotificationService } from 'src/features/notifications/notification.ser
 import { CalendlyIntegrationService } from './calendly-integration.service';
 import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
 import { lockNegotiationProductMoney } from 'src/features/products/product-monetary-lock';
+import { validateSpecialistProductAssociation } from 'src/features/products/product-association-validator';
 
 /**
  * AppointmentsService
@@ -276,6 +277,12 @@ export class AppointmentsService {
         });
       }
     }
+
+    await validateSpecialistProductAssociation(this.prisma, {
+      specialistId: dto.specialist_id,
+      productType: dto.product_type,
+      productId: dto.product_id,
+    });
 
     // Validação 7: Verificar conflitos de horário (especialista não pode ter 2 agendamentos no mesmo horário)
     // Considerar janela de 1 hora para evitar overlap (ex: agendamento 14:00-15:00)
@@ -1195,6 +1202,12 @@ export class AppointmentsService {
       [appointment, process] = await this.prisma.$transaction(async (tx) => {
         this.logger.log(`[createPending] Dentro da transação - iniciando`);
 
+        await validateSpecialistProductAssociation(tx, {
+          specialistId: dto.specialist_id,
+          productType: dto.product_type,
+          productId: dto.product_id,
+        });
+
         // Criar appointment
         const appointmentData: any = {
           client_id: dto.client_id,
@@ -1425,6 +1438,12 @@ export class AppointmentsService {
 
     // Atualizar para SCHEDULED e atualizar Process para NEGOTIATION em transação
     const [updated, process] = await this.prisma.$transaction(async (tx) => {
+      await validateSpecialistProductAssociation(tx, {
+        specialistId: appointment.specialist_id,
+        productType: appointment.product_type,
+        productId: appointment.product_id,
+      });
+
       // Atualizar appointment
       const updatedApt = await tx.appointment.update({
         where: { id: appointmentId },

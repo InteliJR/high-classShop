@@ -50,7 +50,17 @@ export function buildNegotiationSnapshotUpdate(
   if (hasCurrency && hasValue) return {};
 
   const product = selectedProduct(source);
-  if (!product) return {};
+  if (!product) {
+    if (source.product_type !== null) {
+      throw new ConflictException(
+        snapshotError(
+          'PROCESS_PRODUCT_ASSOCIATION_INCONSISTENT',
+          'O tipo do produto não possui uma relação de produto correspondente.',
+        ),
+      );
+    }
+    return {};
+  }
   return {
     negotiation_currency: product.currency,
     negotiation_product_value: product.valor,

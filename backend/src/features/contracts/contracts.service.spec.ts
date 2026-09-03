@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Prisma, ProductCurrency, ProductType } from '@prisma/client';
 import {
   ContractsService,
@@ -8,12 +8,21 @@ import { formatBRL, numberToWords } from '../../shared/utils/format.utils';
 
 function mkPrisma(overrides: Partial<Record<string, any>> = {}) {
   return {
+    user: {
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'specialist-1',
+        role: 'SPECIALIST',
+      }),
+    },
     process: {
       findUnique: jest.fn(),
     },
     company: {
       findUnique: jest.fn(),
     },
+    $transaction: jest.fn(async (callback: any) =>
+      callback({ $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]) }),
+    ),
     ...overrides,
   } as any;
 }
@@ -50,6 +59,9 @@ const carFixture = {
 function processFixture(overrides: Record<string, any> = {}) {
   return {
     id: 'process-1',
+    specialist_id: 'specialist-1',
+    status: 'DOCUMENTATION',
+    active_contract_id: null,
     product_type: ProductType.CAR,
     negotiation_currency: ProductCurrency.BRL,
     negotiation_product_value: new Prisma.Decimal('100000.00'),
@@ -86,6 +98,37 @@ function processFixture(overrides: Record<string, any> = {}) {
 }
 
 describe('ContractsService — prefillContract', () => {
+  it('rejects an unrelated specialist before returning contract PII', async () => {
+    const prisma = mkPrisma({
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'other-specialist',
+          role: 'SPECIALIST',
+        }),
+      },
+    });
+    prisma.process.findUnique.mockResolvedValue(processFixture());
+    const service = mkSvc(prisma, mkPlatformCompanyService(10));
+
+    await expect(
+      service.prefillContract('process-1', 'other-specialist'),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('allows an administrator to load the contract prefill', async () => {
+    const prisma = mkPrisma({
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'admin-1', role: 'ADMIN' }),
+      },
+    });
+    prisma.process.findUnique.mockResolvedValue(processFixture());
+    const service = mkSvc(prisma, mkPlatformCompanyService(10));
+
+    await expect(
+      service.prefillContract('process-1', 'admin-1'),
+    ).resolves.toMatchObject({ process_id: 'process-1' });
+  });
+
   it('prefills price and currency from the process snapshot', async () => {
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue(
@@ -101,7 +144,7 @@ describe('ContractsService — prefillContract', () => {
     );
     const service = mkSvc(prisma, mkPlatformCompanyService(10));
 
-    const result = await service.prefillContract('process-1');
+    const result = await service.prefillContract('process-1', 'specialist-1');
     const commission = await (service as any).resolveCommissionFromTotal(
       'process-1',
       10,
@@ -122,11 +165,40 @@ describe('ContractsService — prefillContract', () => {
     );
     const service = mkSvc(prisma, mkPlatformCompanyService(10));
 
-    await expect(service.prefillContract('process-1')).rejects.toMatchObject({
+    await expect(
+      service.prefillContract('process-1', 'specialist-1'),
+    ).rejects.toMatchObject({
       response: {
         error: { code: 'PROCESS_NEGOTIATION_SNAPSHOT_MISSING' },
       },
     });
+  });
+});
+
+describe('ContractsService — cancelPreview authorization', () => {
+  it('does not cancel an envelope bound to another process', async () => {
+    const prisma = mkPrisma();
+    prisma.process.findUnique.mockResolvedValue(processFixture());
+    const docusign = {
+      getEnvelopeProcessId: jest.fn().mockResolvedValue('other-process'),
+      voidDraftEnvelope: jest.fn(),
+    } as any;
+    const service = new ContractsService(
+      prisma,
+      docusign,
+      {} as any,
+      mkPlatformCompanyService(10),
+    );
+
+    await expect(
+      service.cancelPreview(
+        'envelope-1',
+        'process-1',
+        'specialist-1',
+        'cancel',
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(docusign.voidDraftEnvelope).not.toHaveBeenCalled();
   });
 });
 

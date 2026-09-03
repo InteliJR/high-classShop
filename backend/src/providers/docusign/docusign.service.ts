@@ -244,6 +244,16 @@ export class DocuSignService {
     }
   }
 
+  async getEnvelopeProcessId(envelopeId: string): Promise<string | null> {
+    const envelope = await this.client.getEnvelopeWithCustomFields(envelopeId);
+    const fields = envelope?.customFields?.textCustomFields;
+    if (!Array.isArray(fields)) return null;
+    const processField = fields.find(
+      (field: any) => field?.name === 'processId',
+    );
+    return typeof processField?.value === 'string' ? processField.value : null;
+  }
+
   /**
    * Cancela um envelope (void)
    *

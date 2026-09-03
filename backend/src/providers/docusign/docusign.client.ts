@@ -385,6 +385,14 @@ export class DocuSignClient {
     );
   }
 
+  async getEnvelopeWithCustomFields(envelopeId: string): Promise<any> {
+    const token = await this.getAccessToken();
+    return this.get(
+      `/v2.1/accounts/${this.accountId}/envelopes/${envelopeId}?include=custom_fields`,
+      token,
+    );
+  }
+
   /**
    * Cria um envelope a partir de um template DocuSign
    *

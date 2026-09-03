@@ -25,8 +25,9 @@ export class CreateProcessDTO {
    * ID do produto (car_id, boat_id ou aircraft_id)
    * Opcional para consultoria - será definido após reunião
    */
-  @IsOptional()
-  @ValidateIf((o) => o.product_type !== undefined)
+  @ValidateIf(
+    (o) => o.product_type !== undefined || o.product_id !== undefined,
+  )
   @IsUUID('4', { message: 'product_id deve ser um UUID válido' })
   product_id?: string;
 
@@ -34,8 +35,9 @@ export class CreateProcessDTO {
    * Tipo do produto: CAR, BOAT ou AIRCRAFT
    * Opcional para consultoria - será definido após reunião
    */
-  @IsOptional()
-  @ValidateIf((o) => o.product_id !== undefined)
+  @ValidateIf(
+    (o) => o.product_type !== undefined || o.product_id !== undefined,
+  )
   @IsEnum($Enums.ProductType, {
     message: 'product_type deve ser CAR, BOAT ou AIRCRAFT',
   })

@@ -1,5 +1,8 @@
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -34,7 +37,7 @@ import {
   numberToWords,
   stripFormatting,
 } from 'src/shared/utils/format.utils';
-import { ProductType } from '@prisma/client';
+import { ProcessStatus, ProductType, UserRole } from '@prisma/client';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { PlatformCompanyService } from 'src/features/platform-company/platform-company.service';
 import { computeNestedCommissionSplit } from './commission-split';
@@ -106,6 +109,76 @@ export class ContractsService {
     private readonly platformCompanyService: PlatformCompanyService,
   ) {}
 
+  private async getAuthorizedContractProcess(
+    processId: string,
+    userId: string,
+  ): Promise<{
+    id: string;
+    status: ProcessStatus;
+    active_contract_id: string | null;
+    product_type: ProductType | null;
+    specialist_id: string;
+  }> {
+    const [processRecord, requester] = await Promise.all([
+      this.prismaService.process.findUnique({
+        where: { id: processId },
+        select: {
+          id: true,
+          status: true,
+          active_contract_id: true,
+          product_type: true,
+          specialist_id: true,
+        },
+      }),
+      this.prismaService.user.findUnique({
+        where: { id: userId },
+        select: { id: true, role: true },
+      }),
+    ]);
+
+    if (!processRecord) throw new ProcessNotFoundException(processId);
+    if (
+      !requester ||
+      (requester.role !== UserRole.ADMIN &&
+        (requester.role !== UserRole.SPECIALIST ||
+          processRecord.specialist_id !== userId))
+    ) {
+      throw new ForbiddenException(
+        'Você não pode acessar contratos deste processo.',
+      );
+    }
+    return processRecord;
+  }
+
+  private async assertEnvelopeBelongsToProcess(
+    envelopeId: string,
+    processId: string,
+  ): Promise<void> {
+    const envelopeProcessId =
+      await this.docuSignService.getEnvelopeProcessId(envelopeId);
+    if (envelopeProcessId !== processId) {
+      throw new ForbiddenException(
+        'O envelope informado não pertence a este processo.',
+      );
+    }
+  }
+
+  private async withContractProcessLock<T>(
+    processId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    return this.prismaService.$transaction(
+      async (tx) => {
+        const lockKey = `contract-process:${processId}`;
+        await tx.$queryRaw`
+          SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
+        `;
+        return operation();
+      },
+      { maxWait: 10_000, timeout: 120_000 },
+    );
+  }
+
   private assertSellerIndependentFromSpecialist(
     sellerEmail: string,
     specialistEmail?: string,
@@ -149,8 +222,11 @@ export class ContractsService {
    */
   async prefillContract(
     processId: string,
+    userId: string,
   ): Promise<PrefillContractResponseDto> {
     this.logger.debug(`Prefill contract data for process: ${processId}`);
+
+    await this.getAuthorizedContractProcess(processId, userId);
 
     // Buscar processo com todas as relações necessárias
     const processData = await this.prismaService.process.findUnique({
@@ -615,6 +691,16 @@ export class ContractsService {
     dto: GenerateContractDto,
     userId: string,
   ): Promise<ContractResponse> {
+    return this.withContractProcessLock(dto.process_id, () =>
+      this.generateContractLocked(dto, userId),
+    );
+  }
+
+  private async generateContractLocked(
+    dto: GenerateContractDto,
+    userId: string,
+  ): Promise<ContractResponse> {
+    let envelopeToCompensate: string | null = null;
     try {
       this.logger.log(`=== INICIANDO GERAÇÃO DE CONTRATO ===`);
       this.logger.log(`Usuário: ${userId}`);
@@ -625,15 +711,10 @@ export class ContractsService {
       this.logger.log('Etapa 1: Validando integridade de negócio...');
 
       // 1.1 Verificar se processo existe
-      const processRecord = await this.prismaService.process.findUnique({
-        where: { id: dto.process_id },
-        select: {
-          id: true,
-          status: true,
-          active_contract_id: true,
-          product_type: true,
-        },
-      });
+      const processRecord = await this.getAuthorizedContractProcess(
+        dto.process_id,
+        userId,
+      );
 
       if (!processRecord) {
         this.logger.warn(`Processo ${dto.process_id} não encontrado`);
@@ -779,6 +860,7 @@ export class ContractsService {
           testimonial2Name: dto.testimonial2_name,
           testimonial2Email: dto.testimonial2_email,
         });
+      envelopeToCompensate = envelopeResponse.envelopeId;
 
       this.logger.log(
         `✓ Envelope criado (ID: ${envelopeResponse.envelopeId}, Status: ${envelopeResponse.status})`,
@@ -902,13 +984,22 @@ export class ContractsService {
           });
 
           // 4.2 Atualizar processo
-          await tx.process.update({
-            where: { id: dto.process_id },
+          const processClaim = await tx.process.updateMany({
+            where: {
+              id: dto.process_id,
+              status: processRecord.status,
+              active_contract_id: processRecord.active_contract_id,
+            },
             data: {
               active_contract_id: contract.id,
               status: 'PROCESSING_CONTRACT',
             },
           });
+          if (processClaim.count !== 1) {
+            throw new ConflictException(
+              'O processo mudou durante a geração do contrato.',
+            );
+          }
 
           this.logger.log(
             `✓ Contrato definido como ativo no processo ${dto.process_id}`,
@@ -918,6 +1009,7 @@ export class ContractsService {
           return contract;
         },
       );
+      envelopeToCompensate = null;
 
       this.logger.log(
         `✓ Contrato criado no banco com ID: ${createdContract.id}`,
@@ -965,7 +1057,17 @@ export class ContractsService {
         signed_by: null,
       };
     } catch (error) {
+      if (envelopeToCompensate) {
+        await this.docuSignService.voidDraftEnvelope(
+          envelopeToCompensate,
+          'Falha ao persistir a geração do contrato',
+        );
+      }
       // ===== TRATAMENTO DE ERROS =====
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
       if (
         error instanceof ProcessNotFoundException ||
         error instanceof SignerNotFoundException ||
@@ -1135,6 +1237,15 @@ export class ContractsService {
     dto: PreviewContractDto,
     userId: string,
   ): Promise<PreviewContractResponseDto> {
+    return this.withContractProcessLock(dto.process_id, () =>
+      this.previewContractLocked(dto, userId),
+    );
+  }
+
+  private async previewContractLocked(
+    dto: PreviewContractDto,
+    userId: string,
+  ): Promise<PreviewContractResponseDto> {
     try {
       this.logger.log(`=== INICIANDO PREVIEW DE CONTRATO ===`);
       this.logger.log(`Usuário: ${userId}`);
@@ -1144,15 +1255,10 @@ export class ContractsService {
       this.logger.log('Preview Etapa 1: Validando integridade de negócio...');
 
       // 1.1 Verificar se processo existe
-      const processRecord = await this.prismaService.process.findUnique({
-        where: { id: dto.process_id },
-        select: {
-          id: true,
-          status: true,
-          active_contract_id: true,
-          product_type: true,
-        },
-      });
+      const processRecord = await this.getAuthorizedContractProcess(
+        dto.process_id,
+        userId,
+      );
 
       if (!processRecord) {
         this.logger.warn(`Processo ${dto.process_id} não encontrado`);
@@ -1318,6 +1424,10 @@ export class ContractsService {
         process_id: dto.process_id,
       };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
       if (
         error instanceof ProcessNotFoundException ||
         error instanceof ContractAlreadyExistsException
@@ -1360,6 +1470,17 @@ export class ContractsService {
     dto: PreviewContractDto,
     userId: string,
   ): Promise<SendContractResponseDto> {
+    return this.withContractProcessLock(dto.process_id, () =>
+      this.sendContractAfterPreviewLocked(envelopeId, dto, userId),
+    );
+  }
+
+  private async sendContractAfterPreviewLocked(
+    envelopeId: string,
+    dto: PreviewContractDto,
+    userId: string,
+  ): Promise<SendContractResponseDto> {
+    let sentEnvelopeNeedsCompensation = false;
     try {
       this.logger.log(`=== ENVIANDO CONTRATO APÓS PREVIEW ===`);
       this.logger.log(`EnvelopeID: ${envelopeId}`);
@@ -1368,15 +1489,12 @@ export class ContractsService {
 
       // ===== ETAPA 1: RE-VALIDAR INTEGRIDADE =====
       // (usuário pode ter aguardado muito tempo após preview)
-      const processRecord = await this.prismaService.process.findUnique({
-        where: { id: dto.process_id },
-        select: {
-          id: true,
-          status: true,
-          active_contract_id: true,
-          product_type: true,
-        },
-      });
+      const processRecord = await this.getAuthorizedContractProcess(
+        dto.process_id,
+        userId,
+      );
+
+      await this.assertEnvelopeBelongsToProcess(envelopeId, dto.process_id);
 
       if (!processRecord) {
         throw new ProcessNotFoundException(dto.process_id);
@@ -1436,6 +1554,7 @@ export class ContractsService {
 
       const sendResponse =
         await this.docuSignService.sendDraftEnvelope(envelopeId);
+      sentEnvelopeNeedsCompensation = true;
 
       this.logger.log(`✓ Envelope enviado (Status: ${sendResponse.status})`);
 
@@ -1558,17 +1677,27 @@ export class ContractsService {
           });
 
           // Atualizar processo
-          await tx.process.update({
-            where: { id: dto.process_id },
+          const processClaim = await tx.process.updateMany({
+            where: {
+              id: dto.process_id,
+              status: processRecord.status,
+              active_contract_id: processRecord.active_contract_id,
+            },
             data: {
               active_contract_id: contract.id,
               status: 'PROCESSING_CONTRACT',
             },
           });
+          if (processClaim.count !== 1) {
+            throw new ConflictException(
+              'O processo mudou durante o envio do contrato.',
+            );
+          }
 
           return contract;
         },
       );
+      sentEnvelopeNeedsCompensation = false;
 
       this.logger.log(`✓ Contrato criado: ${createdContract.id}`);
       this.logger.log(`=== ENVIO DE CONTRATO CONCLUÍDO ===`);
@@ -1602,6 +1731,16 @@ export class ContractsService {
         created_at: createdContract.created_at.toISOString(),
       };
     } catch (error) {
+      if (sentEnvelopeNeedsCompensation) {
+        await this.docuSignService.voidDraftEnvelope(
+          envelopeId,
+          'Falha ao persistir o envio do contrato',
+        );
+      }
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
       if (
         error instanceof ProcessNotFoundException ||
         error instanceof ContractAlreadyExistsException ||
@@ -1626,8 +1765,26 @@ export class ContractsService {
    * @param envelopeId - ID do envelope a cancelar
    * @param reason - Motivo do cancelamento
    */
-  async cancelPreview(envelopeId: string, reason: string): Promise<void> {
+  async cancelPreview(
+    envelopeId: string,
+    processId: string,
+    userId: string,
+    reason: string,
+  ): Promise<void> {
+    return this.withContractProcessLock(processId, () =>
+      this.cancelPreviewLocked(envelopeId, processId, userId, reason),
+    );
+  }
+
+  private async cancelPreviewLocked(
+    envelopeId: string,
+    processId: string,
+    userId: string,
+    reason: string,
+  ): Promise<void> {
     this.logger.log(`Cancelando preview: ${envelopeId}`);
+    await this.getAuthorizedContractProcess(processId, userId);
+    await this.assertEnvelopeBelongsToProcess(envelopeId, processId);
     await this.docuSignService.voidDraftEnvelope(envelopeId, reason);
   }
 }

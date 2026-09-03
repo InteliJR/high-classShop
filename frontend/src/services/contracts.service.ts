@@ -377,10 +377,13 @@ export async function sendContractAfterPreview(
  * Cancela um preview de contrato
  * @param envelopeId - ID do envelope no DocuSign
  */
-export async function cancelContractPreview(envelopeId: string): Promise<void> {
+export async function cancelContractPreview(
+  envelopeId: string,
+  processId: string,
+): Promise<void> {
   await api.post(
     `/contracts/cancel-preview/${envelopeId}`,
-    {},
+    { process_id: processId },
     { withCredentials: true },
   );
 }

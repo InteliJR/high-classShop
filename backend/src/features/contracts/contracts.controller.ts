@@ -93,6 +93,7 @@ export class ContractsController {
    * }
    */
   @Get('prefill/:processId')
+  @Roles(UserRole.SPECIALIST, UserRole.ADMIN)
   async prefillContract(
     @Param('processId', new ParseUUIDPipe({ version: '4' })) processId: string,
     @Request() req: RequestWithUser,
@@ -103,7 +104,10 @@ export class ContractsController {
       `Prefill contract requested by user ${userId} (${userEmail}) for process ${processId}`,
     );
 
-    const prefillData = await this.contractsService.prefillContract(processId);
+    const prefillData = await this.contractsService.prefillContract(
+      processId,
+      userId,
+    );
 
     this.logger.debug(`Prefill data returned for process ${processId}`);
 
@@ -396,6 +400,7 @@ export class ContractsController {
   @Roles(UserRole.SPECIALIST, UserRole.ADMIN)
   async cancelPreview(
     @Param('envelopeId') envelopeId: string,
+    @Body('process_id', new ParseUUIDPipe({ version: '4' })) processId: string,
     @Request() req: RequestWithUser,
   ): Promise<ApiResponseDto<null>> {
     const { id: userId, email: userEmail } = req.user;
@@ -405,6 +410,8 @@ export class ContractsController {
 
     await this.contractsService.cancelPreview(
       envelopeId,
+      processId,
+      userId,
       `Cancelado pelo usuário ${userEmail}`,
     );
 

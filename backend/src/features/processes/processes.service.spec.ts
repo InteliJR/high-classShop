@@ -43,9 +43,41 @@ describe('ProcessesService — produto UUID', () => {
       }),
     );
     const prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: specialistId,
+          role: UserRole.SPECIALIST,
+          speciality: ProductType.CAR,
+        }),
+      },
+      car: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: productId,
+          specialist_id: specialistId,
+          is_active: true,
+        }),
+      },
+      boat: { findUnique: jest.fn() },
+      aircraft: { findUnique: jest.fn() },
       process: { findFirst },
       $transaction: jest.fn(async (callback) =>
         callback({
+          user: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: specialistId,
+              role: UserRole.SPECIALIST,
+              speciality: ProductType.CAR,
+            }),
+          },
+          car: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: productId,
+              specialist_id: specialistId,
+              is_active: true,
+            }),
+          },
+          boat: { findUnique: jest.fn() },
+          aircraft: { findUnique: jest.fn() },
           process: { create },
           processStatusHistory: { create: jest.fn().mockResolvedValue({}) },
         }),
@@ -102,6 +134,23 @@ describe('ProcessesService — produto UUID', () => {
         (error) => error.property === 'product_id',
       ),
     ).toBe(true);
+  });
+
+  it.each([
+    { product_type: ProductType.CAR },
+    { product_id: productId },
+  ])('rejeita seleção parcial de produto: %o', async (partial) => {
+    const dto = Object.assign(new CreateProcessDTO(), {
+      client_id: clientId,
+      specialist_id: specialistId,
+      ...partial,
+    });
+
+    const errors = await validate(dto);
+
+    expect(errors.some((error) =>
+      ['product_type', 'product_id'].includes(error.property),
+    )).toBe(true);
   });
 });
 

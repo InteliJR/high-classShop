@@ -614,7 +614,7 @@ export default function CreateContractPage() {
 
     if (previewData?.envelope_id) {
       try {
-        await cancelContractPreview(previewData.envelope_id);
+        await cancelContractPreview(previewData.envelope_id, processId!);
       } catch (error) {
         console.error("Erro ao cancelar preview (não crítico):", error);
       }

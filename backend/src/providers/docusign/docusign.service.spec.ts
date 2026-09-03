@@ -20,6 +20,23 @@ describe('DocuSignService — listTemplates', () => {
   });
 });
 
+describe('DocuSignService — vínculo do envelope ao processo', () => {
+  it('reads the processId custom field from an envelope', async () => {
+    const client = {
+      getEnvelopeWithCustomFields: jest.fn().mockResolvedValue({
+        customFields: {
+          textCustomFields: [{ name: 'processId', value: 'process-1' }],
+        },
+      }),
+    } as any;
+    const service = new DocuSignService(client);
+
+    await expect(service.getEnvelopeProcessId('envelope-1')).resolves.toBe(
+      'process-1',
+    );
+  });
+});
+
 describe('DocuSignService — mapFormFieldsToDocGen é removal-safe', () => {
   const service = new DocuSignService({} as any);
 

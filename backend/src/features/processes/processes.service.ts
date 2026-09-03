@@ -31,6 +31,7 @@ import {
   acquireProductMonetaryLock,
   lockNegotiationProductMoney,
 } from '../products/product-monetary-lock';
+import { validateSpecialistProductAssociation } from '../products/product-association-validator';
 
 /**
  * Quem está pedindo a operação. `companyId` só é usado por OFFICE.
@@ -410,6 +411,12 @@ export class ProcessesService {
 
     // Criar o processo e adiciona os status inicial dele na tabela de histórico
     const processCreated = await this.prismaService.$transaction(async (tx) => {
+      await validateSpecialistProductAssociation(tx, {
+        specialistId: createProcessDto.specialist_id,
+        productType: createProcessDto.product_type,
+        productId: createProcessDto.product_id,
+      });
+
       const process = await tx.process.create({
         data: { specialist_id, client_id, ...dataToSave, ...finalProduct },
         include,

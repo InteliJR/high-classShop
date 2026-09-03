@@ -47,6 +47,16 @@ export class ProposalsService {
     private notificationService: NotificationService,
   ) {}
 
+  private async lockProposalResponse(
+    tx: any,
+    proposalId: string,
+  ): Promise<void> {
+    const lockKey = `proposal-response:${proposalId}`;
+    await tx.$queryRaw`
+      SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
+    `;
+  }
+
   /**
    * Cria uma nova proposta de negociação
    *
@@ -272,6 +282,26 @@ export class ProposalsService {
           },
         });
       }
+
+      if (originalProposal.process_id !== dto.process_id) {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 'COUNTER_PROPOSAL_PROCESS_MISMATCH',
+            message: 'A proposta original pertence a outro processo',
+          },
+        });
+      }
+
+      if (originalProposal.proposed_to_id !== userId) {
+        throw new ForbiddenException({
+          success: false,
+          error: {
+            code: 'COUNTER_PROPOSAL_RECIPIENT_MISMATCH',
+            message: 'Apenas o destinatário pode responder esta proposta',
+          },
+        });
+      }
     }
 
     // 8. Determinar destinatário (lado oposto)
@@ -283,10 +313,26 @@ export class ProposalsService {
     const proposal = await this.prisma.$transaction(async (tx) => {
       // Se está respondendo a uma proposta, marcar a original como COUNTERED
       if (dto.counter_to_id) {
-        await tx.negotiationProposal.update({
-          where: { id: dto.counter_to_id },
+        await this.lockProposalResponse(tx, dto.counter_to_id);
+        const claim = await tx.negotiationProposal.updateMany({
+          where: {
+            id: dto.counter_to_id,
+            process_id: dto.process_id,
+            proposed_to_id: userId,
+            status: ProposalStatus.PENDING,
+          },
           data: { status: ProposalStatus.COUNTERED },
         });
+        if (claim.count !== 1) {
+          throw new ConflictException({
+            success: false,
+            error: {
+              code: 'PROPOSAL_RESPONSE_CONFLICT',
+              message:
+                'A proposta original já foi respondida. Recarregue e tente novamente.',
+            },
+          });
+        }
         this.logger.log(
           `[create] Proposta ${dto.counter_to_id} marcada como COUNTERED`,
         );
@@ -561,6 +607,7 @@ export class ProposalsService {
         userId,
         tx,
       );
+      await this.lockProposalResponse(tx, proposalId);
       const { currency } = requireNegotiationSnapshot(proposal.process);
 
       // Apenas uma resposta concorrente pode reivindicar uma proposta PENDING.
@@ -717,6 +764,7 @@ export class ProposalsService {
         userId,
         tx,
       );
+      await this.lockProposalResponse(tx, proposalId);
       const { currency } = requireNegotiationSnapshot(proposal.process);
 
       const proposalClaim = await tx.negotiationProposal.updateMany({
