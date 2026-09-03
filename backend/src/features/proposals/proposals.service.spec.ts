@@ -81,29 +81,44 @@ function proposalFixture(overrides: Record<string, unknown> = {}) {
 }
 
 function setup() {
+  let claimedStatus = ProposalStatus.ACCEPTED;
   const transactionProposalCreate = jest
     .fn()
     .mockImplementation(({ data }) =>
       Promise.resolve(proposalFixture({ ...data })),
     );
-  const transactionProposalUpdate = jest
+  const proposalFindUnique = jest.fn();
+  const transactionProposalUpdateMany = jest
     .fn()
-    .mockResolvedValue(proposalFixture({ status: ProposalStatus.ACCEPTED }));
+    .mockImplementation(({ data }) => {
+      claimedStatus = data.status;
+      return Promise.resolve({ count: 1 });
+    });
+  const transactionProposalFindUniqueOrThrow = jest
+    .fn()
+    .mockImplementation(() =>
+      Promise.resolve(proposalFixture({ status: claimedStatus })),
+    );
+  const transactionProcessUpdateMany = jest
+    .fn()
+    .mockResolvedValue({ count: 1 });
   const prisma = {
     process: {
       findUnique: jest.fn(),
     },
     negotiationProposal: {
-      findUnique: jest.fn(),
+      findUnique: proposalFindUnique,
       update: jest.fn(),
     },
     $transaction: jest.fn(async (callback) =>
       callback({
         negotiationProposal: {
           create: transactionProposalCreate,
-          update: transactionProposalUpdate,
+          findUnique: proposalFindUnique,
+          findUniqueOrThrow: transactionProposalFindUniqueOrThrow,
+          updateMany: transactionProposalUpdateMany,
         },
-        process: { update: jest.fn().mockResolvedValue({}) },
+        process: { updateMany: transactionProcessUpdateMany },
         processStatusHistory: { create: jest.fn().mockResolvedValue({}) },
       }),
     ),
@@ -126,6 +141,8 @@ function setup() {
     settings,
     notifications,
     transactionProposalCreate,
+    transactionProposalUpdateMany,
+    transactionProcessUpdateMany,
   };
 }
 
@@ -369,11 +386,19 @@ describe('ProposalsService — snapshot e mínimo dinâmico', () => {
       await service[action]('proposal-1', 'specialist-1');
 
       expect(
-        prisma.negotiationProposal.findUnique.mock.calls[1][0].include.process,
+        prisma.negotiationProposal.findUnique.mock.calls[0][0].include.process,
       ).toEqual({
         select: {
+          status: true,
+          client_id: true,
+          specialist_id: true,
+          product_type: true,
+          car_id: true,
+          boat_id: true,
+          aircraft_id: true,
           negotiation_currency: true,
           negotiation_product_value: true,
+          client: { select: { consultant_id: true } },
         },
       });
       expect(notifications[notificationMethod]).toHaveBeenCalledWith(
@@ -391,7 +416,13 @@ describe('ProposalsService — snapshot e mínimo dinâmico', () => {
   ] as const)(
     'falha explicitamente e não notifica ao %s sem snapshot',
     async (action, notificationMethod) => {
-      const { service, prisma, notifications } = setup();
+      const {
+        service,
+        prisma,
+        notifications,
+        transactionProposalUpdateMany,
+        transactionProcessUpdateMany,
+      } = setup();
       const process = {
         status: ProcessStatus.NEGOTIATION,
         client_id: 'client-1',
@@ -424,6 +455,104 @@ describe('ProposalsService — snapshot e mínimo dinâmico', () => {
       });
       expect(notifications[notificationMethod]).not.toHaveBeenCalled();
       expect(prisma.negotiationProposal.update).not.toHaveBeenCalled();
+      expect(transactionProposalUpdateMany).not.toHaveBeenCalled();
+      expect(transactionProcessUpdateMany).not.toHaveBeenCalled();
     },
   );
+
+  it('allows only one concurrent accept/reject response and preserves the accepted proposal invariant', async () => {
+    const state = {
+      proposalStatus: ProposalStatus.PENDING,
+      processStatus: ProcessStatus.NEGOTIATION,
+      acceptedProposalId: null as string | null,
+      historyCount: 0,
+    };
+    const currentProposal = () =>
+      proposalFixture({
+        status: state.proposalStatus,
+        process: processFixture({
+          status: state.processStatus,
+          car_id: 'car-1',
+          boat_id: null,
+          aircraft_id: null,
+        }),
+      });
+
+    const negotiationProposal = {
+      findUnique: jest.fn(async () => currentProposal()),
+      findUniqueOrThrow: jest.fn(async () => currentProposal()),
+      update: jest.fn(async ({ data }) => {
+        state.proposalStatus = data.status;
+        return currentProposal();
+      }),
+      updateMany: jest.fn(async ({ where, data }) => {
+        if (state.proposalStatus !== where.status) return { count: 0 };
+        state.proposalStatus = data.status;
+        return { count: 1 };
+      }),
+    };
+    const process = {
+      findUnique: jest.fn().mockResolvedValue(null),
+      update: jest.fn(async ({ data }) => {
+        state.processStatus = data.status;
+        state.acceptedProposalId = data.accepted_proposal_id;
+        return {};
+      }),
+      updateMany: jest.fn(async ({ where, data }) => {
+        if (state.processStatus !== where.status) return { count: 0 };
+        state.processStatus = data.status;
+        state.acceptedProposalId = data.accepted_proposal_id;
+        return { count: 1 };
+      }),
+    };
+    const prisma = {
+      negotiationProposal,
+      process,
+      processStatusHistory: {
+        create: jest.fn(async () => {
+          state.historyCount += 1;
+          return {};
+        }),
+      },
+      $transaction: jest.fn(async (callback) =>
+        callback({
+          negotiationProposal,
+          process,
+          processStatusHistory: {
+            create: jest.fn(async () => {
+              state.historyCount += 1;
+              return {};
+            }),
+          },
+        }),
+      ),
+    } as any;
+    const notifications = {
+      sendProposalAcceptedEmail: jest.fn().mockResolvedValue(undefined),
+      sendProposalRejectedEmail: jest.fn().mockResolvedValue(undefined),
+      sendProcessStatusChangedEmail: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const service = new ProposalsService(prisma, {} as any, notifications);
+
+    const outcomes = await Promise.allSettled([
+      service.accept('proposal-1', 'specialist-1'),
+      service.reject('proposal-1', 'specialist-1'),
+    ]);
+
+    expect(
+      outcomes.filter(({ status }) => status === 'fulfilled'),
+    ).toHaveLength(1);
+    expect(outcomes.filter(({ status }) => status === 'rejected')).toHaveLength(
+      1,
+    );
+    if (state.acceptedProposalId !== null) {
+      expect(state.proposalStatus).toBe(ProposalStatus.ACCEPTED);
+      expect(state.processStatus).toBe(ProcessStatus.DOCUMENTATION);
+      expect(state.historyCount).toBe(1);
+    } else {
+      expect(state.proposalStatus).toBe(ProposalStatus.REJECTED);
+      expect(state.processStatus).toBe(ProcessStatus.NEGOTIATION);
+      expect(state.historyCount).toBe(0);
+    }
+  });
 });

@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  ConflictException,
   NotFoundException,
   ForbiddenException,
   Logger,
@@ -554,57 +555,43 @@ export class ProposalsService {
   ): Promise<ProposalResponseEntity> {
     this.logger.log(`[accept] Aceitando proposta ${proposalId}`);
 
-    const proposal = await this.validateProposalAction(proposalId, userId);
+    const response = await this.prisma.$transaction(async (tx) => {
+      const proposal = await this.validateProposalAction(
+        proposalId,
+        userId,
+        tx,
+      );
+      const { currency } = requireNegotiationSnapshot(proposal.process);
 
-    // Buscar dados adicionais para notificação (email do proposer)
-    const proposalWithEmails = await this.prisma.negotiationProposal.findUnique(
-      {
-        where: { id: proposalId },
-        include: {
-          proposed_by: {
-            select: { id: true, email: true, name: true, surname: true },
-          },
-          proposed_to: {
-            select: { id: true, email: true, name: true, surname: true },
-          },
-          process: {
-            select: {
-              negotiation_currency: true,
-              negotiation_product_value: true,
-            },
-          },
+      // Apenas uma resposta concorrente pode reivindicar uma proposta PENDING.
+      const proposalClaim = await tx.negotiationProposal.updateMany({
+        where: {
+          id: proposalId,
+          status: ProposalStatus.PENDING,
+          process: { status: ProcessStatus.NEGOTIATION },
         },
-      },
-    );
-
-    const { currency } = requireNegotiationSnapshot(proposal.process);
-
-    // Atualizar proposta e processo em transação
-    const updated = await this.prisma.$transaction(async (tx) => {
-      // 1. Marcar proposta como ACCEPTED
-      const acceptedProposal = await tx.negotiationProposal.update({
-        where: { id: proposalId },
         data: { status: ProposalStatus.ACCEPTED },
-        include: {
-          proposed_by: {
-            select: { id: true, name: true, surname: true, role: true },
-          },
-          proposed_to: {
-            select: { id: true, name: true, surname: true, role: true },
-          },
-        },
       });
+      if (proposalClaim.count !== 1) {
+        throw this.proposalResponseConflict(proposalId);
+      }
 
-      // 2. Atualizar processo para DOCUMENTATION (especialista enviará contrato nessa fase)
-      await tx.process.update({
-        where: { id: proposal.process_id },
+      // A transação desfaz a reivindicação da proposta se o processo já avançou.
+      const processClaim = await tx.process.updateMany({
+        where: {
+          id: proposal.process_id,
+          status: ProcessStatus.NEGOTIATION,
+          accepted_proposal_id: null,
+        },
         data: {
           status: ProcessStatus.DOCUMENTATION,
           accepted_proposal_id: proposalId,
         },
       });
+      if (processClaim.count !== 1) {
+        throw this.proposalResponseConflict(proposalId);
+      }
 
-      // 3. Registrar histórico de status
       await tx.processStatusHistory.create({
         data: {
           processId: proposal.process_id,
@@ -613,36 +600,47 @@ export class ProposalsService {
         },
       });
 
+      const updated = await tx.negotiationProposal.findUniqueOrThrow({
+        where: { id: proposalId },
+        include: {
+          proposed_by: {
+            select: { id: true, name: true, surname: true, role: true },
+          },
+          proposed_to: {
+            select: { id: true, name: true, surname: true, role: true },
+          },
+        },
+      });
+
       this.logger.log(
         `[accept] Proposta ${proposalId} aceita, processo movido para DOCUMENTATION`,
       );
 
-      return acceptedProposal;
+      return { updated, proposal, currency };
     });
+    const { updated, proposal, currency } = response;
 
     // Fire-and-forget: Enviar notificação de proposta aceita
-    if (proposalWithEmails) {
-      const proposer = proposalWithEmails.proposed_by;
-      const accepter = proposalWithEmails.proposed_to;
-      setImmediate(() => {
-        this.notificationService
-          .sendProposalAcceptedEmail({
-            proposerEmail: proposer.email!,
-            proposerName: `${proposer.name} ${proposer.surname || ''}`.trim(),
-            recipientName: `${accepter.name} ${accepter.surname || ''}`.trim(),
-            acceptedValue: Number(proposal.proposed_value),
-            currency,
-            processId: proposal.process_id,
-          })
-          .catch((err) => {
-            this.logger.error('Notification failed (non-critical)', {
-              method: 'accept',
-              proposalId,
-              error: err.message,
-            });
+    const proposer = proposal.proposed_by;
+    const accepter = proposal.proposed_to;
+    setImmediate(() => {
+      this.notificationService
+        .sendProposalAcceptedEmail({
+          proposerEmail: proposer.email!,
+          proposerName: `${proposer.name} ${proposer.surname || ''}`.trim(),
+          recipientName: `${accepter.name} ${accepter.surname || ''}`.trim(),
+          acceptedValue: Number(proposal.proposed_value),
+          currency,
+          processId: proposal.process_id,
+        })
+        .catch((err) => {
+          this.logger.error('Notification failed (non-critical)', {
+            method: 'accept',
+            proposalId,
+            error: err.message,
           });
-      });
-    }
+        });
+    });
 
     const processForNotification = await this.prisma.process.findUnique({
       where: { id: proposal.process_id },
@@ -669,9 +667,8 @@ export class ProposalsService {
           },
         ].filter((recipient) => Boolean(recipient.email));
 
-        const changedByName = proposalWithEmails
-          ? `${proposalWithEmails.proposed_to.name} ${proposalWithEmails.proposed_to.surname || ''}`.trim()
-          : undefined;
+        const changedByName =
+          `${proposal.proposed_to.name} ${proposal.proposed_to.surname || ''}`.trim();
 
         Promise.allSettled(
           recipients.map((recipient) =>
@@ -714,72 +711,68 @@ export class ProposalsService {
   ): Promise<ProposalResponseEntity> {
     this.logger.log(`[reject] Rejeitando proposta ${proposalId}`);
 
-    const proposal = await this.validateProposalAction(proposalId, userId);
+    const response = await this.prisma.$transaction(async (tx) => {
+      const proposal = await this.validateProposalAction(
+        proposalId,
+        userId,
+        tx,
+      );
+      const { currency } = requireNegotiationSnapshot(proposal.process);
 
-    // Buscar dados adicionais para notificação (email do proposer)
-    const proposalWithEmails = await this.prisma.negotiationProposal.findUnique(
-      {
+      const proposalClaim = await tx.negotiationProposal.updateMany({
+        where: {
+          id: proposalId,
+          status: ProposalStatus.PENDING,
+          process: { status: ProcessStatus.NEGOTIATION },
+        },
+        data: {
+          status: ProposalStatus.REJECTED,
+          message: dto?.message || proposal.message,
+        },
+      });
+      if (proposalClaim.count !== 1) {
+        throw this.proposalResponseConflict(proposalId);
+      }
+
+      const updated = await tx.negotiationProposal.findUniqueOrThrow({
         where: { id: proposalId },
         include: {
           proposed_by: {
-            select: { id: true, email: true, name: true, surname: true },
+            select: { id: true, name: true, surname: true, role: true },
           },
           proposed_to: {
-            select: { id: true, email: true, name: true, surname: true },
-          },
-          process: {
-            select: {
-              negotiation_currency: true,
-              negotiation_product_value: true,
-            },
+            select: { id: true, name: true, surname: true, role: true },
           },
         },
-      },
-    );
+      });
 
-    const { currency } = requireNegotiationSnapshot(proposal.process);
-
-    const updated = await this.prisma.negotiationProposal.update({
-      where: { id: proposalId },
-      data: {
-        status: ProposalStatus.REJECTED,
-        message: dto?.message || proposal.message,
-      },
-      include: {
-        proposed_by: {
-          select: { id: true, name: true, surname: true, role: true },
-        },
-        proposed_to: {
-          select: { id: true, name: true, surname: true, role: true },
-        },
-      },
+      return { updated, proposal, currency };
     });
+    const { updated, proposal, currency } = response;
 
     this.logger.log(`[reject] Proposta ${proposalId} rejeitada`);
 
     // Fire-and-forget: Enviar notificação de proposta rejeitada
-    if (proposalWithEmails) {
-      const proposer = proposalWithEmails.proposed_by;
-      const rejecter = proposalWithEmails.proposed_to;
-      setImmediate(() => {
-        this.notificationService
-          .sendProposalRejectedEmail({
-            proposerEmail: proposer.email!,
-            proposerName: `${proposer.name} ${proposer.surname || ''}`.trim(),
-            recipientName: `${rejecter.name} ${rejecter.surname || ''}`.trim(),
-            rejectedValue: Number(proposal.proposed_value),
-            currency,
-            processId: proposal.process_id,
-          })
-          .catch((err) => {
-            this.logger.error('Notification failed (non-critical)', {
-              method: 'reject',
-              proposalId,
-              error: err.message,
-            });
+    const proposer = proposal.proposed_by;
+    const rejecter = proposal.proposed_to;
+    setImmediate(() => {
+      this.notificationService
+        .sendProposalRejectedEmail({
+          proposerEmail: proposer.email!,
+          proposerName: `${proposer.name} ${proposer.surname || ''}`.trim(),
+          recipientName: `${rejecter.name} ${rejecter.surname || ''}`.trim(),
+          rejectedValue: Number(proposal.proposed_value),
+          currency,
+          processId: proposal.process_id,
+        })
+        .catch((err) => {
+          this.logger.error('Notification failed (non-critical)', {
+            method: 'reject',
+            proposalId,
+            error: err.message,
           });
-      });
-    }
+        });
+    });
 
     return this.mapToResponseEntity(updated);
   }
@@ -851,8 +844,9 @@ export class ProposalsService {
   private async validateProposalAction(
     proposalId: string,
     userId: string,
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
   ): Promise<any> {
-    const proposal = await this.prisma.negotiationProposal.findUnique({
+    const proposal = await client.negotiationProposal.findUnique({
       where: { id: proposalId },
       include: {
         process: {
@@ -868,6 +862,12 @@ export class ProposalsService {
             negotiation_product_value: true,
             client: { select: { consultant_id: true } },
           },
+        },
+        proposed_by: {
+          select: { id: true, email: true, name: true, surname: true },
+        },
+        proposed_to: {
+          select: { id: true, email: true, name: true, surname: true },
         },
       },
     });
@@ -954,6 +954,18 @@ export class ProposalsService {
     }
 
     return proposal;
+  }
+
+  private proposalResponseConflict(proposalId: string): ConflictException {
+    return new ConflictException({
+      success: false,
+      error: {
+        code: 'PROPOSAL_RESPONSE_CONFLICT',
+        message:
+          'A proposta ou o processo foi alterado por outra operação. Recarregue e tente novamente.',
+        details: { proposal_id: proposalId },
+      },
+    });
   }
 
   /**
