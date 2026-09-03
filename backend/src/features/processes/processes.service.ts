@@ -1378,9 +1378,8 @@ export class ProcessesService {
       });
 
       const assignmentStateChanged =
-        ![ProcessStatus.SCHEDULING, ProcessStatus.NEGOTIATION].includes(
-          processForAssignment.status,
-        ) ||
+        (processForAssignment.status !== ProcessStatus.SCHEDULING &&
+          processForAssignment.status !== ProcessStatus.NEGOTIATION) ||
         Boolean(
           processForAssignment.product_type ||
             processForAssignment.car_id ||

@@ -15,27 +15,37 @@ export type NegotiationSnapshotSource = {
   aircraft?: MonetaryProduct | null;
 };
 
+export type NegotiationSnapshotUpdate = {
+  negotiation_currency?: ProductCurrency;
+  negotiation_product_value?: Prisma.Decimal;
+};
+
 function snapshotError(code: string, message: string) {
   return { success: false, error: { code, message } };
 }
 
-function selectedProduct(source: NegotiationSnapshotSource): MonetaryProduct | null {
+function selectedProduct(
+  source: NegotiationSnapshotSource,
+): MonetaryProduct | null {
   if (source.product_type === ProductType.CAR) return source.car ?? null;
   if (source.product_type === ProductType.BOAT) return source.boat ?? null;
-  if (source.product_type === ProductType.AIRCRAFT) return source.aircraft ?? null;
+  if (source.product_type === ProductType.AIRCRAFT)
+    return source.aircraft ?? null;
   return null;
 }
 
 export function buildNegotiationSnapshotUpdate(
   source: NegotiationSnapshotSource,
-): Prisma.ProcessUpdateInput {
+): NegotiationSnapshotUpdate {
   const hasCurrency = source.negotiation_currency !== null;
   const hasValue = source.negotiation_product_value !== null;
   if (hasCurrency !== hasValue) {
-    throw new ConflictException(snapshotError(
-      'PROCESS_NEGOTIATION_SNAPSHOT_INCONSISTENT',
-      'O snapshot monetário do processo está inconsistente.',
-    ));
+    throw new ConflictException(
+      snapshotError(
+        'PROCESS_NEGOTIATION_SNAPSHOT_INCONSISTENT',
+        'O snapshot monetário do processo está inconsistente.',
+      ),
+    );
   }
   if (hasCurrency && hasValue) return {};
 
@@ -48,13 +58,21 @@ export function buildNegotiationSnapshotUpdate(
 }
 
 export function requireNegotiationSnapshot(
-  source: Pick<NegotiationSnapshotSource, 'negotiation_currency' | 'negotiation_product_value'>,
+  source: Pick<
+    NegotiationSnapshotSource,
+    'negotiation_currency' | 'negotiation_product_value'
+  >,
 ): { currency: ProductCurrency; productValue: Prisma.Decimal } {
-  if (!source.negotiation_currency || source.negotiation_product_value === null) {
-    throw new BadRequestException(snapshotError(
-      'PROCESS_NEGOTIATION_SNAPSHOT_MISSING',
-      'A negociação não possui valor e moeda congelados.',
-    ));
+  if (
+    !source.negotiation_currency ||
+    source.negotiation_product_value === null
+  ) {
+    throw new BadRequestException(
+      snapshotError(
+        'PROCESS_NEGOTIATION_SNAPSHOT_MISSING',
+        'A negociação não possui valor e moeda congelados.',
+      ),
+    );
   }
   return {
     currency: source.negotiation_currency,
