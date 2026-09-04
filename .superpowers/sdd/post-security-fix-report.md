@@ -245,3 +245,247 @@ transaction and is outside this brief.
 2. The frontend production build retains its pre-existing warning for a JS
    chunk larger than 500 kB. It does not fail the build and is unrelated to this
    wave.
+
+---
+
+# Independent-review follow-up (2026-09-04)
+
+This section supersedes the earlier readiness statement. The independent review
+of `82233c1..f946d3c` returned `NOT READY`; every Important and
+Minor/test-integrity item in that review was addressed in this follow-up.
+
+## Root causes and implementation
+
+### 1. Compensation race and ambiguous commit acknowledgement
+
+Compensation previously ran after releasing `contract-process:<processId>` and
+could void an envelope that a retry had already persisted as the active
+contract. The compensation path now reacquires the process advisory lock,
+re-reads `active_contract_id` and its contract `provider_id`, and refuses to
+void the current persisted provider envelope. It also reads the provider state
+under the lock before deciding whether automatic compensation is safe.
+
+The public generation and preview-send flows track whether their transaction
+callback completed. A rejection after callback completion is treated as an
+ambiguous COMMIT acknowledgement and returns the stable
+`CONTRACT_MANUAL_RECONCILIATION_REQUIRED` response; it never automatically
+voids the envelope. PostgreSQL coverage forces the lost-acknowledgement/retry
+ordering and proves that the persisted envelope is not voided.
+
+### 2. Provider partial effects and send ambiguity
+
+The provider draft used to exist before the application learned its id.
+`DocuSignService` now invokes `onEnvelopeCreated` immediately after draft
+creation, and `EnvelopeEffectError` carries the envelope id plus the typed
+effect state `DRAFT_CONFIRMED` or `SEND_INDETERMINATE`. Confirmed drafts are
+compensated; an unconfirmable send result is sent to manual reconciliation.
+After an update error, the provider status is queried: sent/delivered/completed
+is idempotent success, created is a compensable draft, and unavailable or
+unexpected state is indeterminate.
+
+Creation requests now include a per-operation DocuSign `transactionId`; the
+same request body and transaction id are reused by client-level retries.
+Regressions cover the immediate draft marker, partial DocGen failure,
+idempotency key, confirmed send after a lost response, and indeterminate send.
+
+### 3. Stale or losing previews already sent externally
+
+The preview-send path now authorizes the caller, validates the process binding,
+and inspects provider status before applying terminal/active-contract discard
+rules. A stale draft is voided. A stale or losing
+sent/delivered/completed envelope produces the explicit safe reconciliation
+error instead of being silently logged. The real page keeps preview state and
+the modal open for that code, and the modal event tests exercise confirm,
+cancel, expiry, progress, and error wiring.
+
+### 4. Product association TOCTOU
+
+The shared association validator now acquires the existing
+`product-money:<type>:<id>` transaction-scoped advisory lock before reading the
+product. All catalog mutation paths that can deactivate or reassign a product
+use the same convention: direct car/boat/aircraft update and remove, import
+upserts, and stale-import deactivation. Multi-product deactivation takes locks
+in sorted id order. A deterministic PostgreSQL race holds a deactivation after
+lock acquisition, queues appointment creation on the same key, and proves the
+creator re-reads the inactive row and writes no appointment/process.
+
+### 5. Raw internal errors in HTTP responses
+
+Manual reconciliation and generic contract failures now expose only a stable
+public code/message, safe process/envelope ids, and a generated correlation id.
+Database/provider messages and stacks remain in structured server logs and the
+exception `cause`; they are absent from the HTTP response. Provider fallback
+messages are likewise sanitized, including development mode. Regressions use
+sentinel raw database/provider text and assert that it is not serialized.
+
+### 6. Idempotent cancellation
+
+After authorization, envelope/process binding, and active-envelope protection,
+`cancelPreview` treats provider status `VOIDED` as success. Other non-draft
+statuses remain errors and provider cancellation failures still propagate.
+
+### 7. Active-process deduplication
+
+`createOnBehalfOfClient` moved its active-process query into the write
+transaction. It acquires a scoped key containing client, specialist and
+product/consultancy identity, then re-reads with `tx.process.findFirst` before
+creating Appointment, Process and history. A three-connection PostgreSQL test
+holds the key until both creators are queued and proves exactly one succeeds.
+
+### 8. Appointment schedule serialization
+
+Appointment creation now acquires `appointment-schedule:<specialistId>` before
+the conflict query and insert. A deterministic PostgreSQL test queues two
+different products for the same specialist/time behind a held key and proves
+one success, one `ConflictException`, and one committed appointment.
+
+### 9. Test integrity
+
+Contract PostgreSQL tests use explicit barriers, one connection per pool, and
+exercise the public `sendContractAfterPreview` method as well as generation and
+lost-COMMIT acknowledgement. The appointment rollback harness now uses distinct
+root and transaction delegates and verifies root writes are not used. Real
+React/jsdom tests exercise modal DOM events and the page-level
+reconciliation/cancellation lifecycle. The stale car mock called out in the
+previous report was corrected to model the monetary-lock transaction.
+
+## RED evidence
+
+All commands were prefixed with `rtk`. Jest ran with `--runInBand`; Vitest was
+limited to two workers. Provider clients were mocks.
+
+1. `cd backend && rtk npm test -- --runInBand src/providers/docusign/docusign.service.spec.ts`
+   — RED: 3 expected failures. The draft id was not exposed immediately, no
+   `transactionId` was sent, and an ambiguous send was returned as an ordinary
+   provider error. GREEN for this focused file became 7/7.
+2. `cd backend && rtk npm test -- --runInBand src/features/contracts/contracts.service.spec.ts`
+   — RED: 6 expected failures. Compensation did not safely re-read the active
+   provider, lost COMMIT acknowledgement could enter void compensation, an
+   ambiguous send was not reconciled, a sent loser was silently accepted, and
+   raw causes appeared in public errors. GREEN became 33/33.
+3. `cd backend && rtk npm test -- --runInBand src/features/products/product-association-validator.spec.ts src/features/processes/processes.service.spec.ts src/features/appointments/appointments.service.spec.ts`
+   — RED: 3 expected failures across product, dedup and schedule locks; the
+   required advisory query was absent from each transaction. The consolidated
+   focused group became 57/57 after implementation.
+4. `cd frontend && rtk npm test -- --pool=forks --maxWorkers=2 src/pages/specialist/CreateContractPage.test.tsx`
+   — RED: the page removed the real modal after
+   `CONTRACT_MANUAL_RECONCILIATION_REQUIRED` instead of retaining its envelope
+   context. The page test passed after the lifecycle fix.
+
+During test hardening, two fixture-only failures were found and corrected before
+production conclusions were drawn: fire-and-forget mocks returned `undefined`
+instead of promises, and the appointment transaction/root delegate split was
+initially inverted. An unsupported Vitest CLI option was also replaced with
+`--maxWorkers=2`. No unexpected production regression remained.
+
+## GREEN evidence
+
+- Required/affected backend unit matrix:
+  `cd backend && rtk npm test -- --runInBand src/features/contracts/contracts.service.spec.ts src/features/appointments/appointments.service.spec.ts src/features/processes/processes.service.spec.ts src/providers/docusign/docusign.service.spec.ts src/features/proposals/proposals.service.spec.ts src/features/proposals/proposal-money.spec.ts src/features/products/product-association-validator.spec.ts src/features/cars/cars.service.spec.ts`
+  — 8 suites, 120/120 passed.
+- Contract PostgreSQL concurrency:
+  `POSTGRES_CONCURRENCY_TEST_URL='postgresql://user:password@127.0.0.1:5432/highclass_task8?schema=public' rtk npm test -- --runInBand src/features/contracts/contracts-lock.postgres.spec.ts`
+  — 3/3 passed.
+- Proposal PostgreSQL regression with unchanged proposal guarantees:
+  same environment and Jest options for
+  `src/features/proposals/proposals-concurrency.postgres.spec.ts` — 3/3 passed.
+- Product association PostgreSQL race:
+  same environment and Jest options for
+  `src/features/products/product-association-concurrency.postgres.spec.ts` —
+  1/1 passed.
+- Process deduplication PostgreSQL race:
+  same environment and Jest options for
+  `src/features/processes/processes-dedup-concurrency.postgres.spec.ts` — 1/1
+  passed.
+- Appointment schedule PostgreSQL race:
+  same environment and Jest options for
+  `src/features/appointments/appointments-concurrency.postgres.spec.ts` — 1/1
+  passed.
+- Existing product monetary-lock PostgreSQL regression:
+  same environment and Jest options for
+  `src/features/products/product-monetary-lock.postgres.spec.ts` — 1/1 passed.
+- Frontend cancellation/modal/page matrix:
+  `cd frontend && rtk npm test -- --pool=forks --maxWorkers=2 src/components/contracts/DocuSignPreviewModal.test.tsx src/pages/specialist/CreateContractPage.test.tsx src/lib/contract-preview-cancellation.test.ts`
+  — 3 suites, 10/10 passed.
+- `cd backend && rtk npm run build` — passed.
+- `cd frontend && rtk npm run build` — passed; only the pre-existing Vite chunk
+  size warning remains.
+- `rtk git diff --check` — clean.
+
+## Files changed in this follow-up
+
+Backend production:
+
+- `backend/src/features/aircrafts/aircrafts.service.ts`
+- `backend/src/features/appointments/appointments.service.ts`
+- `backend/src/features/boats/boats.service.ts`
+- `backend/src/features/cars/cars.service.ts`
+- `backend/src/features/contracts/contracts.service.ts`
+- `backend/src/features/processes/processes.service.ts`
+- `backend/src/features/product-import-jobs/product-import-jobs.service.ts`
+- `backend/src/features/products/product-association-validator.ts`
+- `backend/src/providers/docusign/docusign.service.ts`
+- `backend/src/providers/docusign/dto/request/create-template-envelope.dto.ts`
+- `backend/src/providers/docusign/envelope-effect.error.ts`
+- `backend/src/shared/exceptions/custom-exceptions.ts`
+
+Backend tests:
+
+- `backend/src/features/appointments/appointments-concurrency.postgres.spec.ts`
+- `backend/src/features/appointments/appointments.service.spec.ts`
+- `backend/src/features/cars/cars.service.spec.ts`
+- `backend/src/features/contracts/contracts-lock.postgres.spec.ts`
+- `backend/src/features/contracts/contracts.service.spec.ts`
+- `backend/src/features/processes/processes-dedup-concurrency.postgres.spec.ts`
+- `backend/src/features/processes/processes.service.spec.ts`
+- `backend/src/features/products/product-association-concurrency.postgres.spec.ts`
+- `backend/src/features/products/product-association-validator.spec.ts`
+- `backend/src/providers/docusign/docusign.service.spec.ts`
+
+Frontend/tests:
+
+- `frontend/package.json`
+- `frontend/package-lock.json`
+- `frontend/src/components/contracts/DocuSignPreviewModal.test.tsx`
+- `frontend/src/pages/specialist/CreateContractPage.tsx`
+- `frontend/src/pages/specialist/CreateContractPage.test.tsx`
+
+Report:
+
+- `.superpowers/sdd/post-security-fix-report.md`
+
+## Self-review
+
+- Mapped every independent-review item to production code and a focused
+  regression; no Important or Minor/test-integrity item was deferred.
+- Confirmed every compensation decision is made while holding the same process
+  lock and never voids the envelope persisted as the current active provider.
+- Confirmed provider mutation ambiguity is never presented as definitive
+  success/failure and raw causes stay server-side.
+- Confirmed all product validation consumers hold the product lock until their
+  write transaction commits, and every direct deactivation/reassignment path
+  uses the same key convention.
+- Confirmed process dedup and schedule conflict reads occur after their scoped
+  advisory locks and before inserts in the same transaction.
+- Confirmed notification/provider test doubles were used throughout; no real
+  AWS/SES/DocuSign request was made.
+- Confirmed all test runners used at most two workers and heavy commands were
+  sequential.
+- Confirmed `PROJECT-OVERVIEW.md` remains an untracked user file and was neither
+  edited nor staged.
+
+## Commit
+
+Implementation commit: `08f643747010be92190156acb4ed46c20e862014`.
+
+The report itself is committed as its immediate successor, following the prior
+wave's implementation/report convention.
+
+## Remaining concerns
+
+1. The frontend build still emits the pre-existing warning for a JavaScript
+   chunk larger than 500 kB; the build succeeds.
+2. Automatic compensation necessarily performs a provider status read and
+   possible void while holding a database advisory lock. This favors integrity
+   over throughput and may hold the process-scoped lock for the provider
+   timeout, but it prevents the reviewed compensation race.
