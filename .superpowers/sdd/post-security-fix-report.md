@@ -815,3 +815,58 @@ was made.
    three attempts so DocuSign retries instead of accepting an unconverged
    higher-rank event. Operations should monitor repeated
    `CONTRACT_WEBHOOK_CONTENTION` responses.
+
+---
+
+# Fifth-review follow-up — authoritative recovery closeout (2026-09-04)
+
+Review baseline: `33dbf08`. Implementation: `58fb185`.
+
+This narrow round closes the sole Important finding and its direct-generation
+test gap from `.superpowers/sdd/fifth-fix-review-findings.md`.
+
+## Finding matrix
+
+| Finding | Resolution | Regression evidence |
+| --- | --- | --- |
+| Recovery GET missing/unknown status | Recovery no longer falls back to the transaction-search summary. The full-envelope GET status must be a known `EnvelopeStatus`; missing or unknown values raise `EnvelopeCreationAmbiguousError` before DocGen edits or send. | `docusign.service.spec.ts`: search CREATED versus GET missing and unknown, both asserting no DocGen read/update and no send PUT. |
+| Direct generation fingerprint coverage | The real public `generateContract` path is executed with persistence/provider mocks. Its application fingerprint is captured after the authoritative commission split and changes independently when only description or only total/calculated commission changes. | `contracts.service.spec.ts`: three direct generations compare base, changed-description and changed-commission fingerprints. |
+
+## TDD evidence
+
+- RED: `rtk npm test -- --runInBand src/providers/docusign/docusign.service.spec.ts -t 'authoritative GET status is'`
+  — 2 failed, 26 skipped. Both missing and unknown authoritative status cases
+  resolved as SENT and performed the provider preparation/send path.
+- GREEN focused: the same provider regressions plus the direct generation
+  composition test passed, 3 passed and 68 skipped across two suites.
+- The direct `generateContract` test is a requested coverage gap over the
+  already-correct post-split fingerprint implementation and passed as a
+  characterization test before production changed; no artificial RED is
+  claimed for it.
+
+## Final verification
+
+- `rtk npm test -- --runInBand src/providers/docusign/docusign.service.spec.ts src/features/contracts/contracts.service.spec.ts`
+  — 2 suites, 71/71 passed.
+- `rtk npm run build` in `backend` — passed.
+- `rtk git diff --check` — clean.
+- All provider interactions were mocks; Jest ran in-band; no external provider
+  or AWS/SES call occurred.
+
+## Self-review
+
+- Confirmed the transaction search result now locates only a candidate envelope;
+  identity, fingerprint and status all come from the full authoritative GET.
+- Confirmed missing/unknown status exits before `getEnvelopeDocGenFormFields`,
+  `updateEnvelopeDocGenFormFields` and `updateEnvelopeStatus`.
+- Re-read the direct generation path through authoritative split derivation,
+  fingerprint construction, provider invocation and persistence. Description,
+  total commission and all effective split values contribute to the hash.
+- `PROJECT-OVERVIEW.md` remains the same untracked user file and was neither
+  edited nor staged.
+
+## Remaining concerns
+
+None introduced by this closeout. Unknown provider statuses deliberately
+require manual reconciliation rather than risking mutation of an envelope in
+an unrecognized lifecycle state.
