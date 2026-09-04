@@ -23,7 +23,8 @@ const specialistId = '33333333-3333-4333-8333-333333333333';
 
 describe('ProcessesService — produto UUID', () => {
   it('persiste e consulta o produto pelo UUID sem conversão numérica', async () => {
-    const findFirst = jest.fn().mockResolvedValue(null);
+    const rootFindFirst = jest.fn().mockResolvedValue(null);
+    const transactionalFindFirst = jest.fn().mockResolvedValue(null);
     const create = jest.fn().mockImplementation(({ data }) =>
       Promise.resolve({
         id: '44444444-4444-4444-8444-444444444444',
@@ -60,7 +61,7 @@ describe('ProcessesService — produto UUID', () => {
       },
       boat: { findUnique: jest.fn() },
       aircraft: { findUnique: jest.fn() },
-      process: { findFirst },
+      process: { findFirst: rootFindFirst },
       $transaction: jest.fn(async (callback) =>
         callback({
           $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
@@ -80,7 +81,7 @@ describe('ProcessesService — produto UUID', () => {
           },
           boat: { findUnique: jest.fn() },
           aircraft: { findUnique: jest.fn() },
-          process: { create },
+          process: { findFirst: transactionalFindFirst, create },
           processStatusHistory: { create: jest.fn().mockResolvedValue({}) },
         }),
       ),
@@ -98,7 +99,8 @@ describe('ProcessesService — produto UUID', () => {
       { id: 'admin1', role: 'ADMIN' as any },
     );
 
-    expect(findFirst).toHaveBeenCalledWith({
+    expect(rootFindFirst).not.toHaveBeenCalled();
+    expect(transactionalFindFirst).toHaveBeenCalledWith({
       where: expect.objectContaining({ car_id: productId }),
     });
     expect(create).toHaveBeenCalledWith(

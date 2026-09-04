@@ -41,6 +41,10 @@ import {
  * como zero em resolveCommissionFromTotal antes de remover a validação daqui.
  */
 export class PreviewContractDto {
+  @IsUUID('4', { message: 'operation_id deve ser um UUID v4 válido' })
+  @IsNotEmpty({ message: 'operation_id é obrigatório' })
+  operation_id: string;
+
   /**
    * URL para callback após sair do DocuSign Sender View
    * @example "https://app.example.com/contracts/preview-callback"

@@ -53,6 +53,7 @@ describe('DocuSignService — cancelamento de envelope', () => {
 
 describe('DocuSignService — efeitos externos parciais', () => {
   const templateParams = {
+    transactionId: '11111111-1111-4111-8111-111111111111',
     templateId: 'template-1',
     buyerEmail: 'buyer@example.test',
     buyerName: 'Buyer',
@@ -104,8 +105,82 @@ describe('DocuSignService — efeitos externos parciais', () => {
     await service.createEnvelopeFromTemplate(templateParams);
 
     expect(client.createEnvelopeFromTemplate).toHaveBeenCalledWith(
-      expect.objectContaining({ transactionId: expect.any(String) }),
+      expect.objectContaining({ transactionId: templateParams.transactionId }),
     );
+  });
+
+  it('recupera o envelope pelo transactionId quando o POST foi aplicado mas todas as respostas se perderam', async () => {
+    const postFailure = new Error('all POST responses lost');
+    const client = {
+      findEnvelopesByTransactionId: jest
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { envelopeId: 'envelope-recovered', status: 'created' },
+        ]),
+      createEnvelopeFromTemplate: jest.fn().mockRejectedValue(postFailure),
+      getEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({
+        docGenFormFields: [],
+      }),
+      updateEnvelopeDocGenFormFields: jest.fn().mockResolvedValue(undefined),
+      updateEnvelopeStatus: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const service = new DocuSignService(client);
+    const onEnvelopeCreated = jest.fn();
+
+    await expect(
+      service.createEnvelopeFromTemplate({
+        ...templateParams,
+        onEnvelopeCreated,
+      }),
+    ).resolves.toEqual({
+      envelopeId: 'envelope-recovered',
+      status: 'sent',
+    });
+    expect(client.createEnvelopeFromTemplate).toHaveBeenCalledTimes(1);
+    expect(client.findEnvelopesByTransactionId).toHaveBeenCalledTimes(2);
+    expect(onEnvelopeCreated).toHaveBeenCalledWith('envelope-recovered');
+  });
+
+  it('reusa um envelope recuperado em nova chamada e não repete o POST', async () => {
+    const client = {
+      findEnvelopesByTransactionId: jest.fn().mockResolvedValue([
+        { envelopeId: 'envelope-existing', status: 'created' },
+      ]),
+      createEnvelopeFromTemplate: jest.fn(),
+      getEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({
+        docGenFormFields: [],
+      }),
+      updateEnvelopeDocGenFormFields: jest.fn().mockResolvedValue(undefined),
+      updateEnvelopeStatus: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const service = new DocuSignService(client);
+
+    await expect(
+      service.createEnvelopeFromTemplate(templateParams),
+    ).resolves.toEqual({ envelopeId: 'envelope-existing', status: 'sent' });
+    expect(client.createEnvelopeFromTemplate).not.toHaveBeenCalled();
+  });
+
+  it('classifica como ambígua a criação quando a recuperação após perda do POST não é conclusiva', async () => {
+    const postFailure = new Error('all POST responses lost');
+    const recoveryFailure = new Error('recovery unavailable');
+    const client = {
+      findEnvelopesByTransactionId: jest
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockRejectedValueOnce(recoveryFailure),
+      createEnvelopeFromTemplate: jest.fn().mockRejectedValue(postFailure),
+    } as any;
+    const service = new DocuSignService(client);
+
+    await expect(
+      service.createEnvelopeFromTemplate(templateParams),
+    ).rejects.toMatchObject({
+      name: 'EnvelopeCreationAmbiguousError',
+      transactionId: templateParams.transactionId,
+      cause: postFailure,
+    });
   });
 
   it('classifica envio como indeterminado quando a confirmação de status também falha', async () => {
@@ -128,6 +203,23 @@ describe('DocuSignService — efeitos externos parciais', () => {
       },
     );
   });
+
+  it.each(['delivered', 'completed'] as const)(
+    'preserva o status avançado %s ao recuperar um envio já aplicado',
+    async (status) => {
+      const client = {
+        getEnvelope: jest.fn().mockResolvedValue({ status }),
+        updateEnvelopeStatus: jest.fn(),
+      } as any;
+      const service = new DocuSignService(client);
+
+      await expect(service.sendDraftEnvelope('envelope-1')).resolves.toEqual({
+        envelopeId: 'envelope-1',
+        status,
+      });
+      expect(client.updateEnvelopeStatus).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('DocuSignService — mapFormFieldsToDocGen é removal-safe', () => {
@@ -159,5 +251,33 @@ describe('DocuSignService — mapFormFieldsToDocGen é removal-safe', () => {
     expect(names).not.toContain('platform_value');
     expect(names).not.toContain('specialist_value');
     expect(result[0].docGenFormFieldList[0].value).toBe('Comprador');
+  });
+
+  it('não registra valores de CPF, RG, endereço ou dados bancários ao mapear DocGen', () => {
+    const sensitiveValues = [
+      '12345678901',
+      'RG-SECRET',
+      'Rua Sigilosa 42',
+      'BANK-SECRET',
+    ];
+    const debug = jest
+      .spyOn((service as any).logger, 'debug')
+      .mockImplementation();
+    const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation();
+    const fields = sensitiveValues.map((value, index) => ({
+      name: `field_${index}`,
+      label: `field_${index}`,
+      value: '',
+    }));
+
+    (service as any).mapFormFieldsToDocGen(
+      [{ documentId: '1', docGenFormFieldList: fields }],
+      Object.fromEntries(
+        sensitiveValues.map((value, index) => [`field_${index}`, value]),
+      ),
+    );
+
+    const logs = JSON.stringify([...debug.mock.calls, ...warn.mock.calls]);
+    for (const value of sensitiveValues) expect(logs).not.toContain(value);
   });
 });

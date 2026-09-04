@@ -45,7 +45,7 @@ describe("DocuSignPreviewModal cancellation state", () => {
     expect(html).toContain('aria-busy="true"');
   });
 
-  it("routes trusted DocuSign send/cancel messages to the real modal callbacks", () => {
+  it("routes trusted DocuSign send/cancel messages only from the rendered iframe", () => {
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
     render(
@@ -59,25 +59,28 @@ describe("DocuSignPreviewModal cancellation state", () => {
       />,
     );
 
-    fireEvent(
-      window,
-      new MessageEvent("message", {
-        origin: "https://demo.docusign.net",
-        data: { event: "send" },
-      }),
-    );
+    const iframe = screen.getByTitle(
+      "DocuSign Contract Preview",
+    ) as HTMLIFrameElement;
+    const send = (origin: string, data: unknown, source: Window | null) =>
+      fireEvent(
+        window,
+        new MessageEvent("message", { origin, data, source }),
+      );
+
+    send("https://demo.docusign.net", { event: "send" }, iframe.contentWindow);
     expect(onConfirm).toHaveBeenCalledTimes(1);
 
-    fireEvent(
-      window,
-      new MessageEvent("message", {
-        origin: "https://evil.example.test",
-        data: "cancel",
-      }),
-    );
+    send("https://demo.docusign.net", "cancel", window);
+    send("https://docusign.net.attacker.example", "cancel", iframe.contentWindow);
+    send("https://evil-docusign.net", "cancel", iframe.contentWindow);
+    send("https://evil.example.test", "cancel", iframe.contentWindow);
     expect(onCancel).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    send("https://demo.docusign.net", "cancel", iframe.contentWindow);
     expect(onCancel).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(onCancel).toHaveBeenCalledTimes(2);
   });
 });

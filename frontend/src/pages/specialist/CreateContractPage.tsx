@@ -212,6 +212,7 @@ export default function CreateContractPage() {
     string | null
   >(null);
   const previewActionInFlightRef = useRef(false);
+  const previewOperationIdRef = useRef<string | null>(null);
 
   // Wizard: a comissão é decidida antes de o especialista ver o resto do
   // contrato. Um único useForm cobre as duas etapas, então o payload final
@@ -345,7 +346,7 @@ export default function CreateContractPage() {
           setValue("total_commission_rate", data.suggested_total_rate);
         }
       } catch (error: unknown) {
-        console.error("Erro ao carregar dados do contrato:", error);
+      console.error("Erro ao carregar dados do contrato");
 
         // Verificar se é erro de produto não associado
         const axiosError = error as {
@@ -508,6 +509,8 @@ export default function CreateContractPage() {
 
       const previewPayload: PreviewContractData = {
         ...contractData,
+        operation_id:
+          previewOperationIdRef.current ??= globalThis.crypto.randomUUID(),
         return_url: `${window.location.origin}/specialist/contracts/preview-callback`,
       };
 
@@ -519,7 +522,7 @@ export default function CreateContractPage() {
       setPreviewCancellationError(null);
       setShowPreviewModal(true);
     } catch (error: any) {
-      console.error("Erro ao criar preview:", error);
+      console.error("Erro ao criar preview");
 
       const backendMessage = extractBackendMessage(error);
       const lowerMessage = backendMessage.toLowerCase();
@@ -579,6 +582,7 @@ export default function CreateContractPage() {
       );
 
       setShowPreviewModal(false);
+      previewOperationIdRef.current = null;
       setSubmitStatus({
         type: "success",
         message: `Contrato enviado com sucesso! ID: ${result.id}`,
@@ -588,7 +592,7 @@ export default function CreateContractPage() {
         navigate("/specialist/processes");
       }, 2000);
     } catch (error: any) {
-      console.error("Erro ao enviar contrato:", error);
+      console.error("Erro ao enviar contrato");
 
       const backendMessage = extractBackendMessage(error);
       const lowerMessage = backendMessage.toLowerCase();
@@ -644,6 +648,7 @@ export default function CreateContractPage() {
         setPreviewData(null);
         setPreviewFormData(null);
         setPreviewCancellationError(null);
+        previewOperationIdRef.current = null;
       };
 
       if (mode === "expire") {
@@ -662,7 +667,7 @@ export default function CreateContractPage() {
         await cancelPreviewBeforeDiscard(cancelEnvelope, discardPreview);
       }
     } catch (error) {
-      console.error("Erro ao cancelar preview:", error);
+      console.error("Erro ao cancelar preview");
       setPreviewCancellationError(
         mode === "expire"
           ? "O preview expirou, mas não foi possível cancelar o envelope. Ele foi mantido aberto; tente novamente."

@@ -429,7 +429,7 @@ export class DocuSignWebhookService {
                   method: 'handleEnvelopeStatusChanged',
                   event: 'SENT',
                   contractId: contract.id,
-                  error: err.message,
+                  errorType: err instanceof Error ? err.name : typeof err,
                 });
               });
           } else if (
@@ -452,7 +452,7 @@ export class DocuSignWebhookService {
                   method: 'handleEnvelopeStatusChanged',
                   event: 'COMPLETED',
                   contractId: contract.id,
-                  error: err.message,
+                  errorType: err instanceof Error ? err.name : typeof err,
                 });
               });
           } else if (providerStatus === 'DECLINED' && sellerEmail) {
@@ -470,7 +470,7 @@ export class DocuSignWebhookService {
                   method: 'handleEnvelopeStatusChanged',
                   event: 'DECLINED',
                   contractId: contract.id,
-                  error: err.message,
+                  errorType: err instanceof Error ? err.name : typeof err,
                 });
               });
           } else if (providerStatus === 'VOIDED' && sellerEmail) {
@@ -488,7 +488,7 @@ export class DocuSignWebhookService {
                   method: 'handleEnvelopeStatusChanged',
                   event: 'VOIDED',
                   contractId: contract.id,
-                  error: err.message,
+                  errorType: err instanceof Error ? err.name : typeof err,
                 });
               });
           } else if (providerStatus === 'TIMEDOUT' && sellerEmail) {
@@ -506,7 +506,7 @@ export class DocuSignWebhookService {
                   method: 'handleEnvelopeStatusChanged',
                   event: 'TIMEDOUT',
                   contractId: contract.id,
-                  error: err.message,
+                  errorType: err instanceof Error ? err.name : typeof err,
                 });
               });
           }
@@ -529,20 +529,8 @@ export class DocuSignWebhookService {
       });
     } catch (error) {
       // Não relançar erro para evitar retry infinito de webhooks
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error.stack : undefined;
-
-      this.logger.error(
-        `❌ Erro ao processar webhook DocuSign: ${errorMessage}`,
-        errorStack,
-      );
-
-      // Log estruturado para debugging
-      this.logger.debug(`Erro ao processar webhook - detalhes completos:`, {
-        error: errorMessage,
-        payload: payload,
-        stack: errorStack,
+      this.logger.error('Erro ao processar webhook DocuSign', {
+        errorType: error instanceof Error ? error.name : typeof error,
       });
     }
   }

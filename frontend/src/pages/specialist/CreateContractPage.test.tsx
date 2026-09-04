@@ -151,4 +151,41 @@ describe("CreateContractPage preview lifecycle", () => {
       "Não foi possível cancelar o preview",
     );
   });
+
+  it("reuses one operation id when a public preview request is retried", async () => {
+    vi.mocked(previewContract)
+      .mockRejectedValueOnce(new Error("lost response"))
+      .mockResolvedValueOnce(preview);
+
+    renderPage();
+    await screen.findByText("Gerar Contrato de Venda");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Continuar para os dados do contrato/i,
+      }),
+    );
+    const previewButton = await screen.findByRole("button", {
+      name: /Pré-visualizar e Enviar Contrato/i,
+    });
+    await waitFor(() =>
+      expect((previewButton as HTMLButtonElement).disabled).toBe(false),
+    );
+
+    fireEvent.click(previewButton);
+    await waitFor(() => expect(previewContract).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect((previewButton as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(previewButton);
+    await screen.findByTitle("DocuSign Contract Preview");
+
+    const firstOperationId = vi.mocked(previewContract).mock.calls[0][0]
+      .operation_id;
+    const secondOperationId = vi.mocked(previewContract).mock.calls[1][0]
+      .operation_id;
+    expect(firstOperationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    expect(secondOperationId).toBe(firstOperationId);
+  });
 });

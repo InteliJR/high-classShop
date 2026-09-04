@@ -91,6 +91,28 @@ describeWithPostgres('process active dedup lock — PostgreSQL concurrency', () 
     });
   });
 
+  beforeEach(async () => {
+    const processes = await holder.process.findMany({
+      where: { client_id: clientId, specialist_id: specialistId },
+      select: { id: true, appointment_id: true },
+    });
+    await holder.processStatusHistory.deleteMany({
+      where: { processId: { in: processes.map(({ id }) => id) } },
+    });
+    await holder.process.deleteMany({
+      where: { id: { in: processes.map(({ id }) => id) } },
+    });
+    await holder.appointment.deleteMany({
+      where: {
+        id: {
+          in: processes.flatMap(({ appointment_id }) =>
+            appointment_id ? [appointment_id] : [],
+          ),
+        },
+      },
+    });
+  });
+
   afterAll(async () => {
     const processes = await holder.process.findMany({
       where: { client_id: clientId, specialist_id: specialistId },
@@ -155,5 +177,107 @@ describeWithPostgres('process active dedup lock — PostgreSQL concurrency', () 
     await expect(
       holder.process.count({ where: { client_id: clientId, specialist_id: specialistId } }),
     ).resolves.toBe(1);
+  }, 15_000);
+
+  it('serializes two public create requests on the same active-process key', async () => {
+    const lockKey = `process-dedup:${clientId}:${specialistId}:CONSULTANCY:none`;
+    const holderReady = deferred();
+    const releaseHolder = deferred();
+    const firstAttempted = deferred();
+    const secondAttempted = deferred();
+    const held = holder.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
+      `;
+      holderReady.resolve();
+      await releaseHolder.promise;
+    });
+    await holderReady.promise;
+
+    const serviceA = new ProcessesService(
+      signalDedupLockAttempt(first, firstAttempted) as any,
+      {} as any,
+    );
+    const serviceB = new ProcessesService(
+      signalDedupLockAttempt(second, secondAttempted) as any,
+      {} as any,
+    );
+    const dto = {
+      client_id: clientId,
+      specialist_id: specialistId,
+    } as any;
+    const requester = { id: randomUUID(), role: UserRole.ADMIN };
+    const firstCreate = serviceA.create(dto, requester);
+    const secondCreate = serviceB.create(dto, requester);
+    const bothAttemptedBeforeCompletion = await Promise.race([
+      Promise.all([firstAttempted.promise, secondAttempted.promise]).then(
+        () => true,
+      ),
+      Promise.allSettled([firstCreate, secondCreate]).then(() => false),
+    ]);
+    releaseHolder.resolve();
+    await held;
+    const outcomes = await Promise.allSettled([firstCreate, secondCreate]);
+
+    expect(bothAttemptedBeforeCompletion).toBe(true);
+    expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.find(({ status }) => status === 'rejected')).toMatchObject({
+      reason: expect.any(ConflictException),
+    });
+  }, 15_000);
+
+  it('shares the dedup lock between public create and create-on-behalf', async () => {
+    const lockKey = `process-dedup:${clientId}:${specialistId}:CONSULTANCY:none`;
+    const holderReady = deferred();
+    const releaseHolder = deferred();
+    const publicAttempted = deferred();
+    const behalfAttempted = deferred();
+    const held = holder.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
+      `;
+      holderReady.resolve();
+      await releaseHolder.promise;
+    });
+    await holderReady.promise;
+
+    const publicService = new ProcessesService(
+      signalDedupLockAttempt(first, publicAttempted) as any,
+      {} as any,
+    );
+    const behalfService = new ProcessesService(
+      signalDedupLockAttempt(second, behalfAttempted) as any,
+      {} as any,
+    );
+    const publicCreate = publicService.create(
+      { client_id: clientId, specialist_id: specialistId } as any,
+      { id: randomUUID(), role: UserRole.ADMIN },
+    );
+    const behalfCreate = behalfService.createOnBehalfOfClient({
+      client_id: clientId,
+      specialist_id: specialistId,
+      product_type: 'CAR',
+      product_id: undefined,
+      createdBy: specialistId,
+      actorLabel: 'especialista',
+    });
+    const bothAttemptedBeforeCompletion = await Promise.race([
+      Promise.all([publicAttempted.promise, behalfAttempted.promise]).then(
+        () => true,
+      ),
+      publicCreate.then(
+        () => false,
+        () => false,
+      ),
+    ]);
+    releaseHolder.resolve();
+    await held;
+    const outcomes = await Promise.allSettled([publicCreate, behalfCreate]);
+
+    expect(bothAttemptedBeforeCompletion).toBe(true);
+    expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.find(({ status }) => status === 'rejected')).toMatchObject({
+      reason: expect.any(ConflictException),
+    });
   }, 15_000);
 });

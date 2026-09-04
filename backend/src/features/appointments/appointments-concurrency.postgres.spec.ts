@@ -122,6 +122,26 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
     });
   });
 
+  beforeEach(async () => {
+    const appointments = await holder.appointment.findMany({
+      where: { specialist_id: specialistId },
+      select: { id: true },
+    });
+    const processes = await holder.process.findMany({
+      where: { appointment_id: { in: appointments.map(({ id }) => id) } },
+      select: { id: true },
+    });
+    await holder.processStatusHistory.deleteMany({
+      where: { processId: { in: processes.map(({ id }) => id) } },
+    });
+    await holder.process.deleteMany({
+      where: { id: { in: processes.map(({ id }) => id) } },
+    });
+    await holder.appointment.deleteMany({
+      where: { id: { in: appointments.map(({ id }) => id) } },
+    });
+  });
+
   afterAll(async () => {
     const appointments = await holder.appointment.findMany({
       where: { specialist_id: specialistId },
@@ -202,5 +222,202 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
     await expect(
       holder.appointment.count({ where: { specialist_id: specialistId } }),
     ).resolves.toBe(1);
+  }, 15_000);
+
+  async function createPendingWithProcess(
+    clientId: string,
+    carId: string,
+  ) {
+    const appointment = await holder.appointment.create({
+      data: {
+        client_id: clientId,
+        specialist_id: specialistId,
+        product_type: ProductType.CAR,
+        product_id: carId,
+        status: 'PENDING',
+      },
+    });
+    await holder.process.create({
+      data: {
+        client_id: clientId,
+        specialist_id: specialistId,
+        product_type: ProductType.CAR,
+        car_id: carId,
+        appointment_id: appointment.id,
+        status: 'SCHEDULING',
+      },
+    });
+    return appointment;
+  }
+
+  async function holdScheduleLock(release: Deferred, ready: Deferred) {
+    const lockKey = `appointment-schedule:${specialistId}`;
+    return holder.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
+      `;
+      ready.resolve();
+      await release.promise;
+    });
+  }
+
+  function service(client: PrismaClient, attempted: Deferred) {
+    return new AppointmentsService(
+      signalScheduleLockAttempt(client, attempted) as any,
+      {
+        sendAppointmentCreatedEmail: jest.fn().mockResolvedValue(undefined),
+        sendAppointmentConfirmedEmail: jest.fn().mockResolvedValue(undefined),
+      } as any,
+      {} as any,
+    );
+  }
+
+  it('serializes direct create against confirming an overlapping pending appointment', async () => {
+    const pending = await createPendingWithProcess(secondClientId, secondCarId);
+    const release = deferred();
+    const ready = deferred();
+    const createAttempted = deferred();
+    const confirmAttempted = deferred();
+    const held = holdScheduleLock(release, ready);
+    await ready.promise;
+    const serviceA = service(first, createAttempted);
+    const serviceB = service(second, confirmAttempted);
+    const scheduledAt = new Date('2099-01-01T10:00:00.000Z');
+
+    const creating = serviceA.create(
+      {
+        client_id: firstClientId,
+        specialist_id: specialistId,
+        product_type: ProductType.CAR,
+        product_id: firstCarId,
+        appointment_datetime: scheduledAt.toISOString(),
+      } as any,
+      firstClientId,
+    );
+    const confirming = serviceB.confirmPending(
+      pending.id,
+      specialistId,
+      scheduledAt,
+    );
+    const bothAttemptedBeforeCompletion = await Promise.race([
+      Promise.all([createAttempted.promise, confirmAttempted.promise]).then(
+        () => true,
+      ),
+      confirming.then(
+        () => false,
+        () => false,
+      ),
+    ]);
+    release.resolve();
+    await held;
+    const outcomes = await Promise.allSettled([creating, confirming]);
+
+    expect(bothAttemptedBeforeCompletion).toBe(true);
+    expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.find(({ status }) => status === 'rejected')).toMatchObject({
+      reason: expect.any(ConflictException),
+    });
+  }, 15_000);
+
+  it('serializes two confirmations that select the same specialist time', async () => {
+    const firstPending = await createPendingWithProcess(firstClientId, firstCarId);
+    const secondPending = await createPendingWithProcess(secondClientId, secondCarId);
+    const release = deferred();
+    const ready = deferred();
+    const firstAttempted = deferred();
+    const secondAttempted = deferred();
+    const held = holdScheduleLock(release, ready);
+    await ready.promise;
+    const serviceA = service(first, firstAttempted);
+    const serviceB = service(second, secondAttempted);
+    const scheduledAt = new Date('2099-01-01T11:00:00.000Z');
+    const firstConfirm = serviceA.confirmPending(
+      firstPending.id,
+      specialistId,
+      scheduledAt,
+    );
+    const secondConfirm = serviceB.confirmPending(
+      secondPending.id,
+      specialistId,
+      scheduledAt,
+    );
+    const bothAttemptedBeforeCompletion = await Promise.race([
+      Promise.all([firstAttempted.promise, secondAttempted.promise]).then(
+        () => true,
+      ),
+      Promise.allSettled([firstConfirm, secondConfirm]).then(() => false),
+    ]);
+    release.resolve();
+    await held;
+    const outcomes = await Promise.allSettled([firstConfirm, secondConfirm]);
+
+    expect(bothAttemptedBeforeCompletion).toBe(true);
+    expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.find(({ status }) => status === 'rejected')).toMatchObject({
+      reason: expect.any(ConflictException),
+    });
+  }, 15_000);
+
+  it('serializes two Calendly callbacks that resolve to an overlapping time', async () => {
+    const firstPending = await holder.appointment.create({
+      data: {
+        client_id: firstClientId,
+        specialist_id: specialistId,
+        product_type: ProductType.CAR,
+        product_id: firstCarId,
+        status: 'PENDING',
+      },
+    });
+    const secondPending = await holder.appointment.create({
+      data: {
+        client_id: secondClientId,
+        specialist_id: specialistId,
+        product_type: ProductType.CAR,
+        product_id: secondCarId,
+        status: 'PENDING',
+      },
+    });
+    const release = deferred();
+    const ready = deferred();
+    const firstAttempted = deferred();
+    const secondAttempted = deferred();
+    const held = holdScheduleLock(release, ready);
+    await ready.promise;
+    const serviceA = service(first, firstAttempted);
+    const serviceB = service(second, secondAttempted);
+    const scheduledStart = '2099-01-01T12:00:00.000Z';
+    const firstRegister = serviceA.registerCalendlyScheduled(
+      firstPending.id,
+      firstClientId,
+      {
+        event_uri: `https://calendly.test/events/${firstPending.id}`,
+        invitee_uri: `https://calendly.test/invitees/${firstPending.id}`,
+        scheduled_start_time: scheduledStart,
+      },
+    );
+    const secondRegister = serviceB.registerCalendlyScheduled(
+      secondPending.id,
+      secondClientId,
+      {
+        event_uri: `https://calendly.test/events/${secondPending.id}`,
+        invitee_uri: `https://calendly.test/invitees/${secondPending.id}`,
+        scheduled_start_time: scheduledStart,
+      },
+    );
+    const bothAttemptedBeforeCompletion = await Promise.race([
+      Promise.all([firstAttempted.promise, secondAttempted.promise]).then(
+        () => true,
+      ),
+      Promise.allSettled([firstRegister, secondRegister]).then(() => false),
+    ]);
+    release.resolve();
+    await held;
+    const outcomes = await Promise.allSettled([firstRegister, secondRegister]);
+
+    expect(bothAttemptedBeforeCompletion).toBe(true);
+    expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.find(({ status }) => status === 'rejected')).toMatchObject({
+      reason: expect.any(ConflictException),
+    });
   }, 15_000);
 });

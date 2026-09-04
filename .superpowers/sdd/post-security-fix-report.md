@@ -489,3 +489,139 @@ wave's implementation/report convention.
    possible void while holding a database advisory lock. This favors integrity
    over throughput and may hold the process-scoped lock for the provider
    timeout, but it prevents the reviewed compensation race.
+
+---
+
+# Second-review follow-up — third integrity wave (2026-09-04)
+
+This section supersedes the preceding readiness statement. The second
+independent review in `second-fix-review-findings.md` returned `NOT READY` for
+`08f6437`; all seven Important and both Minor/test-integrity findings were
+verified against the code and addressed in one follow-up from `dfb21b7`.
+
+## Technical resolution
+
+1. **Cross-request provider recovery.** Both public contract DTOs now require a
+   caller-owned UUID v4 `operation_id`. The real page creates one UUID, retains
+   it across failed preview requests, passes it unchanged as the DocuSign
+   `transactionId`, and clears it only after confirmed send or discard.
+   `DocuSignService` queries envelopes by exact transaction id before POST,
+   recovers after a lost POST response, avoids a second POST when one match
+   exists, and produces stable manual reconciliation for zero/ambiguous
+   post-failure results or multiple pre-existing matches.
+2. **Known external effects before later work.** Provider preflight status is
+   registered as `DRAFT_CONFIRMED` or `SEND_CONFIRMED` immediately after the
+   status response and before local validations or another provider call.
+   Known sent-or-beyond effects never enter automatic draft compensation.
+3. **Advanced state preservation.** `sendDraftEnvelope` returns the actual
+   `SENT`, `DELIVERED`, or `COMPLETED` status. Persistence maps that exact
+   provider status; `COMPLETED` creates a `SIGNED` contract with `signed_at`, a
+   completed process and history, while sent/delivered move the process to
+   `DOCUMENTATION`. The HTTP result reflects the persisted contract state.
+4. **Stable cleanup reconciliation.** Failed or ambiguous void of a stale or
+   losing draft retains process/envelope/correlation context and returns
+   `CONTRACT_MANUAL_RECONCILIATION_REQUIRED`. The page keeps its real modal and
+   operation state on send or cancellation failure.
+5. **One dedup invariant for every producer.** A shared
+   `process-dedup:<client>:<specialist>:<product-or-consultancy>` transaction
+   lock and post-lock active-process recheck protects public process creation,
+   on-behalf creation, direct appointment creation, pending appointment
+   creation, and legacy process creation during pending confirmation. Product,
+   dedup and schedule locks use one consistent acquisition order.
+6. **One schedule invariant for every time writer.** Direct create,
+   `confirmPending`, `registerCalendlyScheduled`, and the Calendly
+   `invitee.created` webhook acquire
+   `appointment-schedule:<specialistId>`, re-read mutable appointment state,
+   and recheck overlapping pending/scheduled appointments inside the write
+   transaction.
+7. **Iframe message trust boundary.** The modal accepts messages only when
+   `event.source` is the rendered iframe window and `event.origin` exactly
+   equals the parsed preview URL origin over HTTPS on an exact DocuSign domain
+   or dot-delimited subdomain. Suffix attacks and unrelated windows are
+   ignored; trusted send/cancel messages still work.
+8. **404 preservation.** Car, boat and aircraft removal rethrow the shared
+   helper's `NotFoundException` instead of wrapping it as a generic 500.
+9. **PII-safe operations.** DocuSign request bodies, DocGen values, sender-view
+   bodies, response bodies, form payloads, void reasons, raw notification
+   failures, webhook payloads, raw causes and stacks were removed from logs.
+   Operational logs keep only safe ids, counts, status and error type.
+
+## RED evidence
+
+All commands were prefixed with `rtk`; Jest used `--runInBand` and Vitest used
+at most two workers. Provider collaborators were mocks, and no real provider
+was invoked.
+
+- `cd backend && rtk npm test -- --runInBand src/providers/docusign/docusign.service.spec.ts`
+  — RED: 7 failed, 6 passed. Missing transaction recovery, ambiguity handling
+  and advanced-state preservation were observed.
+- `cd backend && rtk npm test -- --runInBand src/features/contracts/contracts.service.spec.ts`
+  — RED: 6 failed, 33 passed. Known effects were not retained early enough,
+  advanced provider states were downgraded, and failed stale void lost the
+  required reconciliation semantics.
+- `cd frontend && rtk npm test -- src/components/contracts/DocuSignPreviewModal.test.tsx src/pages/specialist/CreateContractPage.test.tsx --maxWorkers=2`
+  — RED: 2 failed, 4 passed. A suffix origin/wrong source could trigger modal
+  actions and public retry did not retain one operation id.
+- Focused removal/client privacy tests — RED: 6 expected failures before 404
+  preservation and request-payload log redaction.
+- `cd backend && rtk npm test -- --runInBand src/features/appointments/appointments.service.spec.ts src/features/processes/processes.service.spec.ts`
+  — RED: 8 failed, 44 passed before shared producer locks/rechecks.
+- PostgreSQL dedup race spec — RED: 2 failed, 1 passed before public and
+  cross-entrypoint creation shared the advisory key.
+- PostgreSQL appointment race spec — RED: 3 failed, 1 passed before direct,
+  confirmation and Calendly writers shared the schedule key.
+- `cd backend && rtk npm test -- --runInBand src/features/appointments/calendly-integration.service.spec.ts`
+  — RED: 1 failed because `invitee.created` performed zero transactions; GREEN
+  became 1/1 after extending the same schedule invariant to that writer.
+
+Two test-contract adjustments were made after implementation: DTO fixtures
+were updated with the newly required operation UUID, and an obsolete
+PostgreSQL assertion expecting `PROCESSING_CONTRACT` after provider `SENT` was
+updated to the existing webhook-consistent `DOCUMENTATION`. A legacy test that
+required raw provider/database messages in server logs was corrected to assert
+redacted error types, matching the explicit PII requirement.
+
+## Final GREEN evidence
+
+- Backend focused unit/regression matrix:
+  `cd backend && rtk npm test -- --runInBand src/features/contracts/contracts.service.spec.ts src/providers/docusign/docusign.service.spec.ts src/providers/docusign/docusign.client.spec.ts src/features/appointments/appointments.service.spec.ts src/features/appointments/calendly-integration.service.spec.ts src/features/processes/processes.service.spec.ts src/features/products/product-removal-not-found.spec.ts src/features/contracts/dto/preview-contract.dto.spec.ts src/features/proposals/proposals.service.spec.ts src/features/proposals/proposal-money.spec.ts`
+  — 10 suites, 165/165 passed.
+- Deterministic PostgreSQL matrix with
+  `POSTGRES_CONCURRENCY_TEST_URL='postgresql://user:password@127.0.0.1:5432/highclass_task8?schema=public'`:
+  `rtk npm test -- --runInBand src/features/contracts/contracts-lock.postgres.spec.ts src/features/products/product-association-concurrency.postgres.spec.ts src/features/products/product-monetary-lock.postgres.spec.ts src/features/processes/processes-dedup-concurrency.postgres.spec.ts src/features/appointments/appointments-concurrency.postgres.spec.ts src/features/proposals/proposals-concurrency.postgres.spec.ts`
+  — 6 suites, 15/15 passed.
+- Frontend cancellation/modal/page matrix:
+  `cd frontend && rtk npm test -- src/lib/contract-preview-cancellation.test.ts src/components/contracts/DocuSignPreviewModal.test.tsx src/pages/specialist/CreateContractPage.test.tsx --maxWorkers=2`
+  — 3 suites, 11/11 passed.
+- `cd backend && rtk npm run build` — passed.
+- `cd frontend && rtk npm run build` — passed; only the pre-existing Vite
+  warning for a JavaScript chunk larger than 500 kB remains.
+- `rtk git diff --check` — clean.
+
+## Self-review
+
+- Traced every `process.create` producer and confirmed the post-lock active
+  query occurs in its write transaction; confirmed every scheduled-time writer
+  uses the shared specialist schedule key and conflict semantics.
+- Checked provider effect ordering around preflight, create recovery, send,
+  persistence failure, lost COMMIT acknowledgement and stale/losing void.
+  Definitive advanced states are preserved; uncertain effects always retain a
+  stable operation/envelope reconciliation handle.
+- Rechecked iframe hostname boundaries, exact origin equality and iframe source
+  identity, including attacker suffixes and trusted send/cancel behavior.
+- Searched DocuSign/contract operational logging for request/form/DocGen values
+  and removed remaining raw payload/error paths; focused tests assert secrets
+  and raw causes do not reach logs.
+- Confirmed all database tests used the named local PostgreSQL container, every
+  external provider was mocked, all heavy commands were sequential, and no
+  runner exceeded two workers.
+- Confirmed `PROJECT-OVERVIEW.md` remains the same untracked user file and was
+  neither edited nor staged.
+
+## Remaining concerns
+
+1. The frontend production build retains its pre-existing chunk-size warning;
+   it does not fail the build.
+2. Transaction-id recovery depends on DocuSign's transaction-id lookup
+   availability. An unavailable or ambiguous lookup deliberately returns the
+   stable manual-reconciliation response instead of risking a duplicate POST.

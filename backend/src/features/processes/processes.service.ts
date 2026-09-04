@@ -32,6 +32,7 @@ import {
   lockNegotiationProductMoney,
 } from '../products/product-monetary-lock';
 import { validateSpecialistProductAssociation } from '../products/product-association-validator';
+import { lockAndAssertNoActiveProcess } from './process-dedup-lock';
 
 /**
  * Quem está pedindo a operação. `companyId` só é usado por OFFICE.
@@ -303,77 +304,9 @@ export class ProcessesService {
     const { product_id, client_id, specialist_id, ...dataToSave } =
       createProcessDto;
 
-    // Map para os produtos existentes
-    const productMap = {
-      CAR: 'car',
-      BOAT: 'boat',
-      AIRCRAFT: 'aircraft',
-    } as const;
-
     // Para processo com produto (não consultoria)
     const hasProduct =
       createProcessDto.product_type && createProcessDto.product_id;
-
-    // Atribuir o produto correto passado pela req
-    const fieldName = hasProduct
-      ? productMap[createProcessDto.product_type!]
-      : null;
-
-    const activeStatuses: ProcessStatus[] = [
-      ProcessStatus.SCHEDULING,
-      ProcessStatus.NEGOTIATION,
-      ProcessStatus.PROCESSING_CONTRACT,
-      ProcessStatus.DOCUMENTATION,
-    ];
-
-    if (hasProduct) {
-      const whereClause: {
-        client_id: string;
-        specialist_id: string;
-        aircraft_id?: string;
-        boat_id?: string;
-        car_id?: string;
-        status?: { in: ProcessStatus[] };
-      } = {
-        client_id,
-        specialist_id,
-        [`${fieldName}_id`]: createProcessDto.product_id,
-        // Só bloqueia se houver processo ATIVO; processos encerrados
-        // (COMPLETED/REJECTED) permitem novo processo para o mesmo produto.
-        status: { in: activeStatuses },
-      };
-
-      this.logger.debug('[create] Verificando se processo ativo já existe');
-      const processAlreadyExists = await this.prismaService.process.findFirst({
-        where: whereClause,
-      });
-      if (processAlreadyExists) {
-        this.logger.warn(
-          `[create] Processo ativo já existe para cliente ${client_id} e produto ${product_id}`,
-        );
-        throw new ConflictException(
-          'Já existe processo ativo para este cliente com este produto.',
-        );
-      }
-    } else {
-      // Consultoria (sem produto): impedir múltiplos processos ativos entre os mesmos atores
-      const activeConsultancy = await this.prismaService.process.findFirst({
-        where: {
-          client_id,
-          specialist_id,
-          product_type: null,
-          status: { in: activeStatuses },
-        },
-      });
-      if (activeConsultancy) {
-        this.logger.warn(
-          `[create] Consultoria ativa já existe para cliente ${client_id} e especialista ${specialist_id}`,
-        );
-        throw new ConflictException(
-          'Já existe consultoria ativa entre este cliente e este especialista.',
-        );
-      }
-    }
 
     // Criação de um objeto para incluir na response do processo
     const include = {
@@ -415,6 +348,13 @@ export class ProcessesService {
         specialistId: createProcessDto.specialist_id,
         productType: createProcessDto.product_type,
         productId: createProcessDto.product_id,
+      });
+
+      await lockAndAssertNoActiveProcess(tx, {
+        clientId: client_id,
+        specialistId: specialist_id,
+        productType: hasProduct ? createProcessDto.product_type : null,
+        productId: hasProduct ? createProcessDto.product_id : null,
       });
 
       const process = await tx.process.create({
@@ -478,48 +418,20 @@ export class ProcessesService {
       ? productFieldMap[input.product_type]
       : undefined;
 
-    const activeStatuses = [
-      'SCHEDULING',
-      'NEGOTIATION',
-      'PROCESSING_CONTRACT',
-      'DOCUMENTATION',
-    ] as const;
-
     const pendingExpiresAt = new Date();
     pendingExpiresAt.setDate(pendingExpiresAt.getDate() + 7);
 
     const isConsultancy = !productField || !input.product_id;
 
     const [, process] = await this.prismaService.$transaction(async (tx) => {
-      const dedupKey = `process-dedup:${input.client_id}:${input.specialist_id}:${isConsultancy ? 'CONSULTANCY' : input.product_type}:${isConsultancy ? 'none' : input.product_id}`;
-      await tx.$queryRaw`
-        SELECT pg_advisory_xact_lock(hashtextextended(${dedupKey}, 0))::text AS locked
-      `;
-
-      const existing = await tx.process.findFirst({
-        where: isConsultancy
-          ? {
-              client_id: input.client_id,
-              specialist_id: input.specialist_id,
-              product_type: null,
-              status: { in: [...activeStatuses] as any },
-            }
-          : {
-              client_id: input.client_id,
-              specialist_id: input.specialist_id,
-              [productField!]: input.product_id,
-              status: { in: [...activeStatuses] as any },
-            },
-      });
-      if (existing) {
-        throw new ConflictException(
-          isConsultancy
-            ? 'Já existe consultoria ativa entre este cliente e este especialista.'
-            : 'Já existe processo ativo para este cliente com este produto.',
-        );
-      }
-
       await validateSpecialistProductAssociation(tx, {
+        specialistId: input.specialist_id,
+        productType: isConsultancy ? null : input.product_type,
+        productId: isConsultancy ? null : input.product_id,
+      });
+
+      await lockAndAssertNoActiveProcess(tx, {
+        clientId: input.client_id,
         specialistId: input.specialist_id,
         productType: isConsultancy ? null : input.product_type,
         productId: isConsultancy ? null : input.product_id,

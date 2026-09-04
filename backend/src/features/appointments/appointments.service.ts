@@ -34,14 +34,18 @@ import { plainToInstance } from 'class-transformer';
 import {
   parseDate,
   isFutureDate,
-  formatToISO,
-  suggestNextAvailableSlots,
 } from 'src/shared/utils/date.utils';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { CalendlyIntegrationService } from './calendly-integration.service';
 import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
 import { lockNegotiationProductMoney } from 'src/features/products/product-monetary-lock';
 import { validateSpecialistProductAssociation } from 'src/features/products/product-association-validator';
+import { lockAndAssertNoActiveProcess } from 'src/features/processes/process-dedup-lock';
+import {
+  acquireSpecialistScheduleLock,
+  assertSpecialistScheduleAvailable,
+  lockAndAssertSpecialistScheduleAvailable,
+} from './appointment-schedule-lock';
 
 /**
  * AppointmentsService
@@ -232,60 +236,17 @@ export class AppointmentsService {
           productId: dto.product_id,
         })) as Car | Boat | Aircraft;
 
-        const scheduleLockKey = `appointment-schedule:${dto.specialist_id}`;
-        await tx.$queryRaw`
-          SELECT pg_advisory_xact_lock(hashtextextended(${scheduleLockKey}, 0))::text AS locked
-        `;
-
-        // Validação 7: Verificar conflitos de horário (especialista não pode ter 2 agendamentos no mesmo horário)
-        // Considerar janela de 1 hora para evitar overlap (ex: agendamento 14:00-15:00)
-        let existingAppointment = null;
-        if (appointmentDateTime) {
-          const conflictStart = new Date(
-            appointmentDateTime.getTime() - 60 * 60 * 1000,
-          );
-          const conflictEnd = new Date(
-            appointmentDateTime.getTime() + 60 * 60 * 1000,
-          );
-
-          existingAppointment = await tx.appointment.findFirst({
-            where: {
-              specialist_id: dto.specialist_id,
-              appointment_datetime: {
-                gte: conflictStart,
-                lte: conflictEnd,
-              },
-              status: { in: [StatusAgendamento.SCHEDULED] }, // Apenas agendamentos ativos
-            },
-          });
-
-          if (existingAppointment) {
-            // Gerar 3 sugestões de horários alternativos (próximas 3 horas disponíveis)
-            const suggestedTimes = suggestNextAvailableSlots(
-              appointmentDateTime,
-              3,
-            );
-
-            throw new ConflictException({
-              success: false,
-              error: {
-                code: 409,
-                message: 'Especialista já possui agendamento neste horário',
-                details: {
-                  conflicting_appointment: {
-                    id: existingAppointment.id,
-                    appointment_datetime:
-                      existingAppointment.appointment_datetime
-                        ? formatToISO(existingAppointment.appointment_datetime)
-                        : null,
-                    client_id: existingAppointment.client_id,
-                  },
-                  suggested_times: suggestedTimes, // Retornar formato ISO 8601 UTC
-                },
-              },
-            });
-          }
-        }
+        await lockAndAssertNoActiveProcess(tx, {
+          clientId: dto.client_id,
+          specialistId: dto.specialist_id,
+          productType: dto.product_type,
+          productId: dto.product_id,
+        });
+        await lockAndAssertSpecialistScheduleAvailable(
+          tx,
+          dto.specialist_id,
+          appointmentDateTime,
+        );
 
         // Criar Appointment
         const appointment = await tx.appointment.create({
@@ -1150,7 +1111,6 @@ export class AppointmentsService {
     this.logger.log(
       `[createPending] Iniciando transação para criar appointment e process`,
     );
-    this.logger.log(`[createPending] Dados do DTO: ${JSON.stringify(dto)}`);
 
     let appointment: any;
     let process: any;
@@ -1166,11 +1126,31 @@ export class AppointmentsService {
           productId: dto.product_id,
         });
 
+        await lockAndAssertNoActiveProcess(tx, {
+          clientId: dto.client_id,
+          specialistId: dto.specialist_id,
+          productType: isConsultancy ? null : dto.product_type,
+          productId: isConsultancy ? null : dto.product_id,
+        });
+        const pendingDateTime = dto.appointment_datetime
+          ? parseDate(String(dto.appointment_datetime))
+          : null;
+        if (dto.appointment_datetime && !pendingDateTime) {
+          throw new BadRequestException('Data/hora do agendamento é inválida');
+        }
+        if (pendingDateTime) {
+          await lockAndAssertSpecialistScheduleAvailable(
+            tx,
+            dto.specialist_id,
+            pendingDateTime,
+          );
+        }
+
         // Criar appointment
         const appointmentData: any = {
           client_id: dto.client_id,
           specialist_id: dto.specialist_id,
-          appointment_datetime: dto.appointment_datetime || null,
+          appointment_datetime: pendingDateTime,
           status: StatusAgendamento.PENDING,
           notes:
             dto.notes ||
@@ -1266,10 +1246,6 @@ export class AppointmentsService {
         `[createPending] Tipo do erro: ${error?.constructor?.name}`,
       );
       this.logger.error(`[createPending] Mensagem: ${error?.message}`);
-      this.logger.error(`[createPending] Stack: ${error?.stack}`);
-      this.logger.error(
-        `[createPending] Erro completo: ${JSON.stringify(error, null, 2)}`,
-      );
       throw error;
     }
   }
@@ -1402,15 +1378,64 @@ export class AppointmentsService {
         productId: appointment.product_id,
       });
 
+      await lockAndAssertNoActiveProcess(
+        tx,
+        {
+          clientId: appointment.client_id,
+          specialistId: appointment.specialist_id,
+          productType: appointment.product_type,
+          productId: appointment.product_id,
+        },
+        appointment.process?.id,
+      );
+      await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
+
+      const lockedAppointment = await tx.appointment.findUnique({
+        where: { id: appointmentId },
+        include: { client: true, specialist: true, process: true },
+      });
+      if (!lockedAppointment) {
+        throw new NotFoundException({
+          success: false,
+          error: { code: 404, message: 'Agendamento não encontrado' },
+        });
+      }
+      if (lockedAppointment.specialist_id !== userId) {
+        throw new ForbiddenException({
+          success: false,
+          error: {
+            code: 403,
+            message: 'Apenas o especialista pode confirmar agendamentos',
+          },
+        });
+      }
+      if (lockedAppointment.status !== StatusAgendamento.PENDING) {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message: 'Apenas agendamentos PENDING podem ser confirmados',
+            details: { current_status: lockedAppointment.status },
+          },
+        });
+      }
+      const confirmedDateTime =
+        appointmentDatetime ||
+        lockedAppointment.appointment_datetime ||
+        new Date();
+      await assertSpecialistScheduleAvailable(
+        tx,
+        lockedAppointment.specialist_id,
+        confirmedDateTime,
+        appointmentId,
+      );
+
       // Atualizar appointment
       const updatedApt = await tx.appointment.update({
         where: { id: appointmentId },
         data: {
           status: StatusAgendamento.SCHEDULED,
-          appointment_datetime:
-            appointmentDatetime ||
-            appointment.appointment_datetime ||
-            new Date(),
+          appointment_datetime: confirmedDateTime,
           confirmed_at: new Date(),
           confirmed_by_id: userId,
         },
@@ -1418,23 +1443,23 @@ export class AppointmentsService {
       });
 
       // Buscar ou criar Process
-      let processToUpdate = appointment.process;
+      let processToUpdate = lockedAppointment.process;
 
       if (!processToUpdate) {
         // Se não existe, criar (caso de migração/dados antigos)
         const productField =
-          appointment.product_type === ProductType.CAR
+          lockedAppointment.product_type === ProductType.CAR
             ? 'car_id'
-            : appointment.product_type === ProductType.BOAT
+            : lockedAppointment.product_type === ProductType.BOAT
               ? 'boat_id'
               : 'aircraft_id';
 
         processToUpdate = await tx.process.create({
           data: {
-            client_id: appointment.client_id,
-            specialist_id: appointment.specialist_id,
-            product_type: appointment.product_type,
-            [productField]: appointment.product_id,
+            client_id: lockedAppointment.client_id,
+            specialist_id: lockedAppointment.specialist_id,
+            product_type: lockedAppointment.product_type,
+            [productField]: lockedAppointment.product_id,
             appointment_id: appointmentId,
             status: 'SCHEDULING',
             notes: `Criado via confirmação de agendamento PENDING (${new Date().toISOString()})`,
@@ -1810,24 +1835,68 @@ export class AppointmentsService {
       }
     }
 
-    const syncStatus =
-      scheduledStartTime || appointment.appointment_datetime
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
+      const lockedAppointment = await tx.appointment.findUnique({
+        where: { id: appointmentId },
+      });
+      if (!lockedAppointment) {
+        throw new NotFoundException({
+          success: false,
+          error: { code: 404, message: 'Agendamento não encontrado' },
+        });
+      }
+      if (lockedAppointment.client_id !== userId) {
+        throw new ForbiddenException({
+          success: false,
+          error: {
+            code: 403,
+            message:
+              'Apenas o cliente dono do agendamento pode registrar evento do Calendly',
+          },
+        });
+      }
+      if (
+        lockedAppointment.status !== StatusAgendamento.PENDING &&
+        lockedAppointment.status !== StatusAgendamento.SCHEDULED
+      ) {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message:
+              'Somente agendamentos pendentes ou agendados aceitam sincronização Calendly',
+          },
+        });
+      }
+      if (lockedAppointment.calendly_event_uri === dto.event_uri) {
+        return lockedAppointment;
+      }
+
+      const targetDateTime =
+        scheduledStartTime || lockedAppointment.appointment_datetime;
+      await assertSpecialistScheduleAvailable(
+        tx,
+        lockedAppointment.specialist_id,
+        targetDateTime,
+        lockedAppointment.id,
+      );
+      const syncStatus = targetDateTime
         ? CalendlySyncStatus.SYNCED
         : CalendlySyncStatus.PENDING;
-
-    const updated = await this.prisma.appointment.update({
-      where: { id: appointment.id },
-      data: {
-        calendly_event_uri: dto.event_uri,
-        calendly_invitee_uri: dto.invitee_uri,
-        calendly_scheduled_at: dto.client_observed_at
-          ? new Date(dto.client_observed_at)
-          : new Date(),
-        calendly_last_sync_at: new Date(),
-        calendly_sync_status: syncStatus,
-        appointment_datetime:
-          scheduledStartTime || appointment.appointment_datetime,
-      },
+      return tx.appointment.update({
+        where: { id: lockedAppointment.id },
+        data: {
+          calendly_event_uri: dto.event_uri,
+          calendly_invitee_uri: dto.invitee_uri,
+          calendly_scheduled_at: dto.client_observed_at
+            ? new Date(dto.client_observed_at)
+            : new Date(),
+          calendly_last_sync_at: new Date(),
+          calendly_sync_status: syncStatus,
+          appointment_datetime: targetDateTime,
+        },
+      });
     });
 
     return {

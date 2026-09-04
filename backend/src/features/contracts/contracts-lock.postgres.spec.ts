@@ -202,6 +202,7 @@ describeWithPostgres('contract process lock — PostgreSQL concurrency', () => {
       platformCompany,
     );
     const dto = {
+      operation_id: randomUUID(),
       process_id: processId,
       template_id: 'test-template',
       seller_name: 'Independent Seller',
@@ -241,7 +242,7 @@ describeWithPostgres('contract process lock — PostgreSQL concurrency', () => {
       first.contract.findMany({ where: { process_id: processId } }),
     ]);
     expect(process).toMatchObject({
-      status: ProcessStatus.PROCESSING_CONTRACT,
+      status: ProcessStatus.DOCUMENTATION,
       active_contract_id: contracts[0]?.id,
     });
     expect(contracts).toHaveLength(1);

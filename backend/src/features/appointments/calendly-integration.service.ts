@@ -17,6 +17,10 @@ import {
 } from 'crypto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { parseDate } from 'src/shared/utils/date.utils';
+import {
+  acquireSpecialistScheduleLock,
+  assertSpecialistScheduleAvailable,
+} from './appointment-schedule-lock';
 
 interface CalendlyTokenResponse {
   access_token: string;
@@ -389,19 +393,39 @@ export class CalendlyIntegrationService {
         payload.start_time;
       const parsedStartTime = startTimeRaw ? parseDate(startTimeRaw) : null;
 
-      await this.prisma.appointment.update({
-        where: { id: appointment.id },
-        data: {
-          calendly_event_uri: eventUri || appointment.calendly_event_uri,
-          calendly_invitee_uri: inviteeUri || appointment.calendly_invitee_uri,
-          calendly_last_sync_at: new Date(),
-          calendly_scheduled_at: new Date(),
-          calendly_sync_status: parsedStartTime
-            ? CalendlySyncStatus.SYNCED
-            : appointment.calendly_sync_status,
-          appointment_datetime:
-            parsedStartTime || appointment.appointment_datetime,
-        },
+      await this.prisma.$transaction(async (tx) => {
+        await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
+        const lockedAppointment = await tx.appointment.findUnique({
+          where: { id: appointment.id },
+        });
+        if (!lockedAppointment) {
+          throw new NotFoundException('Agendamento não encontrado');
+        }
+
+        const targetDateTime =
+          parsedStartTime || lockedAppointment.appointment_datetime;
+        await assertSpecialistScheduleAvailable(
+          tx,
+          lockedAppointment.specialist_id,
+          targetDateTime,
+          lockedAppointment.id,
+        );
+
+        await tx.appointment.update({
+          where: { id: lockedAppointment.id },
+          data: {
+            calendly_event_uri:
+              eventUri || lockedAppointment.calendly_event_uri,
+            calendly_invitee_uri:
+              inviteeUri || lockedAppointment.calendly_invitee_uri,
+            calendly_last_sync_at: new Date(),
+            calendly_scheduled_at: new Date(),
+            calendly_sync_status: parsedStartTime
+              ? CalendlySyncStatus.SYNCED
+              : lockedAppointment.calendly_sync_status,
+            appointment_datetime: targetDateTime,
+          },
+        });
       });
 
       return {

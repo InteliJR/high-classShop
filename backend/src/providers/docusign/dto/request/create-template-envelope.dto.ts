@@ -6,7 +6,7 @@
  */
 export class CreateTemplateEnvelopeDto {
   /** Chave idempotente da operação de criação no provedor. */
-  transactionId?: string;
+  transactionId: string;
 
   /**
    * ID do template no DocuSign

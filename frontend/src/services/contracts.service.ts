@@ -179,6 +179,7 @@ export interface ContractResponse {
 
 // PreviewContractData inclui return_url para callback do DocuSign
 export interface PreviewContractData extends GenerateContractData {
+  operation_id: string;
   return_url: string;
 }
 

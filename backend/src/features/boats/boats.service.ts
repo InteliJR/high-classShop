@@ -307,6 +307,7 @@ export class BoatsService {
       });
       return { ok: true };
     } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       throw new Error(`Erro ao deletar lancha: ${error.message}`);
     }
   }

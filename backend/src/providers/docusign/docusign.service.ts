@@ -11,8 +11,10 @@ import {
   ProviderTimeoutException,
 } from 'src/shared/exceptions/custom-exceptions';
 import { CreateTemplateEnvelopeDto } from './dto/request/create-template-envelope.dto';
-import { randomUUID } from 'node:crypto';
-import { EnvelopeEffectError } from './envelope-effect.error';
+import {
+  EnvelopeCreationAmbiguousError,
+  EnvelopeEffectError,
+} from './envelope-effect.error';
 
 /**
  * Serviço de integração com DocuSign
@@ -34,6 +36,66 @@ export class DocuSignService {
   private readonly logger = new Logger(DocuSignService.name);
 
   constructor(private readonly client: DocuSignClient) {}
+
+  private async createOrRecoverTemplateEnvelope(
+    dto: CreateTemplateEnvelopeDto,
+    onEnvelopeCreated?: (envelopeId: string) => void,
+  ): Promise<CreateEnvelopeResponseDto> {
+    const transactionId = dto.transactionId;
+    if (!transactionId) {
+      throw new EnvelopeCreationFailedException(
+        'Transaction ID da operação é obrigatório',
+      );
+    }
+    const findByTransaction = (this.client as any)
+      .findEnvelopesByTransactionId as
+      | ((id: string) => Promise<CreateEnvelopeResponseDto[]>)
+      | undefined;
+
+    const recover = async (): Promise<CreateEnvelopeResponseDto | null> => {
+      if (!findByTransaction) return null;
+      const matches = await findByTransaction.call(this.client, transactionId);
+      if (matches.length > 1) {
+        throw new EnvelopeCreationAmbiguousError(transactionId, matches);
+      }
+      return matches[0] ?? null;
+    };
+
+    let existing: CreateEnvelopeResponseDto | null;
+    try {
+      existing = await recover();
+    } catch (error) {
+      if (error instanceof EnvelopeCreationAmbiguousError) throw error;
+      throw new EnvelopeCreationAmbiguousError(transactionId, error);
+    }
+    if (existing) {
+      onEnvelopeCreated?.(existing.envelopeId);
+      return existing;
+    }
+
+    try {
+      const created = await this.client.createEnvelopeFromTemplate(dto);
+      onEnvelopeCreated?.(created.envelopeId);
+      return created;
+    } catch (createError) {
+      if (!findByTransaction) throw createError;
+      try {
+        const recovered = await recover();
+        if (recovered) {
+          onEnvelopeCreated?.(recovered.envelopeId);
+          return recovered;
+        }
+      } catch (recoveryError) {
+        if (recoveryError instanceof EnvelopeCreationAmbiguousError) {
+          throw new EnvelopeCreationAmbiguousError(
+            transactionId,
+            createError,
+          );
+        }
+      }
+      throw new EnvelopeCreationAmbiguousError(transactionId, createError);
+    }
+  }
 
   /**
    * Cria um envelope na DocuSign com um documento PDF e um signer
@@ -84,7 +146,7 @@ export class DocuSignService {
         );
       }
 
-      this.logger.log(`Criando envelope para ${clientEmail}...`);
+      this.logger.log('Criando envelope...');
 
       // 2. Converter PDF para base64
       const pdfBase64 = pdfBuffer.toString('base64');
@@ -175,9 +237,7 @@ export class DocuSignService {
         error instanceof ProviderUnavailableException ||
         error instanceof ProviderTimeoutException
       ) {
-        this.logger.error(
-          `Erro de resiliência ao criar envelope: ${error.message}`,
-        );
+        this.logger.error('Erro de resiliência ao criar envelope');
         throw error;
       }
 
@@ -188,13 +248,7 @@ export class DocuSignService {
       }
 
       // Erro inesperado
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-
-      this.logger.error(
-        `Erro inesperado ao criar envelope: ${errorMessage}`,
-        error instanceof Error ? error.stack : undefined,
-      );
+      this.logger.error('Erro inesperado ao criar envelope');
 
       throw new EnvelopeCreationFailedException(
         'O provedor não concluiu a criação do envelope.',
@@ -232,12 +286,7 @@ export class DocuSignService {
         throw error;
       }
 
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-
-      this.logger.error(
-        `Erro ao consultar status do envelope: ${errorMessage}`,
-      );
+      this.logger.error('Erro ao consultar status do envelope');
 
       throw new ProviderUnavailableException(
         'DocuSign',
@@ -272,10 +321,7 @@ export class DocuSignService {
         `Envelope ${envelopeId} marcado para cancelamento (NOT IMPLEMENTED)`,
       );
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-
-      this.logger.error(`Erro ao cancelar envelope: ${errorMessage}`);
+      this.logger.error('Erro ao cancelar envelope');
 
       throw new ProviderUnavailableException(
         'DocuSign',
@@ -309,6 +355,7 @@ export class DocuSignService {
    * @throws ProviderTimeoutException - Timeout na requisição
    */
   async createEnvelopeFromTemplate(params: {
+    transactionId: string;
     templateId: string;
     buyerEmail: string;
     buyerName: string;
@@ -326,6 +373,7 @@ export class DocuSignService {
   }): Promise<{ envelopeId: string; status: EnvelopeStatus }> {
     const {
       templateId,
+      transactionId,
       buyerEmail,
       buyerName,
       sellerEmail,
@@ -363,7 +411,6 @@ export class DocuSignService {
       }
 
       this.logger.log(`=== INICIANDO FLUXO DOCGEN DE 4 ETAPAS ===`);
-      this.logger.log(`Buyer: ${buyerEmail}, Seller: ${sellerEmail}`);
       this.logger.debug(`Template ID: ${templateId}`);
       this.logger.debug(`Process ID: ${processId}`);
       this.logger.debug(`Form fields count: ${Object.keys(formFields).length}`);
@@ -372,7 +419,7 @@ export class DocuSignService {
       this.logger.log('ETAPA 1: Criando envelope como DRAFT...');
 
       const createEnvelopeDto: CreateTemplateEnvelopeDto = {
-        transactionId: randomUUID(),
+        transactionId,
         templateId,
         status: 'created', // DRAFT - não envia ainda
         emailSubject: 'Contrato de Compra e Venda - Assinatura Digital',
@@ -419,11 +466,20 @@ export class DocuSignService {
         },
       };
 
-      const draftResponse =
-        await this.client.createEnvelopeFromTemplate(createEnvelopeDto);
+      const draftResponse = await this.createOrRecoverTemplateEnvelope(
+        createEnvelopeDto,
+        onEnvelopeCreated,
+      );
       const envelopeId = draftResponse.envelopeId;
       createdEnvelopeId = envelopeId;
-      onEnvelopeCreated?.(envelopeId);
+
+      if (
+        draftResponse.status === EnvelopeStatus.SENT ||
+        draftResponse.status === EnvelopeStatus.DELIVERED ||
+        draftResponse.status === EnvelopeStatus.COMPLETED
+      ) {
+        return { envelopeId, status: draftResponse.status };
+      }
 
       this.logger.log(`✓ Envelope DRAFT criado. ID: ${envelopeId}`);
 
@@ -433,10 +489,6 @@ export class DocuSignService {
       const docGenFieldsResponse =
         await this.client.getEnvelopeDocGenFormFields(envelopeId);
 
-      this.logger.debug(
-        `DocGen fields response: ${JSON.stringify(docGenFieldsResponse, null, 2)}`,
-      );
-
       // ===== ETAPA 3: MAPEAR E ATUALIZAR CAMPOS =====
       this.logger.log('ETAPA 3: Mapeando e atualizando campos DocGen...');
 
@@ -445,10 +497,6 @@ export class DocuSignService {
       const updatedDocGenFormFields = this.mapFormFieldsToDocGen(
         docGenFieldsResponse.docGenFormFields,
         formFields,
-      );
-
-      this.logger.debug(
-        `Updated DocGen fields: ${JSON.stringify(updatedDocGenFormFields, null, 2)}`,
       );
 
       await this.client.updateEnvelopeDocGenFormFields(envelopeId, {
@@ -473,7 +521,10 @@ export class DocuSignService {
     } catch (error) {
       // Tratamento de erros com categorização
 
-      if (error instanceof EnvelopeEffectError) {
+      if (
+        error instanceof EnvelopeEffectError ||
+        error instanceof EnvelopeCreationAmbiguousError
+      ) {
         throw error;
       }
 
@@ -488,7 +539,7 @@ export class DocuSignService {
             ) {
               return {
                 envelopeId: createdEnvelopeId,
-                status: EnvelopeStatus.SENT,
+                status: envelope.status,
               };
             }
             if (envelope?.status !== EnvelopeStatus.CREATED) {
@@ -522,9 +573,7 @@ export class DocuSignService {
         error instanceof ProviderUnavailableException ||
         error instanceof ProviderTimeoutException
       ) {
-        this.logger.error(
-          `Erro de resiliência ao criar envelope via template: ${error.message}`,
-        );
+        this.logger.error('Erro de resiliência ao criar envelope via template');
         throw error;
       }
 
@@ -533,13 +582,7 @@ export class DocuSignService {
         throw error;
       }
 
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-
-      this.logger.error(
-        `Erro inesperado ao criar envelope via template: ${errorMessage}`,
-        error instanceof Error ? error.stack : undefined,
-      );
+      this.logger.error('Erro inesperado ao criar envelope via template');
 
       throw new EnvelopeCreationFailedException(
         'O provedor não concluiu a criação do envelope via template.',
@@ -574,6 +617,7 @@ export class DocuSignService {
    * @returns Promise<{ envelopeId, previewUrl, expiresAt }>
    */
   async createEnvelopePreview(params: {
+    transactionId: string;
     templateId: string;
     buyerEmail: string;
     buyerName: string;
@@ -596,6 +640,7 @@ export class DocuSignService {
   }> {
     const {
       templateId,
+      transactionId,
       buyerEmail,
       buyerName,
       sellerEmail,
@@ -633,7 +678,6 @@ export class DocuSignService {
       }
 
       this.logger.log(`=== INICIANDO FLUXO DE PREVIEW (3 ETAPAS) ===`);
-      this.logger.log(`Buyer: ${buyerEmail}, Seller: ${sellerEmail}`);
       this.logger.debug(`Template ID: ${templateId}`);
       this.logger.debug(`Process ID: ${processId}`);
 
@@ -641,7 +685,7 @@ export class DocuSignService {
       this.logger.log('PREVIEW ETAPA 1: Criando envelope como DRAFT...');
 
       const createEnvelopeDto: CreateTemplateEnvelopeDto = {
-        transactionId: randomUUID(),
+        transactionId,
         templateId,
         status: 'created', // DRAFT - não envia
         emailSubject: 'Contrato de Compra e Venda - Assinatura Digital',
@@ -687,11 +731,25 @@ export class DocuSignService {
         },
       };
 
-      const draftResponse =
-        await this.client.createEnvelopeFromTemplate(createEnvelopeDto);
+      const draftResponse = await this.createOrRecoverTemplateEnvelope(
+        createEnvelopeDto,
+        onEnvelopeCreated,
+      );
       const envelopeId = draftResponse.envelopeId;
       createdEnvelopeId = envelopeId;
-      onEnvelopeCreated?.(envelopeId);
+
+      if (
+        draftResponse.status === EnvelopeStatus.SENT ||
+        draftResponse.status === EnvelopeStatus.DELIVERED ||
+        draftResponse.status === EnvelopeStatus.COMPLETED
+      ) {
+        throw new EnvelopeEffectError(
+          envelopeId,
+          'SEND_CONFIRMED',
+          null,
+          draftResponse.status,
+        );
+      }
 
       this.logger.log(`✓ Envelope DRAFT criado. ID: ${envelopeId}`);
 
@@ -702,19 +760,12 @@ export class DocuSignService {
         await this.client.getEnvelopeDocGenFormFields(envelopeId);
 
       this.logger.log(
-        `DocGen fields raw response: ${JSON.stringify(docGenFieldsResponse, null, 2)}`,
-      );
-      this.logger.log(
         `Form fields keys being sent: ${JSON.stringify(Object.keys(formFields))}`,
       );
 
       const updatedDocGenFormFields = this.mapFormFieldsToDocGen(
         docGenFieldsResponse.docGenFormFields,
         formFields,
-      );
-
-      this.logger.log(
-        `Updated DocGen fields to send: ${JSON.stringify(updatedDocGenFormFields, null, 2)}`,
       );
 
       await this.client.updateEnvelopeDocGenFormFields(envelopeId, {
@@ -751,7 +802,10 @@ export class DocuSignService {
         expiresAt,
       };
     } catch (error) {
-      if (error instanceof EnvelopeEffectError) {
+      if (
+        error instanceof EnvelopeEffectError ||
+        error instanceof EnvelopeCreationAmbiguousError
+      ) {
         throw error;
       }
 
@@ -767,7 +821,7 @@ export class DocuSignService {
         error instanceof ProviderUnavailableException ||
         error instanceof ProviderTimeoutException
       ) {
-        this.logger.error(`Erro de resiliência no preview: ${error.message}`);
+        this.logger.error('Erro de resiliência no preview');
         throw error;
       }
 
@@ -776,13 +830,7 @@ export class DocuSignService {
         throw error;
       }
 
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-
-      this.logger.error(
-        `Erro inesperado no preview: ${errorMessage}`,
-        error instanceof Error ? error.stack : undefined,
-      );
+      this.logger.error('Erro inesperado no preview');
 
       throw new EnvelopeCreationFailedException(
         'O provedor não concluiu a criação do preview.',
@@ -821,7 +869,7 @@ export class DocuSignService {
 
         return {
           envelopeId,
-          status: EnvelopeStatus.SENT,
+          status: currentStatus,
         };
       }
 
@@ -865,7 +913,7 @@ export class DocuSignService {
 
           return {
             envelopeId,
-            status: EnvelopeStatus.SENT,
+            status: statusAfterFailure,
           };
         }
 
@@ -880,12 +928,8 @@ export class DocuSignService {
         if (statusCheckError instanceof EnvelopeEffectError) {
           throw statusCheckError;
         }
-        const statusCheckMessage =
-          statusCheckError instanceof Error
-            ? statusCheckError.message
-            : String(statusCheckError);
         this.logger.warn(
-          `Não foi possível confirmar status do envelope após falha de envio: ${statusCheckMessage}`,
+          'Não foi possível confirmar status do envelope após falha de envio',
         );
         throw new EnvelopeEffectError(
           envelopeId,
@@ -894,10 +938,7 @@ export class DocuSignService {
         );
       }
 
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-
-      this.logger.error(`Erro ao enviar envelope draft: ${errorMessage}`);
+      this.logger.error('Erro ao enviar envelope draft');
 
       throw new EnvelopeEffectError(envelopeId, 'DRAFT_CONFIRMED', error);
     }
@@ -910,16 +951,13 @@ export class DocuSignService {
    * @param reason - Motivo do cancelamento
    */
   async voidDraftEnvelope(envelopeId: string, reason: string): Promise<void> {
-    this.logger.log(`Cancelando envelope draft ${envelopeId}: ${reason}`);
+    this.logger.log(`Cancelando envelope draft ${envelopeId}`);
 
     try {
       await this.client.voidEnvelope(envelopeId, reason);
       this.logger.log(`✓ Envelope ${envelopeId} cancelado`);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-
-      this.logger.error(`Erro ao cancelar envelope: ${errorMessage}`);
+      this.logger.error('Erro ao cancelar envelope');
       throw error;
     }
   }
@@ -957,9 +995,7 @@ export class DocuSignService {
           const value = formFields[lookupKey];
 
           if (value !== undefined) {
-            this.logger.debug(
-              `Mapeando campo: label="${field.label}" name="${field.name}" → key="${lookupKey}" = "${value}"`,
-            );
+            this.logger.debug(`Mapeando campo DocGen: key="${lookupKey}"`);
             return {
               name: field.name,
               value: String(value),

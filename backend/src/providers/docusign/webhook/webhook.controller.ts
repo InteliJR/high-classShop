@@ -113,9 +113,6 @@ export class WebhookController {
     this.logger.debug(`Received Signature: ${signature.substring(0, 20)}...`);
     this.logger.debug(`Webhook URI: ${webhookUri}`);
     this.logger.debug(`Body String Length: ${bodyString.length}`);
-    this.logger.debug(
-      `Body String (first 200 chars): ${bodyString.substring(0, 200)}...`,
-    );
 
     const isValidSignature = this.signatureValidator.isValidSignature(
       signature,
@@ -149,13 +146,9 @@ export class WebhookController {
         message: 'Webhook processado com sucesso',
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-
-      this.logger.error(
-        `Erro ao processar webhook: ${errorMessage}`,
-        error instanceof Error ? error.stack : undefined,
-      );
+      this.logger.error('Erro ao processar webhook', {
+        errorType: error instanceof Error ? error.name : typeof error,
+      });
 
       // Re-lança erro (será capturado pelo filtro global)
       throw error;

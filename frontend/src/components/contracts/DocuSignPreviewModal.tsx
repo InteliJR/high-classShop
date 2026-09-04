@@ -84,16 +84,32 @@ export default function DocuSignPreviewModal({
     (event: MessageEvent) => {
       if (isBusy) return;
 
-      // Validar origem (aceitar docusign.net e demo.docusign.net)
-      if (
-        !event.origin.includes("docusign.net") &&
-        !event.origin.includes("docusign.com") &&
-        !event.origin.includes(window.location.origin)
-      ) {
+      if (event.source !== iframeRef.current?.contentWindow) {
         return;
       }
 
-      console.log("[DocuSignPreview] Message received:", event.data);
+      let messageOrigin: URL;
+      let configuredOrigin: URL;
+      try {
+        messageOrigin = new URL(event.origin);
+        configuredOrigin = new URL(previewUrl);
+      } catch {
+        return;
+      }
+
+      const hostname = messageOrigin.hostname.toLowerCase();
+      const isOfficialDocuSignHost =
+        hostname === "docusign.net" ||
+        hostname.endsWith(".docusign.net") ||
+        hostname === "docusign.com" ||
+        hostname.endsWith(".docusign.com");
+      if (
+        messageOrigin.protocol !== "https:" ||
+        !isOfficialDocuSignHost ||
+        messageOrigin.origin !== configuredOrigin.origin
+      ) {
+        return;
+      }
 
       // Formato da mensagem pode variar
       const data = event.data;
@@ -107,7 +123,6 @@ export default function DocuSignPreviewModal({
       } else if (typeof data === "object" && data !== null) {
         // Mensagem estruturada
         const eventType = data.event || data.type || data.action;
-        console.log("[DocuSignPreview] Parsed event type:", eventType);
         if (eventType === "send" || eventType === "signing_complete") {
           onConfirm();
         } else if (
@@ -120,7 +135,7 @@ export default function DocuSignPreviewModal({
         // 'unknown', 'save' e 'error' são apenas logados, sem ação automática
       }
     },
-    [isBusy, onConfirm, onCancel],
+    [isBusy, onConfirm, onCancel, previewUrl],
   );
 
   useEffect(() => {

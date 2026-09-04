@@ -548,7 +548,7 @@ describe('ContractsService — locked transaction and compensation', () => {
     expect(docusign.voidDraftEnvelope).not.toHaveBeenCalled();
   });
 
-  it('logs full causes but never exposes raw database/provider errors in reconciliation HTTP details', async () => {
+  it('redacts raw database/provider errors from reconciliation responses and logs', async () => {
     const persistenceFailure = new Error('database commit failed');
     const compensationFailure = new Error('provider void failed');
     const docusign = {
@@ -616,9 +616,15 @@ describe('ContractsService — locked transaction and compensation', () => {
       expect.objectContaining({
         processId: 'process-1',
         envelopeId: 'envelope-1',
-        persistenceError: 'database commit failed',
-        compensationError: 'provider void failed',
+        persistenceErrorType: 'Error',
+        compensationErrorType: 'Error',
       }),
+    );
+    expect(JSON.stringify(loggerError.mock.calls)).not.toContain(
+      'database commit failed',
+    );
+    expect(JSON.stringify(loggerError.mock.calls)).not.toContain(
+      'provider void failed',
     );
   });
 
@@ -766,6 +772,7 @@ describe('ContractsService — send after preview integrity', () => {
           created_at: new Date('2026-09-04T12:00:00.000Z'),
         }),
       },
+      processStatusHistory: { create: jest.fn().mockResolvedValue({}) },
       company: { findUnique: jest.fn() },
     };
     const prisma = mkPrisma({
@@ -800,6 +807,7 @@ describe('ContractsService — send after preview integrity', () => {
       specialistRate: 9,
     });
     const dto = {
+      operation_id: '11111111-1111-4111-8111-111111111111',
       process_id: 'process-1',
       template_id: 'template-1',
       seller_name: 'Seller',
@@ -887,6 +895,192 @@ describe('ContractsService — send after preview integrity', () => {
     });
     expect(docusign.getEnvelopeStatus).toHaveBeenCalledWith('envelope-1');
     expect(docusign.voidDraftEnvelope).not.toHaveBeenCalled();
+  });
+
+  it('registers a preflight SENT effect before later validation fails', async () => {
+    const { service, docusign, tx, dto } = makeSendHarness();
+    docusign.getEnvelopeStatus.mockResolvedValue({
+      envelopeId: 'envelope-1',
+      status: EnvelopeStatus.SENT,
+    });
+    jest
+      .spyOn(service as any, 'resolveCommissionFromTotal')
+      .mockRejectedValue(new Error('late validation failed'));
+
+    await expect(
+      service.sendContractAfterPreview('envelope-1', dto, 'specialist-1'),
+    ).rejects.toMatchObject({
+      response: {
+        error: { code: 'CONTRACT_MANUAL_RECONCILIATION_REQUIRED' },
+      },
+    });
+    expect(tx.contract.create).not.toHaveBeenCalled();
+    expect(docusign.voidDraftEnvelope).not.toHaveBeenCalled();
+  });
+
+  it('retains a known SENT effect when the provider status check inside send fails', async () => {
+    const { service, docusign, dto } = makeSendHarness();
+    docusign.getEnvelopeStatus.mockResolvedValue({
+      envelopeId: 'envelope-1',
+      status: EnvelopeStatus.SENT,
+    });
+    docusign.sendDraftEnvelope.mockRejectedValue(
+      new Error('second status query failed'),
+    );
+
+    await expect(
+      service.sendContractAfterPreview('envelope-1', dto, 'specialist-1'),
+    ).rejects.toMatchObject({
+      response: {
+        error: { code: 'CONTRACT_MANUAL_RECONCILIATION_REQUIRED' },
+      },
+    });
+    expect(docusign.voidDraftEnvelope).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      EnvelopeStatus.DELIVERED,
+      'DELIVERED',
+      'PENDING',
+      ProcessStatus.DOCUMENTATION,
+    ],
+    [
+      EnvelopeStatus.COMPLETED,
+      'COMPLETED',
+      'SIGNED',
+      ProcessStatus.COMPLETED,
+    ],
+  ] as const)(
+    'persists %s without downgrading provider, contract or process state',
+    async (providerStatus, persistedProviderStatus, contractStatus, processStatus) => {
+      const { service, docusign, tx, dto } = makeSendHarness();
+      docusign.getEnvelopeStatus.mockResolvedValue({
+        envelopeId: 'envelope-1',
+        status: providerStatus,
+      });
+      docusign.sendDraftEnvelope.mockResolvedValue({
+        envelopeId: 'envelope-1',
+        status: providerStatus,
+      });
+
+      await service.sendContractAfterPreview(
+        'envelope-1',
+        dto,
+        'specialist-1',
+      );
+
+      expect(tx.contract.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            provider_status: persistedProviderStatus,
+            status: contractStatus,
+            ...(providerStatus === EnvelopeStatus.COMPLETED
+              ? { signed_at: expect.any(Date) }
+              : {}),
+          }),
+        }),
+      );
+      expect(tx.process.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: processStatus }),
+        }),
+      );
+      if (providerStatus === EnvelopeStatus.COMPLETED) {
+        expect(tx.processStatusHistory.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({
+            processId: 'process-1',
+            status: ProcessStatus.COMPLETED,
+            reason: 'CONTRACT_SIGNED',
+          }),
+        });
+      }
+    },
+  );
+
+  it('requires reconciliation and retains envelope context when stale draft void fails', async () => {
+    const { service, docusign, tx, dto } = makeSendHarness({
+      status: ProcessStatus.COMPLETED,
+    });
+    docusign.voidDraftEnvelope.mockRejectedValue(
+      new Error('provider void response lost'),
+    );
+
+    await expect(
+      service.sendContractAfterPreview('envelope-1', dto, 'specialist-1'),
+    ).rejects.toMatchObject({
+      response: {
+        error: {
+          code: 'CONTRACT_MANUAL_RECONCILIATION_REQUIRED',
+          details: expect.objectContaining({
+            process_id: 'process-1',
+            envelope_id: 'envelope-1',
+          }),
+        },
+      },
+    });
+    expect(tx.contract.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('ContractsService — provider operation id', () => {
+  it('passes the same public operation_id through to DocuSign preview retries', async () => {
+    const process = processFixture();
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: { findUnique: jest.fn().mockResolvedValue(process) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'specialist-1',
+          role: 'SPECIALIST',
+        }),
+      },
+      contract: { findUnique: jest.fn() },
+      company: { findUnique: jest.fn() },
+    };
+    const docusign = {
+      createEnvelopePreview: jest.fn().mockResolvedValue({
+        envelopeId: 'envelope-1',
+        previewUrl: 'https://demo.docusign.net/preview',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      }),
+    } as any;
+    const service = new ContractsService(
+      mkPrisma({
+        $transaction: jest.fn(async (callback: any) => callback(tx)),
+      }),
+      docusign,
+      {} as any,
+      mkPlatformCompanyService(10),
+    );
+    jest.spyOn(service as any, 'resolveCommissionFromTotal').mockResolvedValue({
+      platformValue: 1000,
+      platformRate: 1,
+      officeValue: 0,
+      officeRate: 0,
+      specialistValue: 9000,
+      specialistRate: 9,
+    });
+    const dto = {
+      operation_id: '11111111-1111-4111-8111-111111111111',
+      process_id: 'process-1',
+      template_id: 'template-1',
+      seller_name: 'Seller',
+      seller_email: 'seller@example.test',
+      buyer_name: 'Buyer',
+      buyer_email: 'buyer@example.test',
+      total_commission_rate: 10,
+      city: 'Sao Paulo',
+      return_url: 'https://app.example.test/return',
+    } as any;
+
+    await service.previewContract(dto, 'specialist-1');
+    await service.previewContract(dto, 'specialist-1');
+
+    expect(docusign.createEnvelopePreview).toHaveBeenCalledTimes(2);
+    for (const [params] of docusign.createEnvelopePreview.mock.calls) {
+      expect(params.transactionId).toBe(dto.operation_id);
+    }
   });
 });
 
