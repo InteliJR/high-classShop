@@ -37,6 +37,20 @@ describe('DocuSignService — vínculo do envelope ao processo', () => {
   });
 });
 
+describe('DocuSignService — cancelamento de envelope', () => {
+  it('propaga falha do provedor ao cancelar um draft', async () => {
+    const providerFailure = new Error('void rejected by provider');
+    const client = {
+      voidEnvelope: jest.fn().mockRejectedValue(providerFailure),
+    } as any;
+    const service = new DocuSignService(client);
+
+    await expect(
+      service.voidDraftEnvelope('envelope-1', 'Cancelamento explícito'),
+    ).rejects.toBe(providerFailure);
+  });
+});
+
 describe('DocuSignService — mapFormFieldsToDocGen é removal-safe', () => {
   const service = new DocuSignService({} as any);
 

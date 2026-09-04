@@ -107,9 +107,13 @@ function setup() {
   const transactionProcessUpdateMany = jest
     .fn()
     .mockResolvedValue({ count: 1 });
+  const processFindUnique = jest.fn();
+  const transactionProcessFindUnique = jest
+    .fn()
+    .mockImplementation((args) => processFindUnique(args));
   const prisma = {
     process: {
-      findUnique: jest.fn(),
+      findUnique: processFindUnique,
     },
     negotiationProposal: {
       findUnique: proposalFindUnique,
@@ -124,7 +128,10 @@ function setup() {
           findUniqueOrThrow: transactionProposalFindUniqueOrThrow,
           updateMany: transactionProposalUpdateMany,
         },
-        process: { updateMany: transactionProcessUpdateMany },
+        process: {
+          findUnique: transactionProcessFindUnique,
+          updateMany: transactionProcessUpdateMany,
+        },
         processStatusHistory: { create: jest.fn().mockResolvedValue({}) },
       }),
     ),
@@ -148,6 +155,7 @@ function setup() {
     notifications,
     transactionProposalCreate,
     transactionProposalUpdateMany,
+    transactionProcessFindUnique,
     transactionProcessUpdateMany,
   };
 }
@@ -427,6 +435,31 @@ describe('ProposalsService — snapshot e mínimo dinâmico', () => {
     expect(transactionProposalCreate).not.toHaveBeenCalled();
   });
 
+  it('re-reads process state inside the lock and cannot create after documentation starts', async () => {
+    const {
+      service,
+      prisma,
+      transactionProcessFindUnique,
+      transactionProposalCreate,
+    } = setup();
+    prisma.process.findUnique.mockResolvedValue(
+      processFixture({ status: ProcessStatus.NEGOTIATION }),
+    );
+    transactionProcessFindUnique.mockResolvedValue(
+      processFixture({ status: ProcessStatus.DOCUMENTATION }),
+    );
+
+    await expect(
+      service.create(
+        { process_id: 'process-1', proposed_value: 80000 },
+        'client-1',
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(transactionProposalCreate).not.toHaveBeenCalled();
+    expect(transactionProcessFindUnique).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ['accept', 'sendProposalAcceptedEmail', 'acceptedValue'],
     ['reject', 'sendProposalRejectedEmail', 'rejectedValue'],
@@ -447,6 +480,7 @@ describe('ProposalsService — snapshot e mínimo dinâmico', () => {
         client: { consultant_id: null },
       };
       prisma.negotiationProposal.findUnique
+        .mockResolvedValueOnce({ process_id: 'process-1' })
         .mockResolvedValueOnce(proposalFixture({ process }))
         .mockResolvedValueOnce(
           proposalFixture({
@@ -464,7 +498,7 @@ describe('ProposalsService — snapshot e mínimo dinâmico', () => {
       await service[action]('proposal-1', 'specialist-1');
 
       expect(
-        prisma.negotiationProposal.findUnique.mock.calls[0][0].include.process,
+        prisma.negotiationProposal.findUnique.mock.calls[1][0].include.process,
       ).toEqual({
         select: {
           status: true,
@@ -514,6 +548,7 @@ describe('ProposalsService — snapshot e mínimo dinâmico', () => {
         client: { consultant_id: null },
       };
       prisma.negotiationProposal.findUnique
+        .mockResolvedValueOnce({ process_id: 'process-1' })
         .mockResolvedValueOnce(proposalFixture({ process }))
         .mockResolvedValueOnce(
           proposalFixture({

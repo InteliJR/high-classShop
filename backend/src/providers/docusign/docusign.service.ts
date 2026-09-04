@@ -816,7 +816,7 @@ export class DocuSignService {
         error instanceof Error ? error.message : String(error);
 
       this.logger.error(`Erro ao cancelar envelope: ${errorMessage}`);
-      // Não relançamos o erro - cancelamento é best-effort
+      throw error;
     }
   }
 

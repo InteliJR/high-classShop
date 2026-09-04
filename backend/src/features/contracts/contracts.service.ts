@@ -37,11 +37,17 @@ import {
   numberToWords,
   stripFormatting,
 } from 'src/shared/utils/format.utils';
-import { ProcessStatus, ProductType, UserRole } from '@prisma/client';
+import { Prisma, ProcessStatus, ProductType, UserRole } from '@prisma/client';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { PlatformCompanyService } from 'src/features/platform-company/platform-company.service';
 import { computeNestedCommissionSplit } from './commission-split';
 import { requireNegotiationSnapshot } from 'src/features/processes/negotiation-snapshot';
+import { EnvelopeStatus } from 'src/providers/docusign/enums/envelope-status.enum';
+
+const CONTRACT_PREPARATION_STATUSES: ProcessStatus[] = [
+  ProcessStatus.PROCESSING_CONTRACT,
+  ProcessStatus.DOCUMENTATION,
+];
 
 export interface ContractDocumentFields {
   seller_cpf?: string;
@@ -112,6 +118,7 @@ export class ContractsService {
   private async getAuthorizedContractProcess(
     processId: string,
     userId: string,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
   ): Promise<{
     id: string;
     status: ProcessStatus;
@@ -120,7 +127,7 @@ export class ContractsService {
     specialist_id: string;
   }> {
     const [processRecord, requester] = await Promise.all([
-      this.prismaService.process.findUnique({
+      client.process.findUnique({
         where: { id: processId },
         select: {
           id: true,
@@ -130,7 +137,7 @@ export class ContractsService {
           specialist_id: true,
         },
       }),
-      this.prismaService.user.findUnique({
+      client.user.findUnique({
         where: { id: userId },
         select: { id: true, role: true },
       }),
@@ -163,9 +170,32 @@ export class ContractsService {
     }
   }
 
+  private assertProcessCanPrepareContract(
+    processId: string,
+    status: ProcessStatus,
+  ): void {
+    if (CONTRACT_PREPARATION_STATUSES.includes(status)) return;
+
+    this.logger.warn(
+      `Processo ${processId} não está em status adequado. Status atual: ${status}`,
+    );
+    throw new InternalServerErrorException({
+      success: false,
+      error: {
+        code: 400,
+        message:
+          'Processo deve estar em fase de preparação de contrato ou documentação',
+        details: {
+          current_status: status,
+          allowed_statuses: CONTRACT_PREPARATION_STATUSES,
+        },
+      },
+    });
+  }
+
   private async withContractProcessLock<T>(
     processId: string,
-    operation: () => Promise<T>,
+    operation: (tx: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {
     return this.prismaService.$transaction(
       async (tx) => {
@@ -173,10 +203,79 @@ export class ContractsService {
         await tx.$queryRaw`
           SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
         `;
-        return operation();
+        return operation(tx);
       },
       { maxWait: 10_000, timeout: 120_000 },
     );
+  }
+
+  private async compensateExternalEnvelope(
+    envelopeId: string,
+    processId: string,
+    reason: string,
+    persistenceError: unknown,
+  ): Promise<void> {
+    try {
+      await this.docuSignService.voidDraftEnvelope(envelopeId, reason);
+    } catch (compensationError) {
+      const persistenceMessage =
+        persistenceError instanceof Error
+          ? persistenceError.message
+          : String(persistenceError);
+      const compensationMessage =
+        compensationError instanceof Error
+          ? compensationError.message
+          : String(compensationError);
+      this.logger.error(
+        'Falha na compensação externa; reconciliação manual necessária',
+        {
+          processId,
+          envelopeId,
+          persistenceError: persistenceMessage,
+          compensationError: compensationMessage,
+        },
+      );
+      throw new InternalServerErrorException({
+        success: false,
+        error: {
+          code: 'CONTRACT_MANUAL_RECONCILIATION_REQUIRED',
+          message:
+            'Falha ao persistir o contrato e ao cancelar o envelope externo. Reconciliação manual necessária.',
+          details: {
+            process_id: processId,
+            envelope_id: envelopeId,
+            persistence_error: persistenceMessage,
+            compensation_error: compensationMessage,
+          },
+        },
+      });
+    }
+  }
+
+  private queueContractGeneratedNotification(
+    dto: GenerateContractDto | PreviewContractDto,
+    contractId: string,
+    method: 'generateContract' | 'sendContractAfterPreview',
+  ): void {
+    setImmediate(() => {
+      this.notificationService
+        .sendContractGeneratedEmail({
+          buyerEmail: dto.buyer_email,
+          buyerName: dto.buyer_name,
+          sellerEmail: dto.seller_email,
+          sellerName: dto.seller_name,
+          contractId,
+          vehicleDetails: `${dto.vehicle_model} ${dto.vehicle_year}`,
+          processId: dto.process_id,
+        })
+        .catch((err) => {
+          this.logger.error('Notification failed (non-critical)', {
+            method,
+            contractId,
+            error: err.message,
+          });
+        });
+    });
   }
 
   private assertSellerIndependentFromSpecialist(
@@ -485,6 +584,7 @@ export class ContractsService {
     platformCompany: { default_commission_rate: number } | null,
     // Escritório da venda = empresa do CONSULTOR do cliente (não do especialista).
     officeCompanyId: string | null,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
   ): Promise<{
     platformRate: number;
     officeRate: number;
@@ -540,7 +640,7 @@ export class ContractsService {
 
     // 1. Escritório da venda: empresa do consultor do cliente (se houver).
     if (officeCompanyId) {
-      const company = await this.prismaService.company.findUnique({
+      const company = await client.company.findUnique({
         where: { id: officeCompanyId },
       });
       if (company) {
@@ -584,6 +684,7 @@ export class ContractsService {
   private async resolveCommissionFromTotal(
     processId: string,
     totalCommissionRate: number,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
   ): Promise<{
     platformRate: number;
     officeRate: number;
@@ -592,7 +693,7 @@ export class ContractsService {
     officeValue: number;
     specialistValue: number;
   }> {
-    const process = await this.prismaService.process.findUnique({
+    const process = await client.process.findUnique({
       where: { id: processId },
       include: {
         specialist: true,
@@ -608,10 +709,9 @@ export class ContractsService {
       throw new ProcessNotFoundException(processId);
     }
 
-    const { productValue: snapshotValue } =
-      requireNegotiationSnapshot(process);
+    const { productValue: snapshotValue } = requireNegotiationSnapshot(process);
 
-    const platformCompany = await this.platformCompanyService.findOne();
+    const platformCompany = await this.platformCompanyService.findOne(client);
     // specialistRate e officeRate são fatias independentes do BOLO. A
     // plataforma é derivada do saldo após as duas fatias.
     const { officeRate, specialistRate: specialistShareRate } =
@@ -621,6 +721,7 @@ export class ContractsService {
         process.client?.consultant?.company_id ??
           process.client?.company_id ??
           null,
+        client,
       );
 
     const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -691,16 +792,57 @@ export class ContractsService {
     dto: GenerateContractDto,
     userId: string,
   ): Promise<ContractResponse> {
-    return this.withContractProcessLock(dto.process_id, () =>
-      this.generateContractLocked(dto, userId),
-    );
+    let externalEnvelopeId: string | null = null;
+    try {
+      const result = await this.withContractProcessLock(dto.process_id, (tx) =>
+        this.generateContractLocked(dto, userId, tx, (envelopeId) => {
+          externalEnvelopeId = envelopeId;
+        }),
+      );
+      externalEnvelopeId = null;
+      this.queueContractGeneratedNotification(
+        dto,
+        result.id,
+        'generateContract',
+      );
+      return result;
+    } catch (error) {
+      if (externalEnvelopeId) {
+        await this.compensateExternalEnvelope(
+          externalEnvelopeId,
+          dto.process_id,
+          'Falha ao persistir a geração do contrato',
+          error,
+        );
+      }
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        typeof error.code === 'string' &&
+        error.code.startsWith('P')
+      ) {
+        throw new TransactionFailedException(
+          'meta' in error &&
+          typeof error.meta === 'object' &&
+          error.meta !== null &&
+          'cause' in error.meta
+            ? String(error.meta.cause)
+            : error instanceof Error
+              ? error.message
+              : String(error),
+        );
+      }
+      throw error;
+    }
   }
 
   private async generateContractLocked(
     dto: GenerateContractDto,
     userId: string,
+    tx: Prisma.TransactionClient,
+    registerExternalEnvelope: (envelopeId: string) => void,
   ): Promise<ContractResponse> {
-    let envelopeToCompensate: string | null = null;
     try {
       this.logger.log(`=== INICIANDO GERAÇÃO DE CONTRATO ===`);
       this.logger.log(`Usuário: ${userId}`);
@@ -714,6 +856,7 @@ export class ContractsService {
       const processRecord = await this.getAuthorizedContractProcess(
         dto.process_id,
         userId,
+        tx,
       );
 
       if (!processRecord) {
@@ -722,28 +865,14 @@ export class ContractsService {
       }
 
       // 1.2 Validar status do processo
-      const allowedStatuses = ['PROCESSING_CONTRACT', 'DOCUMENTATION'];
-      if (!allowedStatuses.includes(processRecord.status)) {
-        this.logger.warn(
-          `Processo ${dto.process_id} não está em status adequado. Status atual: ${processRecord.status}`,
-        );
-        throw new InternalServerErrorException({
-          success: false,
-          error: {
-            code: 400,
-            message:
-              'Processo deve estar em fase de preparação de contrato ou documentação',
-            details: {
-              current_status: processRecord.status,
-              allowed_statuses: allowedStatuses,
-            },
-          },
-        });
-      }
+      this.assertProcessCanPrepareContract(
+        dto.process_id,
+        processRecord.status,
+      );
 
       // 1.3 Verificar se já existe contrato ativo
       if (processRecord.active_contract_id) {
-        const activeContract = await this.prismaService.contract.findUnique({
+        const activeContract = await tx.contract.findUnique({
           where: { id: processRecord.active_contract_id },
           select: { id: true, provider_status: true },
         });
@@ -762,7 +891,7 @@ export class ContractsService {
       }
 
       // 1.4 Verificar se buyer existe no sistema (apenas em produção)
-      const buyerUser = await this.prismaService.user.findUnique({
+      const buyerUser = await tx.user.findUnique({
         where: { email: dto.buyer_email },
         select: { id: true, email: true, name: true, surname: true },
       });
@@ -788,7 +917,7 @@ export class ContractsService {
       );
 
       // 1.6 Buscar dados do usuário que está criando
-      const uploaderUser = await this.prismaService.user.findUnique({
+      const uploaderUser = await tx.user.findUnique({
         where: { id: userId },
         select: {
           id: true,
@@ -812,6 +941,7 @@ export class ContractsService {
       const commission = await this.resolveCommissionFromTotal(
         dto.process_id,
         dto.total_commission_rate,
+        tx,
       );
       const dtoWithCommission: GenerateContractDto = {
         ...dto,
@@ -860,7 +990,7 @@ export class ContractsService {
           testimonial2Name: dto.testimonial2_name,
           testimonial2Email: dto.testimonial2_email,
         });
-      envelopeToCompensate = envelopeResponse.envelopeId;
+      registerExternalEnvelope(envelopeResponse.envelopeId);
 
       this.logger.log(
         `✓ Envelope criado (ID: ${envelopeResponse.envelopeId}, Status: ${envelopeResponse.status})`,
@@ -871,171 +1001,141 @@ export class ContractsService {
         'Etapa 4: Salvando contrato no banco em transação atômica...',
       );
 
-      const createdContract = await this.prismaService.$transaction(
-        async (tx) => {
-          // 4.1 Criar contrato no BD com todos os dados do formulário
-          const cleanDocs = stripContractDocumentFields(dto);
-          const contract = await tx.contract.create({
-            data: {
-              process_id: dto.process_id,
-              description: dto.description || '',
+      // A mesma transação que possui o advisory lock faz as leituras e escritas.
+      const cleanDocs = stripContractDocumentFields(dto);
+      const contract = await tx.contract.create({
+        data: {
+          process_id: dto.process_id,
+          description: dto.description || '',
 
-              // Provider (DocuSign)
-              provider_name: 'DOCUSIGN',
-              provider_id: envelopeResponse.envelopeId,
-              provider_status: mapDocusignStatusToProviderStatus(
-                envelopeResponse.status,
-              ),
-              provider_meta: {
-                sentAt: new Date().toISOString(),
-                originalStatus: envelopeResponse.status,
-                templateId: templateId,
-              } as any,
+          // Provider (DocuSign)
+          provider_name: 'DOCUSIGN',
+          provider_id: envelopeResponse.envelopeId,
+          provider_status: mapDocusignStatusToProviderStatus(
+            envelopeResponse.status,
+          ),
+          provider_meta: {
+            sentAt: new Date().toISOString(),
+            originalStatus: envelopeResponse.status,
+            templateId: templateId,
+          } as any,
 
-              // Dados do vendedor
-              seller_name: dto.seller_name,
-              seller_cpf: cleanDocs.seller_cpf,
-              seller_rg: cleanDocs.seller_rg,
-              seller_address: dto.seller_address ?? '',
-              seller_cep: cleanDocs.seller_cep,
-              seller_bank: dto.seller_bank ?? '',
-              seller_agency: dto.seller_agency ?? '',
-              seller_checking_account: dto.seller_checking_account ?? '',
+          // Dados do vendedor
+          seller_name: dto.seller_name,
+          seller_cpf: cleanDocs.seller_cpf,
+          seller_rg: cleanDocs.seller_rg,
+          seller_address: dto.seller_address ?? '',
+          seller_cep: cleanDocs.seller_cep,
+          seller_bank: dto.seller_bank ?? '',
+          seller_agency: dto.seller_agency ?? '',
+          seller_checking_account: dto.seller_checking_account ?? '',
 
-              // Dados do comprador
-              buyer_name: dto.buyer_name,
-              buyer_cpf: cleanDocs.buyer_cpf,
-              buyer_rg: cleanDocs.buyer_rg,
-              buyer_address: dto.buyer_address ?? '',
-              buyer_cep: cleanDocs.buyer_cep,
+          // Dados do comprador
+          buyer_name: dto.buyer_name,
+          buyer_cpf: cleanDocs.buyer_cpf,
+          buyer_rg: cleanDocs.buyer_rg,
+          buyer_address: dto.buyer_address ?? '',
+          buyer_cep: cleanDocs.buyer_cep,
 
-              // Dados do veículo
-              vehicle_model: dto.vehicle_model ?? '',
-              vehicle_year: dto.vehicle_year ?? '',
-              vehicle_registration_id: dto.vehicle_registration_id ?? '',
-              vehicle_serial_number: dto.vehicle_serial_number ?? '',
-              vehicle_technical_information: dto.vehicle_technical_info,
-              vehicle_price: dto.vehicle_price,
-              vehicle_price_written: numberToWords(dto.vehicle_price),
+          // Dados do veículo
+          vehicle_model: dto.vehicle_model ?? '',
+          vehicle_year: dto.vehicle_year ?? '',
+          vehicle_registration_id: dto.vehicle_registration_id ?? '',
+          vehicle_serial_number: dto.vehicle_serial_number ?? '',
+          vehicle_technical_information: dto.vehicle_technical_info,
+          vehicle_price: dto.vehicle_price,
+          vehicle_price_written: numberToWords(dto.vehicle_price),
 
-              // Pagamento ao vendedor
-              payment_seller_value: dto.payment_seller_value,
-              payment_seller_value_written: numberToWords(
-                dto.payment_seller_value,
-              ),
+          // Pagamento ao vendedor
+          payment_seller_value: dto.payment_seller_value,
+          payment_seller_value_written: numberToWords(dto.payment_seller_value),
 
-              // Dados da Plataforma (Split 1) — taxa travada, calculada no backend
-              platform_value: commission.platformValue,
-              platform_value_written: numberToWords(commission.platformValue),
-              platform_percentage: commission.platformRate,
-              platform_name: dto.platform_name,
-              platform_cnpj: cleanDocs.platform_cnpj,
-              platform_bank: dto.platform_bank,
-              platform_agency: dto.platform_agency,
-              platform_checking_account: dto.platform_checking_account,
+          // Dados da Plataforma (Split 1) — taxa travada, calculada no backend
+          platform_value: commission.platformValue,
+          platform_value_written: numberToWords(commission.platformValue),
+          platform_percentage: commission.platformRate,
+          platform_name: dto.platform_name,
+          platform_cnpj: cleanDocs.platform_cnpj,
+          platform_bank: dto.platform_bank,
+          platform_agency: dto.platform_agency,
+          platform_checking_account: dto.platform_checking_account,
 
-              // Dados do Escritório (Split 2) — taxa travada, calculada no backend
-              office_value: commission.officeValue,
-              office_value_written: numberToWords(commission.officeValue),
-              office_name: dto.office_name,
-              office_cnpj: cleanDocs.office_cnpj,
-              office_bank: dto.office_bank || null,
-              office_agency: dto.office_agency || null,
-              office_checking_account: dto.office_checking_account || null,
+          // Dados do Escritório (Split 2) — taxa travada, calculada no backend
+          office_value: commission.officeValue,
+          office_value_written: numberToWords(commission.officeValue),
+          office_name: dto.office_name,
+          office_cnpj: cleanDocs.office_cnpj,
+          office_bank: dto.office_bank || null,
+          office_agency: dto.office_agency || null,
+          office_checking_account: dto.office_checking_account || null,
 
-              // Dados do Especialista (Split 3) — resíduo do total informado
-              specialist_commission_value: commission.specialistValue,
-              specialist_commission_rate: commission.specialistRate,
-              specialist_commission_value_written: numberToWords(
-                commission.specialistValue,
-              ),
-              specialist_name: dto.specialist_name,
-              specialist_document: cleanDocs.specialist_document,
-              specialist_bank: dto.specialist_bank || null,
-              specialist_agency: dto.specialist_agency || null,
-              specialist_checking_account:
-                dto.specialist_checking_account || null,
+          // Dados do Especialista (Split 3) — resíduo do total informado
+          specialist_commission_value: commission.specialistValue,
+          specialist_commission_rate: commission.specialistRate,
+          specialist_commission_value_written: numberToWords(
+            commission.specialistValue,
+          ),
+          specialist_name: dto.specialist_name,
+          specialist_document: cleanDocs.specialist_document,
+          specialist_bank: dto.specialist_bank || null,
+          specialist_agency: dto.specialist_agency || null,
+          specialist_checking_account: dto.specialist_checking_account || null,
 
-              // Testemunhas (opcionais)
-              testimonial1_cpf: cleanDocs.testimonial1_cpf || null,
-              testimonial1_email: dto.testimonial1_email || null,
-              testimonial2_cpf: cleanDocs.testimonial2_cpf || null,
-              testimonial2_email: dto.testimonial2_email || null,
+          // Testemunhas (opcionais)
+          testimonial1_cpf: cleanDocs.testimonial1_cpf || null,
+          testimonial1_email: dto.testimonial1_email || null,
+          testimonial2_cpf: cleanDocs.testimonial2_cpf || null,
+          testimonial2_email: dto.testimonial2_email || null,
 
-              // Cidade
-              city: dto.city ?? '',
+          // Cidade
+          city: dto.city ?? '',
 
-              // Template usado
-              template_id: templateId,
+          // Template usado
+          template_id: templateId,
 
-              // Status
-              status: 'PENDING',
-              signature_type: 'SIMPLE',
+          // Status
+          status: 'PENDING',
+          signature_type: 'SIMPLE',
 
-              // Quem criou
-              uploaded_by_id: userId,
-              uploaded_by_type: uploaderUser.role,
+          // Quem criou
+          uploaded_by_id: userId,
+          uploaded_by_type: uploaderUser.role,
 
-              // Quem vai assinar (null em dev se buyer externo)
-              signed_by_id: buyerUser?.id ?? null,
+          // Quem vai assinar (null em dev se buyer externo)
+          signed_by_id: buyerUser?.id ?? null,
 
-              created_at: new Date(),
-            },
-          });
-
-          // 4.2 Atualizar processo
-          const processClaim = await tx.process.updateMany({
-            where: {
-              id: dto.process_id,
-              status: processRecord.status,
-              active_contract_id: processRecord.active_contract_id,
-            },
-            data: {
-              active_contract_id: contract.id,
-              status: 'PROCESSING_CONTRACT',
-            },
-          });
-          if (processClaim.count !== 1) {
-            throw new ConflictException(
-              'O processo mudou durante a geração do contrato.',
-            );
-          }
-
-          this.logger.log(
-            `✓ Contrato definido como ativo no processo ${dto.process_id}`,
-          );
-          this.logger.log(`✓ Processo atualizado para PROCESSING_CONTRACT`);
-
-          return contract;
+          created_at: new Date(),
         },
-      );
-      envelopeToCompensate = null;
+      });
 
+      // 4.2 Atualizar processo
+      const processClaim = await tx.process.updateMany({
+        where: {
+          id: dto.process_id,
+          status: processRecord.status,
+          active_contract_id: processRecord.active_contract_id,
+        },
+        data: {
+          active_contract_id: contract.id,
+          status: 'PROCESSING_CONTRACT',
+        },
+      });
+      if (processClaim.count !== 1) {
+        throw new ConflictException(
+          'O processo mudou durante a geração do contrato.',
+        );
+      }
+
+      this.logger.log(
+        `✓ Contrato definido como ativo no processo ${dto.process_id}`,
+      );
+      this.logger.log(`✓ Processo atualizado para PROCESSING_CONTRACT`);
+
+      const createdContract = contract;
       this.logger.log(
         `✓ Contrato criado no banco com ID: ${createdContract.id}`,
       );
       this.logger.log(`=== GERAÇÃO DE CONTRATO CONCLUÍDA COM SUCESSO ===`);
-
-      // Fire-and-forget: Enviar notificação de contrato gerado
-      setImmediate(() => {
-        this.notificationService
-          .sendContractGeneratedEmail({
-            buyerEmail: dto.buyer_email,
-            buyerName: dto.buyer_name,
-            sellerEmail: dto.seller_email,
-            sellerName: dto.seller_name,
-            contractId: createdContract.id,
-            vehicleDetails: `${dto.vehicle_model} ${dto.vehicle_year}`,
-            processId: dto.process_id,
-          })
-          .catch((err) => {
-            this.logger.error('Notification failed (non-critical)', {
-              method: 'generateContract',
-              contractId: createdContract.id,
-              error: err.message,
-            });
-          });
-      });
 
       // ===== RETORNAR RESPOSTA =====
       return {
@@ -1057,12 +1157,6 @@ export class ContractsService {
         signed_by: null,
       };
     } catch (error) {
-      if (envelopeToCompensate) {
-        await this.docuSignService.voidDraftEnvelope(
-          envelopeToCompensate,
-          'Falha ao persistir a geração do contrato',
-        );
-      }
       // ===== TRATAMENTO DE ERROS =====
       if (error instanceof HttpException) {
         throw error;
@@ -1237,14 +1331,15 @@ export class ContractsService {
     dto: PreviewContractDto,
     userId: string,
   ): Promise<PreviewContractResponseDto> {
-    return this.withContractProcessLock(dto.process_id, () =>
-      this.previewContractLocked(dto, userId),
+    return this.withContractProcessLock(dto.process_id, (tx) =>
+      this.previewContractLocked(dto, userId, tx),
     );
   }
 
   private async previewContractLocked(
     dto: PreviewContractDto,
     userId: string,
+    tx: Prisma.TransactionClient,
   ): Promise<PreviewContractResponseDto> {
     try {
       this.logger.log(`=== INICIANDO PREVIEW DE CONTRATO ===`);
@@ -1258,6 +1353,7 @@ export class ContractsService {
       const processRecord = await this.getAuthorizedContractProcess(
         dto.process_id,
         userId,
+        tx,
       );
 
       if (!processRecord) {
@@ -1271,28 +1367,14 @@ export class ContractsService {
       );
 
       // 1.2 Validar status do processo
-      const allowedStatuses = ['PROCESSING_CONTRACT', 'DOCUMENTATION'];
-      if (!allowedStatuses.includes(processRecord.status)) {
-        this.logger.warn(
-          `Processo ${dto.process_id} não está em status adequado. Status atual: ${processRecord.status}`,
-        );
-        throw new InternalServerErrorException({
-          success: false,
-          error: {
-            code: 400,
-            message:
-              'Processo deve estar em fase de preparação de contrato ou documentação',
-            details: {
-              current_status: processRecord.status,
-              allowed_statuses: allowedStatuses,
-            },
-          },
-        });
-      }
+      this.assertProcessCanPrepareContract(
+        dto.process_id,
+        processRecord.status,
+      );
 
       // 1.3 Verificar se já existe contrato ativo
       if (processRecord.active_contract_id) {
-        const activeContract = await this.prismaService.contract.findUnique({
+        const activeContract = await tx.contract.findUnique({
           where: { id: processRecord.active_contract_id },
           select: { id: true, provider_status: true },
         });
@@ -1316,6 +1398,7 @@ export class ContractsService {
       const commission = await this.resolveCommissionFromTotal(
         dto.process_id,
         dto.total_commission_rate,
+        tx,
       );
 
       // ===== ETAPA 2: FORMATAR DADOS PARA DOCUSIGN =====
@@ -1470,17 +1553,40 @@ export class ContractsService {
     dto: PreviewContractDto,
     userId: string,
   ): Promise<SendContractResponseDto> {
-    return this.withContractProcessLock(dto.process_id, () =>
-      this.sendContractAfterPreviewLocked(envelopeId, dto, userId),
-    );
+    let sentEnvelopeNeedsCompensation = false;
+    try {
+      const result = await this.withContractProcessLock(dto.process_id, (tx) =>
+        this.sendContractAfterPreviewLocked(envelopeId, dto, userId, tx, () => {
+          sentEnvelopeNeedsCompensation = true;
+        }),
+      );
+      sentEnvelopeNeedsCompensation = false;
+      this.queueContractGeneratedNotification(
+        dto,
+        result.id,
+        'sendContractAfterPreview',
+      );
+      return result;
+    } catch (error) {
+      if (sentEnvelopeNeedsCompensation) {
+        await this.compensateExternalEnvelope(
+          envelopeId,
+          dto.process_id,
+          'Falha ao persistir o envio do contrato',
+          error,
+        );
+      }
+      throw error;
+    }
   }
 
   private async sendContractAfterPreviewLocked(
     envelopeId: string,
     dto: PreviewContractDto,
     userId: string,
+    tx: Prisma.TransactionClient,
+    registerSentEnvelope: () => void,
   ): Promise<SendContractResponseDto> {
-    let sentEnvelopeNeedsCompensation = false;
     try {
       this.logger.log(`=== ENVIANDO CONTRATO APÓS PREVIEW ===`);
       this.logger.log(`EnvelopeID: ${envelopeId}`);
@@ -1492,6 +1598,12 @@ export class ContractsService {
       const processRecord = await this.getAuthorizedContractProcess(
         dto.process_id,
         userId,
+        tx,
+      );
+
+      this.assertProcessCanPrepareContract(
+        dto.process_id,
+        processRecord.status,
       );
 
       await this.assertEnvelopeBelongsToProcess(envelopeId, dto.process_id);
@@ -1502,10 +1614,14 @@ export class ContractsService {
 
       // Revalidar que não existe contrato ativo (pode ter sido criado enquanto preview)
       if (processRecord.active_contract_id) {
-        const activeContract = await this.prismaService.contract.findUnique({
+        const activeContract = await tx.contract.findUnique({
           where: { id: processRecord.active_contract_id },
-          select: { id: true, provider_status: true },
+          select: { id: true, provider_id: true, provider_status: true },
         });
+
+        if (activeContract?.provider_id === envelopeId) {
+          throw new ContractAlreadyExistsException(dto.process_id);
+        }
 
         if (
           activeContract &&
@@ -1513,17 +1629,24 @@ export class ContractsService {
             activeContract.provider_status || '',
           )
         ) {
-          // Cancelar o envelope draft
-          await this.docuSignService.voidDraftEnvelope(
-            envelopeId,
-            'Contrato criado por outro processo',
-          );
+          const previewEnvelope =
+            await this.docuSignService.getEnvelopeStatus(envelopeId);
+          if (previewEnvelope.status === EnvelopeStatus.CREATED) {
+            await this.docuSignService.voidDraftEnvelope(
+              envelopeId,
+              'Contrato criado por outro processo',
+            );
+          } else {
+            this.logger.warn(
+              `Envelope concorrente ${envelopeId} não está em rascunho (${previewEnvelope.status}); cancelamento automático ignorado`,
+            );
+          }
           throw new ContractAlreadyExistsException(dto.process_id);
         }
       }
 
       // Buscar usuário uploader
-      const uploaderUser = await this.prismaService.user.findUnique({
+      const uploaderUser = await tx.user.findUnique({
         where: { id: userId },
         select: { id: true, role: true },
       });
@@ -1533,7 +1656,7 @@ export class ContractsService {
       }
 
       // Buscar buyer
-      const buyerUser = await this.prismaService.user.findUnique({
+      const buyerUser = await tx.user.findUnique({
         where: { email: dto.buyer_email },
         select: { id: true },
       });
@@ -1547,6 +1670,7 @@ export class ContractsService {
       const commission = await this.resolveCommissionFromTotal(
         dto.process_id,
         dto.total_commission_rate,
+        tx,
       );
 
       // ===== ETAPA 2: ENVIAR ENVELOPE NO DOCUSIGN =====
@@ -1554,7 +1678,7 @@ export class ContractsService {
 
       const sendResponse =
         await this.docuSignService.sendDraftEnvelope(envelopeId);
-      sentEnvelopeNeedsCompensation = true;
+      registerSentEnvelope();
 
       this.logger.log(`✓ Envelope enviado (Status: ${sendResponse.status})`);
 
@@ -1564,164 +1688,134 @@ export class ContractsService {
       const templateId =
         dto.template_id || globalThis.process.env.DOCUSIGN_TEMPLATE_ID || '';
 
-      const createdContract = await this.prismaService.$transaction(
-        async (tx) => {
-          const cleanDocs = stripContractDocumentFields(dto);
-          const contract = await tx.contract.create({
-            data: {
-              process_id: dto.process_id,
-              description: dto.description || '',
+      const cleanDocs = stripContractDocumentFields(dto);
+      const contract = await tx.contract.create({
+        data: {
+          process_id: dto.process_id,
+          description: dto.description || '',
 
-              // Provider (DocuSign)
-              provider_name: 'DOCUSIGN',
-              provider_id: envelopeId,
-              provider_status: mapDocusignStatusToProviderStatus(
-                sendResponse.status,
-              ),
-              provider_meta: {
-                sentAt: new Date().toISOString(),
-                originalStatus: sendResponse.status,
-                templateId: templateId,
-                previewUsed: true,
-              } as any,
+          // Provider (DocuSign)
+          provider_name: 'DOCUSIGN',
+          provider_id: envelopeId,
+          provider_status: mapDocusignStatusToProviderStatus(
+            sendResponse.status,
+          ),
+          provider_meta: {
+            sentAt: new Date().toISOString(),
+            originalStatus: sendResponse.status,
+            templateId: templateId,
+            previewUsed: true,
+          } as any,
 
-              // Dados do vendedor
-              seller_name: dto.seller_name,
-              seller_cpf: cleanDocs.seller_cpf,
-              seller_rg: cleanDocs.seller_rg,
-              seller_address: dto.seller_address ?? '',
-              seller_cep: cleanDocs.seller_cep,
-              seller_bank: dto.seller_bank ?? '',
-              seller_agency: dto.seller_agency ?? '',
-              seller_checking_account: dto.seller_checking_account ?? '',
+          // Dados do vendedor
+          seller_name: dto.seller_name,
+          seller_cpf: cleanDocs.seller_cpf,
+          seller_rg: cleanDocs.seller_rg,
+          seller_address: dto.seller_address ?? '',
+          seller_cep: cleanDocs.seller_cep,
+          seller_bank: dto.seller_bank ?? '',
+          seller_agency: dto.seller_agency ?? '',
+          seller_checking_account: dto.seller_checking_account ?? '',
 
-              // Dados do comprador
-              buyer_name: dto.buyer_name,
-              buyer_cpf: cleanDocs.buyer_cpf,
-              buyer_rg: cleanDocs.buyer_rg,
-              buyer_address: dto.buyer_address ?? '',
-              buyer_cep: cleanDocs.buyer_cep,
+          // Dados do comprador
+          buyer_name: dto.buyer_name,
+          buyer_cpf: cleanDocs.buyer_cpf,
+          buyer_rg: cleanDocs.buyer_rg,
+          buyer_address: dto.buyer_address ?? '',
+          buyer_cep: cleanDocs.buyer_cep,
 
-              // Dados do veículo
-              vehicle_model: dto.vehicle_model ?? '',
-              vehicle_year: dto.vehicle_year ?? '',
-              vehicle_registration_id: dto.vehicle_registration_id ?? '',
-              vehicle_serial_number: dto.vehicle_serial_number ?? '',
-              vehicle_technical_information: dto.vehicle_technical_info,
-              vehicle_price: dto.vehicle_price,
-              vehicle_price_written: numberToWords(dto.vehicle_price),
+          // Dados do veículo
+          vehicle_model: dto.vehicle_model ?? '',
+          vehicle_year: dto.vehicle_year ?? '',
+          vehicle_registration_id: dto.vehicle_registration_id ?? '',
+          vehicle_serial_number: dto.vehicle_serial_number ?? '',
+          vehicle_technical_information: dto.vehicle_technical_info,
+          vehicle_price: dto.vehicle_price,
+          vehicle_price_written: numberToWords(dto.vehicle_price),
 
-              // Pagamento ao vendedor
-              payment_seller_value: dto.payment_seller_value,
-              payment_seller_value_written: numberToWords(
-                dto.payment_seller_value,
-              ),
+          // Pagamento ao vendedor
+          payment_seller_value: dto.payment_seller_value,
+          payment_seller_value_written: numberToWords(dto.payment_seller_value),
 
-              // Dados da Plataforma (Split 1) — taxa travada, calculada no backend
-              platform_value: commission.platformValue,
-              platform_value_written: numberToWords(commission.platformValue),
-              platform_percentage: commission.platformRate,
-              platform_name: dto.platform_name,
-              platform_cnpj: cleanDocs.platform_cnpj,
-              platform_bank: dto.platform_bank,
-              platform_agency: dto.platform_agency,
-              platform_checking_account: dto.platform_checking_account,
+          // Dados da Plataforma (Split 1) — taxa travada, calculada no backend
+          platform_value: commission.platformValue,
+          platform_value_written: numberToWords(commission.platformValue),
+          platform_percentage: commission.platformRate,
+          platform_name: dto.platform_name,
+          platform_cnpj: cleanDocs.platform_cnpj,
+          platform_bank: dto.platform_bank,
+          platform_agency: dto.platform_agency,
+          platform_checking_account: dto.platform_checking_account,
 
-              // Dados do Escritório (Split 2) — taxa travada, calculada no backend
-              office_value: commission.officeValue,
-              office_value_written: numberToWords(commission.officeValue),
-              office_name: dto.office_name,
-              office_cnpj: cleanDocs.office_cnpj,
-              office_bank: dto.office_bank || null,
-              office_agency: dto.office_agency || null,
-              office_checking_account: dto.office_checking_account || null,
+          // Dados do Escritório (Split 2) — taxa travada, calculada no backend
+          office_value: commission.officeValue,
+          office_value_written: numberToWords(commission.officeValue),
+          office_name: dto.office_name,
+          office_cnpj: cleanDocs.office_cnpj,
+          office_bank: dto.office_bank || null,
+          office_agency: dto.office_agency || null,
+          office_checking_account: dto.office_checking_account || null,
 
-              // Dados do Especialista (Split 3) — resíduo do total informado
-              specialist_commission_value: commission.specialistValue,
-              specialist_commission_rate: commission.specialistRate,
-              specialist_commission_value_written: numberToWords(
-                commission.specialistValue,
-              ),
-              specialist_name: dto.specialist_name,
-              specialist_document: cleanDocs.specialist_document,
-              specialist_bank: dto.specialist_bank || null,
-              specialist_agency: dto.specialist_agency || null,
-              specialist_checking_account:
-                dto.specialist_checking_account || null,
+          // Dados do Especialista (Split 3) — resíduo do total informado
+          specialist_commission_value: commission.specialistValue,
+          specialist_commission_rate: commission.specialistRate,
+          specialist_commission_value_written: numberToWords(
+            commission.specialistValue,
+          ),
+          specialist_name: dto.specialist_name,
+          specialist_document: cleanDocs.specialist_document,
+          specialist_bank: dto.specialist_bank || null,
+          specialist_agency: dto.specialist_agency || null,
+          specialist_checking_account: dto.specialist_checking_account || null,
 
-              // Testemunhas (opcionais)
-              testimonial1_cpf: cleanDocs.testimonial1_cpf || null,
-              testimonial1_email: dto.testimonial1_email || null,
-              testimonial2_cpf: cleanDocs.testimonial2_cpf || null,
-              testimonial2_email: dto.testimonial2_email || null,
+          // Testemunhas (opcionais)
+          testimonial1_cpf: cleanDocs.testimonial1_cpf || null,
+          testimonial1_email: dto.testimonial1_email || null,
+          testimonial2_cpf: cleanDocs.testimonial2_cpf || null,
+          testimonial2_email: dto.testimonial2_email || null,
 
-              // Cidade
-              city: dto.city ?? '',
+          // Cidade
+          city: dto.city ?? '',
 
-              // Template usado
-              template_id: templateId,
+          // Template usado
+          template_id: templateId,
 
-              // Status
-              status: 'PENDING',
-              signature_type: 'SIMPLE',
+          // Status
+          status: 'PENDING',
+          signature_type: 'SIMPLE',
 
-              // Quem criou
-              uploaded_by_id: userId,
-              uploaded_by_type: uploaderUser.role,
+          // Quem criou
+          uploaded_by_id: userId,
+          uploaded_by_type: uploaderUser.role,
 
-              // Quem vai assinar
-              signed_by_id: buyerUser?.id ?? null,
+          // Quem vai assinar
+          signed_by_id: buyerUser?.id ?? null,
 
-              created_at: new Date(),
-            },
-          });
-
-          // Atualizar processo
-          const processClaim = await tx.process.updateMany({
-            where: {
-              id: dto.process_id,
-              status: processRecord.status,
-              active_contract_id: processRecord.active_contract_id,
-            },
-            data: {
-              active_contract_id: contract.id,
-              status: 'PROCESSING_CONTRACT',
-            },
-          });
-          if (processClaim.count !== 1) {
-            throw new ConflictException(
-              'O processo mudou durante o envio do contrato.',
-            );
-          }
-
-          return contract;
+          created_at: new Date(),
         },
-      );
-      sentEnvelopeNeedsCompensation = false;
+      });
 
+      // Atualizar processo
+      const processClaim = await tx.process.updateMany({
+        where: {
+          id: dto.process_id,
+          status: { in: CONTRACT_PREPARATION_STATUSES },
+          active_contract_id: processRecord.active_contract_id,
+        },
+        data: {
+          active_contract_id: contract.id,
+          status: 'PROCESSING_CONTRACT',
+        },
+      });
+      if (processClaim.count !== 1) {
+        throw new ConflictException(
+          'O processo mudou durante o envio do contrato.',
+        );
+      }
+
+      const createdContract = contract;
       this.logger.log(`✓ Contrato criado: ${createdContract.id}`);
       this.logger.log(`=== ENVIO DE CONTRATO CONCLUÍDO ===`);
-
-      // Fire-and-forget: Enviar notificação
-      setImmediate(() => {
-        this.notificationService
-          .sendContractGeneratedEmail({
-            buyerEmail: dto.buyer_email,
-            buyerName: dto.buyer_name,
-            sellerEmail: dto.seller_email,
-            sellerName: dto.seller_name,
-            contractId: createdContract.id,
-            vehicleDetails: `${dto.vehicle_model} ${dto.vehicle_year}`,
-            processId: dto.process_id,
-          })
-          .catch((err) => {
-            this.logger.error('Notification failed (non-critical)', {
-              method: 'sendContractAfterPreview',
-              contractId: createdContract.id,
-              error: err.message,
-            });
-          });
-      });
 
       return {
         id: createdContract.id,
@@ -1731,12 +1825,6 @@ export class ContractsService {
         created_at: createdContract.created_at.toISOString(),
       };
     } catch (error) {
-      if (sentEnvelopeNeedsCompensation) {
-        await this.docuSignService.voidDraftEnvelope(
-          envelopeId,
-          'Falha ao persistir o envio do contrato',
-        );
-      }
       if (error instanceof HttpException) {
         throw error;
       }
@@ -1771,8 +1859,8 @@ export class ContractsService {
     userId: string,
     reason: string,
   ): Promise<void> {
-    return this.withContractProcessLock(processId, () =>
-      this.cancelPreviewLocked(envelopeId, processId, userId, reason),
+    return this.withContractProcessLock(processId, (tx) =>
+      this.cancelPreviewLocked(envelopeId, processId, userId, reason, tx),
     );
   }
 
@@ -1781,10 +1869,32 @@ export class ContractsService {
     processId: string,
     userId: string,
     reason: string,
+    tx: Prisma.TransactionClient,
   ): Promise<void> {
     this.logger.log(`Cancelando preview: ${envelopeId}`);
-    await this.getAuthorizedContractProcess(processId, userId);
+    const processRecord = await this.getAuthorizedContractProcess(
+      processId,
+      userId,
+      tx,
+    );
     await this.assertEnvelopeBelongsToProcess(envelopeId, processId);
+
+    if (processRecord.active_contract_id) {
+      const activeContract = await tx.contract.findUnique({
+        where: { id: processRecord.active_contract_id },
+        select: { id: true, provider_id: true },
+      });
+      if (activeContract?.provider_id === envelopeId) {
+        throw new ConflictException(
+          'O envelope informado já pertence ao contrato ativo e não pode ser cancelado como preview.',
+        );
+      }
+    }
+
+    const envelope = await this.docuSignService.getEnvelopeStatus(envelopeId);
+    if (envelope.status !== EnvelopeStatus.CREATED) {
+      throw new EnvelopeNotInDraftException(envelopeId, envelope.status);
+    }
     await this.docuSignService.voidDraftEnvelope(envelopeId, reason);
   }
 }

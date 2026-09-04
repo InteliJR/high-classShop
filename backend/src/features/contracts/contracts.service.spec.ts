@@ -1,10 +1,22 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
-import { Prisma, ProductCurrency, ProductType } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import {
+  Prisma,
+  ProcessStatus,
+  ProductCurrency,
+  ProductType,
+} from '@prisma/client';
 import {
   ContractsService,
   stripContractDocumentFields,
 } from './contracts.service';
 import { formatBRL, numberToWords } from '../../shared/utils/format.utils';
+import { DocuSignService } from '../../providers/docusign/docusign.service';
+import { EnvelopeStatus } from '../../providers/docusign/enums/envelope-status.enum';
 
 function mkPrisma(overrides: Partial<Record<string, any>> = {}) {
   return {
@@ -118,7 +130,9 @@ describe('ContractsService — prefillContract', () => {
   it('allows an administrator to load the contract prefill', async () => {
     const prisma = mkPrisma({
       user: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'admin-1', role: 'ADMIN' }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ id: 'admin-1', role: 'ADMIN' }),
       },
     });
     prisma.process.findUnique.mockResolvedValue(processFixture());
@@ -179,8 +193,15 @@ describe('ContractsService — cancelPreview authorization', () => {
   it('does not cancel an envelope bound to another process', async () => {
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue(processFixture());
+    prisma.$transaction.mockImplementation(async (callback: any) =>
+      callback({
+        ...prisma,
+        $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      }),
+    );
     const docusign = {
       getEnvelopeProcessId: jest.fn().mockResolvedValue('other-process'),
+      getEnvelopeStatus: jest.fn(),
       voidDraftEnvelope: jest.fn(),
     } as any;
     const service = new ContractsService(
@@ -198,6 +219,441 @@ describe('ContractsService — cancelPreview authorization', () => {
         'cancel',
       ),
     ).rejects.toThrow(ForbiddenException);
+    expect(docusign.voidDraftEnvelope).not.toHaveBeenCalled();
+  });
+
+  it('propagates provider cancellation failures to the caller', async () => {
+    const process = processFixture();
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: { findUnique: jest.fn().mockResolvedValue(process) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'specialist-1',
+          role: 'SPECIALIST',
+        }),
+      },
+    };
+    const prisma = mkPrisma({
+      process: { findUnique: jest.fn().mockResolvedValue(process) },
+      $transaction: jest.fn(async (callback: any) => callback(tx)),
+    });
+    const providerFailure = new Error('DocuSign void failed');
+    const docusignClient = {
+      voidEnvelope: jest.fn().mockRejectedValue(providerFailure),
+    } as any;
+    const docusign = new DocuSignService(docusignClient);
+    jest.spyOn(docusign, 'getEnvelopeProcessId').mockResolvedValue('process-1');
+    jest.spyOn(docusign, 'getEnvelopeStatus').mockResolvedValue({
+      envelopeId: 'envelope-1',
+      status: EnvelopeStatus.CREATED,
+      statusDateTime: new Date().toISOString(),
+      uri: '/envelopes/envelope-1',
+    });
+    const service = new ContractsService(
+      prisma,
+      docusign,
+      {} as any,
+      mkPlatformCompanyService(10),
+    );
+
+    await expect(
+      service.cancelPreview(
+        'envelope-1',
+        'process-1',
+        'specialist-1',
+        'cancel',
+      ),
+    ).rejects.toBe(providerFailure);
+  });
+
+  it('does not void an envelope that is already the active sent contract', async () => {
+    const process = processFixture({ active_contract_id: 'contract-1' });
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: { findUnique: jest.fn().mockResolvedValue(process) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'specialist-1',
+          role: 'SPECIALIST',
+        }),
+      },
+      contract: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'contract-1',
+          provider_id: 'envelope-1',
+          provider_status: 'SENT',
+        }),
+      },
+    };
+    const prisma = mkPrisma({
+      $transaction: jest.fn(async (callback: any) => callback(tx)),
+    });
+    const docusign = {
+      getEnvelopeProcessId: jest.fn().mockResolvedValue('process-1'),
+      getEnvelopeStatus: jest.fn(),
+      voidDraftEnvelope: jest.fn(),
+    } as any;
+    const service = new ContractsService(
+      prisma,
+      docusign,
+      {} as any,
+      mkPlatformCompanyService(10),
+    );
+
+    await expect(
+      service.cancelPreview(
+        'envelope-1',
+        'process-1',
+        'specialist-1',
+        'cancel',
+      ),
+    ).rejects.toThrow(ConflictException);
+    expect(docusign.getEnvelopeStatus).not.toHaveBeenCalled();
+    expect(docusign.voidDraftEnvelope).not.toHaveBeenCalled();
+  });
+
+  it('refuses explicit cancellation when the provider no longer reports a draft', async () => {
+    const process = processFixture();
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: { findUnique: jest.fn().mockResolvedValue(process) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'specialist-1',
+          role: 'SPECIALIST',
+        }),
+      },
+      contract: { findUnique: jest.fn() },
+    };
+    const prisma = mkPrisma({
+      $transaction: jest.fn(async (callback: any) => callback(tx)),
+    });
+    const docusign = {
+      getEnvelopeProcessId: jest.fn().mockResolvedValue('process-1'),
+      getEnvelopeStatus: jest.fn().mockResolvedValue({
+        envelopeId: 'envelope-1',
+        status: EnvelopeStatus.SENT,
+      }),
+      voidDraftEnvelope: jest.fn(),
+    } as any;
+    const service = new ContractsService(
+      prisma,
+      docusign,
+      {} as any,
+      mkPlatformCompanyService(10),
+    );
+
+    await expect(
+      service.cancelPreview(
+        'envelope-1',
+        'process-1',
+        'specialist-1',
+        'cancel',
+      ),
+    ).rejects.toMatchObject({
+      response: { error: 'ENVELOPE_NOT_IN_DRAFT' },
+    });
+    expect(docusign.voidDraftEnvelope).not.toHaveBeenCalled();
+  });
+});
+
+describe('ContractsService — locked transaction and compensation', () => {
+  it('runs the operation with the transaction client that owns the advisory lock', async () => {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: { findUnique: jest.fn().mockResolvedValue({ id: 'process-1' }) },
+    };
+    const prisma = mkPrisma({
+      $transaction: jest.fn(async (callback: any) => callback(tx)),
+    });
+    const service = mkSvc(prisma, mkPlatformCompanyService(10));
+
+    await expect(
+      (service as any).withContractProcessLock(
+        'process-1',
+        async (lockedClient: any) =>
+          lockedClient.process.findUnique({ where: { id: 'process-1' } }),
+      ),
+    ).resolves.toEqual({ id: 'process-1' });
+    expect(tx.process.findUnique).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs reconciliation context and preserves the persistence failure when compensation fails', async () => {
+    const persistenceFailure = new Error('database commit failed');
+    const compensationFailure = new Error('provider void failed');
+    const docusign = {
+      voidDraftEnvelope: jest.fn().mockRejectedValue(compensationFailure),
+    } as any;
+    const service = new ContractsService(
+      mkPrisma(),
+      docusign,
+      {} as any,
+      mkPlatformCompanyService(10),
+    );
+    const loggerError = jest
+      .spyOn((service as any).logger, 'error')
+      .mockImplementation();
+
+    await expect(
+      (service as any).compensateExternalEnvelope(
+        'envelope-1',
+        'process-1',
+        'Falha ao persistir contrato',
+        persistenceFailure,
+      ),
+    ).rejects.toMatchObject({
+      constructor: InternalServerErrorException,
+      response: {
+        error: {
+          code: 'CONTRACT_MANUAL_RECONCILIATION_REQUIRED',
+          details: expect.objectContaining({
+            process_id: 'process-1',
+            envelope_id: 'envelope-1',
+            persistence_error: 'database commit failed',
+          }),
+        },
+      },
+    });
+    expect(loggerError).toHaveBeenCalledWith(
+      'Falha na compensação externa; reconciliação manual necessária',
+      expect.objectContaining({
+        processId: 'process-1',
+        envelopeId: 'envelope-1',
+        persistenceError: 'database commit failed',
+        compensationError: 'provider void failed',
+      }),
+    );
+  });
+
+  it('compensates a sent envelope when the transaction rejects during commit', async () => {
+    const commitFailure = new Error('database commit failed');
+    const prisma = mkPrisma({
+      $transaction: jest.fn(async (callback: any) => {
+        await callback({
+          $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+        });
+        throw commitFailure;
+      }),
+    });
+    const docusign = {
+      voidDraftEnvelope: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const service = new ContractsService(
+      prisma,
+      docusign,
+      {} as any,
+      mkPlatformCompanyService(10),
+    );
+    jest
+      .spyOn(service as any, 'sendContractAfterPreviewLocked')
+      .mockImplementation(async (...args: any[]) => {
+        args[4]();
+        return {
+          id: 'contract-1',
+          envelope_id: 'envelope-1',
+          process_id: 'process-1',
+          status: 'PENDING',
+          created_at: new Date().toISOString(),
+        };
+      });
+
+    await expect(
+      service.sendContractAfterPreview(
+        'envelope-1',
+        { process_id: 'process-1' } as any,
+        'specialist-1',
+      ),
+    ).rejects.toBe(commitFailure);
+    expect(docusign.voidDraftEnvelope).toHaveBeenCalledWith(
+      'envelope-1',
+      'Falha ao persistir o envio do contrato',
+    );
+  });
+
+  it('surfaces manual reconciliation through the public send path after commit and compensation both fail', async () => {
+    const commitFailure = new Error('database commit failed');
+    const compensationFailure = new Error('provider void failed');
+    const prisma = mkPrisma({
+      $transaction: jest.fn(async (callback: any) => {
+        await callback({
+          $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+        });
+        throw commitFailure;
+      }),
+    });
+    const docusign = {
+      voidDraftEnvelope: jest.fn().mockRejectedValue(compensationFailure),
+    } as any;
+    const service = new ContractsService(
+      prisma,
+      docusign,
+      {} as any,
+      mkPlatformCompanyService(10),
+    );
+    jest
+      .spyOn(service as any, 'sendContractAfterPreviewLocked')
+      .mockImplementation(async (...args: any[]) => {
+        args[4]();
+        return {
+          id: 'contract-1',
+          envelope_id: 'envelope-1',
+          process_id: 'process-1',
+          status: 'PENDING',
+          created_at: new Date().toISOString(),
+        };
+      });
+
+    await expect(
+      service.sendContractAfterPreview(
+        'envelope-1',
+        { process_id: 'process-1' } as any,
+        'specialist-1',
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        error: {
+          code: 'CONTRACT_MANUAL_RECONCILIATION_REQUIRED',
+          details: expect.objectContaining({
+            persistence_error: 'database commit failed',
+            compensation_error: 'provider void failed',
+          }),
+        },
+      },
+    });
+  });
+});
+
+describe('ContractsService — send after preview integrity', () => {
+  function makeSendHarness(processOverrides: Record<string, any> = {}) {
+    const process = processFixture(processOverrides);
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: {
+        findUnique: jest.fn().mockResolvedValue(process),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      user: {
+        findUnique: jest
+          .fn()
+          .mockImplementation(({ where }: any) =>
+            Promise.resolve(
+              where.id
+                ? { id: where.id, role: 'SPECIALIST' }
+                : { id: 'buyer-1' },
+            ),
+          ),
+      },
+      contract: {
+        findUnique: jest.fn(),
+        create: jest.fn().mockResolvedValue({
+          id: 'contract-new',
+          process_id: 'process-1',
+          created_at: new Date('2026-09-04T12:00:00.000Z'),
+        }),
+      },
+      company: { findUnique: jest.fn() },
+    };
+    const prisma = mkPrisma({
+      $transaction: jest.fn(async (callback: any) => callback(tx)),
+    });
+    const docusign = {
+      getEnvelopeProcessId: jest.fn().mockResolvedValue('process-1'),
+      getEnvelopeStatus: jest.fn(),
+      sendDraftEnvelope: jest.fn().mockResolvedValue({
+        envelopeId: 'envelope-1',
+        status: EnvelopeStatus.SENT,
+      }),
+      voidDraftEnvelope: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const service = new ContractsService(
+      prisma,
+      docusign,
+      {
+        sendContractGeneratedEmail: jest.fn().mockResolvedValue(undefined),
+      } as any,
+      mkPlatformCompanyService(10),
+    );
+    jest.spyOn(service as any, 'resolveCommissionFromTotal').mockResolvedValue({
+      platformValue: 1000,
+      platformRate: 1,
+      officeValue: 0,
+      officeRate: 0,
+      specialistValue: 9000,
+      specialistRate: 9,
+    });
+    const dto = {
+      process_id: 'process-1',
+      template_id: 'template-1',
+      seller_name: 'Seller',
+      seller_email: 'seller@example.test',
+      buyer_name: 'Buyer',
+      buyer_email: 'buyer@example.test',
+      vehicle_model: 'Model',
+      vehicle_year: '2026',
+      vehicle_price: 100000,
+      payment_seller_value: 90000,
+      total_commission_rate: 10,
+      platform_name: 'Platform',
+      specialist_name: 'Specialist',
+      specialist_email: 'specialist@example.test',
+      city: 'Sao Paulo',
+    } as any;
+    return { service, docusign, tx, dto };
+  }
+
+  it('rejects a stale preview from a terminal process before sending externally', async () => {
+    const { service, docusign, tx, dto } = makeSendHarness({
+      status: ProcessStatus.COMPLETED,
+    });
+
+    await expect(
+      service.sendContractAfterPreview('envelope-1', dto, 'specialist-1'),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(docusign.sendDraftEnvelope).not.toHaveBeenCalled();
+    expect(tx.contract.create).not.toHaveBeenCalled();
+    expect(tx.process.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not void the winner when duplicate send uses the active envelope', async () => {
+    const { service, docusign, tx, dto } = makeSendHarness({
+      active_contract_id: 'contract-active',
+    });
+    tx.contract.findUnique.mockResolvedValue({
+      id: 'contract-active',
+      provider_id: 'envelope-1',
+      provider_status: 'SENT',
+    });
+
+    await expect(
+      service.sendContractAfterPreview('envelope-1', dto, 'specialist-1'),
+    ).rejects.toMatchObject({
+      response: { error: 'CONTRACT_ALREADY_EXISTS' },
+    });
+    expect(docusign.sendDraftEnvelope).not.toHaveBeenCalled();
+    expect(docusign.voidDraftEnvelope).not.toHaveBeenCalled();
+  });
+
+  it('does not void a sent losing envelope while another contract is active', async () => {
+    const { service, docusign, tx, dto } = makeSendHarness({
+      active_contract_id: 'contract-active',
+    });
+    tx.contract.findUnique.mockResolvedValue({
+      id: 'contract-active',
+      provider_id: 'envelope-winner',
+      provider_status: 'SENT',
+    });
+    docusign.getEnvelopeStatus.mockResolvedValue({
+      envelopeId: 'envelope-1',
+      status: EnvelopeStatus.SENT,
+    });
+
+    await expect(
+      service.sendContractAfterPreview('envelope-1', dto, 'specialist-1'),
+    ).rejects.toMatchObject({
+      response: { error: 'CONTRACT_ALREADY_EXISTS' },
+    });
+    expect(docusign.getEnvelopeStatus).toHaveBeenCalledWith('envelope-1');
     expect(docusign.voidDraftEnvelope).not.toHaveBeenCalled();
   });
 });
@@ -491,7 +947,10 @@ describe('ContractsService — resolveCommissionFromTotal', () => {
       negotiation_currency: ProductCurrency.BRL,
       negotiation_product_value: new Prisma.Decimal('100000'),
       specialist: { id: 's1', commission_rate: null, company_id: null },
-      client: { consultant: { company_id: 'consultantCo' }, company_id: 'directCo' },
+      client: {
+        consultant: { company_id: 'consultantCo' },
+        company_id: 'directCo',
+      },
       car: { valor: 100000 },
       boat: null,
       aircraft: null,

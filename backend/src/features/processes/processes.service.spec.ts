@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
@@ -136,22 +137,24 @@ describe('ProcessesService — produto UUID', () => {
     ).toBe(true);
   });
 
-  it.each([
-    { product_type: ProductType.CAR },
-    { product_id: productId },
-  ])('rejeita seleção parcial de produto: %o', async (partial) => {
-    const dto = Object.assign(new CreateProcessDTO(), {
-      client_id: clientId,
-      specialist_id: specialistId,
-      ...partial,
-    });
+  it.each([{ product_type: ProductType.CAR }, { product_id: productId }])(
+    'rejeita seleção parcial de produto: %o',
+    async (partial) => {
+      const dto = Object.assign(new CreateProcessDTO(), {
+        client_id: clientId,
+        specialist_id: specialistId,
+        ...partial,
+      });
 
-    const errors = await validate(dto);
+      const errors = await validate(dto);
 
-    expect(errors.some((error) =>
-      ['product_type', 'product_id'].includes(error.property),
-    )).toBe(true);
-  });
+      expect(
+        errors.some((error) =>
+          ['product_type', 'product_id'].includes(error.property),
+        ),
+      ).toBe(true);
+    },
+  );
 });
 
 describe('ProcessesService.create — autorização por cliente', () => {
@@ -239,26 +242,44 @@ describe('ProcessesService.create — autorização por cliente', () => {
 });
 
 describe('ProcessesService.createOnBehalfOfClient', () => {
-  function mkService(specialist: any = { id: specialistId }) {
+  function mkService(
+    specialist: any = {
+      id: specialistId,
+      role: UserRole.SPECIALIST,
+      speciality: ProductType.CAR,
+    },
+    product: any = {
+      id: productId,
+      specialist_id: specialistId,
+      is_active: true,
+    },
+  ) {
     const appointmentCreate = jest
       .fn()
       .mockResolvedValue({ id: 'appointment-1' });
     const processCreate = jest.fn().mockResolvedValue({ id: 'process-1' });
+    const tx = {
+      user: { findUnique: jest.fn().mockResolvedValue(specialist) },
+      car: { findUnique: jest.fn().mockResolvedValue(product) },
+      boat: { findUnique: jest.fn().mockResolvedValue(product) },
+      aircraft: { findUnique: jest.fn().mockResolvedValue(product) },
+      appointment: { create: appointmentCreate },
+      process: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: processCreate,
+      },
+      processStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
     const prisma = {
       user: { findFirst: jest.fn().mockResolvedValue(specialist) },
       process: { findFirst: jest.fn().mockResolvedValue(null) },
-      $transaction: jest.fn(async (cb) =>
-        cb({
-          appointment: { create: appointmentCreate },
-          process: { create: processCreate },
-          processStatusHistory: { create: jest.fn().mockResolvedValue({}) },
-        }),
-      ),
+      $transaction: jest.fn(async (cb) => cb(tx)),
     } as any;
     return {
       service: new ProcessesService(prisma, {} as any),
       appointmentCreate,
       processCreate,
+      tx,
     };
   }
 
@@ -329,6 +350,38 @@ describe('ProcessesService.createOnBehalfOfClient', () => {
       service.createOnBehalfOfClient({ ...base, actorLabel: 'consultor' }),
     ).rejects.toThrow(NotFoundException);
   });
+
+  it.each([
+    [
+      'inativo',
+      { id: productId, specialist_id: specialistId, is_active: false },
+      BadRequestException,
+    ],
+    [
+      'de outro especialista',
+      { id: productId, specialist_id: 'other-specialist', is_active: true },
+      ForbiddenException,
+    ],
+  ])(
+    'rejeita produto %s dentro da transação antes de criar registros',
+    async (_label, product, expectedError) => {
+      const { service, appointmentCreate, processCreate, tx } = mkService(
+        undefined,
+        product,
+      );
+
+      await expect(
+        service.createOnBehalfOfClient({
+          ...base,
+          actorLabel: 'gerente do escritório',
+        }),
+      ).rejects.toThrow(expectedError);
+      expect(tx.user.findUnique).toHaveBeenCalled();
+      expect(tx.car.findUnique).toHaveBeenCalled();
+      expect(appointmentCreate).not.toHaveBeenCalled();
+      expect(processCreate).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('ProcessesService.getAll — escopo de visibilidade', () => {

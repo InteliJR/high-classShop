@@ -9,7 +9,7 @@ import {
 import { validate } from 'class-validator';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { AppointmentsService } from './appointments.service';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
 describe('CreateAppointmentDto — seleção de produto', () => {
   const base = {
@@ -25,9 +25,149 @@ describe('CreateAppointmentDto — seleção de produto', () => {
 
     const errors = await validate(dto);
 
-    expect(errors.some((error) =>
-      ['product_type', 'product_id'].includes(error.property),
-    )).toBe(true);
+    expect(
+      errors.some((error) =>
+        ['product_type', 'product_id'].includes(error.property),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('AppointmentsService.create — associação e atomicidade', () => {
+  const client = {
+    id: 'client-1',
+    name: 'Cliente',
+    surname: 'Teste',
+    email: 'cliente@example.com',
+    role: UserRole.CUSTOMER,
+  };
+  const specialist = {
+    id: 'specialist-1',
+    name: 'Especialista',
+    surname: 'Teste',
+    email: 'especialista@example.com',
+    role: UserRole.SPECIALIST,
+    speciality: ProductType.CAR,
+  };
+  const activeProduct = {
+    id: 'product-1',
+    specialist_id: specialist.id,
+    is_active: true,
+    marca: 'Porsche',
+    modelo: '911',
+  };
+  const dto = {
+    client_id: client.id,
+    specialist_id: specialist.id,
+    product_type: ProductType.CAR,
+    product_id: activeProduct.id,
+    appointment_datetime: '2099-01-01T10:00:00.000Z',
+  } as CreateAppointmentDto;
+
+  function harness(options: {
+    transactionalProduct?: typeof activeProduct;
+    processFailure?: Error;
+  }) {
+    const storedAppointments: any[] = [];
+    const appointmentCreate = jest.fn(async ({ data }) => {
+      const appointment = {
+        id: 'appointment-1',
+        ...data,
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
+      storedAppointments.push(appointment);
+      return appointment;
+    });
+    const processCreate = jest.fn(async () => {
+      if (options.processFailure) throw options.processFailure;
+      return { id: 'process-1' };
+    });
+    const userFindUnique = jest.fn(async ({ where }) =>
+      where.id === client.id ? client : specialist,
+    );
+    const rootProductFindUnique = jest.fn().mockResolvedValue(activeProduct);
+    const tx = {
+      user: { findUnique: userFindUnique },
+      car: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue(options.transactionalProduct ?? activeProduct),
+      },
+      boat: { findUnique: jest.fn() },
+      aircraft: { findUnique: jest.fn() },
+      appointment: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: appointmentCreate,
+      },
+      process: { create: processCreate },
+    };
+    const prisma = {
+      user: { findUnique: userFindUnique },
+      car: { findUnique: rootProductFindUnique },
+      boat: { findUnique: jest.fn() },
+      aircraft: { findUnique: jest.fn() },
+      appointment: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: appointmentCreate,
+      },
+      process: { create: processCreate },
+      $transaction: jest.fn(async (callback) => {
+        const before = storedAppointments.length;
+        try {
+          return await callback(tx);
+        } catch (error) {
+          storedAppointments.splice(before);
+          throw error;
+        }
+      }),
+    } as any;
+    return {
+      service: new AppointmentsService(prisma, {} as any, {} as any),
+      prisma,
+      tx,
+      appointmentCreate,
+      processCreate,
+      storedAppointments,
+    };
+  }
+
+  it.each([
+    ['inativo', { ...activeProduct, is_active: false }, BadRequestException],
+    [
+      'de outro especialista',
+      { ...activeProduct, specialist_id: 'other-specialist' },
+      ForbiddenException,
+    ],
+  ])(
+    'rejeita produto %s usando o cliente transacional antes das escritas',
+    async (_label, transactionalProduct, expectedError) => {
+      const { service, prisma, tx, appointmentCreate, processCreate } = harness(
+        {
+          transactionalProduct,
+          processFailure: new Error('process should not be reached'),
+        },
+      );
+
+      await expect(service.create(dto, client.id)).rejects.toThrow(
+        expectedError,
+      );
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(tx.car.findUnique).toHaveBeenCalled();
+      expect(appointmentCreate).not.toHaveBeenCalled();
+      expect(processCreate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rolls back the appointment when process creation fails', async () => {
+    const processFailure = new Error('process insert failed');
+    const { service, prisma, storedAppointments } = harness({
+      processFailure,
+    });
+
+    await expect(service.create(dto, client.id)).rejects.toBe(processFailure);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(storedAppointments).toHaveLength(0);
   });
 });
 

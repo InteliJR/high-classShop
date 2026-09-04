@@ -469,14 +469,6 @@ export class ProcessesService {
    * @throws {ConflictException} - Já existe processo/consultoria ativa equivalente
    */
   async createOnBehalfOfClient(input: CreateOnBehalfInput) {
-    const specialist = await this.prismaService.user.findFirst({
-      where: { id: input.specialist_id, role: UserRole.SPECIALIST },
-    });
-
-    if (!specialist) {
-      throw new NotFoundException('Especialista não encontrado');
-    }
-
     const productFieldMap = {
       CAR: 'car_id',
       BOAT: 'boat_id',
@@ -531,6 +523,12 @@ export class ProcessesService {
     const isConsultancy = !productField || !input.product_id;
 
     const [, process] = await this.prismaService.$transaction(async (tx) => {
+      await validateSpecialistProductAssociation(tx, {
+        specialistId: input.specialist_id,
+        productType: isConsultancy ? null : input.product_type,
+        productId: isConsultancy ? null : input.product_id,
+      });
+
       const appointmentData: any = {
         client_id: input.client_id,
         specialist_id: input.specialist_id,

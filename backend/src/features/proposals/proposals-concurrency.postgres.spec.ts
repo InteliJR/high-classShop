@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import {
   PrismaClient,
   ProcessStatus,
@@ -52,6 +52,41 @@ function synchronizeProposalValidation(
       get(target, property) {
         if (property === 'negotiationProposal') {
           return wrapNegotiationProposal(target.negotiationProposal);
+        }
+        return bindMember(target, property);
+      },
+    });
+
+  return new Proxy(client, {
+    get(target, property) {
+      if (property === '$transaction') {
+        return (
+          callback: (transaction: any) => Promise<unknown>,
+          options?: any,
+        ) =>
+          target.$transaction(
+            (transaction) => callback(wrapTransaction(transaction)),
+            options,
+          );
+      }
+      return bindMember(target, property);
+    },
+  });
+}
+
+function signalAdvisoryLockAttempt(
+  client: PrismaClient,
+  onAttempt: (queryArguments: any[]) => void,
+): PrismaClient {
+  const wrapTransaction = (transaction: any) =>
+    new Proxy(transaction, {
+      get(target, property) {
+        if (property === '$queryRaw') {
+          const queryRaw = bindMember(target, property);
+          return (...args: any[]) => {
+            onAttempt(args);
+            return queryRaw(...args);
+          };
         }
         return bindMember(target, property);
       },
@@ -204,7 +239,7 @@ describeWithPostgres('proposal responses — PostgreSQL concurrency', () => {
     const rejected = outcomes.find(({ status }) => status === 'rejected');
     expect(rejected).toMatchObject({
       status: 'rejected',
-      reason: expect.any(ConflictException),
+      reason: expect.any(BadRequestException),
     });
 
     const [proposal, process, historyCount] = await Promise.all([
@@ -245,7 +280,7 @@ describeWithPostgres('proposal responses — PostgreSQL concurrency', () => {
     });
 
     const waitForBothTransactions = validationBarrier(2);
-    const lockKey = `proposal-response:${proposalId}`;
+    const lockKey = `proposal-process:${processId}`;
 
     const outcomes = await Promise.allSettled([
       rejectClient.$transaction(async (tx) => {
@@ -288,9 +323,9 @@ describeWithPostgres('proposal responses — PostgreSQL concurrency', () => {
       }),
     ]);
 
-    expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(
-      1,
-    );
+    expect(
+      outcomes.filter(({ status }) => status === 'fulfilled'),
+    ).toHaveLength(1);
     expect(outcomes.find(({ status }) => status === 'rejected')).toMatchObject({
       reason: expect.any(ConflictException),
     });
@@ -314,4 +349,112 @@ describeWithPostgres('proposal responses — PostgreSQL concurrency', () => {
       expect(counters).toBe(1);
     }
   }, 15000);
+
+  it('does not create a proposal after concurrent acceptance moves the process to documentation', async () => {
+    await observer.process.update({
+      where: { id: processId },
+      data: {
+        status: ProcessStatus.NEGOTIATION,
+        accepted_proposal_id: null,
+      },
+    });
+    await observer.processStatusHistory.deleteMany({ where: { processId } });
+    await observer.negotiationProposal.deleteMany({
+      where: { process_id: processId, id: { not: proposalId } },
+    });
+    await observer.negotiationProposal.update({
+      where: { id: proposalId },
+      data: { status: ProposalStatus.PENDING },
+    });
+
+    const acceptanceLocked = validationBarrier(2);
+    const releaseAcceptance = validationBarrier(2);
+    const acceptance = acceptClient.$transaction(async (tx) => {
+      const lockKey = `proposal-process:${processId}`;
+      await tx.$queryRaw`
+        SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
+      `;
+      await tx.negotiationProposal.update({
+        where: { id: proposalId },
+        data: { status: ProposalStatus.ACCEPTED },
+      });
+      await tx.process.update({
+        where: { id: processId },
+        data: {
+          status: ProcessStatus.DOCUMENTATION,
+          accepted_proposal_id: proposalId,
+        },
+      });
+      await acceptanceLocked();
+      await releaseAcceptance();
+    });
+    await acceptanceLocked();
+
+    const settings = {
+      isMinimumProposalEnabled: jest.fn().mockResolvedValue(false),
+      getMinimumProposalPercentage: jest.fn(),
+    } as any;
+    const notifications = {
+      sendProposalReceivedEmail: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    let markCreationLockAttempted!: (queryArguments: any[]) => void;
+    const creationLockAttempted = new Promise<any[]>((resolve) => {
+      markCreationLockAttempted = resolve;
+    });
+    const signalingCreateClient = signalAdvisoryLockAttempt(
+      rejectClient,
+      markCreationLockAttempted,
+    );
+    const createService = new ProposalsService(
+      signalingCreateClient as any,
+      settings,
+      notifications,
+    );
+    const creation = createService.create(
+      { process_id: processId, proposed_value: 81000 },
+      clientId,
+    );
+
+    let creationSettledBeforeLock: unknown;
+    try {
+      const queryArguments = await Promise.race([
+        creationLockAttempted,
+        creation.then(
+          () => {
+            throw new Error(
+              'Proposal creation settled before attempting the process lock',
+            );
+          },
+          (error) => {
+            throw error;
+          },
+        ),
+      ]);
+      expect(queryArguments[1]).toBe(`proposal-process:${processId}`);
+    } catch (error) {
+      creationSettledBeforeLock = error;
+    }
+    await releaseAcceptance();
+    await acceptance;
+    if (creationSettledBeforeLock) throw creationSettledBeforeLock;
+
+    await expect(creation).rejects.toMatchObject({
+      response: {
+        error: {
+          message: 'Processo não está em fase de negociação',
+        },
+      },
+    });
+    await expect(
+      observer.negotiationProposal.count({
+        where: { process_id: processId, id: { not: proposalId } },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      observer.process.findUniqueOrThrow({ where: { id: processId } }),
+    ).resolves.toMatchObject({
+      status: ProcessStatus.DOCUMENTATION,
+      accepted_proposal_id: proposalId,
+    });
+  }, 15_000);
 });

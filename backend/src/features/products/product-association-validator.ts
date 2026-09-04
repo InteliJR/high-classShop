@@ -57,7 +57,6 @@ export async function validateSpecialistProductAssociation(
         : client.aircraft;
   const product = await delegate.findUnique({
     where: { id: input.productId },
-    select: { id: true, specialist_id: true, is_active: true },
   });
   if (!product) throw new NotFoundException('Produto não encontrado');
   if (product.is_active === false) {
