@@ -294,16 +294,16 @@ export class BoatsService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
-
     try {
-      await this.prismaService.boat.update({
-        where: { id },
+      await updateProductWithMonetaryLock(this.prismaService, {
+        productType: ProductType.BOAT,
+        productId: id,
         data: {
           is_active: false,
           deactivated_at: new Date(),
           deactivated_by_sync_job_id: null,
         },
+        notFoundMessage: 'Lancha não encontrada',
       });
       return { ok: true };
     } catch (error) {

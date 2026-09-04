@@ -33,10 +33,16 @@ describe('CarsService — UUID do produto', () => {
     const findUnique = jest.fn().mockResolvedValue(currentCar);
     const update = jest.fn().mockResolvedValue(currentCar);
     const findFirst = jest.fn();
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      car: { findUnique, update },
+      process: { findFirst },
+    };
     const service = new CarsService(
       {
         car: { findUnique, update },
         process: { findFirst },
+        $transaction: jest.fn(async (callback: any) => callback(tx)),
       } as any,
       {} as any,
     );

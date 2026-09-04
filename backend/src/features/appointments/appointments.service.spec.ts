@@ -87,7 +87,10 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
       where.id === client.id ? client : specialist,
     );
     const rootProductFindUnique = jest.fn().mockResolvedValue(activeProduct);
+    const rootAppointmentCreate = jest.fn();
+    const rootProcessCreate = jest.fn();
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
       user: { findUnique: userFindUnique },
       car: {
         findUnique: jest
@@ -109,9 +112,9 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
       aircraft: { findUnique: jest.fn() },
       appointment: {
         findFirst: jest.fn().mockResolvedValue(null),
-        create: appointmentCreate,
+        create: rootAppointmentCreate,
       },
-      process: { create: processCreate },
+      process: { create: rootProcessCreate },
       $transaction: jest.fn(async (callback) => {
         const before = storedAppointments.length;
         try {
@@ -123,11 +126,17 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
       }),
     } as any;
     return {
-      service: new AppointmentsService(prisma, {} as any, {} as any),
+      service: new AppointmentsService(
+        prisma,
+        { sendAppointmentCreatedEmail: jest.fn().mockResolvedValue(undefined) } as any,
+        {} as any,
+      ),
       prisma,
       tx,
       appointmentCreate,
       processCreate,
+      rootAppointmentCreate,
+      rootProcessCreate,
       storedAppointments,
     };
   }
@@ -161,13 +170,35 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
 
   it('rolls back the appointment when process creation fails', async () => {
     const processFailure = new Error('process insert failed');
-    const { service, prisma, storedAppointments } = harness({
+    const {
+      service,
+      prisma,
+      storedAppointments,
+      rootAppointmentCreate,
+      rootProcessCreate,
+    } = harness({
       processFailure,
     });
 
     await expect(service.create(dto, client.id)).rejects.toBe(processFailure);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(storedAppointments).toHaveLength(0);
+    expect(rootAppointmentCreate).not.toHaveBeenCalled();
+    expect(rootProcessCreate).not.toHaveBeenCalled();
+  });
+
+  it('serializa a verificação e a inserção do horário por especialista', async () => {
+    const { service, tx } = harness({});
+
+    await service.create(dto, client.id);
+
+    expect(tx.$queryRaw).toHaveBeenCalledWith(
+      expect.anything(),
+      'appointment-schedule:specialist-1',
+    );
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.appointment.findFirst.mock.invocationCallOrder[0],
+    );
   });
 });
 
@@ -570,8 +601,9 @@ describe('AppointmentsService.confirmPending — snapshot da negociação', () =
       await service.confirmPending(appointment.id, specialist.id);
 
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-      expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
       expect(tx.$queryRaw.mock.calls[0][1]).toBe('product-money:CAR:product-1');
+      expect(tx.$queryRaw.mock.calls[1][1]).toBe('product-money:CAR:product-1');
       expect(processUpdateMany).toHaveBeenCalledWith({
         where: {
           id: schedulingProcess.id,

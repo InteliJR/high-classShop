@@ -11,6 +11,8 @@ import {
   ProviderTimeoutException,
 } from 'src/shared/exceptions/custom-exceptions';
 import { CreateTemplateEnvelopeDto } from './dto/request/create-template-envelope.dto';
+import { randomUUID } from 'node:crypto';
+import { EnvelopeEffectError } from './envelope-effect.error';
 
 /**
  * Serviço de integração com DocuSign
@@ -195,7 +197,7 @@ export class DocuSignService {
       );
 
       throw new EnvelopeCreationFailedException(
-        `Falha geral ao criar envelope: ${errorMessage}`,
+        'O provedor não concluiu a criação do envelope.',
       );
     }
   }
@@ -320,6 +322,7 @@ export class DocuSignService {
     testimonial1Email?: string;
     testimonial2Name?: string;
     testimonial2Email?: string;
+    onEnvelopeCreated?: (envelopeId: string) => void;
   }): Promise<{ envelopeId: string; status: EnvelopeStatus }> {
     const {
       templateId,
@@ -335,7 +338,11 @@ export class DocuSignService {
       testimonial1Email,
       testimonial2Name,
       testimonial2Email,
+      onEnvelopeCreated,
     } = params;
+
+    let createdEnvelopeId: string | null = null;
+    let sendAttempted = false;
 
     try {
       // 1. Validações básicas
@@ -365,6 +372,7 @@ export class DocuSignService {
       this.logger.log('ETAPA 1: Criando envelope como DRAFT...');
 
       const createEnvelopeDto: CreateTemplateEnvelopeDto = {
+        transactionId: randomUUID(),
         templateId,
         status: 'created', // DRAFT - não envia ainda
         emailSubject: 'Contrato de Compra e Venda - Assinatura Digital',
@@ -414,6 +422,8 @@ export class DocuSignService {
       const draftResponse =
         await this.client.createEnvelopeFromTemplate(createEnvelopeDto);
       const envelopeId = draftResponse.envelopeId;
+      createdEnvelopeId = envelopeId;
+      onEnvelopeCreated?.(envelopeId);
 
       this.logger.log(`✓ Envelope DRAFT criado. ID: ${envelopeId}`);
 
@@ -450,6 +460,7 @@ export class DocuSignService {
       // ===== ETAPA 4: ENVIAR ENVELOPE =====
       this.logger.log('ETAPA 4: Enviando envelope (status: sent)...');
 
+      sendAttempted = true;
       await this.client.updateEnvelopeStatus(envelopeId, 'sent');
 
       this.logger.log(`✓ Envelope enviado com sucesso!`);
@@ -461,6 +472,51 @@ export class DocuSignService {
       };
     } catch (error) {
       // Tratamento de erros com categorização
+
+      if (error instanceof EnvelopeEffectError) {
+        throw error;
+      }
+
+      if (createdEnvelopeId) {
+        if (sendAttempted) {
+          try {
+            const envelope = await this.client.getEnvelope(createdEnvelopeId);
+            if (
+              envelope?.status === EnvelopeStatus.SENT ||
+              envelope?.status === EnvelopeStatus.DELIVERED ||
+              envelope?.status === EnvelopeStatus.COMPLETED
+            ) {
+              return {
+                envelopeId: createdEnvelopeId,
+                status: EnvelopeStatus.SENT,
+              };
+            }
+            if (envelope?.status !== EnvelopeStatus.CREATED) {
+              throw new EnvelopeEffectError(
+                createdEnvelopeId,
+                'SEND_INDETERMINATE',
+                error,
+              );
+            }
+          } catch (statusError) {
+            if (statusError instanceof EnvelopeEffectError) throw statusError;
+            this.logger.error(
+              'Falha ao confirmar o status depois do envio do envelope',
+              statusError instanceof Error ? statusError.stack : undefined,
+            );
+            throw new EnvelopeEffectError(
+              createdEnvelopeId,
+              'SEND_INDETERMINATE',
+              error,
+            );
+          }
+        }
+        throw new EnvelopeEffectError(
+          createdEnvelopeId,
+          'DRAFT_CONFIRMED',
+          error,
+        );
+      }
 
       if (
         error instanceof ProviderUnavailableException ||
@@ -486,7 +542,7 @@ export class DocuSignService {
       );
 
       throw new EnvelopeCreationFailedException(
-        `Falha ao criar envelope via template: ${errorMessage}`,
+        'O provedor não concluiu a criação do envelope via template.',
       );
     }
   }
@@ -532,6 +588,7 @@ export class DocuSignService {
     testimonial1Email?: string;
     testimonial2Name?: string;
     testimonial2Email?: string;
+    onEnvelopeCreated?: (envelopeId: string) => void;
   }): Promise<{
     envelopeId: string;
     previewUrl: string;
@@ -552,7 +609,10 @@ export class DocuSignService {
       testimonial1Email,
       testimonial2Name,
       testimonial2Email,
+      onEnvelopeCreated,
     } = params;
+
+    let createdEnvelopeId: string | null = null;
 
     try {
       // Validações básicas
@@ -581,6 +641,7 @@ export class DocuSignService {
       this.logger.log('PREVIEW ETAPA 1: Criando envelope como DRAFT...');
 
       const createEnvelopeDto: CreateTemplateEnvelopeDto = {
+        transactionId: randomUUID(),
         templateId,
         status: 'created', // DRAFT - não envia
         emailSubject: 'Contrato de Compra e Venda - Assinatura Digital',
@@ -629,6 +690,8 @@ export class DocuSignService {
       const draftResponse =
         await this.client.createEnvelopeFromTemplate(createEnvelopeDto);
       const envelopeId = draftResponse.envelopeId;
+      createdEnvelopeId = envelopeId;
+      onEnvelopeCreated?.(envelopeId);
 
       this.logger.log(`✓ Envelope DRAFT criado. ID: ${envelopeId}`);
 
@@ -688,6 +751,18 @@ export class DocuSignService {
         expiresAt,
       };
     } catch (error) {
+      if (error instanceof EnvelopeEffectError) {
+        throw error;
+      }
+
+      if (createdEnvelopeId) {
+        throw new EnvelopeEffectError(
+          createdEnvelopeId,
+          'DRAFT_CONFIRMED',
+          error,
+        );
+      }
+
       if (
         error instanceof ProviderUnavailableException ||
         error instanceof ProviderTimeoutException
@@ -710,7 +785,7 @@ export class DocuSignService {
       );
 
       throw new EnvelopeCreationFailedException(
-        `Falha ao criar preview do envelope: ${errorMessage}`,
+        'O provedor não concluiu a criação do preview.',
       );
     }
   }
@@ -728,6 +803,7 @@ export class DocuSignService {
   ): Promise<{ envelopeId: string; status: EnvelopeStatus }> {
     this.logger.log(`Enviando envelope DRAFT ${envelopeId}...`);
 
+    let sendAttempted = false;
     try {
       const currentEnvelope = await this.client.getEnvelope(envelopeId);
       const currentStatus = currentEnvelope?.status as
@@ -749,6 +825,7 @@ export class DocuSignService {
         };
       }
 
+      sendAttempted = true;
       await this.client.updateEnvelopeStatus(envelopeId, 'sent');
 
       this.logger.log(`✓ Envelope ${envelopeId} enviado com sucesso`);
@@ -758,6 +835,19 @@ export class DocuSignService {
         status: EnvelopeStatus.SENT,
       };
     } catch (error) {
+      if (!sendAttempted) {
+        if (
+          error instanceof ProviderUnavailableException ||
+          error instanceof ProviderTimeoutException ||
+          error instanceof EnvelopeCreationFailedException
+        ) {
+          throw error;
+        }
+        throw new EnvelopeCreationFailedException(
+          'Não foi possível verificar o status do envelope antes do envio.',
+        );
+      }
+
       try {
         const envelopeAfterFailure = await this.client.getEnvelope(envelopeId);
         const statusAfterFailure = envelopeAfterFailure?.status as
@@ -778,13 +868,29 @@ export class DocuSignService {
             status: EnvelopeStatus.SENT,
           };
         }
+
+        if (statusAfterFailure !== EnvelopeStatus.CREATED) {
+          throw new EnvelopeEffectError(
+            envelopeId,
+            'SEND_INDETERMINATE',
+            error,
+          );
+        }
       } catch (statusCheckError) {
+        if (statusCheckError instanceof EnvelopeEffectError) {
+          throw statusCheckError;
+        }
         const statusCheckMessage =
           statusCheckError instanceof Error
             ? statusCheckError.message
             : String(statusCheckError);
         this.logger.warn(
           `Não foi possível confirmar status do envelope após falha de envio: ${statusCheckMessage}`,
+        );
+        throw new EnvelopeEffectError(
+          envelopeId,
+          'SEND_INDETERMINATE',
+          error,
         );
       }
 
@@ -793,9 +899,7 @@ export class DocuSignService {
 
       this.logger.error(`Erro ao enviar envelope draft: ${errorMessage}`);
 
-      throw new EnvelopeCreationFailedException(
-        `Falha ao enviar envelope: ${errorMessage}`,
-      );
+      throw new EnvelopeEffectError(envelopeId, 'DRAFT_CONFIRMED', error);
     }
   }
 

@@ -274,16 +274,16 @@ export class CarsService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
-
     try {
-      await this.prismaService.car.update({
-        where: { id },
+      await updateProductWithMonetaryLock(this.prismaService, {
+        productType: ProductType.CAR,
+        productId: id,
         data: {
           is_active: false,
           deactivated_at: new Date(),
           deactivated_by_sync_job_id: null,
         },
+        notFoundMessage: 'Carro não encontrado',
       });
       return { ok: true };
     } catch (error) {

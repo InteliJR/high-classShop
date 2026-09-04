@@ -4,8 +4,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ProductType, UserRole } from '@prisma/client';
+import { acquireProductMonetaryLock } from './product-monetary-lock';
 
 type ProductAssociationClient = {
+  $queryRaw<T = unknown>(
+    query: TemplateStringsArray,
+    ...values: unknown[]
+  ): Promise<T>;
   user: { findUnique(args: unknown): Promise<any> };
   car: { findUnique(args: unknown): Promise<any> };
   boat: { findUnique(args: unknown): Promise<any> };
@@ -48,6 +53,13 @@ export async function validateSpecialistProductAssociation(
     );
   }
   if (!input.productType || !input.productId) return null;
+
+  // The same advisory key is used by catalog mutations. Holding it through
+  // the caller's transaction closes the read/insert TOCTOU window.
+  await acquireProductMonetaryLock(client, {
+    productType: input.productType,
+    productId: input.productId,
+  });
 
   const delegate =
     input.productType === ProductType.CAR

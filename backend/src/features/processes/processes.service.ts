@@ -485,44 +485,40 @@ export class ProcessesService {
       'DOCUMENTATION',
     ] as const;
 
-    if (productField && input.product_id) {
-      // Só bloqueia se houver processo ATIVO; processos encerrados
-      // (COMPLETED/REJECTED) permitem novo processo para o mesmo produto.
-      const existing = await this.prismaService.process.findFirst({
-        where: {
-          client_id: input.client_id,
-          specialist_id: input.specialist_id,
-          [productField]: input.product_id,
-          status: { in: [...activeStatuses] as any },
-        },
-      });
-      if (existing) {
-        throw new ConflictException(
-          'Já existe processo ativo para este cliente com este produto.',
-        );
-      }
-    } else {
-      const activeConsultancy = await this.prismaService.process.findFirst({
-        where: {
-          client_id: input.client_id,
-          specialist_id: input.specialist_id,
-          product_type: null,
-          status: { in: [...activeStatuses] as any },
-        },
-      });
-      if (activeConsultancy) {
-        throw new ConflictException(
-          'Já existe consultoria ativa entre este cliente e este especialista.',
-        );
-      }
-    }
-
     const pendingExpiresAt = new Date();
     pendingExpiresAt.setDate(pendingExpiresAt.getDate() + 7);
 
     const isConsultancy = !productField || !input.product_id;
 
     const [, process] = await this.prismaService.$transaction(async (tx) => {
+      const dedupKey = `process-dedup:${input.client_id}:${input.specialist_id}:${isConsultancy ? 'CONSULTANCY' : input.product_type}:${isConsultancy ? 'none' : input.product_id}`;
+      await tx.$queryRaw`
+        SELECT pg_advisory_xact_lock(hashtextextended(${dedupKey}, 0))::text AS locked
+      `;
+
+      const existing = await tx.process.findFirst({
+        where: isConsultancy
+          ? {
+              client_id: input.client_id,
+              specialist_id: input.specialist_id,
+              product_type: null,
+              status: { in: [...activeStatuses] as any },
+            }
+          : {
+              client_id: input.client_id,
+              specialist_id: input.specialist_id,
+              [productField!]: input.product_id,
+              status: { in: [...activeStatuses] as any },
+            },
+      });
+      if (existing) {
+        throw new ConflictException(
+          isConsultancy
+            ? 'Já existe consultoria ativa entre este cliente e este especialista.'
+            : 'Já existe processo ativo para este cliente com este produto.',
+        );
+      }
+
       await validateSpecialistProductAssociation(tx, {
         specialistId: input.specialist_id,
         productType: isConsultancy ? null : input.product_type,

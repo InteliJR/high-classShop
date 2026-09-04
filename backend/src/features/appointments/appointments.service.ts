@@ -232,6 +232,11 @@ export class AppointmentsService {
           productId: dto.product_id,
         })) as Car | Boat | Aircraft;
 
+        const scheduleLockKey = `appointment-schedule:${dto.specialist_id}`;
+        await tx.$queryRaw`
+          SELECT pg_advisory_xact_lock(hashtextextended(${scheduleLockKey}, 0))::text AS locked
+        `;
+
         // Validação 7: Verificar conflitos de horário (especialista não pode ter 2 agendamentos no mesmo horário)
         // Considerar janela de 1 hora para evitar overlap (ex: agendamento 14:00-15:00)
         let existingAppointment = null;

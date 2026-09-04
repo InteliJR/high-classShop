@@ -37,7 +37,10 @@ import { CreateCarDto } from '../cars/dto/create-car.dto';
 import { CreateBoatDto } from '../boats/dto/create-boat.dto';
 import { CreateAircraftDto } from '../aircrafts/dto/create-aircraft.dto';
 import { DriveImportService } from '../drive-import/drive-import.service';
-import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
+import {
+  acquireProductMonetaryLock,
+  updateProductWithMonetaryLock,
+} from '../products/product-monetary-lock';
 
 type UpsertResult = {
   productId: string;
@@ -488,22 +491,28 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       deactivated_by_sync_job_id: jobId,
     };
 
-    if (productType === ProductType.CAR) {
-      await this.prisma.car.updateMany({
-        where: { id: { in: staleIds }, specialist_id: specialistId },
-        data,
-      });
-    } else if (productType === ProductType.BOAT) {
-      await this.prisma.boat.updateMany({
-        where: { id: { in: staleIds }, specialist_id: specialistId },
-        data,
-      });
-    } else {
-      await this.prisma.aircraft.updateMany({
-        where: { id: { in: staleIds }, specialist_id: specialistId },
-        data,
-      });
-    }
+    await this.prisma.$transaction(async (tx) => {
+      for (const productId of [...staleIds].sort()) {
+        await acquireProductMonetaryLock(tx, { productType, productId });
+      }
+
+      if (productType === ProductType.CAR) {
+        await tx.car.updateMany({
+          where: { id: { in: staleIds }, specialist_id: specialistId },
+          data,
+        });
+      } else if (productType === ProductType.BOAT) {
+        await tx.boat.updateMany({
+          where: { id: { in: staleIds }, specialist_id: specialistId },
+          data,
+        });
+      } else {
+        await tx.aircraft.updateMany({
+          where: { id: { in: staleIds }, specialist_id: specialistId },
+          data,
+        });
+      }
+    });
 
     return staleIds;
   }

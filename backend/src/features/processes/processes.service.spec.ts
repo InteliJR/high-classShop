@@ -63,6 +63,7 @@ describe('ProcessesService — produto UUID', () => {
       process: { findFirst },
       $transaction: jest.fn(async (callback) =>
         callback({
+          $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
           user: {
             findUnique: jest.fn().mockResolvedValue({
               id: specialistId,
@@ -259,6 +260,7 @@ describe('ProcessesService.createOnBehalfOfClient', () => {
       .mockResolvedValue({ id: 'appointment-1' });
     const processCreate = jest.fn().mockResolvedValue({ id: 'process-1' });
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
       user: { findUnique: jest.fn().mockResolvedValue(specialist) },
       car: { findUnique: jest.fn().mockResolvedValue(product) },
       boat: { findUnique: jest.fn().mockResolvedValue(product) },
@@ -314,6 +316,21 @@ describe('ProcessesService.createOnBehalfOfClient', () => {
         }),
       }),
     );
+  });
+
+  it('serializa e repete a deduplicação dentro da transação', async () => {
+    const { service, tx } = mkService();
+
+    await service.createOnBehalfOfClient({
+      ...base,
+      actorLabel: 'gerente do escritório',
+    });
+
+    expect(tx.$queryRaw).toHaveBeenCalledWith(
+      expect.anything(),
+      `process-dedup:${clientId}:${specialistId}:CAR:${productId}`,
+    );
+    expect(tx.process.findFirst).toHaveBeenCalledTimes(1);
   });
 
   it('registra nas notas quem abriu o processo', async () => {

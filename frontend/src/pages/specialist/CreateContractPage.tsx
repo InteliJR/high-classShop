@@ -589,10 +589,12 @@ export default function CreateContractPage() {
       }, 2000);
     } catch (error: any) {
       console.error("Erro ao enviar contrato:", error);
-      setShowPreviewModal(false);
 
       const backendMessage = extractBackendMessage(error);
       const lowerMessage = backendMessage.toLowerCase();
+      const requiresManualReconciliation =
+        error.response?.data?.error?.code ===
+        "CONTRACT_MANUAL_RECONCILIATION_REQUIRED";
 
       const isEmailConflict =
         (lowerMessage.includes("vendedor") &&
@@ -601,11 +603,21 @@ export default function CreateContractPage() {
         (error.response?.data?.error?.code === 400 &&
           error.response?.data?.error?.details?.seller_email != null);
 
+      const message = isEmailConflict
+        ? "O e-mail do comprador não pode ser o mesmo do consultor ou vendedor. Utilize e-mails diferentes para cada parte."
+        : backendMessage || "Erro ao enviar contrato. Tente novamente.";
+
+      if (requiresManualReconciliation) {
+        // The envelope may already be SENT. Keep its context on screen and
+        // block accidental regeneration/cancellation until support reconciles it.
+        setPreviewCancellationError(message);
+      } else {
+        setShowPreviewModal(false);
+      }
+
       setSubmitStatus({
         type: "error",
-        message: isEmailConflict
-          ? "O e-mail do comprador não pode ser o mesmo do consultor ou vendedor. Utilize e-mails diferentes para cada parte."
-          : backendMessage || "Erro ao enviar contrato. Tente novamente.",
+        message,
       });
     } finally {
       previewActionInFlightRef.current = false;

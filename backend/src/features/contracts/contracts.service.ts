@@ -23,7 +23,6 @@ import {
   ProcessNotFoundException,
   SignerNotFoundException,
   ContractAlreadyExistsException,
-  TransactionFailedException,
   EnvelopeNotInDraftException,
   EnvelopeNotFoundException,
 } from 'src/shared/exceptions/custom-exceptions';
@@ -43,11 +42,26 @@ import { PlatformCompanyService } from 'src/features/platform-company/platform-c
 import { computeNestedCommissionSplit } from './commission-split';
 import { requireNegotiationSnapshot } from 'src/features/processes/negotiation-snapshot';
 import { EnvelopeStatus } from 'src/providers/docusign/enums/envelope-status.enum';
+import {
+  EnvelopeEffectError,
+  EnvelopeEffectState,
+} from 'src/providers/docusign/envelope-effect.error';
+import { randomUUID } from 'node:crypto';
 
 const CONTRACT_PREPARATION_STATUSES: ProcessStatus[] = [
   ProcessStatus.PROCESSING_CONTRACT,
   ProcessStatus.DOCUMENTATION,
 ];
+
+type CompensableEnvelopeEffect = Exclude<
+  EnvelopeEffectState | 'SEND_CONFIRMED',
+  'SEND_INDETERMINATE'
+>;
+
+interface ExternalEnvelopeEffect {
+  envelopeId: string;
+  state: EnvelopeEffectState | 'SEND_CONFIRMED';
+}
 
 export interface ContractDocumentFields {
   seller_cpf?: string;
@@ -214,10 +228,56 @@ export class ContractsService {
     processId: string,
     reason: string,
     persistenceError: unknown,
+    effectState: CompensableEnvelopeEffect = 'SEND_CONFIRMED',
   ): Promise<void> {
     try {
-      await this.docuSignService.voidDraftEnvelope(envelopeId, reason);
+      await this.withContractProcessLock(processId, async (tx) => {
+        const processRecord = await tx.process.findUnique({
+          where: { id: processId },
+          select: { active_contract_id: true },
+        });
+        if (processRecord?.active_contract_id) {
+          const activeContract = await tx.contract.findUnique({
+            where: { id: processRecord.active_contract_id },
+            select: { provider_id: true },
+          });
+          if (activeContract?.provider_id === envelopeId) {
+            throw this.manualReconciliationRequired(
+              processId,
+              envelopeId,
+              'A compensação encontrou o envelope persistido como contrato ativo.',
+              persistenceError,
+            );
+          }
+        }
+
+        const envelope =
+          await this.docuSignService.getEnvelopeStatus(envelopeId);
+        if (envelope.status === EnvelopeStatus.VOIDED) return;
+
+        const canVoid =
+          effectState === 'DRAFT_CONFIRMED'
+            ? envelope.status === EnvelopeStatus.CREATED
+            : [
+                EnvelopeStatus.CREATED,
+                EnvelopeStatus.SENT,
+                EnvelopeStatus.DELIVERED,
+              ].includes(envelope.status);
+        if (!canVoid) {
+          throw this.manualReconciliationRequired(
+            processId,
+            envelopeId,
+            `Status externo '${envelope.status}' não permite compensação automática segura.`,
+            persistenceError,
+          );
+        }
+
+        await this.docuSignService.voidDraftEnvelope(envelopeId, reason);
+      });
     } catch (compensationError) {
+      if (this.isManualReconciliationError(compensationError)) {
+        throw compensationError;
+      }
       const persistenceMessage =
         persistenceError instanceof Error
           ? persistenceError.message
@@ -235,21 +295,91 @@ export class ContractsService {
           compensationError: compensationMessage,
         },
       );
-      throw new InternalServerErrorException({
+      throw this.manualReconciliationRequired(
+        processId,
+        envelopeId,
+        'Falha ao compensar o envelope externo.',
+        compensationError,
+      );
+    }
+  }
+
+  private isManualReconciliationError(error: unknown): boolean {
+    return (
+      error instanceof InternalServerErrorException &&
+      (error.getResponse() as any)?.error?.code ===
+        'CONTRACT_MANUAL_RECONCILIATION_REQUIRED'
+    );
+  }
+
+  private manualReconciliationRequired(
+    processId: string,
+    envelopeId: string,
+    reason: string,
+    cause: unknown,
+  ): InternalServerErrorException {
+    const correlationId = randomUUID();
+    this.logger.error(
+      'Falha na compensação externa; reconciliação manual necessária',
+      {
+        processId,
+        envelopeId,
+        correlationId,
+        reason,
+        cause:
+          cause instanceof Error
+            ? { name: cause.name, message: cause.message, stack: cause.stack }
+            : cause,
+      },
+    );
+    return new InternalServerErrorException(
+      {
         success: false,
         error: {
           code: 'CONTRACT_MANUAL_RECONCILIATION_REQUIRED',
           message:
-            'Falha ao persistir o contrato e ao cancelar o envelope externo. Reconciliação manual necessária.',
+            'O estado do contrato precisa ser reconciliado antes de uma nova tentativa.',
           details: {
             process_id: processId,
             envelope_id: envelopeId,
-            persistence_error: persistenceMessage,
-            compensation_error: compensationMessage,
+            correlation_id: correlationId,
           },
         },
-      });
-    }
+      },
+      { cause },
+    );
+  }
+
+  private contractOperationFailed(
+    processId: string,
+    envelopeId: string | null,
+    cause: unknown,
+  ): InternalServerErrorException {
+    const correlationId = randomUUID();
+    this.logger.error('Falha interna em operação de contrato', {
+      processId,
+      envelopeId,
+      correlationId,
+      cause:
+        cause instanceof Error
+          ? { name: cause.name, message: cause.message, stack: cause.stack }
+          : cause,
+    });
+    return new InternalServerErrorException(
+      {
+        success: false,
+        error: {
+          code: 'CONTRACT_OPERATION_FAILED',
+          message: 'Não foi possível concluir a operação de contrato.',
+          details: {
+            process_id: processId,
+            ...(envelopeId ? { envelope_id: envelopeId } : {}),
+            correlation_id: correlationId,
+          },
+        },
+      },
+      { cause },
+    );
   }
 
   private queueContractGeneratedNotification(
@@ -792,14 +922,25 @@ export class ContractsService {
     dto: GenerateContractDto,
     userId: string,
   ): Promise<ContractResponse> {
-    let externalEnvelopeId: string | null = null;
+    let externalEffect: ExternalEnvelopeEffect | null = null;
+    let transactionCallbackCompleted = false;
     try {
-      const result = await this.withContractProcessLock(dto.process_id, (tx) =>
-        this.generateContractLocked(dto, userId, tx, (envelopeId) => {
-          externalEnvelopeId = envelopeId;
-        }),
+      const result = await this.withContractProcessLock(
+        dto.process_id,
+        async (tx) => {
+          const contract = await this.generateContractLocked(
+            dto,
+            userId,
+            tx,
+            (envelopeId, state) => {
+              externalEffect = { envelopeId, state };
+            },
+          );
+          transactionCallbackCompleted = true;
+          return contract;
+        },
       );
-      externalEnvelopeId = null;
+      externalEffect = null;
       this.queueContractGeneratedNotification(
         dto,
         result.id,
@@ -807,12 +948,32 @@ export class ContractsService {
       );
       return result;
     } catch (error) {
-      if (externalEnvelopeId) {
+      if (error instanceof EnvelopeEffectError) {
+        externalEffect = {
+          envelopeId: error.envelopeId,
+          state: error.effectState,
+        };
+      }
+      if (externalEffect) {
+        if (
+          transactionCallbackCompleted ||
+          externalEffect.state === 'SEND_INDETERMINATE'
+        ) {
+          throw this.manualReconciliationRequired(
+            dto.process_id,
+            externalEffect.envelopeId,
+            transactionCallbackCompleted
+              ? 'A confirmação do commit falhou depois que a transação concluiu.'
+              : 'O provedor não confirmou se o envelope foi enviado.',
+            error,
+          );
+        }
         await this.compensateExternalEnvelope(
-          externalEnvelopeId,
+          externalEffect.envelopeId,
           dto.process_id,
           'Falha ao persistir a geração do contrato',
           error,
+          externalEffect.state,
         );
       }
       if (
@@ -822,16 +983,7 @@ export class ContractsService {
         typeof error.code === 'string' &&
         error.code.startsWith('P')
       ) {
-        throw new TransactionFailedException(
-          'meta' in error &&
-          typeof error.meta === 'object' &&
-          error.meta !== null &&
-          'cause' in error.meta
-            ? String(error.meta.cause)
-            : error instanceof Error
-              ? error.message
-              : String(error),
-        );
+        throw this.contractOperationFailed(dto.process_id, null, error);
       }
       throw error;
     }
@@ -841,7 +993,10 @@ export class ContractsService {
     dto: GenerateContractDto,
     userId: string,
     tx: Prisma.TransactionClient,
-    registerExternalEnvelope: (envelopeId: string) => void,
+    registerExternalEnvelope: (
+      envelopeId: string,
+      state: EnvelopeEffectState | 'SEND_CONFIRMED',
+    ) => void,
   ): Promise<ContractResponse> {
     try {
       this.logger.log(`=== INICIANDO GERAÇÃO DE CONTRATO ===`);
@@ -989,8 +1144,10 @@ export class ContractsService {
           testimonial1Email: dto.testimonial1_email,
           testimonial2Name: dto.testimonial2_name,
           testimonial2Email: dto.testimonial2_email,
+          onEnvelopeCreated: (envelopeId) =>
+            registerExternalEnvelope(envelopeId, 'DRAFT_CONFIRMED'),
         });
-      registerExternalEnvelope(envelopeResponse.envelopeId);
+      registerExternalEnvelope(envelopeResponse.envelopeId, 'SEND_CONFIRMED');
 
       this.logger.log(
         `✓ Envelope criado (ID: ${envelopeResponse.envelopeId}, Status: ${envelopeResponse.status})`,
@@ -1158,6 +1315,9 @@ export class ContractsService {
       };
     } catch (error) {
       // ===== TRATAMENTO DE ERROS =====
+      if (error instanceof EnvelopeEffectError) {
+        throw error;
+      }
       if (error instanceof HttpException) {
         throw error;
       }
@@ -1186,9 +1346,7 @@ export class ContractsService {
         this.logger.error(
           `Erro de transação Prisma [${error.code}]: ${error.message}`,
         );
-        throw new TransactionFailedException(
-          error.meta?.cause || error.message,
-        );
+        throw this.contractOperationFailed(dto.process_id, null, error);
       }
 
       const errorMessage =
@@ -1197,9 +1355,7 @@ export class ContractsService {
         `Erro inesperado na geração de contrato: ${errorMessage}`,
         error,
       );
-      throw new InternalServerErrorException(
-        `Erro ao gerar contrato: ${errorMessage}`,
-      );
+      throw this.contractOperationFailed(dto.process_id, null, error);
     }
   }
 
@@ -1331,15 +1487,46 @@ export class ContractsService {
     dto: PreviewContractDto,
     userId: string,
   ): Promise<PreviewContractResponseDto> {
-    return this.withContractProcessLock(dto.process_id, (tx) =>
-      this.previewContractLocked(dto, userId, tx),
-    );
+    let externalEffect: ExternalEnvelopeEffect | null = null;
+    try {
+      return await this.withContractProcessLock(dto.process_id, (tx) =>
+        this.previewContractLocked(dto, userId, tx, (envelopeId) => {
+          externalEffect = { envelopeId, state: 'DRAFT_CONFIRMED' };
+        }),
+      );
+    } catch (error) {
+      if (error instanceof EnvelopeEffectError) {
+        externalEffect = {
+          envelopeId: error.envelopeId,
+          state: error.effectState,
+        };
+      }
+      if (externalEffect) {
+        if (externalEffect.state === 'SEND_INDETERMINATE') {
+          throw this.manualReconciliationRequired(
+            dto.process_id,
+            externalEffect.envelopeId,
+            'O estado do preview externo é indeterminado.',
+            error,
+          );
+        }
+        await this.compensateExternalEnvelope(
+          externalEffect.envelopeId,
+          dto.process_id,
+          'Falha ao preparar o preview do contrato',
+          error,
+          'DRAFT_CONFIRMED',
+        );
+      }
+      throw error;
+    }
   }
 
   private async previewContractLocked(
     dto: PreviewContractDto,
     userId: string,
     tx: Prisma.TransactionClient,
+    registerExternalEnvelope: (envelopeId: string) => void,
   ): Promise<PreviewContractResponseDto> {
     try {
       this.logger.log(`=== INICIANDO PREVIEW DE CONTRATO ===`);
@@ -1493,6 +1680,7 @@ export class ContractsService {
         testimonial1Email: dto.testimonial1_email,
         testimonial2Name: dto.testimonial2_name,
         testimonial2Email: dto.testimonial2_email,
+        onEnvelopeCreated: registerExternalEnvelope,
       });
 
       this.logger.log(
@@ -1507,6 +1695,9 @@ export class ContractsService {
         process_id: dto.process_id,
       };
     } catch (error) {
+      if (error instanceof EnvelopeEffectError) {
+        throw error;
+      }
       if (error instanceof HttpException) {
         throw error;
       }
@@ -1530,9 +1721,7 @@ export class ContractsService {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(`Erro inesperado no preview: ${errorMessage}`, error);
-      throw new InternalServerErrorException(
-        `Erro ao criar preview: ${errorMessage}`,
-      );
+      throw this.contractOperationFailed(dto.process_id, null, error);
     }
   }
 
@@ -1553,14 +1742,26 @@ export class ContractsService {
     dto: PreviewContractDto,
     userId: string,
   ): Promise<SendContractResponseDto> {
-    let sentEnvelopeNeedsCompensation = false;
+    let externalEffect: ExternalEnvelopeEffect | null = null;
+    let transactionCallbackCompleted = false;
     try {
-      const result = await this.withContractProcessLock(dto.process_id, (tx) =>
-        this.sendContractAfterPreviewLocked(envelopeId, dto, userId, tx, () => {
-          sentEnvelopeNeedsCompensation = true;
-        }),
+      const result = await this.withContractProcessLock(
+        dto.process_id,
+        async (tx) => {
+          const contract = await this.sendContractAfterPreviewLocked(
+            envelopeId,
+            dto,
+            userId,
+            tx,
+            (state) => {
+              externalEffect = { envelopeId, state };
+            },
+          );
+          transactionCallbackCompleted = true;
+          return contract;
+        },
       );
-      sentEnvelopeNeedsCompensation = false;
+      externalEffect = null;
       this.queueContractGeneratedNotification(
         dto,
         result.id,
@@ -1568,12 +1769,32 @@ export class ContractsService {
       );
       return result;
     } catch (error) {
-      if (sentEnvelopeNeedsCompensation) {
+      if (error instanceof EnvelopeEffectError) {
+        externalEffect = {
+          envelopeId: error.envelopeId,
+          state: error.effectState,
+        };
+      }
+      if (externalEffect) {
+        if (
+          transactionCallbackCompleted ||
+          externalEffect.state === 'SEND_INDETERMINATE'
+        ) {
+          throw this.manualReconciliationRequired(
+            dto.process_id,
+            externalEffect.envelopeId,
+            transactionCallbackCompleted
+              ? 'A confirmação do commit falhou depois que a transação concluiu.'
+              : 'O provedor não confirmou se o envelope foi enviado.',
+            error,
+          );
+        }
         await this.compensateExternalEnvelope(
-          envelopeId,
+          externalEffect.envelopeId,
           dto.process_id,
           'Falha ao persistir o envio do contrato',
           error,
+          externalEffect.state,
         );
       }
       throw error;
@@ -1585,7 +1806,9 @@ export class ContractsService {
     dto: PreviewContractDto,
     userId: string,
     tx: Prisma.TransactionClient,
-    registerSentEnvelope: () => void,
+    registerEnvelopeEffect: (
+      state: EnvelopeEffectState | 'SEND_CONFIRMED',
+    ) => void,
   ): Promise<SendContractResponseDto> {
     try {
       this.logger.log(`=== ENVIANDO CONTRATO APÓS PREVIEW ===`);
@@ -1600,16 +1823,47 @@ export class ContractsService {
         userId,
         tx,
       );
-
-      this.assertProcessCanPrepareContract(
-        dto.process_id,
-        processRecord.status,
-      );
-
       await this.assertEnvelopeBelongsToProcess(envelopeId, dto.process_id);
 
-      if (!processRecord) {
-        throw new ProcessNotFoundException(dto.process_id);
+      let previewEnvelope: Awaited<
+        ReturnType<DocuSignService['getEnvelopeStatus']>
+      >;
+      try {
+        previewEnvelope =
+          await this.docuSignService.getEnvelopeStatus(envelopeId);
+      } catch (statusError) {
+        throw this.manualReconciliationRequired(
+          dto.process_id,
+          envelopeId,
+          'Não foi possível verificar o estado do envelope antes do envio.',
+          statusError,
+        );
+      }
+
+      const isSentOrBeyond = [
+        EnvelopeStatus.SENT,
+        EnvelopeStatus.DELIVERED,
+        EnvelopeStatus.COMPLETED,
+      ].includes(previewEnvelope.status);
+
+      if (!CONTRACT_PREPARATION_STATUSES.includes(processRecord.status)) {
+        if (previewEnvelope.status === EnvelopeStatus.CREATED) {
+          await this.docuSignService.voidDraftEnvelope(
+            envelopeId,
+            'Preview obsoleto de processo encerrado',
+          );
+        } else if (isSentOrBeyond) {
+          throw this.manualReconciliationRequired(
+            dto.process_id,
+            envelopeId,
+            'Um envelope enviado pertence a um processo em estado terminal.',
+            new Error(`process_status=${processRecord.status}`),
+          );
+        }
+        this.assertProcessCanPrepareContract(
+          dto.process_id,
+          processRecord.status,
+        );
       }
 
       // Revalidar que não existe contrato ativo (pode ter sido criado enquanto preview)
@@ -1629,16 +1883,17 @@ export class ContractsService {
             activeContract.provider_status || '',
           )
         ) {
-          const previewEnvelope =
-            await this.docuSignService.getEnvelopeStatus(envelopeId);
           if (previewEnvelope.status === EnvelopeStatus.CREATED) {
             await this.docuSignService.voidDraftEnvelope(
               envelopeId,
               'Contrato criado por outro processo',
             );
-          } else {
-            this.logger.warn(
-              `Envelope concorrente ${envelopeId} não está em rascunho (${previewEnvelope.status}); cancelamento automático ignorado`,
+          } else if (isSentOrBeyond) {
+            throw this.manualReconciliationRequired(
+              dto.process_id,
+              envelopeId,
+              'Um envelope concorrente já foi enviado e não pode ser descartado automaticamente.',
+              new Error(`provider_status=${previewEnvelope.status}`),
             );
           }
           throw new ContractAlreadyExistsException(dto.process_id);
@@ -1678,7 +1933,7 @@ export class ContractsService {
 
       const sendResponse =
         await this.docuSignService.sendDraftEnvelope(envelopeId);
-      registerSentEnvelope();
+      registerEnvelopeEffect('SEND_CONFIRMED');
 
       this.logger.log(`✓ Envelope enviado (Status: ${sendResponse.status})`);
 
@@ -1825,6 +2080,9 @@ export class ContractsService {
         created_at: createdContract.created_at.toISOString(),
       };
     } catch (error) {
+      if (error instanceof EnvelopeEffectError) {
+        throw error;
+      }
       if (error instanceof HttpException) {
         throw error;
       }
@@ -1841,9 +2099,7 @@ export class ContractsService {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(`Erro ao enviar contrato: ${errorMessage}`, error);
-      throw new InternalServerErrorException(
-        `Erro ao enviar contrato: ${errorMessage}`,
-      );
+      throw this.contractOperationFailed(dto.process_id, envelopeId, error);
     }
   }
 
@@ -1892,6 +2148,9 @@ export class ContractsService {
     }
 
     const envelope = await this.docuSignService.getEnvelopeStatus(envelopeId);
+    if (envelope.status === EnvelopeStatus.VOIDED) {
+      return;
+    }
     if (envelope.status !== EnvelopeStatus.CREATED) {
       throw new EnvelopeNotInDraftException(envelopeId, envelope.status);
     }

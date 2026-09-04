@@ -13,6 +13,7 @@ function db(overrides: Record<string, unknown> = {}) {
     is_active: true,
   };
   return {
+    $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
     user: {
       findUnique: jest.fn().mockResolvedValue({
         id: 'specialist-1',
@@ -28,6 +29,24 @@ function db(overrides: Record<string, unknown> = {}) {
 }
 
 describe('validateSpecialistProductAssociation', () => {
+  it('acquires the shared product lock before reading the catalog row', async () => {
+    const client = db();
+
+    await validateSpecialistProductAssociation(client, {
+      specialistId: 'specialist-1',
+      productType: ProductType.CAR,
+      productId: 'product-1',
+    });
+
+    expect(client.$queryRaw).toHaveBeenCalledWith(
+      expect.anything(),
+      'product-money:CAR:product-1',
+    );
+    expect(client.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      client.car.findUnique.mock.invocationCallOrder[0],
+    );
+  });
+
   it('rejects a non-specialist user', async () => {
     const client = db({
       user: {

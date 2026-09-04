@@ -51,6 +51,85 @@ describe('DocuSignService — cancelamento de envelope', () => {
   });
 });
 
+describe('DocuSignService — efeitos externos parciais', () => {
+  const templateParams = {
+    templateId: 'template-1',
+    buyerEmail: 'buyer@example.test',
+    buyerName: 'Buyer',
+    sellerEmail: 'seller@example.test',
+    sellerName: 'Seller',
+    formFields: {},
+    processId: 'process-1',
+  };
+
+  it('registra o draft imediatamente e preserva metadados seguros se o DocGen falhar', async () => {
+    const providerFailure = new Error('raw provider docgen failure');
+    const client = {
+      createEnvelopeFromTemplate: jest.fn().mockResolvedValue({
+        envelopeId: 'envelope-partial',
+        status: 'created',
+      }),
+      getEnvelopeDocGenFormFields: jest.fn().mockRejectedValue(providerFailure),
+    } as any;
+    const service = new DocuSignService(client);
+    const onEnvelopeCreated = jest.fn();
+
+    await expect(
+      service.createEnvelopeFromTemplate({
+        ...templateParams,
+        onEnvelopeCreated,
+      }),
+    ).rejects.toMatchObject({
+      envelopeId: 'envelope-partial',
+      effectState: 'DRAFT_CONFIRMED',
+      cause: providerFailure,
+    });
+    expect(onEnvelopeCreated).toHaveBeenCalledWith('envelope-partial');
+  });
+
+  it('usa uma chave idempotente por operação ao criar o envelope', async () => {
+    const client = {
+      createEnvelopeFromTemplate: jest.fn().mockResolvedValue({
+        envelopeId: 'envelope-1',
+        status: 'created',
+      }),
+      getEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({
+        docGenFormFields: [],
+      }),
+      updateEnvelopeDocGenFormFields: jest.fn().mockResolvedValue(undefined),
+      updateEnvelopeStatus: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const service = new DocuSignService(client);
+
+    await service.createEnvelopeFromTemplate(templateParams);
+
+    expect(client.createEnvelopeFromTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: expect.any(String) }),
+    );
+  });
+
+  it('classifica envio como indeterminado quando a confirmação de status também falha', async () => {
+    const sendFailure = new Error('raw provider send failure');
+    const statusFailure = new Error('raw provider status failure');
+    const client = {
+      getEnvelope: jest
+        .fn()
+        .mockResolvedValueOnce({ status: 'created' })
+        .mockRejectedValueOnce(statusFailure),
+      updateEnvelopeStatus: jest.fn().mockRejectedValue(sendFailure),
+    } as any;
+    const service = new DocuSignService(client);
+
+    await expect(service.sendDraftEnvelope('envelope-1')).rejects.toMatchObject(
+      {
+        envelopeId: 'envelope-1',
+        effectState: 'SEND_INDETERMINATE',
+        cause: sendFailure,
+      },
+    );
+  });
+});
+
 describe('DocuSignService — mapFormFieldsToDocGen é removal-safe', () => {
   const service = new DocuSignService({} as any);
 
