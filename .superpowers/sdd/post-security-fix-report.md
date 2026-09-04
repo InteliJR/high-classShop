@@ -625,3 +625,104 @@ redacted error types, matching the explicit PII requirement.
 2. Transaction-id recovery depends on DocuSign's transaction-id lookup
    availability. An unavailable or ambiguous lookup deliberately returns the
    stable manual-reconciliation response instead of risking a duplicate POST.
+
+---
+
+# Third-review follow-up — fourth closed integrity wave (2026-09-04)
+
+Baseline: `e38d84136d70f5bfa24e5fc1ada1c8897b70eabd`.
+Implementation: `d0ca24a`.
+
+This round addresses every one of the seven Important and three Minor findings
+in `.superpowers/sdd/third-fix-review-findings.md`. No template, historical
+migration/OFFICE drift, responsive table, or historical Decimal behavior was
+changed.
+
+## Finding matrix
+
+| Finding | Resolution | Regression evidence |
+| --- | --- | --- |
+| I1 — create POST retried before recovery | Template-envelope creation uses a single HTTP POST attempt; the service owns lookup-before-create and post-failure recovery. | `docusign.client.spec.ts`: real Axios boundary asserts one POST on timeout. |
+| I2 — recovered envelope not bound to intent | Every create writes `processId` and a canonical SHA-256 fingerprint covering operation, template, signing roles and immutable form payload. Recovery fails closed on missing/mismatched fields or VOIDED/DECLINED state. | `docusign.service.spec.ts`: foreign process, changed payload, terminal recovery and valid reuse. |
+| I3 — operation key lifecycle | The frontend stores the UUID in `sessionStorage` under a process-scoped key, restores it after remount/reload, retains it on unknown outcomes and clears it only after confirmed send/discard or confirmed compensation. Successful compensation returns `CONTRACT_PREVIEW_COMPENSATED`, which explicitly rotates the next attempt. | `contract-operation-id.test.ts`, `CreateContractPage.test.tsx`, `contracts.service.spec.ts`. |
+| I4 — non-monotonic provider/local convergence | Successful send PUT is followed by a provider read and the actual status is returned. Webhooks return retryable 503 before local insertion, reject delayed/terminal downgrades, claim transitions with CAS, and emit history/notifications only for the winner. COMPLETED and REJECTED history statuses are explicit. | `docusign.service.spec.ts`, `webhook.service.spec.ts`: pre-insert, delayed, duplicate and concurrent delivery. |
+| I5 — direct appointment without datetime | The fallback `Date` is generated once before the transaction; that exact value is checked under the schedule lock and persisted. | Appointment unit test plus PostgreSQL concurrent no-datetime test. |
+| I6 — `assignProduct` changes dedup identity | After the globally ordered product-money lock, assignment acquires the target product dedup lock and rechecks active processes excluding itself before mutation. | Process unit assertions plus PostgreSQL assignment-vs-create race. |
+| I7 — legacy `GenerateContractData` missing operation id | `operation_id` is required on the shared public generation type and is built by the page before either generate or preview dispatch. | Frontend TypeScript production build and lifecycle tests. |
+| M1 — lost send response closed context | A send error without an HTTP response retains the real preview modal, envelope and operation context. | `CreateContractPage.test.tsx`: network/no-response send. |
+| M2 — definitive 4xx became manual reconciliation | Empty transaction lookup after a definitive non-408/non-429 4xx preserves the normal provider failure path; only unknown-effect failures become ambiguous. | `docusign.service.spec.ts`: definitive 400 is not `EnvelopeCreationAmbiguousError`. |
+| M3 — already-SCHEDULED Calendly conflict untested | Added coverage proving schedule lookup includes an existing SCHEDULED appointment and prevents the update. | `appointments.service.spec.ts`. |
+
+Cross-process recovery plus the existing process-scoped contract lock prevents
+one provider envelope from being inserted into two local processes: a recovered
+envelope must carry the exact current process id and immutable fingerprint,
+while same-process duplicates remain serialized by the existing active-contract
+claim. No risky historical uniqueness migration was added.
+
+## RED evidence
+
+All commands used `rtk`; Jest ran in-band and Vitest used at most two workers.
+External provider behavior was mocked except for the intentional Axios client
+boundary, which was also mocked and made no network request.
+
+- DocuSign client/service focused RED: 4 failed, 16 passed. It reproduced three
+  HTTP POST attempts, accepted foreign/stale recovery and classified a
+  definitive 400 as ambiguous.
+- Appointment/process focused RED: 5 failed, 49 passed. Four production
+  assertions reproduced the unchecked generated datetime and missing target
+  dedup lock for CAR/BOAT/AIRCRAFT. The fifth was a characterization matcher
+  adjustment: the already-SCHEDULED Calendly conflict was already thrown as a
+  structured `ConflictException`, so the test was corrected to assert the
+  exception type rather than Nest's generic message.
+- The review itself supplied the reproducible failing scenarios for webhook
+  convergence and browser lifecycle. Focused characterization tests were added
+  before final verification; the original pre-change terminal/pre-insert and
+  remount outputs are not recoverable as standalone test logs after the machine
+  restart, so this report does not fabricate counts for them.
+
+## Final GREEN evidence
+
+- Backend focused matrix:
+  `rtk npm test -- --runInBand src/features/contracts/contracts.service.spec.ts src/providers/docusign/docusign.service.spec.ts src/providers/docusign/docusign.client.spec.ts src/providers/docusign/webhook/webhook.service.spec.ts src/features/appointments/appointments.service.spec.ts src/features/processes/processes.service.spec.ts`
+  — 6 suites, 118/118 passed (the subsequent terminal-envelope focused run
+  passed 19/19 after adding VOIDED/DECLINED coverage).
+- PostgreSQL matrix using
+  `POSTGRES_CONCURRENCY_TEST_URL='postgresql://user:password@127.0.0.1:5432/highclass_task8?schema=public'`:
+  appointment schedule plus product association concurrency — 2 suites, 7/7
+  passed.
+- Frontend lifecycle matrix:
+  `rtk npm test -- src/lib/contract-operation-id.test.ts src/pages/specialist/CreateContractPage.test.tsx --maxWorkers=2`
+  — 2 suites, 8/8 passed.
+- `backend: rtk npm run build` — passed.
+- `frontend: rtk npm run build` — passed; only the pre-existing Vite chunk-size
+  warning remains.
+- Focused ESLint invocation completed without findings.
+- `rtk git diff --check` — clean before the implementation commit.
+
+## Self-review
+
+- Re-read the complete diff from `e38d841`, including recovery error branches,
+  provider status ordering, webhook CAS losers, explicit history writes, lock
+  acquisition order, storage clearing sites and all public contract payloads.
+- Confirmed recovery never mutates a foreign, payload-mismatched, VOIDED or
+  DECLINED envelope and a definitive 4xx never enters manual reconciliation.
+- Confirmed duplicate/delayed webhook deliveries return before process history
+  and notification work; a concurrent terminal pair has a single CAS winner.
+- Confirmed both new database races exercised the local PostgreSQL instance and
+  left one valid winner, with all external notifications/providers mocked.
+- Confirmed all heavy commands were sequential, no runner exceeded two workers,
+  and `PROJECT-OVERVIEW.md` remained an untracked user file that was never
+  edited or staged.
+
+## Remaining concerns
+
+1. The frontend production build retains the pre-existing JavaScript chunk-size
+   warning; it does not fail the build.
+2. Pre-insert DocuSign webhooks now deliberately return HTTP 503 and rely on the
+   provider's configured retry policy. This avoids silent loss without adding a
+   new persistence migration, but operations should monitor repeated
+   `CONTRACT_WEBHOOK_NOT_READY` responses.
+3. No database uniqueness migration for nullable historical `provider_id` was
+   added. Cross-process reuse is prevented at the provider recovery boundary;
+   adding a partial unique index later would first require auditing existing
+   production duplicates.
