@@ -15,7 +15,6 @@ import {
   EnvelopeCreationAmbiguousError,
   EnvelopeEffectError,
 } from './envelope-effect.error';
-import { createHash } from 'node:crypto';
 
 /**
  * Serviço de integração com DocuSign
@@ -40,7 +39,7 @@ export class DocuSignService {
 
   private async createOrRecoverTemplateEnvelope(
     dto: CreateTemplateEnvelopeDto,
-    immutablePayload: Record<string, unknown>,
+    requestFingerprint: string,
     onEnvelopeCreated?: (envelopeId: string) => void,
   ): Promise<CreateEnvelopeResponseDto> {
     const transactionId = dto.transactionId;
@@ -50,13 +49,11 @@ export class DocuSignService {
       );
     }
     const processId = this.getCustomFieldValue(dto, 'processId');
-    const requestFingerprint = this.fingerprintEnvelopeRequest({
-      transactionId,
-      templateId: dto.templateId,
-      templateRoles: dto.templateRoles,
-      processId,
-      immutablePayload,
-    });
+    if (!requestFingerprint?.trim()) {
+      throw new EnvelopeCreationFailedException(
+        'Fingerprint da intenção contratual é obrigatório',
+      );
+    }
     dto.customFields ??= {};
     dto.customFields.textCustomFields ??= [];
     dto.customFields.textCustomFields = [
@@ -100,6 +97,7 @@ export class DocuSignService {
         envelope,
         'requestFingerprint',
       );
+      const authoritativeStatus = envelope?.status ?? recovered.status;
       if (
         !processId ||
         recoveredProcessId !== processId ||
@@ -114,14 +112,14 @@ export class DocuSignService {
         [
           EnvelopeStatus.DECLINED,
           EnvelopeStatus.VOIDED,
-        ].includes(recovered.status as EnvelopeStatus)
+        ].includes(authoritativeStatus as EnvelopeStatus)
       ) {
         throw new EnvelopeCreationAmbiguousError(
           transactionId,
-          new Error(`Recovered envelope is not reusable: ${recovered.status}`),
+          new Error(`Recovered envelope is not reusable: ${authoritativeStatus}`),
         );
       }
-      return recovered;
+      return { ...recovered, status: authoritativeStatus };
     };
 
     let existing: CreateEnvelopeResponseDto | null;
@@ -172,24 +170,6 @@ export class DocuSignService {
     return typeof field?.value === 'string' ? field.value : null;
   }
 
-  private fingerprintEnvelopeRequest(payload: unknown): string {
-    const normalize = (value: any): any => {
-      if (Array.isArray(value)) return value.map(normalize);
-      if (value && typeof value === 'object') {
-        return Object.keys(value)
-          .sort()
-          .reduce<Record<string, unknown>>((result, key) => {
-            result[key] = normalize(value[key]);
-            return result;
-          }, {});
-      }
-      return value;
-    };
-    return createHash('sha256')
-      .update(JSON.stringify(normalize(payload)))
-      .digest('hex');
-  }
-
   private isDefinitiveCreateFailure(error: unknown): boolean {
     const status = (error as any)?.response?.status;
     return (
@@ -198,6 +178,40 @@ export class DocuSignService {
       status < 500 &&
       status !== 408 &&
       status !== 429
+    );
+  }
+
+  private async statusAfterSuccessfulSend(
+    envelopeId: string,
+  ): Promise<EnvelopeStatus> {
+    let envelope: CreateEnvelopeResponseDto;
+    try {
+      envelope = await this.client.getEnvelope(envelopeId);
+    } catch (error) {
+      throw new EnvelopeEffectError(
+        envelopeId,
+        'SEND_INDETERMINATE',
+        error,
+      );
+    }
+    const status = envelope?.status as EnvelopeStatus | undefined;
+    if (!status || status === EnvelopeStatus.CREATED) {
+      return EnvelopeStatus.SENT;
+    }
+    if (
+      [
+        EnvelopeStatus.SENT,
+        EnvelopeStatus.DELIVERED,
+        EnvelopeStatus.COMPLETED,
+      ].includes(status)
+    ) {
+      return status;
+    }
+    throw new EnvelopeEffectError(
+      envelopeId,
+      'SEND_INDETERMINATE',
+      null,
+      status,
     );
   }
 
@@ -469,6 +483,7 @@ export class DocuSignService {
     specialistName?: string;
     formFields: Record<string, string>;
     processId: string;
+    requestFingerprint: string;
     testimonial1Name?: string;
     testimonial1Email?: string;
     testimonial2Name?: string;
@@ -486,6 +501,7 @@ export class DocuSignService {
       specialistName,
       formFields,
       processId,
+      requestFingerprint,
       testimonial1Name,
       testimonial1Email,
       testimonial2Name,
@@ -572,7 +588,7 @@ export class DocuSignService {
 
       const draftResponse = await this.createOrRecoverTemplateEnvelope(
         createEnvelopeDto,
-        formFields,
+        requestFingerprint,
         onEnvelopeCreated,
       );
       const envelopeId = draftResponse.envelopeId;
@@ -615,15 +631,14 @@ export class DocuSignService {
 
       sendAttempted = true;
       await this.client.updateEnvelopeStatus(envelopeId, 'sent');
-
-      const sentEnvelope = await this.client.getEnvelope(envelopeId);
+      const sentStatus = await this.statusAfterSuccessfulSend(envelopeId);
 
       this.logger.log(`✓ Envelope enviado com sucesso!`);
       this.logger.log(`=== FLUXO DOCGEN CONCLUÍDO ===`);
 
       return {
         envelopeId,
-        status: sentEnvelope.status,
+        status: sentStatus,
       };
     } catch (error) {
       // Tratamento de erros com categorização
@@ -734,6 +749,7 @@ export class DocuSignService {
     specialistName?: string;
     formFields: Record<string, string>;
     processId: string;
+    requestFingerprint: string;
     returnUrl: string;
     testimonial1Name?: string;
     testimonial1Email?: string;
@@ -756,6 +772,7 @@ export class DocuSignService {
       specialistName,
       formFields,
       processId,
+      requestFingerprint,
       returnUrl,
       testimonial1Name,
       testimonial1Email,
@@ -840,7 +857,7 @@ export class DocuSignService {
 
       const draftResponse = await this.createOrRecoverTemplateEnvelope(
         createEnvelopeDto,
-        formFields,
+        requestFingerprint,
         onEnvelopeCreated,
       );
       const envelopeId = draftResponse.envelopeId;
@@ -983,8 +1000,7 @@ export class DocuSignService {
 
       sendAttempted = true;
       await this.client.updateEnvelopeStatus(envelopeId, 'sent');
-      const envelopeAfterSend = await this.client.getEnvelope(envelopeId);
-      const statusAfterSend = envelopeAfterSend?.status as EnvelopeStatus;
+      const statusAfterSend = await this.statusAfterSuccessfulSend(envelopeId);
 
       this.logger.log(`✓ Envelope ${envelopeId} enviado com sucesso`);
 
@@ -993,6 +1009,7 @@ export class DocuSignService {
         status: statusAfterSend,
       };
     } catch (error) {
+      if (error instanceof EnvelopeEffectError) throw error;
       if (!sendAttempted) {
         if (
           error instanceof ProviderUnavailableException ||

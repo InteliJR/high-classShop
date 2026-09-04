@@ -180,7 +180,10 @@ export class DocuSignWebhookService {
    * Saída:
    * Contrato atualizado com status SIGNED
    */
-  async handleEnvelopeStatusChanged(payload: any): Promise<void> {
+  async handleEnvelopeStatusChanged(
+    payload: any,
+    casAttempt = 0,
+  ): Promise<void> {
     try {
       // ===== ETAPA 1: VALIDAR PAYLOAD =====
 
@@ -439,13 +442,49 @@ export class DocuSignWebhookService {
 
       if (!updated) {
         this.logger.debug(
-          'Webhook perdeu o claim concorrente; sem novos efeitos',
+          'Webhook perdeu o claim concorrente; relendo estado autoritativo',
           {
             envelopeId,
             providerStatus,
+            casAttempt,
           },
         );
-        return;
+        const latestContract = await this.prismaService.contract.findFirst({
+          where: { provider_id: envelopeId },
+        });
+        if (!latestContract) {
+          throw new ServiceUnavailableException({
+            success: false,
+            error: {
+              code: 'CONTRACT_WEBHOOK_NOT_READY',
+              message:
+                'Contrato ainda não está disponível para este envelope.',
+            },
+          });
+        }
+        const latestStatus = latestContract.provider_status as
+          | ProviderStatus
+          | null;
+        if (
+          latestStatus === nextProviderStatus ||
+          (latestStatus &&
+            (TERMINAL_PROVIDER_STATUSES.has(latestStatus) ||
+              PROVIDER_STATUS_RANK[latestStatus] >=
+                PROVIDER_STATUS_RANK[nextProviderStatus]))
+        ) {
+          return;
+        }
+        if (casAttempt >= 2) {
+          throw new ServiceUnavailableException({
+            success: false,
+            error: {
+              code: 'CONTRACT_WEBHOOK_CONTENTION',
+              message:
+                'O contrato mudou concorrentemente; o webhook deve ser repetido.',
+            },
+          });
+        }
+        return this.handleEnvelopeStatusChanged(payload, casAttempt + 1);
       }
 
       // ===== ETAPA 8: ENVIAR NOTIFICAÇÕES (Fire-and-forget) =====

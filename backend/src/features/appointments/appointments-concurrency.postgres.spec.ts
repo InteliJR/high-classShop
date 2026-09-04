@@ -230,13 +230,34 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
   }, 15_000);
 
   it('allows only one concurrent direct appointment when both omit datetime', async () => {
+    const lockKey = `appointment-schedule:${specialistId}`;
+    const holderReady = deferred();
+    const releaseHolder = deferred();
+    const firstAttempted = deferred();
+    const secondAttempted = deferred();
+    const held = holder.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
+      `;
+      holderReady.resolve();
+      await releaseHolder.promise;
+    });
+    await holderReady.promise;
     const notification = {
       sendAppointmentCreatedEmail: jest.fn().mockResolvedValue(undefined),
     } as any;
-    const serviceA = new AppointmentsService(first as any, notification, {} as any);
-    const serviceB = new AppointmentsService(second as any, notification, {} as any);
+    const serviceA = new AppointmentsService(
+      signalScheduleLockAttempt(first, firstAttempted) as any,
+      notification,
+      {} as any,
+    );
+    const serviceB = new AppointmentsService(
+      signalScheduleLockAttempt(second, secondAttempted) as any,
+      notification,
+      {} as any,
+    );
 
-    const outcomes = await Promise.allSettled([
+    const outcomesPromise = Promise.allSettled([
       serviceA.create(
         {
           client_id: firstClientId,
@@ -256,7 +277,17 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
         secondClientId,
       ),
     ]);
+    const bothAttemptedBeforeCompletion = await Promise.race([
+      Promise.all([firstAttempted.promise, secondAttempted.promise]).then(
+        () => true,
+      ),
+      outcomesPromise.then(() => false),
+    ]);
+    releaseHolder.resolve();
+    await held;
+    const outcomes = await outcomesPromise;
 
+    expect(bothAttemptedBeforeCompletion).toBe(true);
     expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
     expect(outcomes.find(({ status }) => status === 'rejected')).toMatchObject({
       reason: expect.any(ConflictException),

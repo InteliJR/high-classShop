@@ -730,13 +730,14 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
     const txProductFindUnique = jest.fn().mockResolvedValue(usdProduct);
     const rootProductFindUnique = jest.fn();
     const txLock = jest.fn().mockResolvedValue([{ locked: null }]);
+    const processFindFirst = jest.fn().mockResolvedValue(null);
     const tx = {
       $queryRaw: txLock,
       process: {
         update: processUpdate,
         updateMany: processUpdateMany,
         findUniqueOrThrow: processFindUniqueOrThrow,
-        findFirst: jest.fn().mockResolvedValue(null),
+        findFirst: processFindFirst,
       },
       processStatusHistory: { create: historyCreate },
       appointment: {
@@ -776,6 +777,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       txProductFindUnique,
       rootProductFindUnique,
       txLock,
+      processFindFirst,
     };
   }
 
@@ -918,5 +920,29 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
     expect(processUpdateMany.mock.invocationCallOrder[0]).toBeLessThan(
       historyCreate.mock.invocationCallOrder[0],
     );
+  });
+
+  it('rejeita associação sequencial quando a identidade alvo já tem processo ativo', async () => {
+    const {
+      service,
+      processFindFirst,
+      processUpdate,
+      processUpdateMany,
+      historyCreate,
+    } = makeAssignProductService();
+    processFindFirst.mockResolvedValue({ id: 'duplicate-process' });
+
+    await expect(
+      service.assignProduct(
+        'process-1',
+        { product_type: ProductType.CAR, product_id: 'product-1' },
+        'specialist-1',
+        UserRole.SPECIALIST,
+      ),
+    ).rejects.toThrow(ConflictException);
+
+    expect(processUpdate).not.toHaveBeenCalled();
+    expect(processUpdateMany).not.toHaveBeenCalled();
+    expect(historyCreate).not.toHaveBeenCalled();
   });
 });

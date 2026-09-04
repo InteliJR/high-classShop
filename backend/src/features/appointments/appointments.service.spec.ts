@@ -787,7 +787,7 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       id: 'appointment-1',
       client_id: 'client-1',
       specialist_id: 'specialist-1',
-      status: StatusAgendamento.PENDING,
+      status: StatusAgendamento.SCHEDULED,
       appointment_datetime: null,
     };
     const tx = {

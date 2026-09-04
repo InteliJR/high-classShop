@@ -1077,6 +1077,182 @@ describe('ContractsService — provider operation id', () => {
     }
   });
 
+  it('derives the recovery fingerprint from description and authoritative commission split', async () => {
+    const process = processFixture();
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: { findUnique: jest.fn().mockResolvedValue(process) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'specialist-1',
+          role: 'SPECIALIST',
+        }),
+      },
+      contract: { findUnique: jest.fn() },
+      company: { findUnique: jest.fn() },
+    };
+    const docusign = {
+      createEnvelopePreview: jest.fn().mockResolvedValue({
+        envelopeId: 'envelope-1',
+        previewUrl: 'https://demo.docusign.net/preview',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      }),
+    } as any;
+    const service = new ContractsService(
+      mkPrisma({
+        $transaction: jest.fn(async (callback: any) => callback(tx)),
+      }),
+      docusign,
+      {} as any,
+      mkPlatformCompanyService(10),
+    );
+    const baseCommission = {
+      platformValue: 1000,
+      platformRate: 1,
+      officeValue: 0,
+      officeRate: 0,
+      specialistValue: 9000,
+      specialistRate: 9,
+    };
+    jest
+      .spyOn(service as any, 'resolveCommissionFromTotal')
+      .mockResolvedValueOnce(baseCommission)
+      .mockResolvedValueOnce(baseCommission)
+      .mockResolvedValueOnce({
+        ...baseCommission,
+        platformValue: 1100,
+        platformRate: 1.1,
+        specialistValue: 9900,
+        specialistRate: 9.9,
+      });
+    const dto = {
+      operation_id: '11111111-1111-4111-8111-111111111111',
+      process_id: 'process-1',
+      template_id: 'template-1',
+      seller_name: 'Seller',
+      seller_email: 'seller@example.test',
+      buyer_name: 'Buyer',
+      buyer_email: 'buyer@example.test',
+      total_commission_rate: 10,
+      city: 'Sao Paulo',
+      description: 'Intent A',
+      return_url: 'https://app.example.test/return',
+    } as any;
+
+    await service.previewContract(dto, 'specialist-1');
+    await service.previewContract(
+      { ...dto, description: 'Intent B' },
+      'specialist-1',
+    );
+    await service.previewContract(
+      { ...dto, description: 'Intent B', total_commission_rate: 11 },
+      'specialist-1',
+    );
+
+    const fingerprints = docusign.createEnvelopePreview.mock.calls.map(
+      ([params]: [any]) => params.requestFingerprint,
+    );
+    expect(fingerprints).toEqual([
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+    ]);
+    expect(fingerprints[0]).not.toBe(fingerprints[1]);
+    expect(fingerprints[1]).not.toBe(fingerprints[2]);
+  });
+
+  it('fails closed in real application/provider composition when only commission changes', async () => {
+    const process = processFixture();
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: { findUnique: jest.fn().mockResolvedValue(process) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'specialist-1',
+          role: 'SPECIALIST',
+        }),
+      },
+      contract: { findUnique: jest.fn() },
+      company: { findUnique: jest.fn() },
+    };
+    let createdRequest: any = null;
+    const providerClient = {
+      findEnvelopesByTransactionId: jest.fn().mockImplementation(async () =>
+        createdRequest
+          ? [{ envelopeId: 'envelope-1', status: EnvelopeStatus.CREATED }]
+          : [],
+      ),
+      createEnvelopeFromTemplate: jest.fn().mockImplementation(async (dto) => {
+        createdRequest = dto;
+        return { envelopeId: 'envelope-1', status: EnvelopeStatus.CREATED };
+      }),
+      getEnvelopeWithCustomFields: jest.fn().mockImplementation(async () => ({
+        envelopeId: 'envelope-1',
+        status: EnvelopeStatus.CREATED,
+        customFields: createdRequest.customFields,
+      })),
+      getEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({
+        docGenFormFields: [],
+      }),
+      updateEnvelopeDocGenFormFields: jest.fn().mockResolvedValue(undefined),
+      createSenderView: jest.fn().mockResolvedValue({
+        url: 'https://demo.docusign.net/preview',
+      }),
+    } as any;
+    const service = new ContractsService(
+      mkPrisma({
+        $transaction: jest.fn(async (callback: any) => callback(tx)),
+      }),
+      new DocuSignService(providerClient),
+      {} as any,
+      mkPlatformCompanyService(10),
+    );
+    const baseCommission = {
+      platformValue: 1000,
+      platformRate: 1,
+      officeValue: 0,
+      officeRate: 0,
+      specialistValue: 9000,
+      specialistRate: 9,
+    };
+    jest
+      .spyOn(service as any, 'resolveCommissionFromTotal')
+      .mockResolvedValueOnce(baseCommission)
+      .mockResolvedValueOnce({
+        ...baseCommission,
+        platformValue: 1100,
+        platformRate: 1.1,
+        specialistValue: 9900,
+        specialistRate: 9.9,
+      });
+    const dto = {
+      operation_id: '11111111-1111-4111-8111-111111111111',
+      process_id: 'process-1',
+      template_id: 'template-1',
+      seller_name: 'Seller',
+      seller_email: 'seller@example.test',
+      buyer_name: 'Buyer',
+      buyer_email: 'buyer@example.test',
+      total_commission_rate: 10,
+      city: 'Sao Paulo',
+      description: 'Same legal description',
+      return_url: 'https://app.example.test/return',
+    } as any;
+
+    await service.previewContract(dto, 'specialist-1');
+    await expect(
+      service.previewContract(
+        { ...dto, total_commission_rate: 11 },
+        'specialist-1',
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        error: { code: 'CONTRACT_MANUAL_RECONCILIATION_REQUIRED' },
+      },
+    });
+    expect(providerClient.createEnvelopeFromTemplate).toHaveBeenCalledTimes(1);
+  });
+
   it('returns a stable compensated code so the caller can rotate the operation id', async () => {
     const service = mkSvc(mkPrisma(), mkPlatformCompanyService(10));
     jest

@@ -47,7 +47,7 @@ import {
   EnvelopeEffectError,
   EnvelopeEffectState,
 } from 'src/providers/docusign/envelope-effect.error';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 const CONTRACT_PREPARATION_STATUSES: ProcessStatus[] = [
   ProcessStatus.PROCESSING_CONTRACT,
@@ -130,6 +130,36 @@ export class ContractsService {
     private readonly notificationService: NotificationService,
     private readonly platformCompanyService: PlatformCompanyService,
   ) {}
+
+  private contractIntentionFingerprint(input: {
+    processId: string;
+    templateId: string;
+    contract: Record<string, unknown>;
+    commission: Record<string, number>;
+    formFields: Record<string, string>;
+  }): string {
+    const normalize = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(normalize);
+      if (value && typeof value === 'object') {
+        return Object.keys(value as Record<string, unknown>)
+          .sort()
+          .reduce<Record<string, unknown>>((result, key) => {
+            const nested = (value as Record<string, unknown>)[key];
+            if (nested !== undefined) result[key] = normalize(nested);
+            return result;
+          }, {});
+      }
+      return value;
+    };
+    const contract = Object.fromEntries(
+      Object.entries(input.contract).filter(
+        ([key]) => !['operation_id', 'return_url'].includes(key),
+      ),
+    );
+    return createHash('sha256')
+      .update(JSON.stringify(normalize({ ...input, contract })))
+      .digest('hex');
+  }
 
   private async getAuthorizedContractProcess(
     processId: string,
@@ -1155,6 +1185,14 @@ export class ContractsService {
         );
       }
 
+      const requestFingerprint = this.contractIntentionFingerprint({
+        processId: dto.process_id,
+        templateId,
+        contract: dtoWithCommission as unknown as Record<string, unknown>,
+        commission,
+        formFields,
+      });
+
       const envelopeResponse =
         await this.docuSignService.createEnvelopeFromTemplate({
           transactionId: dto.operation_id,
@@ -1167,6 +1205,7 @@ export class ContractsService {
           specialistName: dto.specialist_name,
           formFields,
           processId: dto.process_id,
+          requestFingerprint,
           testimonial1Name: dto.testimonial1_name,
           testimonial1Email: dto.testimonial1_email,
           testimonial2Name: dto.testimonial2_name,
@@ -1724,6 +1763,17 @@ export class ContractsService {
         );
       }
 
+      const requestFingerprint = this.contractIntentionFingerprint({
+        processId: dto.process_id,
+        templateId,
+        contract: {
+          ...(dto as unknown as Record<string, unknown>),
+          ...(generateDto as unknown as Record<string, unknown>),
+        },
+        commission,
+        formFields,
+      });
+
       const previewResponse = await this.docuSignService.createEnvelopePreview({
         transactionId: dto.operation_id,
         templateId,
@@ -1735,6 +1785,7 @@ export class ContractsService {
         specialistName: dto.specialist_name,
         formFields,
         processId: dto.process_id,
+        requestFingerprint,
         returnUrl: dto.return_url,
         testimonial1Name: dto.testimonial1_name,
         testimonial1Email: dto.testimonial1_email,
