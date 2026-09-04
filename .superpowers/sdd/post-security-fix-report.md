@@ -726,3 +726,92 @@ boundary, which was also mocked and made no network request.
    added. Cross-process reuse is prevented at the provider recovery boundary;
    adding a partial unique index later would first require auditing existing
    production duplicates.
+
+---
+
+# Fourth-review follow-up — fifth closed recovery wave (2026-09-04)
+
+Review baseline: `d0ca24a`. Implementation: `33dbf08`.
+
+This round closes all four Important findings and all three literal regression
+gaps in `.superpowers/sdd/fourth-fix-review-findings.md`. Providers remained
+mocked, concurrency verification used the isolated local PostgreSQL database,
+and no template, historical migration/OFFICE drift, responsive table, or
+historical Decimal behavior changed.
+
+## Finding matrix
+
+| Finding | Resolution | Regression evidence |
+| --- | --- | --- |
+| I1 — recovery trusted stale search status | Recovery reads status from the full authoritative envelope, rejects authoritative VOIDED/DECLINED, and returns SENT/DELIVERED/COMPLETED without editing or downgrading it. | `docusign.service.spec.ts`: search CREATED versus authoritative DELIVERED and VOIDED. |
+| I2 — provider-layer fingerprint omitted local intent | `ContractsService` computes canonical SHA-256 only after authoritative commission derivation. It covers process/template, complete DTO intent excluding operation/return transport metadata, complete calculated split, signing parties and rendered provider fields. `DocuSignService` only persists and verifies that application fingerprint. | Contract composition changes description and split hashes; real `ContractsService` + `DocuSignService` composition rejects same-operation recovery when only commission changes. Provider-level mismatch also fails closed. |
+| I3 — successful PUT could regress to draft | A shared post-send classifier treats successful PUT as a SENT floor when GET is missing/CREATED, preserves SENT/DELIVERED/COMPLETED, and maps failed or contradictory reads to `SEND_INDETERMINATE`. Both template-send and draft-send paths use it. | `docusign.service.spec.ts`: stale CREATED and failed GET through both send paths. Existing contract caller regressions preserve known/indeterminate external effects. |
+| I4 — webhook CAS loser returned success too early | CAS losers re-read authoritative local state. If it is lower than the incoming event, they retry up to three claims; continued contention returns retryable 503. History and notifications remain behind the winning claim. | Deterministic DELIVERED-versus-COMPLETED test finishes contract SIGNED/process COMPLETED with one terminal history; bounded-contention test observes exactly three transaction attempts and 503. |
+| G1 — Calendly target not literally SCHEDULED | The reschedule regression now starts the target appointment itself in SCHEDULED state. | `appointments.service.spec.ts`. |
+| G2 — no-datetime PG race lacked barrier | A holder owns the specialist schedule advisory lock while both create calls signal that they reached the lock; release occurs only after both signals. | `appointments-concurrency.postgres.spec.ts`: one success, one conflict, and `bothAttemptedBeforeCompletion=true`. |
+| G3 — sequential assignment duplicate absent | Added an already-active target identity result after the dedup lock and asserted conflict before any update/history. | `processes.service.spec.ts`. |
+
+## RED evidence
+
+All commands used `rtk`; Jest ran with `--runInBand`. No provider network call
+was made.
+
+- `docusign.service.spec.ts` first reproduced the status defects with 4 failed
+  and 21 passed: recovery returned the stale CREATED summary and both successful
+  PUT paths returned CREATED. After those became green, the application-owned
+  fingerprint regression independently failed with 1 failed and 25 passed
+  because a changed supplied fingerprint was ignored.
+- `contracts.service.spec.ts -t 'derives the recovery fingerprint'` failed with
+  1 failed and 40 skipped: all three provider calls received an undefined
+  fingerprint even when description and authoritative split changed.
+- `webhook.service.spec.ts` failed with 1 failed and 3 passed: forced DELIVERED
+  first-claim success made the concurrent COMPLETED event lose its CAS and
+  return with final provider status DELIVERED instead of COMPLETED.
+- The three Minor items were literal coverage gaps over behavior already
+  implemented in the preceding wave. Their strengthened characterization tests
+  passed immediately; no production defect or fabricated RED is claimed for
+  them.
+
+## Final GREEN evidence
+
+- Backend focused matrix:
+  `rtk npm test -- --runInBand src/features/contracts/contracts.service.spec.ts src/providers/docusign/docusign.service.spec.ts src/providers/docusign/docusign.client.spec.ts src/providers/docusign/webhook/webhook.service.spec.ts src/features/appointments/appointments.service.spec.ts src/features/processes/processes.service.spec.ts`
+  — 6 suites, 132/132 passed.
+- Local PostgreSQL schedule matrix with
+  `POSTGRES_CONCURRENCY_TEST_URL='postgresql://user:password@127.0.0.1:5432/highclass_task8?schema=public'`:
+  `rtk npm test -- --runInBand src/features/appointments/appointments-concurrency.postgres.spec.ts`
+  — 1 suite, 5/5 passed, including the explicit no-datetime barrier.
+- `backend: rtk npm run build` — passed.
+- `frontend: rtk npm run build` — passed; only the pre-existing Vite chunk-size
+  warning remains.
+- `rtk git diff --check` — clean.
+
+## Self-review
+
+- Re-read the complete implementation diff from `d0ca24a`, then the focused
+  diff from the documentation baseline `4a1b7db`. Verified authoritative
+  provider status is used before every recovery decision and the successful
+  PUT floor cannot enter draft compensation.
+- Traced every field contributing to contract generation and preview. The
+  fingerprint now contains the original preview DTO (including witness names),
+  the generated persistence-compatible DTO, authoritative split, template,
+  process and form fields; only operation id and return URL are excluded as
+  retry/transport metadata.
+- Forced both webhook interleavings conceptually: a lower event losing to an
+  advanced state exits idempotently, while a higher event losing to a lower
+  state retries. Only a successful CAS reaches history or notifications.
+- Confirmed the strengthened PostgreSQL test blocks both contenders on the same
+  real advisory key before release, and the sequential product test observes no
+  mutation on duplicate identity.
+- Confirmed heavy commands were sequential, no runner exceeded two workers,
+  provider effects were mocked, and `PROJECT-OVERVIEW.md` remained an untracked
+  user file that was neither edited nor staged.
+
+## Remaining concerns
+
+1. The frontend production build retains its pre-existing JavaScript chunk-size
+   warning; it does not fail the build.
+2. Repeated webhook CAS contention now deliberately returns HTTP 503 after
+   three attempts so DocuSign retries instead of accepting an unconverged
+   higher-rank event. Operations should monitor repeated
+   `CONTRACT_WEBHOOK_CONTENTION` responses.
