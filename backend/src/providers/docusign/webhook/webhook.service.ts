@@ -1,7 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { mapDocusignStatusToProviderStatus } from '../mappers/envelope-status.mapper';
-import { ProcessCompletionReason } from '@prisma/client';
+import {
+  ProcessCompletionReason,
+  ProcessStatus,
+  ProviderStatus,
+} from '@prisma/client';
 import { NotificationService } from 'src/features/notifications/notification.service';
 
 /**
@@ -46,6 +54,25 @@ const PROVIDER_STATUS_TO_CONTRACT_STATUS: Record<string, string> = {
   TIMEDOUT: 'REJECTED',
   ERROR: 'REJECTED',
 };
+
+const PROVIDER_STATUS_RANK: Record<ProviderStatus, number> = {
+  [ProviderStatus.CREATED]: 0,
+  [ProviderStatus.SENT]: 1,
+  [ProviderStatus.DELIVERED]: 2,
+  [ProviderStatus.COMPLETED]: 3,
+  [ProviderStatus.DECLINED]: 3,
+  [ProviderStatus.VOIDED]: 3,
+  [ProviderStatus.TIMEDOUT]: 3,
+  [ProviderStatus.ERROR]: 3,
+};
+
+const TERMINAL_PROVIDER_STATUSES = new Set<ProviderStatus>([
+  ProviderStatus.COMPLETED,
+  ProviderStatus.DECLINED,
+  ProviderStatus.VOIDED,
+  ProviderStatus.TIMEDOUT,
+  ProviderStatus.ERROR,
+]);
 
 /**
  * Serviço para processar webhooks da DocuSign.
@@ -216,6 +243,30 @@ export class DocuSignWebhookService {
             accountId: payload.data.accountId,
           },
         );
+        throw new ServiceUnavailableException({
+          success: false,
+          error: {
+            code: 'CONTRACT_WEBHOOK_NOT_READY',
+            message: 'Contrato ainda não está disponível para este envelope.',
+          },
+        });
+      }
+
+      const nextProviderStatus = providerStatus as ProviderStatus;
+      const currentProviderStatus =
+        contract.provider_status as ProviderStatus | null;
+      if (
+        currentProviderStatus === nextProviderStatus ||
+        (currentProviderStatus &&
+          (TERMINAL_PROVIDER_STATUSES.has(currentProviderStatus) ||
+            PROVIDER_STATUS_RANK[nextProviderStatus] <
+              PROVIDER_STATUS_RANK[currentProviderStatus]))
+      ) {
+        this.logger.debug('Webhook idempotente ou atrasado ignorado', {
+          envelopeId,
+          currentProviderStatus,
+          nextProviderStatus,
+        });
         return;
       }
 
@@ -261,10 +312,17 @@ export class DocuSignWebhookService {
       // ===== ETAPA 7: ATUALIZAR CONTRATO E SINCRONIZAR PROCESSO =====
 
       const updated = await this.prismaService.$transaction(async (tx) => {
-        // 7.1 Atualizar contrato
-        const updatedContract = await tx.contract.update({
-          where: { id: contract.id },
+        // 7.1 Claim CAS: somente uma entrega concorrente produz efeitos.
+        const claim = await tx.contract.updateMany({
+          where: {
+            id: contract.id,
+            provider_status: currentProviderStatus,
+          },
           data: updateData,
+        });
+        if (claim.count !== 1) return null;
+        const updatedContract = await tx.contract.findUniqueOrThrow({
+          where: { id: contract.id },
         });
 
         this.logger.log(`✓ Contrato atualizado com sucesso`, {
@@ -315,6 +373,7 @@ export class DocuSignWebhookService {
           await tx.processStatusHistory.create({
             data: {
               processId: process.id,
+              status: ProcessStatus.COMPLETED,
               reason: ProcessCompletionReason.CONTRACT_SIGNED,
             },
           });
@@ -338,6 +397,7 @@ export class DocuSignWebhookService {
           await tx.processStatusHistory.create({
             data: {
               processId: process.id,
+              status: ProcessStatus.REJECTED,
               reason: completionReason,
             },
           });
@@ -376,6 +436,17 @@ export class DocuSignWebhookService {
 
         return updatedContract;
       });
+
+      if (!updated) {
+        this.logger.debug(
+          'Webhook perdeu o claim concorrente; sem novos efeitos',
+          {
+            envelopeId,
+            providerStatus,
+          },
+        );
+        return;
+      }
 
       // ===== ETAPA 8: ENVIAR NOTIFICAÇÕES (Fire-and-forget) =====
 
@@ -528,10 +599,10 @@ export class DocuSignWebhookService {
         },
       });
     } catch (error) {
-      // Não relançar erro para evitar retry infinito de webhooks
       this.logger.error('Erro ao processar webhook DocuSign', {
         errorType: error instanceof Error ? error.name : typeof error,
       });
+      throw error;
     }
   }
 }

@@ -9,7 +9,11 @@ import {
 import { validate } from 'class-validator';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { AppointmentsService } from './appointments.service';
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 
 describe('CreateAppointmentDto — seleção de produto', () => {
   const base = {
@@ -131,7 +135,9 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
     return {
       service: new AppointmentsService(
         prisma,
-        { sendAppointmentCreatedEmail: jest.fn().mockResolvedValue(undefined) } as any,
+        {
+          sendAppointmentCreatedEmail: jest.fn().mockResolvedValue(undefined),
+        } as any,
         {} as any,
       ),
       prisma,
@@ -202,6 +208,24 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
     expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
       tx.appointment.findFirst.mock.invocationCallOrder[0],
     );
+  });
+
+  it('checks the exact generated timestamp when no datetime is supplied', async () => {
+    const { service, tx, appointmentCreate } = harness({});
+    const withoutDate = { ...dto, appointment_datetime: undefined };
+
+    await service.create(withoutDate as CreateAppointmentDto, client.id);
+
+    const insertedAt = appointmentCreate.mock.calls[0][0].data
+      .appointment_datetime as Date;
+    expect(tx.appointment.findFirst).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        appointment_datetime: {
+          gte: new Date(insertedAt.getTime() - 60 * 60 * 1000),
+          lte: new Date(insertedAt.getTime() + 60 * 60 * 1000),
+        },
+      }),
+    });
   });
 
   it('serializa e repete a deduplicação do processo antes de criá-lo', async () => {
@@ -756,5 +780,42 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
     expect(tx.appointment.findFirst).toHaveBeenCalled();
     expect(prisma.appointment.update).not.toHaveBeenCalled();
     expect(tx.appointment.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a reschedule that overlaps an already SCHEDULED appointment', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.PENDING,
+      appointment_datetime: null,
+    };
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(appointment),
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'scheduled-appointment',
+          client_id: 'another-client',
+          status: StatusAgendamento.SCHEDULED,
+          appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+        }),
+        update: jest.fn(),
+      },
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      $transaction: jest.fn(async (callback: any) => callback(tx)),
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await expect(
+      service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
+        event_uri: 'https://calendly.test/events/1',
+        invitee_uri: 'https://calendly.test/invitees/1',
+        scheduled_start_time: '2099-01-01T10:00:00.000Z',
+      } as any),
+    ).rejects.toThrow(ConflictException);
+    expect(tx.appointment.update).not.toHaveBeenCalled();
   });
 });

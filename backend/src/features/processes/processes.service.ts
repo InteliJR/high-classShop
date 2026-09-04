@@ -1310,6 +1310,20 @@ export class ProcessesService {
         });
       }
 
+      // Changing a consultancy into a product process changes its dedup
+      // identity. Claim the target identity (after the product-money lock,
+      // preserving the global lock order) and recheck before any mutation.
+      await lockAndAssertNoActiveProcess(
+        tx,
+        {
+          clientId: processForAssignment.client_id,
+          specialistId: processForAssignment.specialist_id,
+          productType: productType as ProductType,
+          productId: dto.product_id,
+        },
+        processId,
+      );
+
       let product: any;
       if (productType === 'CAR') {
         product = await tx.car.findUnique({ where: { id: dto.product_id } });

@@ -57,6 +57,7 @@ async function openPreview() {
 
 describe("CreateContractPage preview lifecycle", () => {
   beforeEach(() => {
+    sessionStorage.clear();
     vi.mocked(prefillContract).mockResolvedValue({
       process_id: processId,
       product_type: "CAR",
@@ -152,6 +153,20 @@ describe("CreateContractPage preview lifecycle", () => {
     );
   });
 
+  it("retains the real modal when send has no HTTP response", async () => {
+    vi.mocked(sendContractAfterPreview).mockRejectedValue(
+      new Error("network response lost"),
+    );
+    await openPreview();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Confirmar e Enviar/i }),
+    );
+
+    await waitFor(() => expect(sendContractAfterPreview).toHaveBeenCalledTimes(1));
+    expect(screen.getByTitle("DocuSign Contract Preview")).toBeTruthy();
+  });
+
   it("reuses one operation id when a public preview request is retried", async () => {
     vi.mocked(previewContract)
       .mockRejectedValueOnce(new Error("lost response"))
@@ -187,5 +202,41 @@ describe("CreateContractPage preview lifecycle", () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
     expect(secondOperationId).toBe(firstOperationId);
+  });
+
+  it("rotates the operation id after the backend confirms draft compensation", async () => {
+    vi.mocked(previewContract)
+      .mockRejectedValueOnce({
+        response: {
+          data: {
+            error: {
+              code: "CONTRACT_PREVIEW_COMPENSATED",
+              message: "Rascunho cancelado com segurança.",
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce(preview);
+
+    renderPage();
+    await screen.findByText("Gerar Contrato de Venda");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Continuar para os dados do contrato/i,
+      }),
+    );
+    const previewButton = await screen.findByRole("button", {
+      name: /Pré-visualizar e Enviar Contrato/i,
+    });
+    await waitFor(() => expect((previewButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(previewButton);
+    await waitFor(() => expect(previewContract).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect((previewButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(previewButton);
+    await screen.findByTitle("DocuSign Contract Preview");
+
+    expect(vi.mocked(previewContract).mock.calls[1][0].operation_id).not.toBe(
+      vi.mocked(previewContract).mock.calls[0][0].operation_id,
+    );
   });
 });

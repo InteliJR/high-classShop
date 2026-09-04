@@ -378,6 +378,24 @@ export class ContractsService {
     );
   }
 
+  private previewCompensated(
+    processId: string,
+    operationId: string,
+  ): ConflictException {
+    return new ConflictException({
+      success: false,
+      error: {
+        code: 'CONTRACT_PREVIEW_COMPENSATED',
+        message:
+          'O rascunho externo foi cancelado com segurança. Inicie uma nova tentativa.',
+        details: {
+          process_id: processId,
+          operation_id: operationId,
+        },
+      },
+    });
+  }
+
   private queueContractGeneratedNotification(
     dto: GenerateContractDto | PreviewContractDto,
     contractId: string,
@@ -1556,6 +1574,7 @@ export class ContractsService {
           error,
           'DRAFT_CONFIRMED',
         );
+        throw this.previewCompensated(dto.process_id, dto.operation_id);
       }
       throw error;
     }

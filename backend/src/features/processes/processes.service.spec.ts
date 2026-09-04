@@ -736,6 +736,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
         update: processUpdate,
         updateMany: processUpdateMany,
         findUniqueOrThrow: processFindUniqueOrThrow,
+        findFirst: jest.fn().mockResolvedValue(null),
       },
       processStatusHistory: { create: historyCreate },
       appointment: {
@@ -823,9 +824,13 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       expect(txProductFindUnique).toHaveBeenCalledWith({
         where: { id: 'product-1' },
       });
-      expect(txLock).toHaveBeenCalledTimes(1);
+      expect(txLock).toHaveBeenCalledTimes(2);
       expect(txLock.mock.calls[0][1]).toBe(
         `product-money:${productType}:product-1`,
+      );
+      expect(txLock).toHaveBeenCalledWith(
+        expect.anything(),
+        `process-dedup:client-1:specialist-1:${productType}:product-1`,
       );
       expect(rootProductFindUnique).not.toHaveBeenCalled();
       expect(processUpdate).not.toHaveBeenCalled();

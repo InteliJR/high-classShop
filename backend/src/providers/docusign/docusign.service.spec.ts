@@ -99,6 +99,10 @@ describe('DocuSignService — efeitos externos parciais', () => {
       }),
       updateEnvelopeDocGenFormFields: jest.fn().mockResolvedValue(undefined),
       updateEnvelopeStatus: jest.fn().mockResolvedValue(undefined),
+      getEnvelope: jest.fn().mockResolvedValue({
+        envelopeId: 'envelope-1',
+        status: 'sent',
+      }),
     } as any;
     const service = new DocuSignService(client);
 
@@ -111,7 +115,7 @@ describe('DocuSignService — efeitos externos parciais', () => {
 
   it('recupera o envelope pelo transactionId quando o POST foi aplicado mas todas as respostas se perderam', async () => {
     const postFailure = new Error('all POST responses lost');
-    const client = {
+    const client: any = {
       findEnvelopesByTransactionId: jest
         .fn()
         .mockResolvedValueOnce([])
@@ -119,11 +123,19 @@ describe('DocuSignService — efeitos externos parciais', () => {
           { envelopeId: 'envelope-recovered', status: 'created' },
         ]),
       createEnvelopeFromTemplate: jest.fn().mockRejectedValue(postFailure),
+      getEnvelopeWithCustomFields: jest.fn().mockImplementation(async () => ({
+        customFields:
+          client.createEnvelopeFromTemplate.mock.calls[0][0].customFields,
+      })),
       getEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({
         docGenFormFields: [],
       }),
       updateEnvelopeDocGenFormFields: jest.fn().mockResolvedValue(undefined),
       updateEnvelopeStatus: jest.fn().mockResolvedValue(undefined),
+      getEnvelope: jest.fn().mockResolvedValue({
+        envelopeId: 'envelope-recovered',
+        status: 'sent',
+      }),
     } as any;
     const service = new DocuSignService(client);
     const onEnvelopeCreated = jest.fn();
@@ -142,25 +154,135 @@ describe('DocuSignService — efeitos externos parciais', () => {
     expect(onEnvelopeCreated).toHaveBeenCalledWith('envelope-recovered');
   });
 
-  it('reusa um envelope recuperado em nova chamada e não repete o POST', async () => {
+  it('rejects a recovered envelope that belongs to another process', async () => {
     const client = {
-      findEnvelopesByTransactionId: jest.fn().mockResolvedValue([
-        { envelopeId: 'envelope-existing', status: 'created' },
-      ]),
-      createEnvelopeFromTemplate: jest.fn(),
-      getEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({
-        docGenFormFields: [],
+      findEnvelopesByTransactionId: jest
+        .fn()
+        .mockResolvedValue([
+          { envelopeId: 'foreign-envelope', status: 'created' },
+        ]),
+      getEnvelopeWithCustomFields: jest.fn().mockResolvedValue({
+        customFields: {
+          textCustomFields: [
+            { name: 'processId', value: 'process-2' },
+            { name: 'requestFingerprint', value: 'foreign-fingerprint' },
+          ],
+        },
       }),
-      updateEnvelopeDocGenFormFields: jest.fn().mockResolvedValue(undefined),
-      updateEnvelopeStatus: jest.fn().mockResolvedValue(undefined),
+      createEnvelopeFromTemplate: jest.fn(),
     } as any;
     const service = new DocuSignService(client);
 
     await expect(
       service.createEnvelopeFromTemplate(templateParams),
-    ).resolves.toEqual({ envelopeId: 'envelope-existing', status: 'sent' });
+    ).rejects.toMatchObject({
+      name: 'EnvelopeCreationAmbiguousError',
+      transactionId: templateParams.transactionId,
+    });
     expect(client.createEnvelopeFromTemplate).not.toHaveBeenCalled();
   });
+
+  it('rejects a recovered envelope when the immutable request payload changed', async () => {
+    const client = {
+      findEnvelopesByTransactionId: jest
+        .fn()
+        .mockResolvedValue([
+          { envelopeId: 'stale-envelope', status: 'created' },
+        ]),
+      getEnvelopeWithCustomFields: jest.fn().mockResolvedValue({
+        customFields: {
+          textCustomFields: [
+            { name: 'processId', value: 'process-1' },
+            { name: 'requestFingerprint', value: 'stale-fingerprint' },
+          ],
+        },
+      }),
+      createEnvelopeFromTemplate: jest.fn(),
+    } as any;
+    const service = new DocuSignService(client);
+
+    await expect(
+      service.createEnvelopeFromTemplate(templateParams),
+    ).rejects.toMatchObject({ name: 'EnvelopeCreationAmbiguousError' });
+    expect(client.createEnvelopeFromTemplate).not.toHaveBeenCalled();
+  });
+
+  it('does not classify a definitive provider 4xx as ambiguous when no envelope exists', async () => {
+    const providerFailure = Object.assign(new Error('invalid recipients'), {
+      isAxiosError: true,
+      response: { status: 400 },
+    });
+    const client = {
+      findEnvelopesByTransactionId: jest
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]),
+      createEnvelopeFromTemplate: jest.fn().mockRejectedValue(providerFailure),
+    } as any;
+    const service = new DocuSignService(client);
+
+    await expect(
+      service.createEnvelopeFromTemplate(templateParams),
+    ).rejects.toMatchObject({ name: 'EnvelopeCreationFailedException' });
+  });
+
+  it('reusa um envelope recuperado em nova chamada e não repete o POST', async () => {
+    const client: any = {
+      findEnvelopesByTransactionId: jest
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { envelopeId: 'envelope-existing', status: 'sent' },
+        ]),
+      createEnvelopeFromTemplate: jest.fn().mockResolvedValue({
+        envelopeId: 'envelope-existing',
+        status: 'sent',
+      }),
+      getEnvelopeWithCustomFields: jest.fn().mockImplementation(async () => ({
+        customFields:
+          client.createEnvelopeFromTemplate.mock.calls[0][0].customFields,
+      })),
+    };
+    const service = new DocuSignService(client);
+
+    await service.createEnvelopeFromTemplate(templateParams);
+    await expect(
+      service.createEnvelopeFromTemplate(templateParams),
+    ).resolves.toEqual({ envelopeId: 'envelope-existing', status: 'sent' });
+    expect(client.createEnvelopeFromTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['voided', 'declined'])(
+    'never edits a recovered envelope in terminal status %s',
+    async (status) => {
+      const client: any = {
+        findEnvelopesByTransactionId: jest
+          .fn()
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([
+            { envelopeId: 'terminal-envelope', status },
+          ]),
+        createEnvelopeFromTemplate: jest.fn().mockResolvedValue({
+          envelopeId: 'terminal-envelope',
+          status: 'sent',
+        }),
+        getEnvelopeWithCustomFields: jest
+          .fn()
+          .mockImplementation(async () => ({
+            customFields:
+              client.createEnvelopeFromTemplate.mock.calls[0][0].customFields,
+          })),
+        getEnvelopeDocGenFormFields: jest.fn(),
+      };
+      const service = new DocuSignService(client);
+      await service.createEnvelopeFromTemplate(templateParams);
+
+      await expect(
+        service.createEnvelopeFromTemplate(templateParams),
+      ).rejects.toMatchObject({ name: 'EnvelopeCreationAmbiguousError' });
+      expect(client.getEnvelopeDocGenFormFields).not.toHaveBeenCalled();
+    },
+  );
 
   it('classifica como ambígua a criação quando a recuperação após perda do POST não é conclusiva', async () => {
     const postFailure = new Error('all POST responses lost');
@@ -220,6 +342,22 @@ describe('DocuSignService — efeitos externos parciais', () => {
       expect(client.updateEnvelopeStatus).not.toHaveBeenCalled();
     },
   );
+
+  it('returns the actual provider status after a successful send PUT', async () => {
+    const client = {
+      getEnvelope: jest
+        .fn()
+        .mockResolvedValueOnce({ status: 'created' })
+        .mockResolvedValueOnce({ status: 'delivered' }),
+      updateEnvelopeStatus: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const service = new DocuSignService(client);
+
+    await expect(service.sendDraftEnvelope('envelope-1')).resolves.toEqual({
+      envelopeId: 'envelope-1',
+      status: 'delivered',
+    });
+  });
 });
 
 describe('DocuSignService — mapFormFieldsToDocGen é removal-safe', () => {
@@ -263,7 +401,9 @@ describe('DocuSignService — mapFormFieldsToDocGen é removal-safe', () => {
     const debug = jest
       .spyOn((service as any).logger, 'debug')
       .mockImplementation();
-    const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation();
+    const warn = jest
+      .spyOn((service as any).logger, 'warn')
+      .mockImplementation();
     const fields = sensitiveValues.map((value, index) => ({
       name: `field_${index}`,
       label: `field_${index}`,

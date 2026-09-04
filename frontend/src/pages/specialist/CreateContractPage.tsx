@@ -25,6 +25,10 @@ import {
   type ContractTemplate,
 } from "../../services/contracts.service";
 import {
+  clearContractOperationId,
+  getOrCreateContractOperationId,
+} from "../../lib/contract-operation-id";
+import {
   applyCpfMask,
   applyCnpjMask,
   applyCepMask,
@@ -212,7 +216,6 @@ export default function CreateContractPage() {
     string | null
   >(null);
   const previewActionInFlightRef = useRef(false);
-  const previewOperationIdRef = useRef<string | null>(null);
 
   // Wizard: a comissão é decidida antes de o especialista ver o resto do
   // contrato. Um único useForm cobre as duas etapas, então o payload final
@@ -427,6 +430,7 @@ export default function CreateContractPage() {
     formData: ContractFormData,
   ): GenerateContractData => ({
     process_id: processId!,
+    operation_id: getOrCreateContractOperationId(processId!),
     template_id: selectedTemplateId || undefined,
     seller_name: formData.seller_name,
     seller_email: formData.seller_email,
@@ -509,8 +513,6 @@ export default function CreateContractPage() {
 
       const previewPayload: PreviewContractData = {
         ...contractData,
-        operation_id:
-          previewOperationIdRef.current ??= globalThis.crypto.randomUUID(),
         return_url: `${window.location.origin}/specialist/contracts/preview-callback`,
       };
 
@@ -523,6 +525,12 @@ export default function CreateContractPage() {
       setShowPreviewModal(true);
     } catch (error: any) {
       console.error("Erro ao criar preview");
+
+      if (
+        error.response?.data?.error?.code === "CONTRACT_PREVIEW_COMPENSATED"
+      ) {
+        clearContractOperationId(processId);
+      }
 
       const backendMessage = extractBackendMessage(error);
       const lowerMessage = backendMessage.toLowerCase();
@@ -582,7 +590,7 @@ export default function CreateContractPage() {
       );
 
       setShowPreviewModal(false);
-      previewOperationIdRef.current = null;
+      clearContractOperationId(processId!, previewFormData.operation_id);
       setSubmitStatus({
         type: "success",
         message: `Contrato enviado com sucesso! ID: ${result.id}`,
@@ -611,7 +619,8 @@ export default function CreateContractPage() {
         ? "O e-mail do comprador não pode ser o mesmo do consultor ou vendedor. Utilize e-mails diferentes para cada parte."
         : backendMessage || "Erro ao enviar contrato. Tente novamente.";
 
-      if (requiresManualReconciliation) {
+      const hasUnknownExternalEffect = !error.response;
+      if (requiresManualReconciliation || hasUnknownExternalEffect) {
         // The envelope may already be SENT. Keep its context on screen and
         // block accidental regeneration/cancellation until support reconciles it.
         setPreviewCancellationError(message);
@@ -648,7 +657,9 @@ export default function CreateContractPage() {
         setPreviewData(null);
         setPreviewFormData(null);
         setPreviewCancellationError(null);
-        previewOperationIdRef.current = null;
+        if (processId && previewFormData?.operation_id) {
+          clearContractOperationId(processId, previewFormData.operation_id);
+        }
       };
 
       if (mode === "expire") {

@@ -201,6 +201,26 @@ export class DocuSignClient {
   }
 
   /**
+   * Envelope creation is not safely repeatable at the HTTP layer. Its
+   * transactionId is reconciled by DocuSignService before another attempt is
+   * considered, so this POST must be dispatched at most once.
+   */
+  private async postOnce(url: string, body: any, token: string): Promise<any> {
+    this.logger.debug(
+      `[POST] Sending non-retriable request to DocuSign: ${url}`,
+    );
+    const response = await axios.post(this.getFullUrl(url), body, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      timeout: this.REQUEST_TIMEOUT_MS,
+    });
+    return response.data;
+  }
+
+  /**
    * Realiza requisição GET com retry automático
    *
    * @param {string} url - Caminho relativo da API
@@ -267,9 +287,7 @@ export class DocuSignClient {
 
         // Aguardar antes de retry (exponential backoff)
         const delayMs = this.RETRY_DELAY_MS * attempt;
-        this.logger.warn(
-          `[${method}] ${url} falhou. Retry em ${delayMs}ms...`,
-        );
+        this.logger.warn(`[${method}] ${url} falhou. Retry em ${delayMs}ms...`);
         await this.delay(delayMs);
       }
     }
@@ -415,7 +433,11 @@ export class DocuSignClient {
     dto: CreateTemplateEnvelopeDto,
   ): Promise<CreateEnvelopeResponseDto> {
     const token = await this.getAccessToken();
-    return this.post(`/v2.1/accounts/${this.accountId}/envelopes`, dto, token);
+    return this.postOnce(
+      `/v2.1/accounts/${this.accountId}/envelopes`,
+      dto,
+      token,
+    );
   }
 
   /**

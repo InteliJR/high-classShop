@@ -1,11 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ConflictException } from '@nestjs/common';
-import {
-  PrismaClient,
-  ProductCurrency,
-  ProductType,
-  UserRole,
-} from '@prisma/client';
+import { PrismaClient, ProductCurrency, ProductType, UserRole } from '@prisma/client';
 import { AppointmentsService } from './appointments.service';
 
 type Deferred = { promise: Promise<void>; resolve: () => void };
@@ -65,13 +60,21 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
   const firstCarId = randomUUID();
   const secondCarId = randomUUID();
   const first = new PrismaClient({
-    datasources: { db: { url: withApplicationName(databaseUrl!, `schedule_a_${suffix}`) } },
+    datasources: {
+      db: { url: withApplicationName(databaseUrl!, `schedule_a_${suffix}`) },
+    },
   });
   const second = new PrismaClient({
-    datasources: { db: { url: withApplicationName(databaseUrl!, `schedule_b_${suffix}`) } },
+    datasources: {
+      db: { url: withApplicationName(databaseUrl!, `schedule_b_${suffix}`) },
+    },
   });
   const holder = new PrismaClient({
-    datasources: { db: { url: withApplicationName(databaseUrl!, `schedule_holder_${suffix}`) } },
+    datasources: {
+      db: {
+        url: withApplicationName(databaseUrl!, `schedule_holder_${suffix}`),
+      },
+    },
   });
 
   beforeAll(async () => {
@@ -150,8 +153,12 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
     await holder.process.deleteMany({
       where: { appointment_id: { in: appointments.map(({ id }) => id) } },
     });
-    await holder.appointment.deleteMany({ where: { specialist_id: specialistId } });
-    await holder.car.deleteMany({ where: { id: { in: [firstCarId, secondCarId] } } });
+    await holder.appointment.deleteMany({
+      where: { specialist_id: specialistId },
+    });
+    await holder.car.deleteMany({
+      where: { id: { in: [firstCarId, secondCarId] } },
+    });
     await holder.user.deleteMany({
       where: { id: { in: [firstClientId, secondClientId, specialistId] } },
     });
@@ -219,15 +226,44 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
     expect(outcomes.find(({ status }) => status === 'rejected')).toMatchObject({
       reason: expect.any(ConflictException),
     });
-    await expect(
-      holder.appointment.count({ where: { specialist_id: specialistId } }),
-    ).resolves.toBe(1);
+    await expect(holder.appointment.count({ where: { specialist_id: specialistId } })).resolves.toBe(1);
   }, 15_000);
 
-  async function createPendingWithProcess(
-    clientId: string,
-    carId: string,
-  ) {
+  it('allows only one concurrent direct appointment when both omit datetime', async () => {
+    const notification = {
+      sendAppointmentCreatedEmail: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const serviceA = new AppointmentsService(first as any, notification, {} as any);
+    const serviceB = new AppointmentsService(second as any, notification, {} as any);
+
+    const outcomes = await Promise.allSettled([
+      serviceA.create(
+        {
+          client_id: firstClientId,
+          specialist_id: specialistId,
+          product_type: ProductType.CAR,
+          product_id: firstCarId,
+        } as any,
+        firstClientId,
+      ),
+      serviceB.create(
+        {
+          client_id: secondClientId,
+          specialist_id: specialistId,
+          product_type: ProductType.CAR,
+          product_id: secondCarId,
+        } as any,
+        secondClientId,
+      ),
+    ]);
+
+    expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.find(({ status }) => status === 'rejected')).toMatchObject({
+      reason: expect.any(ConflictException),
+    });
+  }, 15_000);
+
+  async function createPendingWithProcess(clientId: string, carId: string) {
     const appointment = await holder.appointment.create({
       data: {
         client_id: clientId,
@@ -294,15 +330,9 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
       } as any,
       firstClientId,
     );
-    const confirming = serviceB.confirmPending(
-      pending.id,
-      specialistId,
-      scheduledAt,
-    );
+    const confirming = serviceB.confirmPending(pending.id, specialistId, scheduledAt);
     const bothAttemptedBeforeCompletion = await Promise.race([
-      Promise.all([createAttempted.promise, confirmAttempted.promise]).then(
-        () => true,
-      ),
+      Promise.all([createAttempted.promise, confirmAttempted.promise]).then(() => true),
       confirming.then(
         () => false,
         () => false,
@@ -331,20 +361,10 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
     const serviceA = service(first, firstAttempted);
     const serviceB = service(second, secondAttempted);
     const scheduledAt = new Date('2099-01-01T11:00:00.000Z');
-    const firstConfirm = serviceA.confirmPending(
-      firstPending.id,
-      specialistId,
-      scheduledAt,
-    );
-    const secondConfirm = serviceB.confirmPending(
-      secondPending.id,
-      specialistId,
-      scheduledAt,
-    );
+    const firstConfirm = serviceA.confirmPending(firstPending.id, specialistId, scheduledAt);
+    const secondConfirm = serviceB.confirmPending(secondPending.id, specialistId, scheduledAt);
     const bothAttemptedBeforeCompletion = await Promise.race([
-      Promise.all([firstAttempted.promise, secondAttempted.promise]).then(
-        () => true,
-      ),
+      Promise.all([firstAttempted.promise, secondAttempted.promise]).then(() => true),
       Promise.allSettled([firstConfirm, secondConfirm]).then(() => false),
     ]);
     release.resolve();
@@ -386,28 +406,18 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
     const serviceA = service(first, firstAttempted);
     const serviceB = service(second, secondAttempted);
     const scheduledStart = '2099-01-01T12:00:00.000Z';
-    const firstRegister = serviceA.registerCalendlyScheduled(
-      firstPending.id,
-      firstClientId,
-      {
-        event_uri: `https://calendly.test/events/${firstPending.id}`,
-        invitee_uri: `https://calendly.test/invitees/${firstPending.id}`,
-        scheduled_start_time: scheduledStart,
-      },
-    );
-    const secondRegister = serviceB.registerCalendlyScheduled(
-      secondPending.id,
-      secondClientId,
-      {
-        event_uri: `https://calendly.test/events/${secondPending.id}`,
-        invitee_uri: `https://calendly.test/invitees/${secondPending.id}`,
-        scheduled_start_time: scheduledStart,
-      },
-    );
+    const firstRegister = serviceA.registerCalendlyScheduled(firstPending.id, firstClientId, {
+      event_uri: `https://calendly.test/events/${firstPending.id}`,
+      invitee_uri: `https://calendly.test/invitees/${firstPending.id}`,
+      scheduled_start_time: scheduledStart,
+    });
+    const secondRegister = serviceB.registerCalendlyScheduled(secondPending.id, secondClientId, {
+      event_uri: `https://calendly.test/events/${secondPending.id}`,
+      invitee_uri: `https://calendly.test/invitees/${secondPending.id}`,
+      scheduled_start_time: scheduledStart,
+    });
     const bothAttemptedBeforeCompletion = await Promise.race([
-      Promise.all([firstAttempted.promise, secondAttempted.promise]).then(
-        () => true,
-      ),
+      Promise.all([firstAttempted.promise, secondAttempted.promise]).then(() => true),
       Promise.allSettled([firstRegister, secondRegister]).then(() => false),
     ]);
     release.resolve();

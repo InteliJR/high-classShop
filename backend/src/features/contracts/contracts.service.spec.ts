@@ -432,9 +432,7 @@ describe('ContractsService — locked transaction and compensation', () => {
           .mockResolvedValue({ active_contract_id: 'contract-active' }),
       },
       contract: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({ provider_id: 'envelope-1' }),
+        findUnique: jest.fn().mockResolvedValue({ provider_id: 'envelope-1' }),
       },
     };
     const docusign = {
@@ -945,15 +943,15 @@ describe('ContractsService — send after preview integrity', () => {
       'PENDING',
       ProcessStatus.DOCUMENTATION,
     ],
-    [
-      EnvelopeStatus.COMPLETED,
-      'COMPLETED',
-      'SIGNED',
-      ProcessStatus.COMPLETED,
-    ],
+    [EnvelopeStatus.COMPLETED, 'COMPLETED', 'SIGNED', ProcessStatus.COMPLETED],
   ] as const)(
     'persists %s without downgrading provider, contract or process state',
-    async (providerStatus, persistedProviderStatus, contractStatus, processStatus) => {
+    async (
+      providerStatus,
+      persistedProviderStatus,
+      contractStatus,
+      processStatus,
+    ) => {
       const { service, docusign, tx, dto } = makeSendHarness();
       docusign.getEnvelopeStatus.mockResolvedValue({
         envelopeId: 'envelope-1',
@@ -964,11 +962,7 @@ describe('ContractsService — send after preview integrity', () => {
         status: providerStatus,
       });
 
-      await service.sendContractAfterPreview(
-        'envelope-1',
-        dto,
-        'specialist-1',
-      );
+      await service.sendContractAfterPreview('envelope-1', dto, 'specialist-1');
 
       expect(tx.contract.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1081,6 +1075,54 @@ describe('ContractsService — provider operation id', () => {
     for (const [params] of docusign.createEnvelopePreview.mock.calls) {
       expect(params.transactionId).toBe(dto.operation_id);
     }
+  });
+
+  it('returns a stable compensated code so the caller can rotate the operation id', async () => {
+    const service = mkSvc(mkPrisma(), mkPlatformCompanyService(10));
+    jest
+      .spyOn(service as any, 'withContractProcessLock')
+      .mockImplementation(async (_processId: string, operation: any) =>
+        operation({}),
+      );
+    jest
+      .spyOn(service as any, 'previewContractLocked')
+      .mockRejectedValue(
+        new EnvelopeEffectError(
+          'envelope-compensated',
+          'DRAFT_CONFIRMED',
+          new Error('docgen failed'),
+        ),
+      );
+    const compensate = jest
+      .spyOn(service as any, 'compensateExternalEnvelope')
+      .mockResolvedValue(undefined);
+
+    await expect(
+      service.previewContract(
+        {
+          process_id: 'process-1',
+          operation_id: '11111111-1111-4111-8111-111111111111',
+        } as any,
+        'specialist-1',
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        error: {
+          code: 'CONTRACT_PREVIEW_COMPENSATED',
+          details: {
+            process_id: 'process-1',
+            operation_id: '11111111-1111-4111-8111-111111111111',
+          },
+        },
+      },
+    });
+    expect(compensate).toHaveBeenCalledWith(
+      'envelope-compensated',
+      'process-1',
+      expect.any(String),
+      expect.any(Error),
+      'DRAFT_CONFIRMED',
+    );
   });
 });
 

@@ -31,10 +31,7 @@ import {
   ProcessStatus,
 } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
-import {
-  parseDate,
-  isFutureDate,
-} from 'src/shared/utils/date.utils';
+import { parseDate, isFutureDate } from 'src/shared/utils/date.utils';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { CalendlyIntegrationService } from './calendly-integration.service';
 import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
@@ -106,10 +103,12 @@ export class AppointmentsService {
     );
 
     // Validação 1: appointment_datetime deve ser futuro (se fornecido)
-    let appointmentDateTime: Date | null = null;
+    // Generate the fallback once. The exact instant checked under the
+    // specialist lock must be the same instant persisted below.
+    let appointmentDateTime: Date = new Date();
     if (dto.appointment_datetime) {
-      appointmentDateTime = parseDate(dto.appointment_datetime);
-      if (!appointmentDateTime) {
+      const parsedAppointmentDateTime = parseDate(dto.appointment_datetime);
+      if (!parsedAppointmentDateTime) {
         this.logger.warn('[create] Data/hora do agendamento é inválida');
         throw new BadRequestException({
           success: false,
@@ -124,6 +123,7 @@ export class AppointmentsService {
           },
         });
       }
+      appointmentDateTime = parsedAppointmentDateTime;
 
       if (!isFutureDate(appointmentDateTime)) {
         this.logger.warn('[create] Data/hora do agendamento é no passado');
@@ -255,7 +255,7 @@ export class AppointmentsService {
             specialist_id: dto.specialist_id,
             product_type: dto.product_type,
             product_id: dto.product_id,
-            appointment_datetime: appointmentDateTime || new Date(),
+            appointment_datetime: appointmentDateTime,
             status: StatusAgendamento.SCHEDULED,
             notes: dto.notes,
           },

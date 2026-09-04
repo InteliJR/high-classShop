@@ -90,6 +90,7 @@ export interface PrefillContractResponse {
 
 export interface GenerateContractData {
   process_id: string;
+  operation_id: string;
 
   // Template DocuSign escolhido (opcional; backend faz fallback pro env)
   template_id?: string;
@@ -179,7 +180,6 @@ export interface ContractResponse {
 
 // PreviewContractData inclui return_url para callback do DocuSign
 export interface PreviewContractData extends GenerateContractData {
-  operation_id: string;
   return_url: string;
 }
 
