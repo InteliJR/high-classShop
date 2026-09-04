@@ -97,7 +97,18 @@ export class DocuSignService {
         envelope,
         'requestFingerprint',
       );
-      const authoritativeStatus = envelope?.status ?? recovered.status;
+      const authoritativeStatus = envelope?.status as
+        | EnvelopeStatus
+        | undefined;
+      if (
+        !authoritativeStatus ||
+        !Object.values(EnvelopeStatus).includes(authoritativeStatus)
+      ) {
+        throw new EnvelopeCreationAmbiguousError(
+          transactionId,
+          new Error('Authoritative envelope status is missing or unknown'),
+        );
+      }
       if (
         !processId ||
         recoveredProcessId !== processId ||

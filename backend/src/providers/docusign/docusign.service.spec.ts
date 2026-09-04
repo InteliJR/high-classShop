@@ -125,6 +125,7 @@ describe('DocuSignService — efeitos externos parciais', () => {
         ]),
       createEnvelopeFromTemplate: jest.fn().mockRejectedValue(postFailure),
       getEnvelopeWithCustomFields: jest.fn().mockImplementation(async () => ({
+        status: 'created',
         customFields:
           client.createEnvelopeFromTemplate.mock.calls[0][0].customFields,
       })),
@@ -272,6 +273,7 @@ describe('DocuSignService — efeitos externos parciais', () => {
         status: 'sent',
       }),
       getEnvelopeWithCustomFields: jest.fn().mockImplementation(async () => ({
+        status: 'sent',
         customFields:
           client.createEnvelopeFromTemplate.mock.calls[0][0].customFields,
       })),
@@ -375,6 +377,47 @@ describe('DocuSignService — efeitos externos parciais', () => {
     ).rejects.toMatchObject({ name: 'EnvelopeCreationAmbiguousError' });
     expect(client.getEnvelopeDocGenFormFields).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['missing', undefined],
+    ['unknown', 'provider-mystery-status'],
+  ])(
+    'fails closed when authoritative GET status is %s even if search says created',
+    async (_label, authoritativeStatus) => {
+      const client = {
+        findEnvelopesByTransactionId: jest.fn().mockResolvedValue([
+          { envelopeId: 'uncertain-envelope', status: 'created' },
+        ]),
+        getEnvelopeWithCustomFields: jest.fn().mockResolvedValue({
+          envelopeId: 'uncertain-envelope',
+          ...(authoritativeStatus ? { status: authoritativeStatus } : {}),
+          customFields: {
+            textCustomFields: [
+              { name: 'processId', value: 'process-1' },
+              { name: 'requestFingerprint', value: 'intent-A' },
+            ],
+          },
+        }),
+        getEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({
+          docGenFormFields: [],
+        }),
+        updateEnvelopeDocGenFormFields: jest.fn().mockResolvedValue(undefined),
+        updateEnvelopeStatus: jest.fn().mockResolvedValue(undefined),
+        getEnvelope: jest.fn().mockResolvedValue({
+          envelopeId: 'uncertain-envelope',
+          status: 'sent',
+        }),
+      } as any;
+      const service = new DocuSignService(client);
+
+      await expect(
+        service.createEnvelopeFromTemplate(templateParams),
+      ).rejects.toMatchObject({ name: 'EnvelopeCreationAmbiguousError' });
+      expect(client.getEnvelopeDocGenFormFields).not.toHaveBeenCalled();
+      expect(client.updateEnvelopeDocGenFormFields).not.toHaveBeenCalled();
+      expect(client.updateEnvelopeStatus).not.toHaveBeenCalled();
+    },
+  );
 
   it('classifica como ambígua a criação quando a recuperação após perda do POST não é conclusiva', async () => {
     const postFailure = new Error('all POST responses lost');

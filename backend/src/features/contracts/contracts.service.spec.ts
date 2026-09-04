@@ -1253,6 +1253,115 @@ describe('ContractsService — provider operation id', () => {
     expect(providerClient.createEnvelopeFromTemplate).toHaveBeenCalledTimes(1);
   });
 
+  it('passes a distinct post-split fingerprint from direct generateContract when description or commission changes', async () => {
+    const generateFingerprint = async (
+      description: string,
+      totalCommissionRate: number,
+      commission: Record<string, number>,
+    ) => {
+      const process = processFixture();
+      const createEnvelopeFromTemplate = jest.fn().mockResolvedValue({
+        envelopeId: 'envelope-1',
+        status: EnvelopeStatus.SENT,
+      });
+      const tx = {
+        $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+        process: {
+          findUnique: jest.fn().mockResolvedValue(process),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        user: {
+          findUnique: jest.fn().mockImplementation(async ({ where }) =>
+            where.email
+              ? {
+                  id: 'buyer-1',
+                  email: where.email,
+                  name: 'Buyer',
+                  surname: 'Person',
+                }
+              : {
+                  id: 'specialist-1',
+                  email: 'specialist@example.test',
+                  name: 'Specialist',
+                  surname: 'Person',
+                  role: 'SPECIALIST',
+                },
+          ),
+        },
+        contract: {
+          findUnique: jest.fn().mockResolvedValue(null),
+          create: jest.fn().mockImplementation(async ({ data }) => ({
+            id: 'contract-1',
+            ...data,
+          })),
+        },
+        processStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+        company: { findUnique: jest.fn() },
+      };
+      const service = new ContractsService(
+        mkPrisma({
+          $transaction: jest.fn(async (callback: any) => callback(tx)),
+        }),
+        { createEnvelopeFromTemplate } as any,
+        {
+          sendContractGeneratedEmail: jest.fn().mockResolvedValue(undefined),
+        } as any,
+        mkPlatformCompanyService(10),
+      );
+      jest
+        .spyOn(service as any, 'resolveCommissionFromTotal')
+        .mockResolvedValue(commission);
+      const dto = {
+        operation_id: '11111111-1111-4111-8111-111111111111',
+        process_id: 'process-1',
+        template_id: 'template-1',
+        seller_name: 'Seller',
+        seller_email: 'seller@example.test',
+        buyer_name: 'Buyer',
+        buyer_email: 'buyer@example.test',
+        specialist_name: 'Specialist',
+        specialist_email: 'specialist@example.test',
+        vehicle_model: 'Model',
+        vehicle_year: '2026',
+        vehicle_price: 100000,
+        payment_seller_value: 90000,
+        total_commission_rate: totalCommissionRate,
+        city: 'Sao Paulo',
+        description,
+      } as any;
+
+      await service.generateContract(dto, 'specialist-1');
+
+      return createEnvelopeFromTemplate.mock.calls[0][0].requestFingerprint;
+    };
+    const baseCommission = {
+      platformValue: 1000,
+      platformRate: 1,
+      officeValue: 0,
+      officeRate: 0,
+      specialistValue: 9000,
+      specialistRate: 9,
+    };
+
+    const base = await generateFingerprint('Intent A', 10, baseCommission);
+    const changedDescription = await generateFingerprint(
+      'Intent B',
+      10,
+      baseCommission,
+    );
+    const changedCommission = await generateFingerprint('Intent A', 11, {
+      ...baseCommission,
+      platformValue: 1100,
+      platformRate: 1.1,
+      specialistValue: 9900,
+      specialistRate: 9.9,
+    });
+
+    expect(base).toEqual(expect.any(String));
+    expect(changedDescription).not.toBe(base);
+    expect(changedCommission).not.toBe(base);
+  });
+
   it('returns a stable compensated code so the caller can rotate the operation id', async () => {
     const service = mkSvc(mkPrisma(), mkPlatformCompanyService(10));
     jest
