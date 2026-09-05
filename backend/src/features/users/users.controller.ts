@@ -19,25 +19,41 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   /**
-   * GET /api/users
-   * Get all users with pagination and optional role filter
-   * @param query - Query parameters (page, perPage, role)
-   * @example
-   * GET /api/users?page=1&perPage=20&role=CUSTOMER
+   * DESATIVADA — GET /api/users (listagem)
+   *
+   * A rota não tinha @Roles(), então qualquer usuário autenticado listava
+   * todos os usuários da plataforma com nome, e-mail e CPF. O único consumidor
+   * era o select de clientes do CreateProcessModal, na tela de processos do
+   * especialista — ou seja, para escolher um cliente o especialista via a base
+   * inteira, inclusive clientes de outros escritórios.
+   *
+   * O botão que abria esse modal foi retirado da tela, e a função que chamava
+   * esta rota (fetchClients, em select-options.service.ts) foi comentada.
+   *
+   * Comentada em vez de apagada: se a listagem voltar, ela precisa nascer
+   * escopada por papel — o ADMIN tem visão global legítima, os demais não.
+   * Note que GET /api/users/:id (abaixo) continua ativa e é @Public().
    */
-  @Get()
-  async getAll(@Query() query: GetUsersDto) {
-    const result = await this.usersService.getAll(query);
-
-    return {
-      success: true,
-      message: 'Usuários recuperados com sucesso',
-      data: result.data,
-      meta: {
-        pagination: result.pagination,
-      },
-    };
-  }
+  // /**
+  // * GET /api/users
+  // * Get all users with pagination and optional role filter
+  // * @param query - Query parameters (page, perPage, role)
+  // * @example
+  // * GET /api/users?page=1&perPage=20&role=CUSTOMER
+  // */
+  // @Get()
+  // async getAll(@Query() query: GetUsersDto) {
+  // const result = await this.usersService.getAll(query);
+  //
+  // return {
+  // success: true,
+  // message: 'Usuários recuperados com sucesso',
+  // data: result.data,
+  // meta: {
+  // pagination: result.pagination,
+  // },
+  // };
+  // }
 
   /**
    * GET /api/users/:id

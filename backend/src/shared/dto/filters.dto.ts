@@ -2,14 +2,11 @@
 //Carro
 // Substituto do tipo ENUM nos postgres
 export type estadoValues = ['novo', 'seminovo', 'colecao'];
-export type tipoCategoriaCarValues = [
-  'SUV',
-  'sedan',
-  'coupe',
-  'conversivel',
-  'esportivo',
-  'supercarro',
-];
+// Tipo/classificação específica é texto livre — o especialista pode cadastrar
+// um tipo fora da lista. As listas antigas viram sugestão no formulário, não
+// restrição de tipo. (Eram tuplas, não uniões: o campo acabava tipado como um
+// array de 6 posições, que nunca correspondeu ao valor real.)
+export type tipoCategoriaCarValues = string;
 export type cambioCarValues = ['manual', 'automatico', 'cvt'];
 export type combustivelCarValues = [
   'gasolina',
@@ -63,14 +60,7 @@ export type combustivelBoatValues = [
   'eletrico',
   'hibrido',
 ];
-export type tipoEmbarcacaoBoatValues = [
-  'iate',
-  'lancha',
-  'catamara',
-  'veleiro',
-  'jet_boat',
-  'outro',
-];
+export type tipoEmbarcacaoBoatValues = string;
 export type tamanhoBoatValues = ['ate_30_pes', '30_50_pes', 'acima_50_pes'];
 export class FiltersBoatMeta {
   marca?: string;
@@ -109,13 +99,7 @@ export class RangeBoatFilters {
 }
 
 // Aeronaves
-export type tipoAeronaveValues = [
-  'VLJ',
-  'executivo_medio',
-  'intercontinental',
-  'turbohelice',
-  'helicoptero',
-];
+export type tipoAeronaveValues = string;
 export class FiltersAircraftMeta {
   marca?: string;
   modelo?: string;

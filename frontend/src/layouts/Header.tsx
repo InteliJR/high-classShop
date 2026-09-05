@@ -1,14 +1,15 @@
 import { ChevronDown, TextAlignJustifyIcon, UserCircle2 } from "lucide-react";
 import Logo from "../assets/logo_brokerage.png";
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
 import { useIsMobile } from "../hooks/use-is-mobile";
 import { useAuth } from "../store/authStateManager";
 import { AppContext } from "../contexts/AppContext";
 import { useNavigate } from "react-router-dom";
 import UserDropdown from "../components/ui/UserDropdown";
-import { resolveCompanyLogo, getUserCompany } from "../utils/branding";
+import { getActiveCompany, resolveCompanyLogo } from "../utils/branding";
 import { useWhitelabel } from "../store/whitelabelStore";
 import { getRoleBasedRoute } from "../utils/roleUtils";
+import { PUBLIC_CATALOG_LINKS } from "../lib/navigation";
 
 export default function Header() {
   const { isSidebarCollapsed, setSidebarCollapsed } = useContext(AppContext);
@@ -16,18 +17,17 @@ export default function Header() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const whitelabelCompany = useWhitelabel((s) => s.company);
-  const company = getUserCompany(user) ?? whitelabelCompany;
+  const company = getActiveCompany(user, whitelabelCompany);
   const brandLogo = resolveCompanyLogo(company) ?? Logo;
   const handleLogoClick = () => {
     navigate(user ? getRoleBasedRoute(user.role) : "/");
   };
 
-  // Lista de itens do menu para visitantes
-  const menuItems = [
-    { label: "Aeronaves", path: "/catalog/aircrafts" },
-    { label: "Embarcações", path: "/catalog/boats" },
-    { label: "Carros", path: "/catalog/cars" },
-  ];
+  useEffect(() => {
+    if (!isMobile && isSidebarCollapsed) {
+      setSidebarCollapsed(false);
+    }
+  }, [isMobile, isSidebarCollapsed, setSidebarCollapsed]);
 
   return (
     <>
@@ -40,24 +40,30 @@ export default function Header() {
       >
         <div className="flex w-full justify-between sm:flex-row-reverse items-center">
           {isMobile && (
-            // Abrir a sidebar do header em mobiles
-            <TextAlignJustifyIcon
-              size={35}
+            <button
+              id="sidebar-menu-trigger"
+              type="button"
+              aria-label={isSidebarCollapsed ? "Fechar menu" : "Abrir menu"}
+              aria-expanded={isSidebarCollapsed}
+              aria-controls="main-sidebar"
               onClick={() => {
                 setSidebarCollapsed(!isSidebarCollapsed);
               }}
-            />
+              className="flex items-center justify-center"
+            >
+              <TextAlignJustifyIcon size={35} />
+            </button>
           )}
           {!isMobile && !user && (
             <div className="flex justify-between items-center text-base w-full pl-12">
               {/* Navegação nos links */}
               <nav>
                 <ul className="flex gap-2">
-                  {menuItems.map((item) => (
+                  {PUBLIC_CATALOG_LINKS.map((item) => (
                     <li
-                      key={item.path}
+                      key={item.to}
                       className="flex items-center p-2 gap-0.5 cursor-pointer"
-                      onClick={() => navigate(item.path)}
+                      onClick={() => navigate(item.to)}
                     >
                       <span>{item.label}</span>
                       <ChevronDown size={20} />
@@ -110,7 +116,11 @@ export default function Header() {
               className="cursor-pointer"
               aria-label="Ir para a página inicial"
             >
-              <img src={brandLogo} alt="BMF Lux Brokerage" className="w-25 sm:w-35 h-auto" />
+              <img
+                src={brandLogo}
+                alt={company?.name ?? "BMF Lux Brokerage"}
+                className="w-25 sm:w-35 h-auto"
+              />
             </button>
           )}
         </div>

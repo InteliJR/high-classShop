@@ -533,22 +533,8 @@ export default function CreateContractPage() {
       }
 
       const backendMessage = extractBackendMessage(error);
-      const lowerMessage = backendMessage.toLowerCase();
 
-      const isEmailConflict =
-        (lowerMessage.includes("vendedor") &&
-          lowerMessage.includes("especialista")) ||
-        lowerMessage.includes("same") ||
-        (error.response?.data?.error?.code === 400 &&
-          error.response?.data?.error?.details?.seller_email != null);
-
-      if (isEmailConflict) {
-        setSubmitStatus({
-          type: "error",
-          message:
-            "O e-mail do comprador não pode ser o mesmo do consultor ou vendedor. Utilize e-mails diferentes para cada parte.",
-        });
-      } else if (
+      if (
         error.response?.status === 409 ||
         error.response?.data?.error === "CONTRACT_ALREADY_EXISTS"
       ) {
@@ -603,21 +589,12 @@ export default function CreateContractPage() {
       console.error("Erro ao enviar contrato");
 
       const backendMessage = extractBackendMessage(error);
-      const lowerMessage = backendMessage.toLowerCase();
       const requiresManualReconciliation =
         error.response?.data?.error?.code ===
         "CONTRACT_MANUAL_RECONCILIATION_REQUIRED";
 
-      const isEmailConflict =
-        (lowerMessage.includes("vendedor") &&
-          lowerMessage.includes("especialista")) ||
-        lowerMessage.includes("same") ||
-        (error.response?.data?.error?.code === 400 &&
-          error.response?.data?.error?.details?.seller_email != null);
-
-      const message = isEmailConflict
-        ? "O e-mail do comprador não pode ser o mesmo do consultor ou vendedor. Utilize e-mails diferentes para cada parte."
-        : backendMessage || "Erro ao enviar contrato. Tente novamente.";
+      const message =
+        backendMessage || "Erro ao enviar contrato. Tente novamente.";
 
       const hasUnknownExternalEffect = !error.response;
       if (requiresManualReconciliation || hasUnknownExternalEffect) {

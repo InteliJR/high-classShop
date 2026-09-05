@@ -10,7 +10,6 @@ import {
   Loader2,
 } from "lucide-react";
 import ProcessCard from "../../components/processes/ProcessCard";
-import CreateProcessModal from "../../components/processes/CreateProcessModal";
 import ProductSelectorModal from "../../components/product/ProductSelectorModal";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
@@ -80,7 +79,6 @@ export default function ProcessesPage() {
   const [showFilters, setShowFilters] = useState(false);
 
   // Modal state
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showProductSelectorModal, setShowProductSelectorModal] =
     useState(false);
   const [selectedProcessForProduct, setSelectedProcessForProduct] =
@@ -210,13 +208,6 @@ export default function ProcessesPage() {
     navigate(`/specialist/contracts/new?processId=${processId}`);
   };
 
-  // Handle successful process creation
-  const handleProcessCreated = () => {
-    setShowCreateModal(false);
-    setIsEditing(false); // Resume polling after creation
-    loadProcesses(1); // Reload from first page
-  };
-
   // Handle opening product selector for consultancy processes
   const handleSelectProduct = (process: ProcessWithProduct) => {
     setSelectedProcessForProduct(process);
@@ -268,10 +259,6 @@ export default function ProcessesPage() {
                 {hasActiveFilters && (
                   <span className="ml-1 w-2 h-2 bg-status-bad rounded-full" />
                 )}
-              </Button>
-              <Button type="button" onClick={() => setShowCreateModal(true)}>
-                <Plus size={16} />
-                <span className="hidden sm:inline">Novo Processo</span>
               </Button>
             </>
           }
@@ -430,15 +417,10 @@ export default function ProcessesPage() {
                 ? "Tente ajustar os filtros para encontrar mais resultados"
                 : "Crie seu primeiro processo para começar"}
             </p>
-            {hasActiveFilters ? (
+            {hasActiveFilters && (
               <Button type="button" variant="light" onClick={handleClearFilters}>
                 <X size={18} />
                 Limpar Filtros
-              </Button>
-            ) : (
-              <Button type="button" onClick={() => setShowCreateModal(true)}>
-                <Plus size={18} />
-                Criar Novo Processo
               </Button>
             )}
           </div>
@@ -497,13 +479,6 @@ export default function ProcessesPage() {
           </div>
         )}
       </div>
-
-      {/* Create Process Modal */}
-      <CreateProcessModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onSuccess={handleProcessCreated}
-      />
 
       {/* Product Selector Modal for Consultancy Processes */}
       {selectedProcessForProduct && user?.speciality && (

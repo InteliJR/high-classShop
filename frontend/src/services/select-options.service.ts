@@ -24,43 +24,60 @@ export interface ProductOption extends Omit<SelectOption, "id"> {
 }
 
 /**
- * Fetch all clients (CUSTOMER users)
- * Used to populate Client select in CreateProcessModal
- * @param page - Page number for pagination
- * @param perPage - Number of items per page
+ * DESATIVADO — listagem de todos os clientes.
+ *
+ * Esta função chamava `GET /users?role=CUSTOMER`, que devolve a base inteira
+ * de clientes. Ela existia só para popular o select do CreateProcessModal, na
+ * tela de processos do especialista: para escolher um cliente, o especialista
+ * enxergava todos os clientes da plataforma — inclusive os de outros
+ * escritórios, com nome, e-mail e CPF.
+ *
+ * O botão de iniciar processo foi retirado da tela do especialista e a rota
+ * `GET /users` foi comentada no backend (users.controller.ts), então esta
+ * função não tem mais para onde apontar.
+ *
+ * Mantida comentada, e não apagada, para o caso de o fluxo voltar com um
+ * endpoint escopado (por exemplo, só os clientes com processo do próprio
+ * especialista).
  */
-export async function fetchClients(
-  page = 1,
-  perPage = 20
-): Promise<ClientOption[]> {
-  try {
-    const response = await api.get("/users", {
-      withCredentials: true,
-      params: { role: "CUSTOMER", page, perPage },
-    });
-
-    return (response.data.data || []).map(
-      (user: {
-        id: string;
-        name: string;
-        surname: string;
-        email: string;
-        role: UserRole;
-      }) => ({
-        id: user.id,
-        label: `${user.name} ${user.surname}`,
-        value: user.id,
-        email: user.email,
-        role: user.role,
-      })
-    );
-  } catch (error) {
-    console.error("Erro ao buscar clientes:", error);
-    throw new Error(
-      "Não foi possível carregar a lista de clientes. Por favor, tente novamente."
-    );
-  }
-}
+// /**
+//  * Fetch all clients (CUSTOMER users)
+//  * Used to populate Client select in CreateProcessModal
+//  * @param page - Page number for pagination
+//  * @param perPage - Number of items per page
+//  */
+// export async function fetchClients(
+//   page = 1,
+//   perPage = 20
+// ): Promise<ClientOption[]> {
+//   try {
+//     const response = await api.get("/users", {
+//       withCredentials: true,
+//       params: { role: "CUSTOMER", page, perPage },
+//     });
+//
+//     return (response.data.data || []).map(
+//       (user: {
+//         id: string;
+//         name: string;
+//         surname: string;
+//         email: string;
+//         role: UserRole;
+//       }) => ({
+//         id: user.id,
+//         label: `${user.name} ${user.surname}`,
+//         value: user.id,
+//         email: user.email,
+//         role: user.role,
+//       })
+//     );
+//   } catch (error) {
+//     console.error("Erro ao buscar clientes:", error);
+//     throw new Error(
+//       "Não foi possível carregar a lista de clientes. Por favor, tente novamente."
+//     );
+//   }
+// }
 
 /**
  * Fetch products by type (CAR, BOAT, AIRCRAFT)

@@ -18,6 +18,12 @@ import {
   ChangeBlockerCode,
   ChangeValidationResult,
 } from './admin-user-management.types';
+import {
+  emailDeExclusao,
+  foiExcluido,
+  rgDeExclusao,
+  senhaDeExclusao,
+} from './admin-user-deletion';
 
 type UserManagementDatabase = Pick<
   PrismaService,
@@ -126,6 +132,77 @@ export class AdminUserManagementService {
         throw new ConflictException(this.result(['CONCURRENT_CHANGE']));
       throw error;
     }
+  }
+
+
+  /**
+   * Exclui a conta de um usuário liberando os identificadores únicos.
+   *
+   * A linha não é apagada: Process.client_id, Process.specialist_id,
+   * Contract e NegotiationProposal apontam para ela com FK obrigatória, e a
+   * task exige que esse histórico continue consultável. O que some é a
+   * identidade — e-mail, CPF, RG e matrícula —, o que devolve esses valores
+   * para um novo cadastro.
+   *
+   * Também derruba o acesso: refresh tokens apagados, conta inativa e hash de
+   * senha inutilizado.
+   *
+   * A conexão do Calendly vai junto por dois motivos: guarda tokens OAuth de
+   * uma conta que deixou de existir, e `calendly_user_uri` é único — sem
+   * remover, a pessoa recadastrada não conseguiria reconectar o mesmo
+   * Calendly.
+   *
+   * @throws {BadRequestException} - Admin tentando excluir a própria conta
+   * @throws {NotFoundException} - Usuário inexistente
+   * @throws {ConflictException} - Conta já excluída
+   */
+  async deleteUser(id: string, actorId: string) {
+    if (id === actorId) {
+      throw new BadRequestException(
+        'Você não pode excluir a própria conta de administrador.',
+      );
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, email: true, name: true, surname: true, role: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    if (foiExcluido(user.email)) {
+      throw new ConflictException('Esta conta já foi excluída.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Sessões primeiro: enquanto a transação não fecha, o access token
+      // atual ainda vale por alguns minutos — o AuthGuard corta pelo is_active.
+      await tx.refreshToken.deleteMany({ where: { user_id: id } });
+      await tx.calendlyConnection.deleteMany({ where: { user_id: id } });
+
+      await tx.user.update({
+        where: { id },
+        data: {
+          email: emailDeExclusao(),
+          cpf: null,
+          rg: rgDeExclusao(),
+          identification_number: null,
+          password_hash: senhaDeExclusao(),
+          is_active: false,
+          deactivated_at: new Date(),
+          deactivated_by: actorId,
+        },
+      });
+    });
+
+    return {
+      id: user.id,
+      name: `${user.name} ${user.surname}`.trim(),
+      role: user.role,
+      message: 'Conta excluída. E-mail e documentos liberados para novo cadastro.',
+    };
   }
 
   private async analyzeRoleChange(
