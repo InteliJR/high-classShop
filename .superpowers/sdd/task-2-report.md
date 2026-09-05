@@ -47,6 +47,21 @@ Resultado:
 - `1 test file passed`
 - `3 tests passed`
 
+## Verificação ampliada
+
+Também rodei a suíte completa do frontend uma única vez, sem alterações adicionais de código.
+
+Comando:
+
+```bash
+cd frontend && rtk npm test -- --pool=forks --maxWorkers=2
+```
+
+Resultado:
+
+- `25 test files passed`
+- `114 tests passed`
+
 ## Self-review
 
 - O escopo ficou restrito aos arquivos da task.
@@ -56,5 +71,5 @@ Resultado:
 
 ## Preocupações
 
-- Não rodei a suíte completa do frontend, apenas o teste focado do `Header`.
+- A suíte completa do frontend passou, então a única limitação remanescente é que não houve build ou lint separados nesta etapa.
 - O texto do aria-label do visitante foi ajustado para o catálogo de carros, como pedido no brief; se houver padronização diferente em outros cabeçalhos, isso pode exigir alinhamento futuro.
