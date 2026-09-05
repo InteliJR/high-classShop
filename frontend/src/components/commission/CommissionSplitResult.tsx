@@ -1,15 +1,14 @@
 import type { NestedCommissionSplit } from "../../lib/commission-split";
 import { effectiveRate } from "../../lib/commission-split";
+import { formatCurrency, type ProductCurrency } from "../../lib/currency";
 
 export interface CommissionSplitResultProps {
   saleValue: number;
   split: NestedCommissionSplit;
+  currency?: ProductCurrency;
   /** Versão reduzida (card do dashboard): sem tabela, sem linha de bolo. */
   compact?: boolean;
 }
-
-const brl = (n: number) =>
-  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 const DOT = {
   specialist: "bg-emerald-500",
@@ -20,6 +19,7 @@ const DOT = {
 export function CommissionSplitResult({
   saleValue,
   split,
+  currency = "BRL",
   compact = false,
 }: CommissionSplitResultProps) {
   if (compact) {
@@ -44,7 +44,7 @@ export function CommissionSplitResult({
               <span className={`w-2 h-2 rounded-full shrink-0 ${row.dot}`} />
               {row.label}
             </span>
-            <span className="font-semibold text-ink">{brl(row.value)}</span>
+            <span className="font-semibold text-ink">{formatCurrency(row.value, currency)}</span>
           </div>
         ))}
       </div>
@@ -78,7 +78,7 @@ export function CommissionSplitResult({
               </span>
             </td>
             <td className="px-3 py-2 text-right font-medium text-ink">
-              {brl(row.value)}
+              {formatCurrency(row.value, currency)}
             </td>
             <td className="px-3 py-2 text-right text-ink-soft">
               {effectiveRate(row.value, saleValue)}%
@@ -94,7 +94,7 @@ export function CommissionSplitResult({
               Plataforma
             </span>
           </td>
-          <td className="px-3 py-2 text-right">{brl(split.platformValue)}</td>
+          <td className="px-3 py-2 text-right">{formatCurrency(split.platformValue, currency)}</td>
           <td className="px-3 py-2 text-right">
             {effectiveRate(split.platformValue, saleValue)}%
           </td>

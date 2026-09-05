@@ -9,6 +9,10 @@ import {
 } from "../../services/googleMeet.service";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
+import {
+  fractionToPercentageInput,
+  percentageInputToFraction,
+} from "../../lib/minimum-proposal-percentage";
 
 /**
  * Admin Settings Page
@@ -112,7 +116,9 @@ export default function SettingsPage() {
           setMinimumProposalEnabled(enabledSetting.value === "true");
         }
         if (percentageSetting) {
-          setMinimumProposalPercentage(percentageSetting.value);
+          setMinimumProposalPercentage(
+            fractionToPercentageInput(percentageSetting.value),
+          );
         }
       } catch (err) {
         setError(
@@ -159,7 +165,7 @@ export default function SettingsPage() {
 
       await updateSetting(
         "minimum_proposal_percentage",
-        minimumProposalPercentage,
+        percentageInputToFraction(minimumProposalPercentage),
       );
 
       setSuccessMessage("Porcentagem atualizada com sucesso!");

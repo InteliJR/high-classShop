@@ -1,4 +1,5 @@
-import { formatRg } from './format.utils';
+import { ProductCurrency } from '@prisma/client';
+import { formatBRL, formatCurrency, formatRg } from './format.utils';
 
 describe('formatRg', () => {
   it('formata RG de 7, 8 ou 9 dígitos', () => {
@@ -13,5 +14,20 @@ describe('formatRg', () => {
 
   it('devolve o valor original para tamanhos inválidos', () => {
     expect(formatRg('123')).toBe('123');
+  });
+});
+
+describe('formatCurrency', () => {
+  it.each([
+    [ProductCurrency.BRL, 'R$ 120.000,00'],
+    [ProductCurrency.USD, 'US$ 120.000,00'],
+  ])('formats %s in pt-BR without conversion', (currency, expected) => {
+    expect(formatCurrency(120000, currency).replace(/\u00a0/g, ' ')).toBe(
+      expected,
+    );
+  });
+
+  it('keeps formatBRL as a compatible BRL wrapper', () => {
+    expect(formatBRL(120000)).toBe(formatCurrency(120000, ProductCurrency.BRL));
   });
 });

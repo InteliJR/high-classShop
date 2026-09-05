@@ -5,6 +5,9 @@
  * com campos pré-preenchidos (docGenFormFields / textTabs)
  */
 export class CreateTemplateEnvelopeDto {
+  /** Chave idempotente da operação de criação no provedor. */
+  transactionId: string;
+
   /**
    * ID do template no DocuSign
    * @example "141ff98d-17af-4400-85e7-4a70640e4b9a"

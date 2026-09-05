@@ -14,6 +14,7 @@ import { getCars } from "../../services/cars.service";
 import { getBoats } from "../../services/boats.service";
 import { getAircrafts } from "../../services/aircrafts.service";
 import type { Product } from "../../types/types";
+import { formatCurrency, type ProductCurrency } from "../../lib/currency";
 
 type ProductCategory = "CAR" | "BOAT" | "AIRCRAFT";
 
@@ -22,9 +23,6 @@ const CATEGORY_LABEL: Record<ProductCategory, string> = {
   BOAT: "Embarcação",
   AIRCRAFT: "Aeronave",
 };
-
-const brl = (n: number) =>
-  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 async function fetchProductsByCategory(
   category: ProductCategory,
@@ -40,6 +38,7 @@ const labelClass = "block text-sm font-medium text-ink-soft mb-1";
 
 export default function CommissionCalculatorPage() {
   const [saleValue, setSaleValue] = useState("0");
+  const [saleCurrency, setSaleCurrency] = useState<ProductCurrency>("BRL");
   const [totalCommissionRate, setTotalCommissionRate] = useState("10");
   const [specialistShareRate, setSpecialistShareRate] = useState("0");
   const [officeShareRate, setOfficeShareRate] = useState("0");
@@ -131,6 +130,7 @@ export default function CommissionCalculatorPage() {
                     setSelectedProductId("");
                     setProducts([]);
                     setSaleValue("0");
+                    setSaleCurrency("BRL");
                   }}
                   className={selectClass}
                 >
@@ -154,7 +154,10 @@ export default function CommissionCalculatorPage() {
                     const product = products.find(
                       (p) => String(p.id) === e.target.value,
                     );
-                    if (product) setSaleValue(String(product.valor));
+                    if (product) {
+                      setSaleValue(String(product.valor));
+                      setSaleCurrency(product.currency);
+                    }
                   }}
                   className={selectClass}
                 >
@@ -163,7 +166,7 @@ export default function CommissionCalculatorPage() {
                   </option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.marca} {p.modelo} — {brl(p.valor)}
+                      {p.marca} {p.modelo} — {formatCurrency(p.valor, p.currency)}
                     </option>
                   ))}
                 </select>
@@ -172,7 +175,7 @@ export default function CommissionCalculatorPage() {
 
             <div>
               <label htmlFor="calculator-sale-value" className={labelClass}>
-                Valor de venda (R$)
+                Valor de venda ({saleCurrency === "USD" ? "US$" : "R$"})
               </label>
               <Input
                 id="calculator-sale-value"
@@ -314,6 +317,7 @@ export default function CommissionCalculatorPage() {
               <CommissionSplitResult
                 saleValue={calculationInput.saleValue}
                 split={split}
+                currency={saleCurrency}
               />
             )}
           </Card>

@@ -3,6 +3,7 @@ import type {
   FiltersMeta,
   PaginationMeta,
   Product,
+  ProductCurrency,
   ResponseAPI,
 } from "../types/types";
 import api from "./api";
@@ -18,6 +19,7 @@ export interface RawAircraft {
   modelo: string;
   identificador: string;
   valor: number;
+  currency: ProductCurrency;
   estado: string;
   ano: number;
   categoria?: string;
@@ -50,6 +52,7 @@ export interface CreateAircraftDto {
   modelo: string;
   identificador: string;
   valor: number;
+  currency?: ProductCurrency;
   estado: string;
   ano: number;
   categoria?: string;
@@ -99,6 +102,7 @@ export async function getAircrafts(
         imageUrl: primaryImage ?? "",
         images: rawAircraft.images,
         valor: rawAircraft.valor,
+        currency: rawAircraft.currency,
         ano: rawAircraft.ano,
         estado: rawAircraft.estado,
         specialist_id: rawAircraft.specialist_id,

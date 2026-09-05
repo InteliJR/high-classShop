@@ -1,5 +1,6 @@
 import ProductCarousel from "./ProductCarousel";
 import type { Product } from "../../types/types";
+import { formatCurrency } from "../../lib/currency";
 
 interface ProductDetailsProps {
   product: Product;
@@ -66,10 +67,7 @@ export default function ProductDetails({ product }: ProductDetailsProps) {
 
     if (numValue === null || Number.isNaN(numValue)) return "N/A";
 
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(numValue);
+    return formatCurrency(numValue, product.currency);
   };
 
   // Função auxiliar para formatar números

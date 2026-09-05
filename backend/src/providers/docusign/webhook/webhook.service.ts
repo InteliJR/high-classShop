@@ -1,7 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { mapDocusignStatusToProviderStatus } from '../mappers/envelope-status.mapper';
-import { ProcessCompletionReason } from '@prisma/client';
+import {
+  ProcessCompletionReason,
+  ProcessStatus,
+  ProviderStatus,
+} from '@prisma/client';
 import { NotificationService } from 'src/features/notifications/notification.service';
 
 /**
@@ -46,6 +54,25 @@ const PROVIDER_STATUS_TO_CONTRACT_STATUS: Record<string, string> = {
   TIMEDOUT: 'REJECTED',
   ERROR: 'REJECTED',
 };
+
+const PROVIDER_STATUS_RANK: Record<ProviderStatus, number> = {
+  [ProviderStatus.CREATED]: 0,
+  [ProviderStatus.SENT]: 1,
+  [ProviderStatus.DELIVERED]: 2,
+  [ProviderStatus.COMPLETED]: 3,
+  [ProviderStatus.DECLINED]: 3,
+  [ProviderStatus.VOIDED]: 3,
+  [ProviderStatus.TIMEDOUT]: 3,
+  [ProviderStatus.ERROR]: 3,
+};
+
+const TERMINAL_PROVIDER_STATUSES = new Set<ProviderStatus>([
+  ProviderStatus.COMPLETED,
+  ProviderStatus.DECLINED,
+  ProviderStatus.VOIDED,
+  ProviderStatus.TIMEDOUT,
+  ProviderStatus.ERROR,
+]);
 
 /**
  * Serviço para processar webhooks da DocuSign.
@@ -153,7 +180,10 @@ export class DocuSignWebhookService {
    * Saída:
    * Contrato atualizado com status SIGNED
    */
-  async handleEnvelopeStatusChanged(payload: any): Promise<void> {
+  async handleEnvelopeStatusChanged(
+    payload: any,
+    casAttempt = 0,
+  ): Promise<void> {
     try {
       // ===== ETAPA 1: VALIDAR PAYLOAD =====
 
@@ -216,6 +246,30 @@ export class DocuSignWebhookService {
             accountId: payload.data.accountId,
           },
         );
+        throw new ServiceUnavailableException({
+          success: false,
+          error: {
+            code: 'CONTRACT_WEBHOOK_NOT_READY',
+            message: 'Contrato ainda não está disponível para este envelope.',
+          },
+        });
+      }
+
+      const nextProviderStatus = providerStatus as ProviderStatus;
+      const currentProviderStatus =
+        contract.provider_status as ProviderStatus | null;
+      if (
+        currentProviderStatus === nextProviderStatus ||
+        (currentProviderStatus &&
+          (TERMINAL_PROVIDER_STATUSES.has(currentProviderStatus) ||
+            PROVIDER_STATUS_RANK[nextProviderStatus] <
+              PROVIDER_STATUS_RANK[currentProviderStatus]))
+      ) {
+        this.logger.debug('Webhook idempotente ou atrasado ignorado', {
+          envelopeId,
+          currentProviderStatus,
+          nextProviderStatus,
+        });
         return;
       }
 
@@ -261,10 +315,17 @@ export class DocuSignWebhookService {
       // ===== ETAPA 7: ATUALIZAR CONTRATO E SINCRONIZAR PROCESSO =====
 
       const updated = await this.prismaService.$transaction(async (tx) => {
-        // 7.1 Atualizar contrato
-        const updatedContract = await tx.contract.update({
-          where: { id: contract.id },
+        // 7.1 Claim CAS: somente uma entrega concorrente produz efeitos.
+        const claim = await tx.contract.updateMany({
+          where: {
+            id: contract.id,
+            provider_status: currentProviderStatus,
+          },
           data: updateData,
+        });
+        if (claim.count !== 1) return null;
+        const updatedContract = await tx.contract.findUniqueOrThrow({
+          where: { id: contract.id },
         });
 
         this.logger.log(`✓ Contrato atualizado com sucesso`, {
@@ -315,6 +376,7 @@ export class DocuSignWebhookService {
           await tx.processStatusHistory.create({
             data: {
               processId: process.id,
+              status: ProcessStatus.COMPLETED,
               reason: ProcessCompletionReason.CONTRACT_SIGNED,
             },
           });
@@ -338,6 +400,7 @@ export class DocuSignWebhookService {
           await tx.processStatusHistory.create({
             data: {
               processId: process.id,
+              status: ProcessStatus.REJECTED,
               reason: completionReason,
             },
           });
@@ -376,6 +439,53 @@ export class DocuSignWebhookService {
 
         return updatedContract;
       });
+
+      if (!updated) {
+        this.logger.debug(
+          'Webhook perdeu o claim concorrente; relendo estado autoritativo',
+          {
+            envelopeId,
+            providerStatus,
+            casAttempt,
+          },
+        );
+        const latestContract = await this.prismaService.contract.findFirst({
+          where: { provider_id: envelopeId },
+        });
+        if (!latestContract) {
+          throw new ServiceUnavailableException({
+            success: false,
+            error: {
+              code: 'CONTRACT_WEBHOOK_NOT_READY',
+              message:
+                'Contrato ainda não está disponível para este envelope.',
+            },
+          });
+        }
+        const latestStatus = latestContract.provider_status as
+          | ProviderStatus
+          | null;
+        if (
+          latestStatus === nextProviderStatus ||
+          (latestStatus &&
+            (TERMINAL_PROVIDER_STATUSES.has(latestStatus) ||
+              PROVIDER_STATUS_RANK[latestStatus] >=
+                PROVIDER_STATUS_RANK[nextProviderStatus]))
+        ) {
+          return;
+        }
+        if (casAttempt >= 2) {
+          throw new ServiceUnavailableException({
+            success: false,
+            error: {
+              code: 'CONTRACT_WEBHOOK_CONTENTION',
+              message:
+                'O contrato mudou concorrentemente; o webhook deve ser repetido.',
+            },
+          });
+        }
+        return this.handleEnvelopeStatusChanged(payload, casAttempt + 1);
+      }
 
       // ===== ETAPA 8: ENVIAR NOTIFICAÇÕES (Fire-and-forget) =====
 
@@ -429,7 +539,7 @@ export class DocuSignWebhookService {
                   method: 'handleEnvelopeStatusChanged',
                   event: 'SENT',
                   contractId: contract.id,
-                  error: err.message,
+                  errorType: err instanceof Error ? err.name : typeof err,
                 });
               });
           } else if (
@@ -452,7 +562,7 @@ export class DocuSignWebhookService {
                   method: 'handleEnvelopeStatusChanged',
                   event: 'COMPLETED',
                   contractId: contract.id,
-                  error: err.message,
+                  errorType: err instanceof Error ? err.name : typeof err,
                 });
               });
           } else if (providerStatus === 'DECLINED' && sellerEmail) {
@@ -470,7 +580,7 @@ export class DocuSignWebhookService {
                   method: 'handleEnvelopeStatusChanged',
                   event: 'DECLINED',
                   contractId: contract.id,
-                  error: err.message,
+                  errorType: err instanceof Error ? err.name : typeof err,
                 });
               });
           } else if (providerStatus === 'VOIDED' && sellerEmail) {
@@ -488,7 +598,7 @@ export class DocuSignWebhookService {
                   method: 'handleEnvelopeStatusChanged',
                   event: 'VOIDED',
                   contractId: contract.id,
-                  error: err.message,
+                  errorType: err instanceof Error ? err.name : typeof err,
                 });
               });
           } else if (providerStatus === 'TIMEDOUT' && sellerEmail) {
@@ -506,7 +616,7 @@ export class DocuSignWebhookService {
                   method: 'handleEnvelopeStatusChanged',
                   event: 'TIMEDOUT',
                   contractId: contract.id,
-                  error: err.message,
+                  errorType: err instanceof Error ? err.name : typeof err,
                 });
               });
           }
@@ -528,22 +638,10 @@ export class DocuSignWebhookService {
         },
       });
     } catch (error) {
-      // Não relançar erro para evitar retry infinito de webhooks
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error.stack : undefined;
-
-      this.logger.error(
-        `❌ Erro ao processar webhook DocuSign: ${errorMessage}`,
-        errorStack,
-      );
-
-      // Log estruturado para debugging
-      this.logger.debug(`Erro ao processar webhook - detalhes completos:`, {
-        error: errorMessage,
-        payload: payload,
-        stack: errorStack,
+      this.logger.error('Erro ao processar webhook DocuSign', {
+        errorType: error instanceof Error ? error.name : typeof error,
       });
+      throw error;
     }
   }
 }

@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  ConflictException,
   NotFoundException,
   ForbiddenException,
   Logger,
@@ -11,9 +12,11 @@ import {
   ProposalResponseEntity,
   ProposalListResponseEntity,
 } from './entities/proposal.entity';
-import { ProposalStatus, ProcessStatus } from '@prisma/client';
+import { Prisma, ProposalStatus, ProcessStatus } from '@prisma/client';
 import { SettingsService } from 'src/features/settings/settings.service';
 import { NotificationService } from 'src/features/notifications/notification.service';
+import { requireNegotiationSnapshot } from 'src/features/processes/negotiation-snapshot';
+import { calculateMinimumProposalValue } from './proposal-money';
 
 /**
  * ProposalsService
@@ -38,14 +41,39 @@ import { NotificationService } from 'src/features/notifications/notification.ser
 export class ProposalsService {
   private readonly logger = new Logger(ProposalsService.name);
 
-  // Porcentagem mínima padrão (usado como fallback)
-  private readonly DEFAULT_MINIMUM_PERCENTAGE = 0.8; // 80%
-
   constructor(
     private prisma: PrismaService,
     private settingsService: SettingsService,
     private notificationService: NotificationService,
   ) {}
+
+  private async lockProposalProcess(tx: any, processId: string): Promise<void> {
+    const lockKey = `proposal-process:${processId}`;
+    await tx.$queryRaw`
+      SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
+    `;
+  }
+
+  private async lockProcessForProposalResponse(
+    tx: Prisma.TransactionClient,
+    proposalId: string,
+  ): Promise<void> {
+    const proposal = await tx.negotiationProposal.findUnique({
+      where: { id: proposalId },
+      select: { process_id: true },
+    });
+    if (!proposal) {
+      throw new NotFoundException({
+        success: false,
+        error: {
+          code: 404,
+          message: 'Proposta não encontrada',
+          details: { proposal_id: proposalId },
+        },
+      });
+    }
+    await this.lockProposalProcess(tx, proposal.process_id);
+  }
 
   /**
    * Cria uma nova proposta de negociação
@@ -65,242 +93,294 @@ export class ProposalsService {
       `[create] Criando proposta para processo ${dto.process_id} por usuário ${userId}`,
     );
 
-    // 1. Buscar processo com dados completos
-    const process = await this.prisma.process.findUnique({
-      where: { id: dto.process_id },
-      include: {
-        client: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            surname: true,
-            role: true,
-            consultant_id: true,
-          },
-        },
-        specialist: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            surname: true,
-            role: true,
-          },
-        },
-        car: { select: { id: true, valor: true, is_active: true } },
-        boat: { select: { id: true, valor: true, is_active: true } },
-        aircraft: { select: { id: true, valor: true, is_active: true } },
-        proposals: {
-          orderBy: { created_at: 'desc' },
-          take: 1,
+    const { proposal, process, currency, productValue, isOnClientSide } =
+      await this.prisma.$transaction(async (tx) => {
+        await this.lockProposalProcess(tx, dto.process_id);
+
+        // 1. Buscar processo com dados completos após adquirir o lock do processo
+        const process = await tx.process.findUnique({
+          where: { id: dto.process_id },
           include: {
-            proposed_by: { select: { id: true } },
-          },
-        },
-      },
-    });
-
-    if (!process) {
-      this.logger.warn(`[create] Processo ${dto.process_id} não encontrado`);
-      throw new NotFoundException({
-        success: false,
-        error: {
-          code: 404,
-          message: 'Processo não encontrado',
-          details: { process_id: dto.process_id },
-        },
-      });
-    }
-
-    // 2. Validar que processo está em NEGOTIATION
-    if (process.status !== ProcessStatus.NEGOTIATION) {
-      this.logger.warn(
-        `[create] Processo ${dto.process_id} não está em NEGOTIATION (status: ${process.status})`,
-      );
-      throw new BadRequestException({
-        success: false,
-        error: {
-          code: 400,
-          message: 'Processo não está em fase de negociação',
-          details: {
-            current_status: process.status,
-            required_status: 'NEGOTIATION',
-          },
-        },
-      });
-    }
-
-    // 3. Validar que usuário é participante do processo (cliente, especialista ou consultor do cliente)
-    const isClient = process.client_id === userId;
-    const isSpecialist = process.specialist_id === userId;
-    const isConsultantOfClient = process.client?.consultant_id === userId;
-    const isOnClientSide = isClient || isConsultantOfClient;
-
-    if (!isClient && !isSpecialist && !isConsultantOfClient) {
-      this.logger.warn(
-        `[create] Usuário ${userId} não é participante do processo ${dto.process_id}`,
-      );
-      throw new ForbiddenException({
-        success: false,
-        error: {
-          code: 403,
-          message: 'Você não é participante deste processo',
-          details: { user_id: userId, process_id: dto.process_id },
-        },
-      });
-    }
-
-    // 4. Validar alternância por lado (cliente/consultor vs especialista) — não pode dois envios seguidos do mesmo lado
-    const lastProposal = process.proposals[0];
-    if (lastProposal && lastProposal.status === ProposalStatus.PENDING) {
-      const lastProposerSide =
-        lastProposal.proposed_by.id === process.specialist_id
-          ? 'SPECIALIST'
-          : 'CLIENT';
-      const userSide = isOnClientSide ? 'CLIENT' : 'SPECIALIST';
-      if (lastProposerSide === userSide) {
-        this.logger.warn(
-          `[create] Usuário ${userId} tentou enviar proposta seguida (lado ${userSide})`,
-        );
-        throw new BadRequestException({
-          success: false,
-          error: {
-            code: 400,
-            message: 'Aguarde a resposta da proposta anterior',
-            details: {
-              last_proposal_id: lastProposal.id,
-              last_proposal_status: lastProposal.status,
+            client: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                surname: true,
+                role: true,
+                consultant_id: true,
+              },
+            },
+            specialist: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                surname: true,
+                role: true,
+              },
+            },
+            car: {
+              select: { id: true, is_active: true },
+            },
+            boat: {
+              select: { id: true, is_active: true },
+            },
+            aircraft: {
+              select: { id: true, is_active: true },
+            },
+            proposals: {
+              orderBy: { created_at: 'desc' },
+              take: 1,
+              include: {
+                proposed_by: { select: { id: true } },
+              },
             },
           },
         });
-      }
-    }
 
-    // 5. Obter valor do produto
-    const product = process.car || process.boat || process.aircraft;
-    if (!product) {
-      this.logger.error(
-        `[create] Processo ${dto.process_id} não tem produto associado`,
-      );
-      throw new BadRequestException({
-        success: false,
-        error: {
-          code: 400,
-          message:
-            'Processo não possui produto associado. O especialista deve selecionar um produto antes de iniciar a negociação.',
-          details: {
+        if (!process) {
+          this.logger.warn(
+            `[create] Processo ${dto.process_id} não encontrado`,
+          );
+          throw new NotFoundException({
+            success: false,
+            error: {
+              code: 404,
+              message: 'Processo não encontrado',
+              details: { process_id: dto.process_id },
+            },
+          });
+        }
+
+        // 2. Validar que processo está em NEGOTIATION
+        if (process.status !== ProcessStatus.NEGOTIATION) {
+          this.logger.warn(
+            `[create] Processo ${dto.process_id} não está em NEGOTIATION (status: ${process.status})`,
+          );
+          throw new BadRequestException({
+            success: false,
+            error: {
+              code: 400,
+              message: 'Processo não está em fase de negociação',
+              details: {
+                current_status: process.status,
+                required_status: 'NEGOTIATION',
+              },
+            },
+          });
+        }
+
+        // 3. Validar que usuário é participante do processo (cliente, especialista ou consultor do cliente)
+        const isClient = process.client_id === userId;
+        const isSpecialist = process.specialist_id === userId;
+        const isConsultantOfClient = process.client?.consultant_id === userId;
+        const isOnClientSide = isClient || isConsultantOfClient;
+
+        if (!isClient && !isSpecialist && !isConsultantOfClient) {
+          this.logger.warn(
+            `[create] Usuário ${userId} não é participante do processo ${dto.process_id}`,
+          );
+          throw new ForbiddenException({
+            success: false,
+            error: {
+              code: 403,
+              message: 'Você não é participante deste processo',
+              details: { user_id: userId, process_id: dto.process_id },
+            },
+          });
+        }
+
+        // 4. Validar alternância por lado (cliente/consultor vs especialista) — não pode dois envios seguidos do mesmo lado
+        const lastProposal = process.proposals[0];
+        if (lastProposal && lastProposal.status === ProposalStatus.PENDING) {
+          const lastProposerSide =
+            lastProposal.proposed_by.id === process.specialist_id
+              ? 'SPECIALIST'
+              : 'CLIENT';
+          const userSide = isOnClientSide ? 'CLIENT' : 'SPECIALIST';
+          if (lastProposerSide === userSide) {
+            this.logger.warn(
+              `[create] Usuário ${userId} tentou enviar proposta seguida (lado ${userSide})`,
+            );
+            throw new BadRequestException({
+              success: false,
+              error: {
+                code: 400,
+                message: 'Aguarde a resposta da proposta anterior',
+                details: {
+                  last_proposal_id: lastProposal.id,
+                  last_proposal_status: lastProposal.status,
+                },
+              },
+            });
+          }
+        }
+
+        // 5. Obter valor do produto
+        const product = process.car || process.boat || process.aircraft;
+        if (!product) {
+          this.logger.error(
+            `[create] Processo ${dto.process_id} não tem produto associado`,
+          );
+          throw new BadRequestException({
+            success: false,
+            error: {
+              code: 400,
+              message:
+                'Processo não possui produto associado. O especialista deve selecionar um produto antes de iniciar a negociação.',
+              details: {
+                process_id: dto.process_id,
+                tip: 'Se este é um processo de consultoria, o especialista precisa atribuir um produto através da opção "Selecionar Produto" na página de processos.',
+              },
+            },
+          });
+        }
+
+        const { currency, productValue: snapshotValue } =
+          requireNegotiationSnapshot(process);
+        const productValue = Number(snapshotValue);
+
+        // 6. Validar valor mínimo (se ativado nas configurações)
+        const minimumEnabled =
+          await this.settingsService.isMinimumProposalEnabled(tx);
+        const minimumPercentage = minimumEnabled
+          ? await this.settingsService.getMinimumProposalPercentage(tx)
+          : null;
+        const minimumValue =
+          minimumPercentage === null
+            ? null
+            : calculateMinimumProposalValue(snapshotValue, minimumPercentage);
+
+        if (
+          minimumValue !== null &&
+          new Prisma.Decimal(dto.proposed_value).lt(minimumValue)
+        ) {
+          this.logger.warn(
+            `[create] Valor proposto ${dto.proposed_value} abaixo do mínimo ${minimumValue.toFixed(2)}`,
+          );
+          throw new BadRequestException({
+            success: false,
+            error: {
+              code: 400,
+              message: `Valor proposto deve ser no mínimo ${Math.round(minimumPercentage! * 100)}% do valor do produto`,
+              details: {
+                proposed_value: dto.proposed_value,
+                minimum_value: Number(minimumValue),
+                product_value: productValue,
+                minimum_percentage: `${Math.round(minimumPercentage! * 100)}%`,
+              },
+            },
+          });
+        }
+
+        // 7. Validar counter_to_id se fornecido
+        if (dto.counter_to_id) {
+          const originalProposal = await tx.negotiationProposal.findUnique({
+            where: { id: dto.counter_to_id },
+          });
+
+          if (!originalProposal) {
+            throw new NotFoundException({
+              success: false,
+              error: {
+                code: 404,
+                message: 'Proposta original não encontrada',
+                details: { counter_to_id: dto.counter_to_id },
+              },
+            });
+          }
+
+          if (originalProposal.status !== ProposalStatus.PENDING) {
+            throw new BadRequestException({
+              success: false,
+              error: {
+                code: 400,
+                message: 'Proposta original já foi respondida',
+                details: {
+                  counter_to_id: dto.counter_to_id,
+                  status: originalProposal.status,
+                },
+              },
+            });
+          }
+
+          if (originalProposal.process_id !== dto.process_id) {
+            throw new BadRequestException({
+              success: false,
+              error: {
+                code: 'COUNTER_PROPOSAL_PROCESS_MISMATCH',
+                message: 'A proposta original pertence a outro processo',
+              },
+            });
+          }
+
+          if (originalProposal.proposed_to_id !== userId) {
+            throw new ForbiddenException({
+              success: false,
+              error: {
+                code: 'COUNTER_PROPOSAL_RECIPIENT_MISMATCH',
+                message: 'Apenas o destinatário pode responder esta proposta',
+              },
+            });
+          }
+        }
+
+        // 8. Determinar destinatário (lado oposto)
+        const proposedToId = isOnClientSide
+          ? process.specialist_id
+          : process.client_id;
+
+        // 9. Criar proposta na mesma transação que fez todas as validações
+        // Se está respondendo a uma proposta, marcar a original como COUNTERED
+        if (dto.counter_to_id) {
+          const claim = await tx.negotiationProposal.updateMany({
+            where: {
+              id: dto.counter_to_id,
+              process_id: dto.process_id,
+              proposed_to_id: userId,
+              status: ProposalStatus.PENDING,
+            },
+            data: { status: ProposalStatus.COUNTERED },
+          });
+          if (claim.count !== 1) {
+            throw new ConflictException({
+              success: false,
+              error: {
+                code: 'PROPOSAL_RESPONSE_CONFLICT',
+                message:
+                  'A proposta original já foi respondida. Recarregue e tente novamente.',
+              },
+            });
+          }
+          this.logger.log(
+            `[create] Proposta ${dto.counter_to_id} marcada como COUNTERED`,
+          );
+        }
+
+        // Criar nova proposta
+        const proposal = await tx.negotiationProposal.create({
+          data: {
             process_id: dto.process_id,
-            tip: 'Se este é um processo de consultoria, o especialista precisa atribuir um produto através da opção "Selecionar Produto" na página de processos.',
+            proposed_by_id: userId,
+            proposed_to_id: proposedToId,
+            proposed_value: dto.proposed_value,
+            message: dto.message,
+            counter_to_id: dto.counter_to_id,
+            status: ProposalStatus.PENDING,
           },
-        },
-      });
-    }
-
-    const productValue = Number(product.valor);
-
-    // 6. Validar valor mínimo (se ativado nas configurações)
-    const isMinimumEnabled =
-      await this.settingsService.isMinimumProposalEnabled();
-
-    if (isMinimumEnabled) {
-      const minimumPercentage =
-        await this.settingsService.getMinimumProposalPercentage();
-      const minimumValue = productValue * minimumPercentage;
-
-      if (dto.proposed_value < minimumValue) {
-        this.logger.warn(
-          `[create] Valor proposto ${dto.proposed_value} abaixo do mínimo ${minimumValue}`,
-        );
-        throw new BadRequestException({
-          success: false,
-          error: {
-            code: 400,
-            message: `Valor proposto deve ser no mínimo ${Math.round(minimumPercentage * 100)}% do valor do produto`,
-            details: {
-              proposed_value: dto.proposed_value,
-              minimum_value: minimumValue,
-              product_value: productValue,
-              minimum_percentage: `${Math.round(minimumPercentage * 100)}%`,
+          include: {
+            proposed_by: {
+              select: { id: true, name: true, surname: true, role: true },
+            },
+            proposed_to: {
+              select: { id: true, name: true, surname: true, role: true },
             },
           },
         });
-      }
-    }
 
-    // 7. Validar counter_to_id se fornecido
-    if (dto.counter_to_id) {
-      const originalProposal = await this.prisma.negotiationProposal.findUnique(
-        {
-          where: { id: dto.counter_to_id },
-        },
-      );
-
-      if (!originalProposal) {
-        throw new NotFoundException({
-          success: false,
-          error: {
-            code: 404,
-            message: 'Proposta original não encontrada',
-            details: { counter_to_id: dto.counter_to_id },
-          },
-        });
-      }
-
-      if (originalProposal.status !== ProposalStatus.PENDING) {
-        throw new BadRequestException({
-          success: false,
-          error: {
-            code: 400,
-            message: 'Proposta original já foi respondida',
-            details: {
-              counter_to_id: dto.counter_to_id,
-              status: originalProposal.status,
-            },
-          },
-        });
-      }
-    }
-
-    // 8. Determinar destinatário (lado oposto)
-    const proposedToId = isOnClientSide
-      ? process.specialist_id
-      : process.client_id;
-
-    // 9. Criar proposta em transação
-    const proposal = await this.prisma.$transaction(async (tx) => {
-      // Se está respondendo a uma proposta, marcar a original como COUNTERED
-      if (dto.counter_to_id) {
-        await tx.negotiationProposal.update({
-          where: { id: dto.counter_to_id },
-          data: { status: ProposalStatus.COUNTERED },
-        });
-        this.logger.log(
-          `[create] Proposta ${dto.counter_to_id} marcada como COUNTERED`,
-        );
-      }
-
-      // Criar nova proposta
-      return tx.negotiationProposal.create({
-        data: {
-          process_id: dto.process_id,
-          proposed_by_id: userId,
-          proposed_to_id: proposedToId,
-          proposed_value: dto.proposed_value,
-          message: dto.message,
-          counter_to_id: dto.counter_to_id,
-          status: ProposalStatus.PENDING,
-        },
-        include: {
-          proposed_by: {
-            select: { id: true, name: true, surname: true, role: true },
-          },
-          proposed_to: {
-            select: { id: true, name: true, surname: true, role: true },
-          },
-        },
+        return { proposal, process, currency, productValue, isOnClientSide };
       });
-    });
 
     this.logger.log(
       `[create] Proposta ${proposal.id} criada com sucesso (valor: ${dto.proposed_value})`,
@@ -326,6 +406,7 @@ export class ProposalsService {
           proposerName,
           proposedValue: dto.proposed_value,
           originalValue: productValue,
+          currency,
           message: dto.message,
           processId: dto.process_id,
         })
@@ -375,27 +456,18 @@ export class ProposalsService {
         car: {
           select: {
             id: true,
-            valor: true,
-            marca: true,
-            modelo: true,
             is_active: true,
           },
         },
         boat: {
           select: {
             id: true,
-            valor: true,
-            marca: true,
-            modelo: true,
             is_active: true,
           },
         },
         aircraft: {
           select: {
             id: true,
-            valor: true,
-            marca: true,
-            modelo: true,
             is_active: true,
           },
         },
@@ -460,15 +532,20 @@ export class ProposalsService {
       });
     }
 
-    const productValue = product ? Number(product.valor) : 0;
+    const { currency, productValue: snapshotValue } =
+      requireNegotiationSnapshot(process);
+    const productValue = Number(snapshotValue);
 
     // Get minimum value based on settings (async)
-    const isMinimumEnabled =
+    const minimumEnabled =
       await this.settingsService.isMinimumProposalEnabled();
-    const minimumPercentage = isMinimumEnabled
+    const minimumPercentage = minimumEnabled
       ? await this.settingsService.getMinimumProposalPercentage()
-      : 0;
-    const minimumValue = productValue * minimumPercentage;
+      : null;
+    const minimumValue =
+      minimumPercentage === null
+        ? null
+        : calculateMinimumProposalValue(snapshotValue, minimumPercentage);
 
     // 4. Determinar quem deve responder
     const lastPendingProposal = process.proposals.find(
@@ -507,7 +584,9 @@ export class ProposalsService {
             ? Boolean((product as any).is_active)
             : undefined,
         product_value: productValue,
-        minimum_value: minimumValue,
+        currency,
+        minimum_enabled: minimumEnabled,
+        minimum_value: minimumValue === null ? null : Number(minimumValue),
         client: {
           id: process.client.id,
           name: process.client.name,
@@ -544,49 +623,44 @@ export class ProposalsService {
   ): Promise<ProposalResponseEntity> {
     this.logger.log(`[accept] Aceitando proposta ${proposalId}`);
 
-    const proposal = await this.validateProposalAction(proposalId, userId);
+    const response = await this.prisma.$transaction(async (tx) => {
+      await this.lockProcessForProposalResponse(tx, proposalId);
+      const proposal = await this.validateProposalAction(
+        proposalId,
+        userId,
+        tx,
+      );
+      const { currency } = requireNegotiationSnapshot(proposal.process);
 
-    // Buscar dados adicionais para notificação (email do proposer)
-    const proposalWithEmails = await this.prisma.negotiationProposal.findUnique(
-      {
-        where: { id: proposalId },
-        include: {
-          proposed_by: {
-            select: { id: true, email: true, name: true, surname: true },
-          },
-          proposed_to: {
-            select: { id: true, email: true, name: true, surname: true },
-          },
+      // Apenas uma resposta concorrente pode reivindicar uma proposta PENDING.
+      const proposalClaim = await tx.negotiationProposal.updateMany({
+        where: {
+          id: proposalId,
+          status: ProposalStatus.PENDING,
+          process: { status: ProcessStatus.NEGOTIATION },
         },
-      },
-    );
-
-    // Atualizar proposta e processo em transação
-    const updated = await this.prisma.$transaction(async (tx) => {
-      // 1. Marcar proposta como ACCEPTED
-      const acceptedProposal = await tx.negotiationProposal.update({
-        where: { id: proposalId },
         data: { status: ProposalStatus.ACCEPTED },
-        include: {
-          proposed_by: {
-            select: { id: true, name: true, surname: true, role: true },
-          },
-          proposed_to: {
-            select: { id: true, name: true, surname: true, role: true },
-          },
-        },
       });
+      if (proposalClaim.count !== 1) {
+        throw this.proposalResponseConflict(proposalId);
+      }
 
-      // 2. Atualizar processo para DOCUMENTATION (especialista enviará contrato nessa fase)
-      await tx.process.update({
-        where: { id: proposal.process_id },
+      // A transação desfaz a reivindicação da proposta se o processo já avançou.
+      const processClaim = await tx.process.updateMany({
+        where: {
+          id: proposal.process_id,
+          status: ProcessStatus.NEGOTIATION,
+          accepted_proposal_id: null,
+        },
         data: {
           status: ProcessStatus.DOCUMENTATION,
           accepted_proposal_id: proposalId,
         },
       });
+      if (processClaim.count !== 1) {
+        throw this.proposalResponseConflict(proposalId);
+      }
 
-      // 3. Registrar histórico de status
       await tx.processStatusHistory.create({
         data: {
           processId: proposal.process_id,
@@ -595,35 +669,47 @@ export class ProposalsService {
         },
       });
 
+      const updated = await tx.negotiationProposal.findUniqueOrThrow({
+        where: { id: proposalId },
+        include: {
+          proposed_by: {
+            select: { id: true, name: true, surname: true, role: true },
+          },
+          proposed_to: {
+            select: { id: true, name: true, surname: true, role: true },
+          },
+        },
+      });
+
       this.logger.log(
         `[accept] Proposta ${proposalId} aceita, processo movido para DOCUMENTATION`,
       );
 
-      return acceptedProposal;
+      return { updated, proposal, currency };
     });
+    const { updated, proposal, currency } = response;
 
     // Fire-and-forget: Enviar notificação de proposta aceita
-    if (proposalWithEmails) {
-      const proposer = proposalWithEmails.proposed_by;
-      const accepter = proposalWithEmails.proposed_to;
-      setImmediate(() => {
-        this.notificationService
-          .sendProposalAcceptedEmail({
-            proposerEmail: proposer.email!,
-            proposerName: `${proposer.name} ${proposer.surname || ''}`.trim(),
-            recipientName: `${accepter.name} ${accepter.surname || ''}`.trim(),
-            acceptedValue: Number(proposal.proposed_value),
-            processId: proposal.process_id,
-          })
-          .catch((err) => {
-            this.logger.error('Notification failed (non-critical)', {
-              method: 'accept',
-              proposalId,
-              error: err.message,
-            });
+    const proposer = proposal.proposed_by;
+    const accepter = proposal.proposed_to;
+    setImmediate(() => {
+      this.notificationService
+        .sendProposalAcceptedEmail({
+          proposerEmail: proposer.email!,
+          proposerName: `${proposer.name} ${proposer.surname || ''}`.trim(),
+          recipientName: `${accepter.name} ${accepter.surname || ''}`.trim(),
+          acceptedValue: Number(proposal.proposed_value),
+          currency,
+          processId: proposal.process_id,
+        })
+        .catch((err) => {
+          this.logger.error('Notification failed (non-critical)', {
+            method: 'accept',
+            proposalId,
+            error: err.message,
           });
-      });
-    }
+        });
+    });
 
     const processForNotification = await this.prisma.process.findUnique({
       where: { id: proposal.process_id },
@@ -650,9 +736,8 @@ export class ProposalsService {
           },
         ].filter((recipient) => Boolean(recipient.email));
 
-        const changedByName = proposalWithEmails
-          ? `${proposalWithEmails.proposed_to.name} ${proposalWithEmails.proposed_to.surname || ''}`.trim()
-          : undefined;
+        const changedByName =
+          `${proposal.proposed_to.name} ${proposal.proposed_to.surname || ''}`.trim();
 
         Promise.allSettled(
           recipients.map((recipient) =>
@@ -695,63 +780,69 @@ export class ProposalsService {
   ): Promise<ProposalResponseEntity> {
     this.logger.log(`[reject] Rejeitando proposta ${proposalId}`);
 
-    const proposal = await this.validateProposalAction(proposalId, userId);
+    const response = await this.prisma.$transaction(async (tx) => {
+      await this.lockProcessForProposalResponse(tx, proposalId);
+      const proposal = await this.validateProposalAction(
+        proposalId,
+        userId,
+        tx,
+      );
+      const { currency } = requireNegotiationSnapshot(proposal.process);
 
-    // Buscar dados adicionais para notificação (email do proposer)
-    const proposalWithEmails = await this.prisma.negotiationProposal.findUnique(
-      {
+      const proposalClaim = await tx.negotiationProposal.updateMany({
+        where: {
+          id: proposalId,
+          status: ProposalStatus.PENDING,
+          process: { status: ProcessStatus.NEGOTIATION },
+        },
+        data: {
+          status: ProposalStatus.REJECTED,
+          message: dto?.message || proposal.message,
+        },
+      });
+      if (proposalClaim.count !== 1) {
+        throw this.proposalResponseConflict(proposalId);
+      }
+
+      const updated = await tx.negotiationProposal.findUniqueOrThrow({
         where: { id: proposalId },
         include: {
           proposed_by: {
-            select: { id: true, email: true, name: true, surname: true },
+            select: { id: true, name: true, surname: true, role: true },
           },
           proposed_to: {
-            select: { id: true, email: true, name: true, surname: true },
+            select: { id: true, name: true, surname: true, role: true },
           },
         },
-      },
-    );
+      });
 
-    const updated = await this.prisma.negotiationProposal.update({
-      where: { id: proposalId },
-      data: {
-        status: ProposalStatus.REJECTED,
-        message: dto?.message || proposal.message,
-      },
-      include: {
-        proposed_by: {
-          select: { id: true, name: true, surname: true, role: true },
-        },
-        proposed_to: {
-          select: { id: true, name: true, surname: true, role: true },
-        },
-      },
+      return { updated, proposal, currency };
     });
+    const { updated, proposal, currency } = response;
 
     this.logger.log(`[reject] Proposta ${proposalId} rejeitada`);
 
     // Fire-and-forget: Enviar notificação de proposta rejeitada
-    if (proposalWithEmails) {
-      const proposer = proposalWithEmails.proposed_by;
-      const rejecter = proposalWithEmails.proposed_to;
-      setImmediate(() => {
-        this.notificationService
-          .sendProposalRejectedEmail({
-            proposerEmail: proposer.email!,
-            proposerName: `${proposer.name} ${proposer.surname || ''}`.trim(),
-            recipientName: `${rejecter.name} ${rejecter.surname || ''}`.trim(),
-            rejectedValue: Number(proposal.proposed_value),
-            processId: proposal.process_id,
-          })
-          .catch((err) => {
-            this.logger.error('Notification failed (non-critical)', {
-              method: 'reject',
-              proposalId,
-              error: err.message,
-            });
+    const proposer = proposal.proposed_by;
+    const rejecter = proposal.proposed_to;
+    setImmediate(() => {
+      this.notificationService
+        .sendProposalRejectedEmail({
+          proposerEmail: proposer.email!,
+          proposerName: `${proposer.name} ${proposer.surname || ''}`.trim(),
+          recipientName: `${rejecter.name} ${rejecter.surname || ''}`.trim(),
+          rejectedValue: Number(proposal.proposed_value),
+          currency,
+          processId: proposal.process_id,
+        })
+        .catch((err) => {
+          this.logger.error('Notification failed (non-critical)', {
+            method: 'reject',
+            proposalId,
+            error: err.message,
           });
-      });
-    }
+        });
+    });
 
     return this.mapToResponseEntity(updated);
   }
@@ -823,8 +914,9 @@ export class ProposalsService {
   private async validateProposalAction(
     proposalId: string,
     userId: string,
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
   ): Promise<any> {
-    const proposal = await this.prisma.negotiationProposal.findUnique({
+    const proposal = await client.negotiationProposal.findUnique({
       where: { id: proposalId },
       include: {
         process: {
@@ -836,8 +928,16 @@ export class ProposalsService {
             car_id: true,
             boat_id: true,
             aircraft_id: true,
+            negotiation_currency: true,
+            negotiation_product_value: true,
             client: { select: { consultant_id: true } },
           },
+        },
+        proposed_by: {
+          select: { id: true, email: true, name: true, surname: true },
+        },
+        proposed_to: {
+          select: { id: true, email: true, name: true, surname: true },
         },
       },
     });
@@ -924,6 +1024,18 @@ export class ProposalsService {
     }
 
     return proposal;
+  }
+
+  private proposalResponseConflict(proposalId: string): ConflictException {
+    return new ConflictException({
+      success: false,
+      error: {
+        code: 'PROPOSAL_RESPONSE_CONFLICT',
+        message:
+          'A proposta ou o processo foi alterado por outra operação. Recarregue e tente novamente.',
+        details: { proposal_id: proposalId },
+      },
+    });
   }
 
   /**

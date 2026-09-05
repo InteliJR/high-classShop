@@ -139,9 +139,7 @@ export class DocuSignClient {
       return accessToken;
     } catch (error) {
       const errorMessage = this.extractErrorMessage(error);
-      this.logger.error(
-        `Falha ao obter access token na OAuth: ${errorMessage}`,
-      );
+      this.logger.error('Falha ao obter access token na OAuth');
 
       // Verificar tipo de erro
       if (axios.isAxiosError(error)) {
@@ -183,9 +181,7 @@ export class DocuSignClient {
    * @returns {Promise<any>} Response da API
    */
   private async post(url: string, body: any, token: string): Promise<any> {
-    // Log detalhado do payload para debug
-    this.logger.debug(`[POST] Payload being sent to DocuSign:`);
-    this.logger.debug(JSON.stringify(body, null, 2));
+    this.logger.debug(`[POST] Sending request to DocuSign: ${url}`);
 
     return this.makeRequest(
       async () => {
@@ -202,6 +198,26 @@ export class DocuSignClient {
       'POST',
       url,
     );
+  }
+
+  /**
+   * Envelope creation is not safely repeatable at the HTTP layer. Its
+   * transactionId is reconciled by DocuSignService before another attempt is
+   * considered, so this POST must be dispatched at most once.
+   */
+  private async postOnce(url: string, body: any, token: string): Promise<any> {
+    this.logger.debug(
+      `[POST] Sending non-retriable request to DocuSign: ${url}`,
+    );
+    const response = await axios.post(this.getFullUrl(url), body, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      timeout: this.REQUEST_TIMEOUT_MS,
+    });
+    return response.data;
   }
 
   /**
@@ -257,7 +273,7 @@ export class DocuSignClient {
 
         if (axios.isAxiosError(error)) {
           this.logger.error(
-            `[${method}] ${url} falhou com status ${error.response?.status ?? 'sem-status'}: ${JSON.stringify(error.response?.data ?? error.message)}`,
+            `[${method}] ${url} falhou com status ${error.response?.status ?? 'sem-status'}`,
           );
         }
 
@@ -271,9 +287,7 @@ export class DocuSignClient {
 
         // Aguardar antes de retry (exponential backoff)
         const delayMs = this.RETRY_DELAY_MS * attempt;
-        this.logger.warn(
-          `[${method}] ${url} falhou (${lastError.message}). Retry em ${delayMs}ms...`,
-        );
+        this.logger.warn(`[${method}] ${url} falhou. Retry em ${delayMs}ms...`);
         await this.delay(delayMs);
       }
     }
@@ -385,6 +399,25 @@ export class DocuSignClient {
     );
   }
 
+  async findEnvelopesByTransactionId(
+    transactionId: string,
+  ): Promise<CreateEnvelopeResponseDto[]> {
+    const token = await this.getAccessToken();
+    const response = await this.get(
+      `/v2.1/accounts/${this.accountId}/envelopes?transaction_ids=${encodeURIComponent(transactionId)}`,
+      token,
+    );
+    return Array.isArray(response?.envelopes) ? response.envelopes : [];
+  }
+
+  async getEnvelopeWithCustomFields(envelopeId: string): Promise<any> {
+    const token = await this.getAccessToken();
+    return this.get(
+      `/v2.1/accounts/${this.accountId}/envelopes/${envelopeId}?include=custom_fields`,
+      token,
+    );
+  }
+
   /**
    * Cria um envelope a partir de um template DocuSign
    *
@@ -400,7 +433,11 @@ export class DocuSignClient {
     dto: CreateTemplateEnvelopeDto,
   ): Promise<CreateEnvelopeResponseDto> {
     const token = await this.getAccessToken();
-    return this.post(`/v2.1/accounts/${this.accountId}/envelopes`, dto, token);
+    return this.postOnce(
+      `/v2.1/accounts/${this.accountId}/envelopes`,
+      dto,
+      token,
+    );
   }
 
   /**
@@ -412,9 +449,7 @@ export class DocuSignClient {
    * @returns {Promise<any>} Response da API
    */
   private async put(url: string, body: any, token: string): Promise<any> {
-    // Log detalhado do payload para debug
-    this.logger.debug(`[PUT] Payload being sent to DocuSign:`);
-    this.logger.debug(JSON.stringify(body, null, 2));
+    this.logger.debug(`[PUT] Sending request to DocuSign: ${url}`);
 
     return this.makeRequest(
       async () => {
@@ -590,10 +625,6 @@ export class DocuSignClient {
       },
     };
 
-    this.logger.debug(
-      `Sender View request body: ${JSON.stringify(requestBody, null, 2)}`,
-    );
-
     return this.post(
       `/v2.1/accounts/${this.accountId}/envelopes/${envelopeId}/views/sender`,
       requestBody,
@@ -656,7 +687,7 @@ export class DocuSignClient {
    * @returns {Promise<void>}
    */
   async voidEnvelope(envelopeId: string, reason: string): Promise<any> {
-    this.logger.log(`Voiding envelope ${envelopeId}: ${reason}`);
+    this.logger.log(`Voiding envelope ${envelopeId}`);
     return this.updateEnvelopeStatus(envelopeId, 'voided', reason);
   }
 

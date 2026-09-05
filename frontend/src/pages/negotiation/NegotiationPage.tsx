@@ -26,6 +26,12 @@ import { ProposalStatusBadge } from "../../components/patterns/ProposalStatusBad
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
 import { EmptyState } from "../../components/patterns/EmptyState";
+import { currencySymbol, formatCurrency } from "../../lib/currency";
+import {
+  getProposalSubmissionError,
+  getMinimumPresentation,
+  normalizeMinimumFormError,
+} from "../../lib/negotiation-money";
 
 /**
  * Página de Negociação
@@ -89,6 +95,9 @@ export default function NegotiationPage() {
       if (response.success) {
         setProposals(response.data);
         setProcessInfo(response.process);
+        setFormError((currentError) =>
+          normalizeMinimumFormError(currentError, response.process),
+        );
         setMeta(response.meta);
       } else {
         setError(response.message || "Erro ao carregar propostas");
@@ -127,17 +136,9 @@ export default function NegotiationPage() {
 
     const value = parseFloat(proposedValue.replace(/\D/g, "")) / 100;
 
-    if (isNaN(value) || value <= 0) {
-      setFormError("Por favor, insira um valor válido");
-      return;
-    }
-
-    if (value < processInfo.minimum_value) {
-      setFormError(
-        `O valor mínimo permitido é ${formatCurrency(
-          processInfo.minimum_value,
-        )}`,
-      );
+    const submissionError = getProposalSubmissionError(value);
+    if (submissionError) {
+      setFormError(submissionError);
       return;
     }
 
@@ -203,16 +204,6 @@ export default function NegotiationPage() {
   };
 
   /**
-   * Formata valor como moeda
-   */
-  const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(value);
-  };
-
-  /**
    * Formata input de moeda
    */
   const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -255,6 +246,10 @@ export default function NegotiationPage() {
     if (!user || proposal.status !== "PENDING") return false;
     return proposal.proposed_to.id === user.id;
   };
+
+  const minimum = processInfo
+    ? getMinimumPresentation(processInfo)
+    : { visible: false, formattedValue: null };
 
   // Loading state
   if (isLoading) {
@@ -338,16 +333,18 @@ export default function NegotiationPage() {
                 <DollarSign size={16} className="text-green-600" />
                 <span className="text-muted">Valor do produto:</span>
                 <span className="font-semibold text-ink">
-                  {formatCurrency(processInfo.product_value)}
+                  {formatCurrency(processInfo.product_value, processInfo.currency)}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <AlertCircle size={16} className="text-orange-500" />
-                <span className="text-muted">Valor mínimo:</span>
-                <span className="font-semibold text-orange-600">
-                  {formatCurrency(processInfo.minimum_value)}
-                </span>
-              </div>
+              {minimum.visible && minimum.formattedValue && (
+                <div className="flex items-center gap-2">
+                  <AlertCircle size={16} className="text-orange-500" />
+                  <span className="text-muted">Valor mínimo:</span>
+                  <span className="font-semibold text-orange-600">
+                    {minimum.formattedValue}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -371,7 +368,7 @@ export default function NegotiationPage() {
 
         {/* Proposals list (chat style) */}
         <div className="space-y-4">
-          {proposals.map((proposal) => {
+          {processInfo && proposals.map((proposal) => {
             const isOwnProposal = proposal.proposed_by.id === user?.id;
 
             return (
@@ -428,7 +425,7 @@ export default function NegotiationPage() {
                           isOwnProposal ? "text-white" : "text-ink"
                         }`}
                       >
-                        {formatCurrency(proposal.proposed_value)}
+                        {formatCurrency(proposal.proposed_value, processInfo.currency)}
                       </span>
                     </div>
 
@@ -503,7 +500,7 @@ export default function NegotiationPage() {
       </main>
 
       {/* Form to create new proposal */}
-      {canCreateProposal() && (
+      {canCreateProposal() && processInfo && (
         <footer className="bg-surface border-t border-border sticky bottom-0">
           <div className="max-w-4xl mx-auto px-4 py-3 md:py-4">
             {formError && (
@@ -521,7 +518,9 @@ export default function NegotiationPage() {
                 {/* Value input */}
                 <div className="relative flex-1 min-w-0">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-muted">R$</span>
+                    <span className="text-muted">
+                      {currencySymbol(processInfo.currency)}
+                    </span>
                   </div>
                   <input
                     type="text"
@@ -561,10 +560,9 @@ export default function NegotiationPage() {
             </form>
 
             {/* Minimum value hint */}
-            {processInfo && (
+            {minimum.visible && minimum.formattedValue && (
               <p className="mt-2 text-xs text-muted text-center md:text-left">
-                O valor mínimo aceito é{" "}
-                {formatCurrency(processInfo.minimum_value)}
+                O valor mínimo aceito é {minimum.formattedValue}
               </p>
             )}
           </div>

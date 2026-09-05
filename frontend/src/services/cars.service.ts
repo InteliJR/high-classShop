@@ -3,6 +3,7 @@ import type {
   FiltersMeta,
   PaginationMeta,
   Product,
+  ProductCurrency,
   ResponseAPI,
 } from "../types/types";
 import api from "./api";
@@ -18,6 +19,7 @@ export interface RawCar {
   modelo: string;
   identificador: string;
   valor: number;
+  currency: ProductCurrency;
   estado: string;
   ano: number;
   cor?: string;
@@ -52,6 +54,7 @@ export interface CreateCarDto {
   modelo: string;
   identificador: string;
   valor: number;
+  currency?: ProductCurrency;
   estado: string;
   ano: number;
   cor?: string;
@@ -102,6 +105,7 @@ export async function getCars(
         imageUrl: primaryImage ?? "",
         images: rawCar.images,
         valor: rawCar.valor,
+        currency: rawCar.currency,
         ano: rawCar.ano,
         estado: rawCar.estado,
         specialist_id: rawCar.specialist_id,

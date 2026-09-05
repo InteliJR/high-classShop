@@ -1,5 +1,6 @@
 import { AircraftImage } from './aircraft-image.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
+import { ProductCurrency } from '@prisma/client';
 
 export class Aircraft {
   id: string;
@@ -15,6 +16,7 @@ export class Aircraft {
   estado: string;
   descricao: string | null;
   valor: number;
+  currency: ProductCurrency;
   tipo_aeronave: string | null;
   created_at: Date;
   updated_at: Date;

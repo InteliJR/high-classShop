@@ -20,6 +20,10 @@ import {
  * Valores monetários devem ser enviados como números decimais.
  */
 export class GenerateContractDto {
+  @IsUUID('4', { message: 'operation_id deve ser um UUID v4 válido' })
+  @IsNotEmpty({ message: 'operation_id é obrigatório' })
+  operation_id: string;
+
   /**
    * ID do processo ao qual este contrato pertence
    * @example "550e8400-e29b-41d4-a716-446655440000"

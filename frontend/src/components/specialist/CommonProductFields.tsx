@@ -115,7 +115,7 @@ export default function CommonProductFields({ register, errors, productType }: C
       {/* Valor */}
       <div className="flex flex-col gap-2">
         <label htmlFor="valor" className="text-sm font-medium text-text-primary">
-          Valor (R$) *
+          Valor *
         </label>
         <input
           id="valor"
@@ -130,6 +130,23 @@ export default function CommonProductFields({ register, errors, productType }: C
         />
         {errors.valor && (
           <span className="text-sm text-red-500">{errors.valor.message as string}</span>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label htmlFor="currency" className="text-sm font-medium text-text-primary">
+          Moeda *
+        </label>
+        <select
+          id="currency"
+          {...register("currency", { required: "Moeda é obrigatória" })}
+          className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="BRL">Real brasileiro (R$)</option>
+          <option value="USD">Dólar americano (US$)</option>
+        </select>
+        {errors.currency && (
+          <span className="text-sm text-red-500">{errors.currency.message as string}</span>
         )}
       </div>
 
@@ -155,4 +172,3 @@ export default function CommonProductFields({ register, errors, productType }: C
     </>
   );
 }
-

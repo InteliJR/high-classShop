@@ -3,6 +3,8 @@
  * Organização por categoria: Appointments, Proposals, Contracts
  */
 
+import { ProductCurrency } from '@prisma/client';
+
 // ============================================================================
 // APPOINTMENT NOTIFICATIONS
 // ============================================================================
@@ -77,6 +79,7 @@ export interface ProposalReceivedEmailDto {
   proposerName: string;
   proposedValue: number;
   originalValue: number;
+  currency: ProductCurrency;
   message?: string;
   processId: string;
 }
@@ -86,6 +89,7 @@ export interface ProposalAcceptedEmailDto {
   proposerName: string;
   recipientName: string;
   acceptedValue: number;
+  currency: ProductCurrency;
   processId: string;
 }
 
@@ -94,6 +98,7 @@ export interface ProposalRejectedEmailDto {
   proposerName: string;
   recipientName: string;
   rejectedValue: number;
+  currency: ProductCurrency;
   processId: string;
 }
 
