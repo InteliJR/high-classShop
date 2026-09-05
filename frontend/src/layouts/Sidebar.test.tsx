@@ -57,6 +57,10 @@ describe("Sidebar", () => {
     const html = renderSidebar();
 
     expect(html).toContain('src="https://cdn.example.com/axbr.png"');
+    expect(html).toContain('aria-label="Ir para o catálogo de carros"');
+    expect(html).toMatch(
+      /aria-label="Ir para o catálogo de carros"[^>]*href="\/catalog\/cars"/,
+    );
     expect(html).toContain('href="/catalog/cars"');
     expect(html).toContain('href="/catalog/boats"');
     expect(html).toContain('href="/catalog/aircrafts"');
@@ -78,6 +82,10 @@ describe("Sidebar", () => {
 
     const html = renderSidebar();
 
+    expect(html).toContain('aria-label="Ir para o início"');
+    expect(html).toMatch(
+      /aria-label="Ir para o início"[^>]*href="\/office\/dashboard"/,
+    );
     expect(html).toContain('href="/office/dashboard"');
     expect(html).toContain('href="/office/consultants"');
     expect(html).toContain('href="/office/clients"');

@@ -19,3 +19,10 @@ export function getRoleBasedRoute(role: UserRole): string {
       return '/customer/home';
   }
 }
+
+/**
+ * Returns the destination used when the platform or white-label logo is selected.
+ */
+export function getBrandHomeRoute(role: UserRole | null | undefined): string {
+  return role == null ? "/catalog/cars" : getRoleBasedRoute(role);
+}

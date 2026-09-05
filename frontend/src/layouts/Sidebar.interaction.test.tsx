@@ -4,7 +4,7 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { AppContext, type AppContextProps } from "../contexts/AppContext";
 import type { CompanyBranding, UserProps } from "../types/types";
 import Header from "./Header";
@@ -32,6 +32,11 @@ vi.mock("../store/whitelabelStore", () => ({
   ) => selector({ company: state.whitelabelCompany }),
 }));
 
+function LocationProbe() {
+  const location = useLocation();
+  return <output aria-label="Rota atual">{location.pathname}</output>;
+}
+
 function MobileNavigationHarness() {
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
   const appContext: AppContextProps = {
@@ -44,10 +49,11 @@ function MobileNavigationHarness() {
   };
 
   return (
-    <MemoryRouter initialEntries={["/catalog/cars"]}>
+    <MemoryRouter initialEntries={["/catalog/boats"]}>
       <AppContext.Provider value={appContext}>
         <Header />
         <Sidebar />
+        <LocationProbe />
       </AppContext.Provider>
     </MemoryRouter>
   );
@@ -61,6 +67,30 @@ describe("Sidebar mobile interactions", () => {
   afterEach(() => {
     cleanup();
     document.body.style.overflow = "";
+  });
+
+  it("navega pela logo white-label e fecha o drawer", async () => {
+    const user = userEvent.setup();
+    render(<MobileNavigationHarness />);
+
+    await user.click(screen.getByRole("button", { name: "Abrir menu" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Menu principal" });
+    const brandLink = within(dialog).getByRole("link", {
+      name: "Ir para o catálogo de carros",
+    });
+
+    expect(brandLink.getAttribute("href")).toBe("/catalog/cars");
+    expect(within(dialog).getByAltText("AXBR Investimentos")).not.toBeNull();
+
+    await user.click(brandLink);
+
+    await waitFor(() => {
+      expect(dialog.getAttribute("aria-hidden")).toBe("true");
+      expect(screen.getByLabelText("Rota atual").textContent).toBe(
+        "/catalog/cars",
+      );
+    });
   });
 
   it("gerencia foco, teclado, estado inerte e scroll durante o drawer", async () => {

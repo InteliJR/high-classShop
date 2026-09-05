@@ -4,11 +4,11 @@ import { useContext, useEffect } from "react";
 import { useIsMobile } from "../hooks/use-is-mobile";
 import { useAuth } from "../store/authStateManager";
 import { AppContext } from "../contexts/AppContext";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import UserDropdown from "../components/ui/UserDropdown";
 import { getActiveCompany, resolveCompanyLogo } from "../utils/branding";
 import { useWhitelabel } from "../store/whitelabelStore";
-import { getRoleBasedRoute } from "../utils/roleUtils";
+import { getBrandHomeRoute } from "../utils/roleUtils";
 import { PUBLIC_CATALOG_LINKS } from "../lib/navigation";
 
 export default function Header() {
@@ -19,9 +19,7 @@ export default function Header() {
   const whitelabelCompany = useWhitelabel((s) => s.company);
   const company = getActiveCompany(user, whitelabelCompany);
   const brandLogo = resolveCompanyLogo(company) ?? Logo;
-  const handleLogoClick = () => {
-    navigate(user ? getRoleBasedRoute(user.role) : "/");
-  };
+  const brandHomeRoute = getBrandHomeRoute(user?.role);
 
   useEffect(() => {
     if (!isMobile && isSidebarCollapsed) {
@@ -93,9 +91,8 @@ export default function Header() {
 
           {user ? (
             <div className="flex items-center w-full justify-between">
-              <button
-                type="button"
-                onClick={handleLogoClick}
+              <Link
+                to={brandHomeRoute}
                 className="cursor-pointer"
                 aria-label="Ir para o início"
               >
@@ -104,24 +101,23 @@ export default function Header() {
                   alt={company?.name ?? "BMF Lux Brokerage"}
                   className="max-h-14 w-auto max-w-36 object-contain"
                 />
-              </button>
+              </Link>
               <div className="ml-2 mr-2 sm:mr-4 shrink-0">
                 <UserDropdown />
               </div>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={handleLogoClick}
+            <Link
+              to={brandHomeRoute}
               className="cursor-pointer"
-              aria-label="Ir para a página inicial"
+              aria-label="Ir para o catálogo de carros"
             >
               <img
                 src={brandLogo}
                 alt={company?.name ?? "BMF Lux Brokerage"}
                 className="w-25 sm:w-35 h-auto"
               />
-            </button>
+            </Link>
           )}
         </div>
       </header>
