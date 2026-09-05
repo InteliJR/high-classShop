@@ -32,6 +32,7 @@ import {
 import { useAuth } from "../store/authStateManager";
 import { useWhitelabel } from "../store/whitelabelStore";
 import { getActiveCompany, resolveCompanyLogo } from "../utils/branding";
+import { getBrandHomeRoute } from "../utils/roleUtils";
 
 const NAVIGATION_ICONS: Record<NavigationIcon, LucideIcon> = {
   home: Home,
@@ -66,6 +67,7 @@ export default function Sidebar() {
   const whitelabelCompany = useWhitelabel((state) => state.company);
   const company = getActiveCompany(user, whitelabelCompany);
   const brandLogo = resolveCompanyLogo(company) ?? Logo;
+  const brandHomeRoute = getBrandHomeRoute(user?.role);
   const isDesktopCollapsed = !isMobile && isSidebarDesktopCollapsed;
   const links = getSidebarLinks(user?.role);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -198,13 +200,20 @@ export default function Sidebar() {
         )}
 
         {!isDesktopCollapsed && (
-          <div className="w-2/3 flex justify-center items-center mx-auto">
+          <Link
+            to={brandHomeRoute}
+            aria-label={user ? "Ir para o início" : "Ir para o catálogo de carros"}
+            onClick={() => {
+              if (isMobile) setSidebarCollapsed(false);
+            }}
+            className="w-2/3 flex justify-center items-center mx-auto"
+          >
             <img
               src={brandLogo}
               alt={company?.name ?? "BMF Lux Brokerage"}
               className="max-h-24 w-auto object-contain"
             />
-          </div>
+          </Link>
         )}
 
         {/* Botões navegáveis */}
