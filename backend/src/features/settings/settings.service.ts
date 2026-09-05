@@ -1,5 +1,11 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 /**
  * Configurações disponíveis no sistema
@@ -45,9 +51,12 @@ export class SettingsService {
   /**
    * Obtém uma configuração por chave
    */
-  async findByKey(key: string): Promise<SettingResponse> {
+  async findByKey(
+    key: string,
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
+  ): Promise<SettingResponse> {
     this.logger.debug(`[findByKey] Buscando configuração: ${key}`);
-    const setting = await this.prisma.settings.findUnique({
+    const setting = await client.settings.findUnique({
       where: { key },
     });
 
@@ -75,6 +84,21 @@ export class SettingsService {
   async update(key: string, value: string): Promise<SettingResponse> {
     this.logger.log(`[update] Atualizando configuração ${key} para ${value}`);
 
+    if (key === SettingKey.MINIMUM_PROPOSAL_PERCENTAGE) {
+      const percentage = Number(value);
+      if (!Number.isFinite(percentage) || percentage < 0 || percentage > 1) {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message:
+              'minimum_proposal_percentage deve ser uma fração entre 0 e 1',
+            details: { value },
+          },
+        });
+      }
+    }
+
     const updated = await this.prisma.settings.upsert({
       where: { key },
       update: { value },
@@ -91,9 +115,14 @@ export class SettingsService {
   /**
    * Verifica se a validação de valor mínimo está ativada
    */
-  async isMinimumProposalEnabled(): Promise<boolean> {
+  async isMinimumProposalEnabled(
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
+  ): Promise<boolean> {
     try {
-      const setting = await this.findByKey(SettingKey.MINIMUM_PROPOSAL_ENABLED);
+      const setting = await this.findByKey(
+        SettingKey.MINIMUM_PROPOSAL_ENABLED,
+        client,
+      );
       return setting.value === 'true';
     } catch {
       // Se não encontrar, assume que está ativado (comportamento padrão)
@@ -104,13 +133,18 @@ export class SettingsService {
   /**
    * Obtém a porcentagem mínima para propostas
    */
-  async getMinimumProposalPercentage(): Promise<number> {
+  async getMinimumProposalPercentage(
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
+  ): Promise<number> {
     try {
       const setting = await this.findByKey(
         SettingKey.MINIMUM_PROPOSAL_PERCENTAGE,
+        client,
       );
       const percentage = parseFloat(setting.value);
-      return isNaN(percentage) ? 0.8 : percentage;
+      return Number.isFinite(percentage) && percentage >= 0 && percentage <= 1
+        ? percentage
+        : 0.8;
     } catch {
       // Se não encontrar, retorna 80% (comportamento padrão)
       return 0.8;

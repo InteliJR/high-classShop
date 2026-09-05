@@ -10,6 +10,7 @@ import {
   Put,
   Query,
   UnauthorizedException,
+  ForbiddenException,
   UseGuards,
   Req,
 } from '@nestjs/common';
@@ -27,6 +28,7 @@ import { ProcessWithHistory } from './entity/process-history.response';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { GetProcessesFilterDto } from './dto/get-processes-filter.dto';
 import { UserEntity } from 'src/auth/entities/user.entity';
+import { UserRole } from '@prisma/client';
 
 @Controller('processes')
 export class ProcessesController {
@@ -167,7 +169,18 @@ export class ProcessesController {
   async getBySpecialist(
     @Param('specialistId', new ParseUUIDPipe()) specialistId: string,
     @Query() filters: GetProcessesFilterDto,
+    @Req() req: { user?: UserEntity },
   ): Promise<ApiResponseDto<ProcessResponse[], unknown>> {
+    const user = req.user;
+    if (
+      !user ||
+      (user.role !== UserRole.ADMIN &&
+        (user.role !== UserRole.SPECIALIST || user.id !== specialistId))
+    ) {
+      throw new ForbiddenException(
+        'Você não pode listar processos de outro especialista.',
+      );
+    }
     const page = Number(filters.page) || 1;
     const perPage = Number(filters.perPage) || 20;
 

@@ -1,5 +1,6 @@
 import api from "./api";
 import { stripFormatting } from "../utils/mask";
+import type { ProductCurrency } from "../lib/currency";
 
 // === TIPOS PARA PREFILL ===
 
@@ -74,6 +75,7 @@ export interface PrefillSpecialist {
 export interface PrefillContractResponse {
   process_id: string;
   product_type: "CAR" | "BOAT" | "AIRCRAFT";
+  currency: ProductCurrency;
   buyer: PrefillBuyer;
   seller: PrefillSeller;
   product: PrefillProduct;
@@ -88,6 +90,7 @@ export interface PrefillContractResponse {
 
 export interface GenerateContractData {
   process_id: string;
+  operation_id: string;
 
   // Template DocuSign escolhido (opcional; backend faz fallback pro env)
   template_id?: string;
@@ -375,23 +378,13 @@ export async function sendContractAfterPreview(
  * Cancela um preview de contrato
  * @param envelopeId - ID do envelope no DocuSign
  */
-export async function cancelContractPreview(envelopeId: string): Promise<void> {
+export async function cancelContractPreview(
+  envelopeId: string,
+  processId: string,
+): Promise<void> {
   await api.post(
     `/contracts/cancel-preview/${envelopeId}`,
-    {},
+    { process_id: processId },
     { withCredentials: true },
   );
-}
-
-// === HELPERS DE FORMATAÇÃO ===
-
-/**
- * Formata valor monetário em BRL
- */
-export function formatBRL(value: number): string {
-  if (value === null || value === undefined || isNaN(value)) return "";
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
 }

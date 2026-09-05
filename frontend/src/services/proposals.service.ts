@@ -1,4 +1,5 @@
 import api from "./api";
+import type { ProductCurrency } from "../lib/currency";
 
 /**
  * Interface para uma proposta de negociação
@@ -34,7 +35,9 @@ export interface NegotiationProcessInfo {
   status: string;
   product_type: string;
   product_value: number;
-  minimum_value: number;
+  currency: ProductCurrency;
+  minimum_enabled: boolean;
+  minimum_value: number | null;
   client: {
     id: string;
     name: string;

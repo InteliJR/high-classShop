@@ -155,16 +155,12 @@ export class ContractAlreadyExistsException extends HttpException {
  * Status HTTP: 502 Bad Gateway
  */
 export class ProviderUnavailableException extends HttpException {
-  constructor(providerName: string = 'DocuSign', originalError?: string) {
+  constructor(providerName: string = 'DocuSign', _originalError?: string) {
     super(
       {
         statusCode: HttpStatus.BAD_GATEWAY,
         error: 'PROVIDER_UNAVAILABLE',
         message: `Serviço '${providerName}' está indisponível no momento. Tente novamente em poucos minutos.`,
-        // Não exponha detalhes do erro original em produção
-        ...(process.env.NODE_ENV === 'development' && {
-          details: originalError,
-        }),
       },
       HttpStatus.BAD_GATEWAY,
     );

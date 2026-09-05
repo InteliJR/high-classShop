@@ -10,10 +10,11 @@ import {
   FiltersAircraftMeta,
   RangeAircraftFilters,
 } from 'src/shared/dto/filters.dto';
-import { Prisma } from '@prisma/client';
+import { Prisma, ProductType } from '@prisma/client';
 import { Aircraft } from './entity/aircraft.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { AIRCRAFT_COLUMNS } from 'src/shared/constants/product-columns';
+import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 
 @Injectable()
 export class AircraftsService {
@@ -41,6 +42,7 @@ export class AircraftsService {
       estado: aircraftData.estado,
       descricao: aircraftData.descricao,
       valor: aircraftData.valor,
+      currency: aircraftData.currency,
       tipo_aeronave: aircraftData.tipo_aeronave,
       specialist_id: specialist_id ?? null,
     };
@@ -263,8 +265,6 @@ export class AircraftsService {
   // }
 
   async update(id: string, updateAircraftDto: UpdateAircraftDto) {
-    await this.findOne(id);
-
     const { specialist_id, images, ...aircraftData } = updateAircraftDto;
     const payload: Prisma.AircraftUncheckedUpdateInput = {};
 
@@ -295,6 +295,9 @@ export class AircraftsService {
     if (aircraftData.valor !== undefined) {
       payload.valor = aircraftData.valor;
     }
+    if (aircraftData.currency !== undefined) {
+      payload.currency = aircraftData.currency;
+    }
     if (aircraftData.tipo_aeronave !== undefined) {
       payload.tipo_aeronave = aircraftData.tipo_aeronave;
     }
@@ -302,14 +305,17 @@ export class AircraftsService {
       payload.specialist_id = specialist_id ?? null;
     }
 
-    try {
-      // 1. Atualizar dados da aeronave
-      await this.prismaService.aircraft.update({
-        where: { id },
-        data: payload,
-      });
+    await updateProductWithMonetaryLock(this.prismaService, {
+      productType: ProductType.AIRCRAFT,
+      productId: id,
+      nextValue: updateAircraftDto.valor,
+      nextCurrency: updateAircraftDto.currency,
+      data: payload,
+      notFoundMessage: 'Aircraft not found',
+    });
 
-      // 2. Se houver novas imagens, processar
+    try {
+      // 1. Se houver novas imagens, processar
       if (images && images.length > 0) {
         // Remover imagens antigas
         await this.prismaService.aircraft_image.deleteMany({
@@ -353,19 +359,20 @@ export class AircraftsService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
-
     try {
-      await this.prismaService.aircraft.update({
-        where: { id },
+      await updateProductWithMonetaryLock(this.prismaService, {
+        productType: ProductType.AIRCRAFT,
+        productId: id,
         data: {
           is_active: false,
           deactivated_at: new Date(),
           deactivated_by_sync_job_id: null,
         },
+        notFoundMessage: 'Aeronave não encontrada',
       });
       return { ok: true };
     } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       throw new Error(`Erro ao deletar aeronave: ${error.message}`);
     }
   }
@@ -377,6 +384,7 @@ export class AircraftsService {
       'Embraer',
       'Phenom 300',
       '15000000',
+      'BRL',
       'São Paulo',
       '2021',
       'Light Jet',

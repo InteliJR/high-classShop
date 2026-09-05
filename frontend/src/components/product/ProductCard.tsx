@@ -1,9 +1,6 @@
 import { useState } from "react";
 import type { Product } from "../../types/types";
-
-function formatValue(valor: number) {
-  return valor.toLocaleString("pt-br", { style: "currency", currency: "BRL" });
-}
+import { formatCurrency } from "../../lib/currency";
 
 export default function ProductCard({
   imageUrl,
@@ -11,6 +8,7 @@ export default function ProductCard({
   modelo,
   descricao,
   valor,
+  currency,
   images,
 }: Product & { images?: any[] }) {
   const [rotateX, setRotateX] = useState(0);
@@ -70,7 +68,7 @@ export default function ProductCard({
         </div>
         <div className="flex flex-col gap-y-1 items-center">
           <p className="text-[8px] sm:text-xs line-clamp-2 text-center">{descricao}</p>
-          <p className="font-bold text-green-600">{formatValue(valor)}</p>
+          <p className="font-bold text-green-600">{formatCurrency(valor, currency)}</p>
         </div>
       </div>
     </article>

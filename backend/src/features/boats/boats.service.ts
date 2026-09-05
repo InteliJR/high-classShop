@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, ProductType } from '@prisma/client';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -14,6 +14,7 @@ import {
 import { Boat } from './entity/boat.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { BOAT_COLUMNS } from 'src/shared/constants/product-columns';
+import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 
 @Injectable()
 export class BoatsService {
@@ -237,15 +238,19 @@ export class BoatsService {
   }
 
   async update(id: string, updateBoatDto: UpdateBoatDto) {
-    await this.findOne(id);
-
     const { images, ...boatData } = updateBoatDto;
 
-    try {
-      // 1. Atualizar dados do barco
-      await this.prismaService.boat.update({ where: { id }, data: boatData });
+    await updateProductWithMonetaryLock(this.prismaService, {
+      productType: ProductType.BOAT,
+      productId: id,
+      nextValue: updateBoatDto.valor,
+      nextCurrency: updateBoatDto.currency,
+      data: boatData,
+      notFoundMessage: 'Boat not found',
+    });
 
-      // 2. Se houver novas imagens, processar
+    try {
+      // 1. Se houver novas imagens, processar
       if (images && images.length > 0) {
         // Remover imagens antigas
         await this.prismaService.boat_image.deleteMany({
@@ -275,7 +280,7 @@ export class BoatsService {
         }
       }
 
-      // 3. Retornar o barco atualizado com imagens
+      // 2. Retornar o barco atualizado com imagens
       return await this.prismaService.boat.findUnique({
         where: { id },
         include: { images: true },
@@ -289,19 +294,20 @@ export class BoatsService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
-
     try {
-      await this.prismaService.boat.update({
-        where: { id },
+      await updateProductWithMonetaryLock(this.prismaService, {
+        productType: ProductType.BOAT,
+        productId: id,
         data: {
           is_active: false,
           deactivated_at: new Date(),
           deactivated_by_sync_job_id: null,
         },
+        notFoundMessage: 'Lancha não encontrada',
       });
       return { ok: true };
     } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       throw new Error(`Erro ao deletar lancha: ${error.message}`);
     }
   }
@@ -313,6 +319,7 @@ export class BoatsService {
       'Azimut',
       '55 Fly',
       '3500000',
+      'BRL',
       'São Paulo',
       '2022',
       'Azimut',

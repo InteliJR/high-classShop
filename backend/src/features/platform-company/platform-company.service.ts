@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpdatePlatformCompanyDto } from './dto/update-platform-company.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class PlatformCompanyService {
@@ -10,8 +11,10 @@ export class PlatformCompanyService {
    * Retorna a empresa da plataforma (singleton - primeiro registro).
    * Se não existir, retorna null.
    */
-  async findOne() {
-    const company = await this.prisma.platformCompany.findFirst();
+  async findOne(
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
+    const company = await client.platformCompany.findFirst();
     if (!company) {
       return null;
     }

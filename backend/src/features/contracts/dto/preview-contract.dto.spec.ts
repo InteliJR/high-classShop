@@ -4,9 +4,11 @@ import { PreviewContractDto } from './preview-contract.dto';
 import { GenerateContractDto } from './generate-contract.dto';
 
 const processId = '550e8400-e29b-41d4-a716-446655440000';
+const operationId = '11111111-1111-4111-8111-111111111111';
 
 /** Só o que continua estruturalmente obrigatório. */
 const minimoPreview = {
+  operation_id: operationId,
   return_url: 'https://app.example.com/callback',
   process_id: processId,
   seller_name: 'Vendedor',
@@ -17,6 +19,7 @@ const minimoPreview = {
 };
 
 const minimoGenerate = {
+  operation_id: operationId,
   process_id: processId,
   seller_name: 'Vendedor',
   seller_email: 'vendedor@example.com',
@@ -59,6 +62,7 @@ describe('PreviewContractDto — preenchimento flexível', () => {
 
   // Os que continuam obrigatórios não podem ter sido afrouxados junto.
   it.each([
+    'operation_id',
     'return_url',
     'process_id',
     'seller_name',
@@ -102,11 +106,14 @@ describe('GenerateContractDto — preenchimento flexível', () => {
     expect(errs.find((e) => e.property === campo)).toBeUndefined();
   });
 
-  it('total_commission_rate continua obrigatório', async () => {
-    const payload = { ...minimoGenerate };
-    delete (payload as Record<string, unknown>).total_commission_rate;
+  it.each(['operation_id', 'total_commission_rate'])(
+    '%s continua obrigatório',
+    async (campo) => {
+      const payload = { ...minimoGenerate };
+      delete (payload as Record<string, unknown>)[campo];
 
-    const errs = await erros(GenerateContractDto, payload);
-    expect(errs.some((e) => e.property === 'total_commission_rate')).toBe(true);
-  });
+      const errs = await erros(GenerateContractDto, payload);
+      expect(errs.some((e) => e.property === campo)).toBe(true);
+    },
+  );
 });

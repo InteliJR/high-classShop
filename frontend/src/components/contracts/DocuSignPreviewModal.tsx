@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { X, Clock, AlertTriangle, Loader2, Send, XCircle } from "lucide-react";
+import { shouldRequestPreviewExpiration } from "../../lib/contract-preview-cancellation";
 
 interface DocuSignPreviewModalProps {
   previewUrl: string;
@@ -9,6 +10,8 @@ interface DocuSignPreviewModalProps {
   onCancel: () => void;
   onExpired: () => void;
   isLoading?: boolean;
+  isCancelling?: boolean;
+  cancellationError?: string | null;
 }
 
 /**
@@ -28,11 +31,15 @@ export default function DocuSignPreviewModal({
   onCancel,
   onExpired,
   isLoading = false,
+  isCancelling = false,
+  cancellationError = null,
 }: DocuSignPreviewModalProps) {
   const [timeRemaining, setTimeRemaining] = useState<string>("");
   const [isExpired, setIsExpired] = useState(false);
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const expirationRequestedRef = useRef(false);
+  const isBusy = isLoading || isCancelling;
 
   // Calcular tempo restante
   useEffect(() => {
@@ -44,7 +51,15 @@ export default function DocuSignPreviewModal({
       if (diff <= 0) {
         setIsExpired(true);
         setTimeRemaining("Expirado");
-        onExpired();
+        if (
+          shouldRequestPreviewExpiration(
+            isBusy,
+            expirationRequestedRef.current,
+          )
+        ) {
+          expirationRequestedRef.current = true;
+          onExpired();
+        }
         return;
       }
 
@@ -62,21 +77,39 @@ export default function DocuSignPreviewModal({
     const interval = setInterval(calculateTimeRemaining, 1000);
 
     return () => clearInterval(interval);
-  }, [expiresAt, onExpired]);
+  }, [expiresAt, isBusy, onExpired]);
 
   // Escutar eventos do DocuSign via postMessage
   const handleMessage = useCallback(
     (event: MessageEvent) => {
-      // Validar origem (aceitar docusign.net e demo.docusign.net)
-      if (
-        !event.origin.includes("docusign.net") &&
-        !event.origin.includes("docusign.com") &&
-        !event.origin.includes(window.location.origin)
-      ) {
+      if (isBusy) return;
+
+      if (event.source !== iframeRef.current?.contentWindow) {
         return;
       }
 
-      console.log("[DocuSignPreview] Message received:", event.data);
+      let messageOrigin: URL;
+      let configuredOrigin: URL;
+      try {
+        messageOrigin = new URL(event.origin);
+        configuredOrigin = new URL(previewUrl);
+      } catch {
+        return;
+      }
+
+      const hostname = messageOrigin.hostname.toLowerCase();
+      const isOfficialDocuSignHost =
+        hostname === "docusign.net" ||
+        hostname.endsWith(".docusign.net") ||
+        hostname === "docusign.com" ||
+        hostname.endsWith(".docusign.com");
+      if (
+        messageOrigin.protocol !== "https:" ||
+        !isOfficialDocuSignHost ||
+        messageOrigin.origin !== configuredOrigin.origin
+      ) {
+        return;
+      }
 
       // Formato da mensagem pode variar
       const data = event.data;
@@ -90,7 +123,6 @@ export default function DocuSignPreviewModal({
       } else if (typeof data === "object" && data !== null) {
         // Mensagem estruturada
         const eventType = data.event || data.type || data.action;
-        console.log("[DocuSignPreview] Parsed event type:", eventType);
         if (eventType === "send" || eventType === "signing_complete") {
           onConfirm();
         } else if (
@@ -103,7 +135,7 @@ export default function DocuSignPreviewModal({
         // 'unknown', 'save' e 'error' são apenas logados, sem ação automática
       }
     },
-    [onConfirm, onCancel],
+    [isBusy, onConfirm, onCancel, previewUrl],
   );
 
   useEffect(() => {
@@ -114,23 +146,30 @@ export default function DocuSignPreviewModal({
   // Fechar com ESC
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isLoading) {
+      if (e.key === "Escape" && !isBusy) {
         onCancel();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel, isLoading]);
+  }, [onCancel, isBusy]);
 
   const handleIframeLoad = () => {
     setIframeLoaded(true);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={!isLoading ? onCancel : undefined}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+      onClick={!isBusy ? onCancel : undefined}
+      aria-busy={isBusy}
+    >
       {/* Container principal */}
-      <div className="relative w-full h-full max-w-7xl max-h-[95vh] mx-4 my-4 bg-white rounded-xl overflow-hidden shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="relative w-full h-full max-w-7xl max-h-[95vh] mx-4 my-4 bg-white rounded-xl overflow-hidden shadow-2xl flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50">
           <div className="flex items-center gap-4">
@@ -164,7 +203,7 @@ export default function DocuSignPreviewModal({
             {/* Botão fechar */}
             <button
               onClick={onCancel}
-              disabled={isLoading}
+              disabled={isBusy}
               className="p-2 rounded-lg hover:bg-slate-200 transition disabled:opacity-50"
               title="Cancelar (ESC)"
             >
@@ -199,6 +238,7 @@ export default function DocuSignPreviewModal({
                 </p>
                 <button
                   onClick={onCancel}
+                  disabled={isBusy}
                   className="px-6 py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition font-medium"
                 >
                   Fechar e Tentar Novamente
@@ -210,7 +250,7 @@ export default function DocuSignPreviewModal({
               ref={iframeRef}
               src={previewUrl}
               onLoad={handleIframeLoad}
-              className="w-full h-full border-0"
+              className={`w-full h-full border-0 ${isBusy ? "pointer-events-none" : ""}`}
               title="DocuSign Contract Preview"
               allow="clipboard-write"
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
@@ -219,39 +259,54 @@ export default function DocuSignPreviewModal({
         </div>
 
         {/* Footer com botões de ação */}
-        <div className="flex items-center justify-between px-6 py-4 border-t bg-slate-50">
-          <div className="text-sm text-slate-500">
-            <p>
-              Revise o contrato acima. Você pode editar os campos antes de
-              enviar.
-            </p>
-            <p className="text-xs mt-1">
-              Use o botão "Enviar" acima ou confirme abaixo quando estiver
-              pronto.
-            </p>
-          </div>
+        <div className="px-6 py-4 border-t bg-slate-50">
+          {cancellationError && (
+            <div
+              role="alert"
+              className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700"
+            >
+              {cancellationError}
+            </div>
+          )}
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onCancel}
-              disabled={isLoading}
-              className="flex items-center gap-2 px-5 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-100 transition font-medium disabled:opacity-50"
-            >
-              <XCircle className="w-4 h-4" />
-              Cancelar
-            </button>
-            <button
-              onClick={onConfirm}
-              disabled={isLoading || isExpired}
-              className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
-              {isLoading ? "Enviando..." : "Confirmar e Enviar"}
-            </button>
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-slate-500">
+              <p>
+                Revise o contrato acima. Você pode editar os campos antes de
+                enviar.
+              </p>
+              <p className="text-xs mt-1">
+                Use o botão "Enviar" acima ou confirme abaixo quando estiver
+                pronto.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onCancel}
+                disabled={isBusy}
+                className="flex items-center gap-2 px-5 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-100 transition font-medium disabled:opacity-50"
+              >
+                {isCancelling ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <XCircle className="w-4 h-4" />
+                )}
+                {isCancelling ? "Cancelando preview..." : "Cancelar"}
+              </button>
+              <button
+                onClick={onConfirm}
+                disabled={isBusy || isExpired}
+                className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                {isLoading ? "Enviando..." : "Confirmar e Enviar"}
+              </button>
+            </div>
           </div>
         </div>
       </div>

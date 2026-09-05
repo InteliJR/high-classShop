@@ -12,6 +12,8 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { ProcessStatus, StatusAgendamento } from '@prisma/client';
 import { GoogleMeetOAuthService } from './google-meet-oauth.service';
+import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
+import { lockNegotiationProductMoney } from 'src/features/products/product-monetary-lock';
 
 @Injectable()
 export class MeetingsService {
@@ -193,15 +195,23 @@ export class MeetingsService {
         car_id: true,
         boat_id: true,
         aircraft_id: true,
+        negotiation_currency: true,
+        negotiation_product_value: true,
         client: {
           select: { email: true, name: true, surname: true },
         },
         specialist: {
           select: { email: true, name: true, surname: true },
         },
-        car: { select: { marca: true, modelo: true } },
-        boat: { select: { marca: true, modelo: true } },
-        aircraft: { select: { marca: true, modelo: true } },
+        car: {
+          select: { marca: true, modelo: true },
+        },
+        boat: {
+          select: { marca: true, modelo: true },
+        },
+        aircraft: {
+          select: { marca: true, modelo: true },
+        },
       },
     });
 
@@ -246,19 +256,45 @@ export class MeetingsService {
       };
     }
 
-    const updated = await this.prismaService.$transaction(async (tx) => {
-      const updatedProcess = await tx.process.update({
-        where: { id: processId },
-        data: {
-          status: ProcessStatus.NEGOTIATION,
-          notes: process.notes
-            ? `${process.notes}\n\nConversa concluída com cliente (${new Date().toISOString()}). Processo avançado para NEGOTIATION.`
-            : `Conversa concluída com cliente (${new Date().toISOString()}). Processo avançado para NEGOTIATION.`,
-        },
-        select: {
-          status: true,
+    const transition = await this.prismaService.$transaction(async (tx) => {
+      await lockNegotiationProductMoney(tx, process);
+      const processForTransition = await tx.process.findUniqueOrThrow({
+        where: { id: process.id },
+        include: {
+          car: { select: { valor: true, currency: true } },
+          boat: { select: { valor: true, currency: true } },
+          aircraft: { select: { valor: true, currency: true } },
         },
       });
+      if (processForTransition.status !== ProcessStatus.SCHEDULING) {
+        return {
+          advanced: false,
+          status: processForTransition.status as ProcessStatus,
+        };
+      }
+      const snapshotData = buildNegotiationSnapshotUpdate(processForTransition);
+      const claim = await tx.process.updateMany({
+        where: { id: processId, status: ProcessStatus.SCHEDULING },
+        data: {
+          status: ProcessStatus.NEGOTIATION,
+          notes: processForTransition.notes
+            ? `${processForTransition.notes}\n\nConversa concluída com cliente (${new Date().toISOString()}). Processo avançado para NEGOTIATION.`
+            : `Conversa concluída com cliente (${new Date().toISOString()}). Processo avançado para NEGOTIATION.`,
+          updated_at: new Date(),
+          ...snapshotData,
+        },
+      });
+
+      if (claim.count !== 1) {
+        const latestProcess = await tx.process.findUniqueOrThrow({
+          where: { id: processId },
+          select: { status: true },
+        });
+        return {
+          advanced: false,
+          status: latestProcess.status as ProcessStatus,
+        };
+      }
 
       await tx.processStatusHistory.create({
         data: {
@@ -268,8 +304,18 @@ export class MeetingsService {
         },
       });
 
-      return updatedProcess;
+      return { advanced: true, status: ProcessStatus.NEGOTIATION };
     });
+
+    if (!transition.advanced) {
+      return {
+        advanced: false,
+        previous_status: previousStatus,
+        status: transition.status,
+        requires_product_selection: false,
+        message: 'Conversa concluída. O processo já está em etapa posterior.',
+      };
+    }
 
     setImmediate(() => {
       const recipients = [
@@ -309,7 +355,7 @@ export class MeetingsService {
     return {
       advanced: true,
       previous_status: previousStatus,
-      status: updated.status as ProcessStatus,
+      status: transition.status,
       requires_product_selection: false,
       message: 'Conversa concluída. Processo avançado para negociação.',
     };

@@ -1,4 +1,4 @@
-import { ProductType } from '@prisma/client';
+import { ProductCurrency, ProductType } from '@prisma/client';
 
 /**
  * DTO de resposta para pré-preenchimento do formulário de contrato
@@ -9,6 +9,7 @@ import { ProductType } from '@prisma/client';
 export class PrefillContractResponseDto {
   process_id: string;
   product_type: ProductType;
+  currency: ProductCurrency;
 
   // Dados do comprador (cliente)
   buyer: {

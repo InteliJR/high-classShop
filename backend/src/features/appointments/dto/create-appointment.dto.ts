@@ -49,8 +49,9 @@ export class CreateAppointmentDto {
    * Opcional para consultoria (sem produto inicial)
    * Se fornecido, product_id também deve ser fornecido
    */
-  @IsOptional()
-  @ValidateIf((o) => o.product_id !== undefined)
+  @ValidateIf(
+    (o) => o.product_type !== undefined || o.product_id !== undefined,
+  )
   @IsEnum(ProductType, {
     message: 'product_type deve ser CAR, BOAT ou AIRCRAFT',
   })
@@ -63,8 +64,9 @@ export class CreateAppointmentDto {
    *
    * Deve ser um UUID v4 do produto correspondente.
    */
-  @IsOptional()
-  @ValidateIf((o) => o.product_type !== undefined)
+  @ValidateIf(
+    (o) => o.product_type !== undefined || o.product_id !== undefined,
+  )
   @IsUUID('4', { message: 'product_id deve ser um UUID válido' })
   product_id?: string;
 

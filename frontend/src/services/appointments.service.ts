@@ -1,4 +1,5 @@
 import api from "./api";
+import type { ProductCurrency } from "../types/types";
 
 export interface Appointment {
   id: string;
@@ -38,6 +39,7 @@ export interface Appointment {
     marca: string;
     modelo: string;
     valor: number;
+    currency: ProductCurrency;
   } | null;
 }
 

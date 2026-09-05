@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useAuth } from "../../store/authStateManager";
 import { AppContext } from "../../contexts/AppContext";
 import { getCars, deleteCar } from "../../services/cars.service";
@@ -11,19 +11,11 @@ import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
 import { Card } from "../../components/ui/card";
 import { PageHeader } from "../../components/patterns/PageHeader";
+import ResponsiveProductList, {
+  type ProductListItem,
+} from "../../components/specialist/ResponsiveProductList";
 
 type ProductType = "cars" | "boats" | "aircrafts";
-
-interface Product {
-  id: string;
-  marca: string;
-  modelo: string;
-  ano?: number;
-  valor: number;
-  estado?: string;
-  descricao?: string;
-  imageUrl?: string;
-}
 
 // Mapeia especialidade para tipo de produto
 const specialityToProductType: Record<SpecialityType, ProductType> = {
@@ -44,7 +36,7 @@ export default function ProductsPage() {
     : "cars";
 
   const [productType, setProductType] = useState<ProductType>(initialProductType);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -196,67 +188,11 @@ export default function ProductsPage() {
             {searchTerm ? "Nenhum produto encontrado com esse termo de pesquisa" : "Nenhum produto cadastrado"}
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="border-b border-border">
-                <tr className="text-left">
-                  <th className="pb-3 text-sm font-medium text-muted">Foto</th>
-                  <th className="pb-3 text-sm font-medium text-muted">Marca</th>
-                  <th className="pb-3 text-sm font-medium text-muted">Modelo</th>
-                  <th className="pb-3 text-sm font-medium text-muted">Ano</th>
-                  <th className="pb-3 text-sm font-medium text-muted">Valor</th>
-                  <th className="pb-3 text-sm font-medium text-muted">Estado</th>
-                  <th className="pb-3 text-sm font-medium text-muted text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProducts.map((product) => (
-                  <tr key={product.id} className="border-b border-border-soft hover:bg-border-soft/50">
-                    <td className="py-3 pr-3">
-                      {product.imageUrl ? (
-                        <img
-                          src={product.imageUrl}
-                          alt={`${product.marca} ${product.modelo}`}
-                          className="w-16 h-16 object-cover rounded-md border border-border"
-                          loading="lazy"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).style.display = "none";
-                          }}
-                        />
-                      ) : (
-                        <div className="w-16 h-16 rounded-md border border-border bg-border-soft flex items-center justify-center text-subtle text-xs">
-                          sem foto
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3">{product.marca}</td>
-                    <td className="py-3">{product.modelo}</td>
-                    <td className="py-3">{product.ano || "-"}</td>
-                    <td className="py-3">R$ {product.valor?.toLocaleString("pt-BR") || "0"}</td>
-                    <td className="py-3 capitalize">{product.estado || "-"}</td>
-                    <td className="py-3">
-                      <div className="flex gap-1 justify-end">
-                        <button
-                          onClick={() => handleEdit(product.id)}
-                          className="p-1.5 rounded hover:bg-border-soft text-ink-soft transition"
-                          title="Editar"
-                        >
-                          <Pencil size={18} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(product.id)}
-                          className="p-1.5 rounded hover:bg-status-bad-wash text-status-bad transition"
-                          title="Excluir"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ResponsiveProductList
+            products={filteredProducts}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+          />
         )}
       </Card>
     </div>

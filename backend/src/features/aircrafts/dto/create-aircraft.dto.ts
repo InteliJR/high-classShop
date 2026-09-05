@@ -6,8 +6,10 @@ import {
   IsArray,
   ValidateNested,
   IsBoolean,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ProductCurrency } from '@prisma/client';
 
 class ImageDto {
   @IsString()
@@ -29,6 +31,10 @@ export class CreateAircraftDto {
 
   @IsNumber()
   valor: number;
+
+  @IsOptional()
+  @IsEnum(ProductCurrency)
+  currency?: ProductCurrency;
 
   @IsString()
   estado: string;

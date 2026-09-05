@@ -28,16 +28,21 @@ import {
   Car,
   Boat,
   Aircraft,
+  ProcessStatus,
 } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
-import {
-  parseDate,
-  isFutureDate,
-  formatToISO,
-  suggestNextAvailableSlots,
-} from 'src/shared/utils/date.utils';
+import { parseDate, isFutureDate } from 'src/shared/utils/date.utils';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { CalendlyIntegrationService } from './calendly-integration.service';
+import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
+import { lockNegotiationProductMoney } from 'src/features/products/product-monetary-lock';
+import { validateSpecialistProductAssociation } from 'src/features/products/product-association-validator';
+import { lockAndAssertNoActiveProcess } from 'src/features/processes/process-dedup-lock';
+import {
+  acquireSpecialistScheduleLock,
+  assertSpecialistScheduleAvailable,
+  lockAndAssertSpecialistScheduleAvailable,
+} from './appointment-schedule-lock';
 
 /**
  * AppointmentsService
@@ -98,10 +103,12 @@ export class AppointmentsService {
     );
 
     // Validação 1: appointment_datetime deve ser futuro (se fornecido)
-    let appointmentDateTime: Date | null = null;
+    // Generate the fallback once. The exact instant checked under the
+    // specialist lock must be the same instant persisted below.
+    let appointmentDateTime: Date = new Date();
     if (dto.appointment_datetime) {
-      appointmentDateTime = parseDate(dto.appointment_datetime);
-      if (!appointmentDateTime) {
+      const parsedAppointmentDateTime = parseDate(dto.appointment_datetime);
+      if (!parsedAppointmentDateTime) {
         this.logger.warn('[create] Data/hora do agendamento é inválida');
         throw new BadRequestException({
           success: false,
@@ -116,6 +123,7 @@ export class AppointmentsService {
           },
         });
       }
+      appointmentDateTime = parsedAppointmentDateTime;
 
       if (!isFutureDate(appointmentDateTime)) {
         this.logger.warn('[create] Data/hora do agendamento é no passado');
@@ -219,144 +227,65 @@ export class AppointmentsService {
       });
     }
 
-    // Validação 6: Verificar que produto existe e pertence ao especialista
-    let product: Car | Boat | Aircraft | null = null;
-    if (dto.product_type === ProductType.CAR) {
-      product = await this.prisma.car.findUnique({
-        where: { id: dto.product_id },
-      });
-      if (!product || product.specialist_id !== dto.specialist_id) {
-        throw new NotFoundException({
-          success: false,
-          error: {
-            code: 404,
-            message: 'Carro não encontrado ou não pertence ao especialista',
-            details: {
-              product_id: dto.product_id,
-              specialist_id: dto.specialist_id,
-            },
-          },
-        });
-      }
-    } else if (dto.product_type === ProductType.BOAT) {
-      product = await this.prisma.boat.findUnique({
-        where: { id: dto.product_id },
-      });
-      if (!product || product.specialist_id !== dto.specialist_id) {
-        throw new NotFoundException({
-          success: false,
-          error: {
-            code: 404,
-            message: 'Barco não encontrado ou não pertence ao especialista',
-            details: {
-              product_id: dto.product_id,
-              specialist_id: dto.specialist_id,
-            },
-          },
-        });
-      }
-    } else if (dto.product_type === ProductType.AIRCRAFT) {
-      product = await this.prisma.aircraft.findUnique({
-        where: { id: dto.product_id },
-      });
-      if (!product || product.specialist_id !== dto.specialist_id) {
-        throw new NotFoundException({
-          success: false,
-          error: {
-            code: 404,
-            message: 'Aeronave não encontrada ou não pertence ao especialista',
-            details: {
-              product_id: dto.product_id,
-              specialist_id: dto.specialist_id,
-            },
-          },
-        });
-      }
-    }
+    const { appointment, process, product } = await this.prisma.$transaction(
+      async (tx) => {
+        // Validação 6: produto ativo, do tipo correto e pertencente ao especialista.
+        const product = (await validateSpecialistProductAssociation(tx, {
+          specialistId: dto.specialist_id,
+          productType: dto.product_type,
+          productId: dto.product_id,
+        })) as Car | Boat | Aircraft;
 
-    // Validação 7: Verificar conflitos de horário (especialista não pode ter 2 agendamentos no mesmo horário)
-    // Considerar janela de 1 hora para evitar overlap (ex: agendamento 14:00-15:00)
-    let existingAppointment = null;
-    if (appointmentDateTime) {
-      const conflictStart = new Date(
-        appointmentDateTime.getTime() - 60 * 60 * 1000,
-      );
-      const conflictEnd = new Date(
-        appointmentDateTime.getTime() + 60 * 60 * 1000,
-      );
-
-      existingAppointment = await this.prisma.appointment.findFirst({
-        where: {
-          specialist_id: dto.specialist_id,
-          appointment_datetime: {
-            gte: conflictStart,
-            lte: conflictEnd,
-          },
-          status: { in: [StatusAgendamento.SCHEDULED] }, // Apenas agendamentos ativos
-        },
-      });
-
-      if (existingAppointment) {
-        // Gerar 3 sugestões de horários alternativos (próximas 3 horas disponíveis)
-        const suggestedTimes = suggestNextAvailableSlots(
+        await lockAndAssertNoActiveProcess(tx, {
+          clientId: dto.client_id,
+          specialistId: dto.specialist_id,
+          productType: dto.product_type,
+          productId: dto.product_id,
+        });
+        await lockAndAssertSpecialistScheduleAvailable(
+          tx,
+          dto.specialist_id,
           appointmentDateTime,
-          3,
         );
 
-        throw new ConflictException({
-          success: false,
-          error: {
-            code: 409,
-            message: 'Especialista já possui agendamento neste horário',
-            details: {
-              conflicting_appointment: {
-                id: existingAppointment.id,
-                appointment_datetime: existingAppointment.appointment_datetime
-                  ? formatToISO(existingAppointment.appointment_datetime)
-                  : null,
-                client_id: existingAppointment.client_id,
-              },
-              suggested_times: suggestedTimes, // Retornar formato ISO 8601 UTC
-            },
+        // Criar Appointment
+        const appointment = await tx.appointment.create({
+          data: {
+            client_id: dto.client_id,
+            specialist_id: dto.specialist_id,
+            product_type: dto.product_type,
+            product_id: dto.product_id,
+            appointment_datetime: appointmentDateTime,
+            status: StatusAgendamento.SCHEDULED,
+            notes: dto.notes,
+          },
+          include: {
+            client: true,
+            specialist: true,
           },
         });
-      }
-    }
 
-    // Criar Appointment
-    const appointment = await this.prisma.appointment.create({
-      data: {
-        client_id: dto.client_id,
-        specialist_id: dto.specialist_id,
-        product_type: dto.product_type,
-        product_id: dto.product_id,
-        appointment_datetime: appointmentDateTime || new Date(),
-        status: StatusAgendamento.SCHEDULED,
-        notes: dto.notes,
-      },
-      include: {
-        client: true,
-        specialist: true,
-      },
-    });
+        // Auto-criar Process vinculado a este Appointment
+        // Process começa em status SCHEDULING (agendamento confirmado)
+        const process = await tx.process.create({
+          data: {
+            client_id: dto.client_id,
+            specialist_id: dto.specialist_id,
+            product_type: dto.product_type,
+            appointment_id: appointment.id,
+            [dto.product_type === ProductType.CAR
+              ? 'car_id'
+              : dto.product_type === ProductType.BOAT
+                ? 'boat_id'
+                : 'aircraft_id']: dto.product_id,
+            status: 'SCHEDULING', // ProcessStatus enum
+            notes: `Criado via agendamento (Calendly integration). Cliente agendou em ${appointment.appointment_datetime?.toISOString() || 'data pendente'}`,
+          },
+        });
 
-    // Auto-criar Process vinculado a este Appointment
-    // Process começa em status SCHEDULING (agendamento confirmado)
-    const process = await this.prisma.process.create({
-      data: {
-        client_id: dto.client_id,
-        specialist_id: dto.specialist_id,
-        product_type: dto.product_type,
-        appointment_id: appointment.id,
-        [dto.product_type === ProductType.CAR
-          ? 'car_id'
-          : dto.product_type === ProductType.BOAT
-            ? 'boat_id'
-            : 'aircraft_id']: dto.product_id,
-        status: 'SCHEDULING', // ProcessStatus enum
-        notes: `Criado via agendamento (Calendly integration). Cliente agendou em ${appointment.appointment_datetime?.toISOString() || 'data pendente'}`,
+        return { appointment, process, product };
       },
-    });
+    );
 
     // Fire-and-forget: Notificar especialista sobre novo agendamento
     const productDetails = product
@@ -684,84 +613,110 @@ export class AppointmentsService {
       });
     }
 
-    // Atualizar appointment
-    const updated = await this.prisma.appointment.update({
-      where: { id },
-      data: {
-        status: dto.status,
-        notes: dto.notes || appointment.notes,
-        updated_at: new Date(),
-      },
-      include: {
-        client: true,
-        specialist: true,
-        process: true,
-      },
-    });
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updatedAppointment = await tx.appointment.update({
+        where: { id },
+        data: {
+          status: dto.status,
+          notes: dto.notes || appointment.notes,
+          updated_at: new Date(),
+        },
+        include: {
+          client: true,
+          specialist: true,
+          process: true,
+        },
+      });
 
-    // LÓGICA CRÍTICA: Se status muda para COMPLETED, atualizar Process vinculado
-    if (dto.status === StatusAgendamento.COMPLETED && appointment.process) {
-      const process = appointment.process;
+      // LÓGICA CRÍTICA: Se status muda para COMPLETED, atualizar Process vinculado
+      if (dto.status === StatusAgendamento.COMPLETED && appointment.process) {
+        const process = appointment.process;
 
-      // Só move para NEGOTIATION se Process está em SCHEDULING
-      // Evita conflito se já está em NEGOTIATION+ (não retrocede)
-      if (process.status === 'SCHEDULING') {
-        // Verificar se processo tem produto associado
-        const hasProduct =
-          process.car_id || process.boat_id || process.aircraft_id;
-
-        if (hasProduct) {
-          // Processo com produto: avançar para NEGOTIATION
-          await this.prisma.process.update({
+        // Só move para NEGOTIATION se Process está em SCHEDULING
+        // Evita conflito se já está em NEGOTIATION+ (não retrocede)
+        if (process.status === ProcessStatus.SCHEDULING) {
+          await lockNegotiationProductMoney(tx, process);
+          const processForTransition = await tx.process.findUniqueOrThrow({
             where: { id: process.id },
-            data: {
-              status: 'NEGOTIATION',
-              notes: `${process.notes || ''}\n[AUTO] Transição automática: SCHEDULING → NEGOTIATION (agendamento concluído em ${new Date().toISOString()})`,
-              updated_at: new Date(),
+            include: {
+              car: { select: { valor: true, currency: true } },
+              boat: { select: { valor: true, currency: true } },
+              aircraft: { select: { valor: true, currency: true } },
             },
           });
+          if (processForTransition.status !== ProcessStatus.SCHEDULING) {
+            return updatedAppointment;
+          }
+          const hasProduct =
+            processForTransition.car_id ||
+            processForTransition.boat_id ||
+            processForTransition.aircraft_id;
 
-          // Registrar mudança de status no histórico
-          await this.prisma.processStatusHistory.create({
-            data: {
-              processId: process.id,
-              status: 'NEGOTIATION',
-              changed_at: new Date(),
-            },
-          });
+          if (hasProduct) {
+            const snapshotData =
+              buildNegotiationSnapshotUpdate(processForTransition);
+            const claim = await tx.process.updateMany({
+              where: {
+                id: process.id,
+                status: ProcessStatus.SCHEDULING,
+              },
+              data: {
+                status: ProcessStatus.NEGOTIATION,
+                notes: `${processForTransition.notes || ''}\n[AUTO] Transição automática: SCHEDULING → NEGOTIATION (agendamento concluído em ${new Date().toISOString()})`,
+                updated_at: new Date(),
+                ...snapshotData,
+              },
+            });
+            if (claim.count === 1) {
+              await tx.processStatusHistory.create({
+                data: {
+                  processId: process.id,
+                  status: ProcessStatus.NEGOTIATION,
+                  changed_by: userId,
+                  changed_at: new Date(),
+                },
+              });
 
-          this.logger.log(
-            `[updateStatus] Process ${process.id} avançado para NEGOTIATION (agendamento concluído)`,
-          );
-        } else {
-          // Consultoria (sem produto): manter em SCHEDULING até produto ser selecionado
-          await this.prisma.process.update({
-            where: { id: process.id },
-            data: {
-              notes: `${process.notes || ''}\n[AUTO] Reunião concluída em ${new Date().toISOString()}. Aguardando especialista selecionar produto para avançar para NEGOTIATION.`,
-              updated_at: new Date(),
-            },
-          });
+              this.logger.log(
+                `[updateStatus] Process ${process.id} avançado para NEGOTIATION (agendamento concluído)`,
+              );
+            }
+          } else {
+            const claim = await tx.process.updateMany({
+              where: {
+                id: process.id,
+                status: ProcessStatus.SCHEDULING,
+              },
+              data: {
+                notes: `${processForTransition.notes || ''}\n[AUTO] Reunião concluída em ${new Date().toISOString()}. Aguardando especialista selecionar produto para avançar para NEGOTIATION.`,
+                updated_at: new Date(),
+              },
+            });
 
-          this.logger.log(
-            `[updateStatus] Process ${process.id} mantido em SCHEDULING (consultoria - aguardando seleção de produto)`,
+            if (claim.count === 1) {
+              this.logger.log(
+                `[updateStatus] Process ${process.id} mantido em SCHEDULING (consultoria - aguardando seleção de produto)`,
+              );
+            }
+          }
+        } else if (
+          !(
+            [
+              ProcessStatus.NEGOTIATION,
+              ProcessStatus.PROCESSING_CONTRACT,
+              ProcessStatus.DOCUMENTATION,
+              ProcessStatus.COMPLETED,
+            ] as ProcessStatus[]
+          ).includes(process.status)
+        ) {
+          console.warn(
+            `[WARNING] Appointment ${id} marked COMPLETED but Process ${process.id} is in unexpected status: ${process.status}`,
           );
         }
-      } else if (
-        ![
-          'NEGOTIATION',
-          'PROCESSING_CONTRACT',
-          'DOCUMENTATION',
-          'COMPLETED',
-        ].includes(process.status)
-      ) {
-        // Warn se Process está em estado inesperado
-        console.warn(
-          `[WARNING] Appointment ${id} marked COMPLETED but Process ${process.id} is in unexpected status: ${process.status}`,
-        );
       }
-      // Se Process já está em NEGOTIATION ou além, não faz nada (mantém integridade lógica)
-    }
+
+      return updatedAppointment;
+    });
 
     // Retornar appointment atualizado
     const product = await this.getProductByType(
@@ -912,6 +867,7 @@ export class AppointmentsService {
           ? parseFloat(product.valor)
           : Number(product.valor);
       productDto.valor = valorNum;
+      productDto.currency = product.currency;
       entity.product = productDto;
     }
 
@@ -1155,7 +1111,6 @@ export class AppointmentsService {
     this.logger.log(
       `[createPending] Iniciando transação para criar appointment e process`,
     );
-    this.logger.log(`[createPending] Dados do DTO: ${JSON.stringify(dto)}`);
 
     let appointment: any;
     let process: any;
@@ -1165,11 +1120,37 @@ export class AppointmentsService {
       [appointment, process] = await this.prisma.$transaction(async (tx) => {
         this.logger.log(`[createPending] Dentro da transação - iniciando`);
 
+        await validateSpecialistProductAssociation(tx, {
+          specialistId: dto.specialist_id,
+          productType: dto.product_type,
+          productId: dto.product_id,
+        });
+
+        await lockAndAssertNoActiveProcess(tx, {
+          clientId: dto.client_id,
+          specialistId: dto.specialist_id,
+          productType: isConsultancy ? null : dto.product_type,
+          productId: isConsultancy ? null : dto.product_id,
+        });
+        const pendingDateTime = dto.appointment_datetime
+          ? parseDate(String(dto.appointment_datetime))
+          : null;
+        if (dto.appointment_datetime && !pendingDateTime) {
+          throw new BadRequestException('Data/hora do agendamento é inválida');
+        }
+        if (pendingDateTime) {
+          await lockAndAssertSpecialistScheduleAvailable(
+            tx,
+            dto.specialist_id,
+            pendingDateTime,
+          );
+        }
+
         // Criar appointment
         const appointmentData: any = {
           client_id: dto.client_id,
           specialist_id: dto.specialist_id,
-          appointment_datetime: dto.appointment_datetime || null,
+          appointment_datetime: pendingDateTime,
           status: StatusAgendamento.PENDING,
           notes:
             dto.notes ||
@@ -1265,10 +1246,6 @@ export class AppointmentsService {
         `[createPending] Tipo do erro: ${error?.constructor?.name}`,
       );
       this.logger.error(`[createPending] Mensagem: ${error?.message}`);
-      this.logger.error(`[createPending] Stack: ${error?.stack}`);
-      this.logger.error(
-        `[createPending] Erro completo: ${JSON.stringify(error, null, 2)}`,
-      );
       throw error;
     }
   }
@@ -1395,15 +1372,70 @@ export class AppointmentsService {
 
     // Atualizar para SCHEDULED e atualizar Process para NEGOTIATION em transação
     const [updated, process] = await this.prisma.$transaction(async (tx) => {
+      await validateSpecialistProductAssociation(tx, {
+        specialistId: appointment.specialist_id,
+        productType: appointment.product_type,
+        productId: appointment.product_id,
+      });
+
+      await lockAndAssertNoActiveProcess(
+        tx,
+        {
+          clientId: appointment.client_id,
+          specialistId: appointment.specialist_id,
+          productType: appointment.product_type,
+          productId: appointment.product_id,
+        },
+        appointment.process?.id,
+      );
+      await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
+
+      const lockedAppointment = await tx.appointment.findUnique({
+        where: { id: appointmentId },
+        include: { client: true, specialist: true, process: true },
+      });
+      if (!lockedAppointment) {
+        throw new NotFoundException({
+          success: false,
+          error: { code: 404, message: 'Agendamento não encontrado' },
+        });
+      }
+      if (lockedAppointment.specialist_id !== userId) {
+        throw new ForbiddenException({
+          success: false,
+          error: {
+            code: 403,
+            message: 'Apenas o especialista pode confirmar agendamentos',
+          },
+        });
+      }
+      if (lockedAppointment.status !== StatusAgendamento.PENDING) {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message: 'Apenas agendamentos PENDING podem ser confirmados',
+            details: { current_status: lockedAppointment.status },
+          },
+        });
+      }
+      const confirmedDateTime =
+        appointmentDatetime ||
+        lockedAppointment.appointment_datetime ||
+        new Date();
+      await assertSpecialistScheduleAvailable(
+        tx,
+        lockedAppointment.specialist_id,
+        confirmedDateTime,
+        appointmentId,
+      );
+
       // Atualizar appointment
       const updatedApt = await tx.appointment.update({
         where: { id: appointmentId },
         data: {
           status: StatusAgendamento.SCHEDULED,
-          appointment_datetime:
-            appointmentDatetime ||
-            appointment.appointment_datetime ||
-            new Date(),
+          appointment_datetime: confirmedDateTime,
           confirmed_at: new Date(),
           confirmed_by_id: userId,
         },
@@ -1411,23 +1443,23 @@ export class AppointmentsService {
       });
 
       // Buscar ou criar Process
-      let processToUpdate = appointment.process;
+      let processToUpdate = lockedAppointment.process;
 
       if (!processToUpdate) {
         // Se não existe, criar (caso de migração/dados antigos)
         const productField =
-          appointment.product_type === ProductType.CAR
+          lockedAppointment.product_type === ProductType.CAR
             ? 'car_id'
-            : appointment.product_type === ProductType.BOAT
+            : lockedAppointment.product_type === ProductType.BOAT
               ? 'boat_id'
               : 'aircraft_id';
 
         processToUpdate = await tx.process.create({
           data: {
-            client_id: appointment.client_id,
-            specialist_id: appointment.specialist_id,
-            product_type: appointment.product_type,
-            [productField]: appointment.product_id,
+            client_id: lockedAppointment.client_id,
+            specialist_id: lockedAppointment.specialist_id,
+            product_type: lockedAppointment.product_type,
+            [productField]: lockedAppointment.product_id,
             appointment_id: appointmentId,
             status: 'SCHEDULING',
             notes: `Criado via confirmação de agendamento PENDING (${new Date().toISOString()})`,
@@ -1444,22 +1476,59 @@ export class AppointmentsService {
         });
       }
 
-      // Atualizar Process para NEGOTIATION
-      const updatedProcess = await tx.process.update({
+      await lockNegotiationProductMoney(tx, processToUpdate);
+      const processForTransition = await tx.process.findUniqueOrThrow({
         where: { id: processToUpdate.id },
-        data: {
-          status: 'NEGOTIATION',
-          notes:
-            processToUpdate.notes +
-            `\n\nAgendamento confirmado pelo especialista (${new Date().toISOString()})`,
+        include: {
+          car: { select: { valor: true, currency: true } },
+          boat: { select: { valor: true, currency: true } },
+          aircraft: { select: { valor: true, currency: true } },
         },
       });
+      const snapshotData = buildNegotiationSnapshotUpdate(processForTransition);
+      const nextUpdatedAt = new Date();
+      const nextNotes =
+        (processForTransition.notes || '') +
+        `\n\nAgendamento confirmado pelo especialista (${new Date().toISOString()})`;
+      const claim = await tx.process.updateMany({
+        where: {
+          id: processForTransition.id,
+          status: ProcessStatus.SCHEDULING,
+          updated_at: processForTransition.updated_at,
+        },
+        data: {
+          status: ProcessStatus.NEGOTIATION,
+          notes: nextNotes,
+          updated_at: nextUpdatedAt,
+          ...snapshotData,
+        },
+      });
+
+      if (claim.count !== 1) {
+        throw new ConflictException({
+          success: false,
+          error: {
+            code: 'PROCESS_STATUS_TRANSITION_CONFLICT',
+            message:
+              'O processo foi alterado durante a confirmação do agendamento.',
+            details: { process_id: processForTransition.id },
+          },
+        });
+      }
+
+      const updatedProcess = {
+        ...processForTransition,
+        ...snapshotData,
+        status: ProcessStatus.NEGOTIATION,
+        notes: nextNotes,
+        updated_at: nextUpdatedAt,
+      };
 
       // Criar histórico de mudança de status
       await tx.processStatusHistory.create({
         data: {
           processId: updatedProcess.id,
-          status: 'NEGOTIATION',
+          status: ProcessStatus.NEGOTIATION,
           changed_by: userId,
           changed_at: new Date(),
         },
@@ -1766,24 +1835,68 @@ export class AppointmentsService {
       }
     }
 
-    const syncStatus =
-      scheduledStartTime || appointment.appointment_datetime
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
+      const lockedAppointment = await tx.appointment.findUnique({
+        where: { id: appointmentId },
+      });
+      if (!lockedAppointment) {
+        throw new NotFoundException({
+          success: false,
+          error: { code: 404, message: 'Agendamento não encontrado' },
+        });
+      }
+      if (lockedAppointment.client_id !== userId) {
+        throw new ForbiddenException({
+          success: false,
+          error: {
+            code: 403,
+            message:
+              'Apenas o cliente dono do agendamento pode registrar evento do Calendly',
+          },
+        });
+      }
+      if (
+        lockedAppointment.status !== StatusAgendamento.PENDING &&
+        lockedAppointment.status !== StatusAgendamento.SCHEDULED
+      ) {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message:
+              'Somente agendamentos pendentes ou agendados aceitam sincronização Calendly',
+          },
+        });
+      }
+      if (lockedAppointment.calendly_event_uri === dto.event_uri) {
+        return lockedAppointment;
+      }
+
+      const targetDateTime =
+        scheduledStartTime || lockedAppointment.appointment_datetime;
+      await assertSpecialistScheduleAvailable(
+        tx,
+        lockedAppointment.specialist_id,
+        targetDateTime,
+        lockedAppointment.id,
+      );
+      const syncStatus = targetDateTime
         ? CalendlySyncStatus.SYNCED
         : CalendlySyncStatus.PENDING;
-
-    const updated = await this.prisma.appointment.update({
-      where: { id: appointment.id },
-      data: {
-        calendly_event_uri: dto.event_uri,
-        calendly_invitee_uri: dto.invitee_uri,
-        calendly_scheduled_at: dto.client_observed_at
-          ? new Date(dto.client_observed_at)
-          : new Date(),
-        calendly_last_sync_at: new Date(),
-        calendly_sync_status: syncStatus,
-        appointment_datetime:
-          scheduledStartTime || appointment.appointment_datetime,
-      },
+      return tx.appointment.update({
+        where: { id: lockedAppointment.id },
+        data: {
+          calendly_event_uri: dto.event_uri,
+          calendly_invitee_uri: dto.invitee_uri,
+          calendly_scheduled_at: dto.client_observed_at
+            ? new Date(dto.client_observed_at)
+            : new Date(),
+          calendly_last_sync_at: new Date(),
+          calendly_sync_status: syncStatus,
+          appointment_datetime: targetDateTime,
+        },
+      });
     });
 
     return {

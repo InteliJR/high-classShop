@@ -1,4 +1,4 @@
-import { ProductType, StatusAgendamento } from '@prisma/client';
+import { ProductCurrency, ProductType, StatusAgendamento } from '@prisma/client';
 import { Expose, Type } from 'class-transformer';
 
 /**
@@ -112,6 +112,9 @@ export class ProductResponseDto {
    */
   @Expose()
   valor: number | string; // Decimal do Prisma pode ser number ou string
+
+  @Expose()
+  currency: ProductCurrency;
 }
 
 /**

@@ -76,6 +76,13 @@ enum ProductType {
   AIRCRAFT @map("AIRCRAFT")
 }
 
+// Moeda na qual o preço do produto foi informado. O valor nunca é convertido
+// automaticamente: negociações e exibições usam a moeda de origem do produto.
+enum ProductCurrency {
+  BRL @map("BRL")
+  USD @map("USD")
+}
+
 enum ProductImportJobStatus {
   PENDING               @map("PENDING")
   PROCESSING            @map("PROCESSING")
@@ -684,6 +691,7 @@ model Car {
   modelo                     String
   identificador              String
   valor                      Decimal
+  currency                   ProductCurrency @default(BRL)
   estado                     String
   ano                        Int
   descricao                  String?
@@ -729,6 +737,7 @@ model Boat {
   modelo                     String
   identificador              String
   valor                      Decimal
+  currency                   ProductCurrency @default(BRL)
   ano                        Int
   fabricante                 String?
   tamanho                    String?
@@ -782,6 +791,7 @@ model Aircraft {
   estado                     String
   descricao                  String?
   valor                      Decimal
+  currency                   ProductCurrency @default(BRL)
   tipo_aeronave              String?
   created_at                 DateTime  @default(now())
   updated_at                 DateTime  @updatedAt
@@ -847,6 +857,8 @@ model Process {
   active_contract_id String?       @unique @db.Uuid
   status             ProcessStatus @default(SCHEDULING)
   notes              String?
+  negotiation_currency      ProductCurrency?
+  negotiation_product_value Decimal?         @db.Decimal(15, 2)
   created_at         DateTime      @default(now())
   updated_at         DateTime      @updatedAt
 

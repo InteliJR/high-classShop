@@ -4,7 +4,7 @@ import type {
   UseFormRegister,
 } from "react-hook-form";
 import Button from "../../components/ui/button";
-import { formatBRL } from "../../services/contracts.service";
+import { formatCurrency, type ProductCurrency } from "../../lib/currency";
 
 /**
  * Etapa 1 do contrato: a comissão, isolada do resto.
@@ -19,9 +19,14 @@ interface Props {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   errors: FieldErrors<any>;
   productLabel: string;
+  currency: ProductCurrency;
   vehiclePrice: number;
   totalCommissionValue: number;
   sellerNetPreviewValue: number;
+  platformValue: number;
+  officeValue: number;
+  specialistValue: number;
+  showOffice: boolean;
   onContinue: () => void;
   onCancel: () => void;
 }
@@ -30,9 +35,14 @@ export default function ContractCommissionStep({
   register,
   errors,
   productLabel,
+  currency,
   vehiclePrice,
   totalCommissionValue,
   sellerNetPreviewValue,
+  platformValue,
+  officeValue,
+  specialistValue,
+  showOffice,
   onContinue,
   onCancel,
 }: Props) {
@@ -59,7 +69,7 @@ export default function ContractCommissionStep({
             </label>
             <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
               {vehiclePrice > 0 ? (
-                formatBRL(vehiclePrice)
+                formatCurrency(vehiclePrice, currency)
               ) : (
                 <span className="text-subtle">—</span>
               )}
@@ -100,18 +110,48 @@ export default function ContractCommissionStep({
 
         {/* Consequência do percentual, para a escolha não ser às cegas. */}
         {vehiclePrice > 0 && totalCommissionValue > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6 pt-5 border-t">
-            <div>
-              <p className="text-xs text-subtle">Comissão total</p>
-              <p className="text-sm font-medium text-ink mt-0.5">
-                {formatBRL(totalCommissionValue)}
-              </p>
+          <div className="mt-6 pt-5 border-t">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-subtle">Comissão total</p>
+                <p className="text-sm font-medium text-ink mt-0.5">
+                  {formatCurrency(totalCommissionValue, currency)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-subtle">
+                  Valor líquido do vendedor
+                </p>
+                <p className="text-sm font-medium text-ink mt-0.5">
+                  {formatCurrency(sellerNetPreviewValue, currency)}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-subtle">Valor líquido do vendedor</p>
-              <p className="text-sm font-medium text-ink mt-0.5">
-                {formatBRL(sellerNetPreviewValue)}
-              </p>
+
+            <p className="text-xs font-semibold uppercase tracking-wider text-subtle mt-5 mb-3">
+              Distribuição da comissão
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs text-subtle">Plataforma</p>
+                <p className="text-sm font-medium text-ink mt-0.5">
+                  {formatCurrency(platformValue, currency)}
+                </p>
+              </div>
+              {showOffice && (
+                <div>
+                  <p className="text-xs text-subtle">Escritório</p>
+                  <p className="text-sm font-medium text-ink mt-0.5">
+                    {formatCurrency(officeValue, currency)}
+                  </p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-subtle">Especialista</p>
+                <p className="text-sm font-medium text-ink mt-0.5">
+                  {formatCurrency(specialistValue, currency)}
+                </p>
+              </div>
             </div>
           </div>
         )}

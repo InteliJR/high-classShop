@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, ProductType } from '@prisma/client';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -14,6 +14,7 @@ import {
 import { Car } from './entity/car.entity';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { CAR_COLUMNS } from 'src/shared/constants/product-columns';
+import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 
 @Injectable()
 export class CarsService {
@@ -217,15 +218,19 @@ export class CarsService {
   }
 
   async update(id: string, updateCarDto: UpdateCarDto) {
-    await this.findOne(id);
-
     const { images, ...carData } = updateCarDto;
 
-    try {
-      // 1. Atualizar dados do carro
-      await this.prismaService.car.update({ where: { id }, data: carData });
+    await updateProductWithMonetaryLock(this.prismaService, {
+      productType: ProductType.CAR,
+      productId: id,
+      nextValue: updateCarDto.valor,
+      nextCurrency: updateCarDto.currency,
+      data: carData,
+      notFoundMessage: 'Car not found',
+    });
 
-      // 2. Se houver novas imagens, processar
+    try {
+      // 1. Se houver novas imagens, processar
       if (images && images.length > 0) {
         // Remover imagens antigas
         await this.prismaService.car_image.deleteMany({
@@ -255,7 +260,7 @@ export class CarsService {
         }
       }
 
-      // 3. Retornar o carro atualizado com imagens
+      // 2. Retornar o carro atualizado com imagens
       return await this.prismaService.car.findUnique({
         where: { id },
         include: { images: true },
@@ -269,19 +274,20 @@ export class CarsService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
-
     try {
-      await this.prismaService.car.update({
-        where: { id },
+      await updateProductWithMonetaryLock(this.prismaService, {
+        productType: ProductType.CAR,
+        productId: id,
         data: {
           is_active: false,
           deactivated_at: new Date(),
           deactivated_by_sync_job_id: null,
         },
+        notFoundMessage: 'Carro não encontrado',
       });
       return { ok: true };
     } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       throw new Error(`Erro ao deletar carro: ${error.message}`);
     }
   }
@@ -293,6 +299,7 @@ export class CarsService {
       'BMW',
       'X5',
       '450000',
+      'BRL',
       'São Paulo',
       '2023',
       'Preto',

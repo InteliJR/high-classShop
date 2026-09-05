@@ -93,17 +93,21 @@ export class ContractsController {
    * }
    */
   @Get('prefill/:processId')
+  @Roles(UserRole.SPECIALIST, UserRole.ADMIN)
   async prefillContract(
     @Param('processId', new ParseUUIDPipe({ version: '4' })) processId: string,
     @Request() req: RequestWithUser,
   ): Promise<ApiResponseDto<PrefillContractResponseDto>> {
-    const { id: userId, email: userEmail } = req.user;
+    const { id: userId } = req.user;
 
     this.logger.log(
-      `Prefill contract requested by user ${userId} (${userEmail}) for process ${processId}`,
+      `Prefill contract requested by user ${userId} for process ${processId}`,
     );
 
-    const prefillData = await this.contractsService.prefillContract(processId);
+    const prefillData = await this.contractsService.prefillContract(
+      processId,
+      userId,
+    );
 
     this.logger.debug(`Prefill data returned for process ${processId}`);
 
@@ -206,14 +210,12 @@ export class ContractsController {
     @Body() generateContractDto: GenerateContractDto,
     @Request() req: RequestWithUser,
   ): Promise<ApiResponseDto<ContractResponse>> {
-    const { id: userId, email: userEmail } = req.user;
+    const { id: userId } = req.user;
 
     this.logger.log(
-      `Iniciando geração de contrato para usuário ${userId} (${userEmail})`,
+      `Iniciando geração de contrato para usuário ${userId}`,
     );
-    this.logger.debug(
-      `Process: ${generateContractDto.process_id}, Buyer: ${generateContractDto.buyer_email}`,
-    );
+    this.logger.debug(`Process: ${generateContractDto.process_id}`);
 
     const contract = await this.contractsService.generateContract(
       generateContractDto,
@@ -280,10 +282,10 @@ export class ContractsController {
     @Body() previewContractDto: PreviewContractDto,
     @Request() req: RequestWithUser,
   ): Promise<ApiResponseDto<PreviewContractResponseDto>> {
-    const { id: userId, email: userEmail } = req.user;
+    const { id: userId } = req.user;
 
     this.logger.log(
-      `Criando preview de contrato para usuário ${userId} (${userEmail})`,
+      `Criando preview de contrato para usuário ${userId}`,
     );
     this.logger.debug(`Process: ${previewContractDto.process_id}`);
 
@@ -354,10 +356,10 @@ export class ContractsController {
     @Body() previewContractDto: PreviewContractDto,
     @Request() req: RequestWithUser,
   ): Promise<ApiResponseDto<SendContractResponseDto>> {
-    const { id: userId, email: userEmail } = req.user;
+    const { id: userId } = req.user;
 
     this.logger.log(
-      `Enviando contrato após preview para usuário ${userId} (${userEmail})`,
+      `Enviando contrato após preview para usuário ${userId}`,
     );
     this.logger.debug(
       `EnvelopeID: ${envelopeId}, Process: ${previewContractDto.process_id}`,
@@ -396,16 +398,19 @@ export class ContractsController {
   @Roles(UserRole.SPECIALIST, UserRole.ADMIN)
   async cancelPreview(
     @Param('envelopeId') envelopeId: string,
+    @Body('process_id', new ParseUUIDPipe({ version: '4' })) processId: string,
     @Request() req: RequestWithUser,
   ): Promise<ApiResponseDto<null>> {
-    const { id: userId, email: userEmail } = req.user;
+    const { id: userId } = req.user;
 
-    this.logger.log(`Cancelando preview para usuário ${userId} (${userEmail})`);
+    this.logger.log(`Cancelando preview para usuário ${userId}`);
     this.logger.debug(`EnvelopeID: ${envelopeId}`);
 
     await this.contractsService.cancelPreview(
       envelopeId,
-      `Cancelado pelo usuário ${userEmail}`,
+      processId,
+      userId,
+      `Cancelado pelo usuário ${userId}`,
     );
 
     this.logger.log(`Preview cancelado com sucesso. EnvelopeID: ${envelopeId}`);

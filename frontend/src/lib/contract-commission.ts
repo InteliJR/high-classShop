@@ -1,20 +1,24 @@
+import { computeNestedCommissionSplit } from "./commission-split";
+
 type CommissionPreviewInput = {
   saleValue: number;
   totalCommissionRate: number;
   specialistShareRate: number;
+  officeShareRate: number;
 };
 
 type CommissionPreview = {
   totalCommissionValue: number;
+  platformValue: number;
+  officeValue: number;
   specialistValue: number;
 };
-
-const round2 = (value: number) => Math.round(value * 100) / 100;
 
 export function getCommissionPreview({
   saleValue,
   totalCommissionRate,
   specialistShareRate,
+  officeShareRate,
 }: CommissionPreviewInput): CommissionPreview {
   const safeSaleValue = Number.isFinite(saleValue) ? saleValue : 0;
   const safeTotalCommissionRate = Number.isFinite(totalCommissionRate)
@@ -23,12 +27,20 @@ export function getCommissionPreview({
   const safeSpecialistShareRate = Number.isFinite(specialistShareRate)
     ? specialistShareRate
     : 0;
-  const totalCommissionValue = round2(
-    (safeSaleValue * safeTotalCommissionRate) / 100,
-  );
-  const specialistValue = round2(
-    (totalCommissionValue * safeSpecialistShareRate) / 100,
-  );
+  const safeOfficeShareRate = Number.isFinite(officeShareRate)
+    ? officeShareRate
+    : 0;
+  const split = computeNestedCommissionSplit({
+    proposalValue: safeSaleValue,
+    totalCommissionRate: safeTotalCommissionRate,
+    specialistShareRate: safeSpecialistShareRate,
+    officeShareRate: safeOfficeShareRate,
+  });
 
-  return { totalCommissionValue, specialistValue };
+  return {
+    totalCommissionValue: split.bolo,
+    platformValue: split.platformValue,
+    officeValue: split.officeValue,
+    specialistValue: split.specialistValue,
+  };
 }
