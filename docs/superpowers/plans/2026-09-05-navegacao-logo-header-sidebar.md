@@ -72,7 +72,7 @@ Run:
 
 ```bash
 cd frontend
-rtk npm test -- src/utils/roleUtils.test.ts --pool=forks --poolOptions.forks.maxForks=2
+rtk npm test -- src/utils/roleUtils.test.ts --pool=forks --maxWorkers=2
 ```
 
 Expected: FAIL porque `getBrandHomeRoute` ainda não é exportado por `roleUtils.ts`.
@@ -98,7 +98,7 @@ Run:
 
 ```bash
 cd frontend
-rtk npm test -- src/utils/roleUtils.test.ts --pool=forks --poolOptions.forks.maxForks=2
+rtk npm test -- src/utils/roleUtils.test.ts --pool=forks --maxWorkers=2
 ```
 
 Expected: 1 arquivo e 2 testes passando.
@@ -212,7 +212,7 @@ Run:
 
 ```bash
 cd frontend
-rtk npm test -- src/layouts/Header.test.tsx --pool=forks --poolOptions.forks.maxForks=2
+rtk npm test -- src/layouts/Header.test.tsx --pool=forks --maxWorkers=2
 ```
 
 Expected: FAIL porque a marca ainda é um `button` e o visitante ainda navega para `/`.
@@ -270,7 +270,7 @@ Run:
 
 ```bash
 cd frontend
-rtk npm test -- src/layouts/Header.test.tsx --pool=forks --poolOptions.forks.maxForks=2
+rtk npm test -- src/layouts/Header.test.tsx --pool=forks --maxWorkers=2
 ```
 
 Expected: todos os testes de `Header.test.tsx` passando.
@@ -380,7 +380,7 @@ Run:
 
 ```bash
 cd frontend
-rtk npm test -- src/layouts/Sidebar.test.tsx src/layouts/Sidebar.interaction.test.tsx --pool=forks --poolOptions.forks.maxForks=2
+rtk npm test -- src/layouts/Sidebar.test.tsx src/layouts/Sidebar.interaction.test.tsx --pool=forks --maxWorkers=2
 ```
 
 Expected: FAIL porque a logo da Sidebar ainda é uma imagem sem link.
@@ -426,7 +426,7 @@ Run:
 
 ```bash
 cd frontend
-rtk npm test -- src/layouts/Sidebar.test.tsx src/layouts/Sidebar.interaction.test.tsx --pool=forks --poolOptions.forks.maxForks=2
+rtk npm test -- src/layouts/Sidebar.test.tsx src/layouts/Sidebar.interaction.test.tsx --pool=forks --maxWorkers=2
 ```
 
 Expected: todos os testes dos dois arquivos passando, incluindo navegação, fechamento, foco e estado inerte.
@@ -458,7 +458,7 @@ Run:
 
 ```bash
 cd frontend
-rtk npm test -- src/utils/roleUtils.test.ts src/layouts/Header.test.tsx src/layouts/Sidebar.test.tsx src/layouts/Sidebar.interaction.test.tsx --pool=forks --poolOptions.forks.maxForks=2
+rtk npm test -- src/utils/roleUtils.test.ts src/layouts/Header.test.tsx src/layouts/Sidebar.test.tsx src/layouts/Sidebar.interaction.test.tsx --pool=forks --maxWorkers=2
 ```
 
 Expected: quatro arquivos passando, sem testes falhos.
@@ -469,7 +469,7 @@ Run:
 
 ```bash
 cd frontend
-rtk npm test -- --pool=forks --poolOptions.forks.maxForks=2
+rtk npm test -- --pool=forks --maxWorkers=2
 ```
 
 Expected: todos os testes do frontend passando e processo encerrado com código zero.
