@@ -304,32 +304,27 @@ git commit -m "fix: oculta apresentacao do valor minimo"
 Criar `frontend/src/pages/minimum-proposal-ui.test.ts`:
 
 ```ts
-// @vitest-environment node
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import settingsPageSource from './admin/SettingsPage.tsx?raw';
+import catalogPageSource from './catalog/CatalogPage.tsx?raw';
+import consultantPageSource from './consultant/ConsultantProcessDetailPage.tsx?raw';
+import negotiationPageSource from './negotiation/NegotiationPage.tsx?raw';
 
 const proposalPages = [
-  './admin/SettingsPage.tsx',
-  './negotiation/NegotiationPage.tsx',
-  './consultant/ConsultantProcessDetailPage.tsx',
-];
+  ['./admin/SettingsPage.tsx', settingsPageSource],
+  ['./negotiation/NegotiationPage.tsx', negotiationPageSource],
+  ['./consultant/ConsultantProcessDetailPage.tsx', consultantPageSource],
+] as const;
 
 describe('minimum proposal UI', () => {
-  it.each(proposalPages)('does not expose minimum proposal copy in %s', (path) => {
-    const source = readFileSync(new URL(path, import.meta.url), 'utf8');
-
+  it.each(proposalPages)('does not expose minimum proposal copy in %s', (_path, source) => {
     expect(source).not.toMatch(
       /valor mínimo|mínimo aceito|porcentagem mínima|minimumProposalEnabled|minimumProposalPercentage/i,
     );
   });
 
   it('keeps the independent minimum price catalog filter', () => {
-    const source = readFileSync(
-      new URL('./catalog/CatalogPage.tsx', import.meta.url),
-      'utf8',
-    );
-
-    expect(source).toContain('Preço mínimo');
+    expect(catalogPageSource).toContain('Preço mínimo');
   });
 });
 ```
@@ -463,7 +458,7 @@ Expected: ambos os builds terminam com exit code 0; não executar os dois comand
 Run:
 
 ```bash
-rg -n -i "valor mínimo|mínimo aceito|porcentagem mínima|minimumProposalEnabled|minimumProposalPercentage" frontend/src/pages
+rg -n -i "valor mínimo|mínimo aceito|porcentagem mínima|minimumProposalEnabled|minimumProposalPercentage" frontend/src/pages -g '!minimum-proposal-ui.test.ts'
 ```
 
 Expected: nenhum resultado.
