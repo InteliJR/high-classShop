@@ -86,10 +86,7 @@ export class SettingsService {
   async update(key: string, value: string): Promise<SettingResponse> {
     this.logger.log(`[update] Atualizando configuração ${key} para ${value}`);
 
-    if (
-      key === SettingKey.MINIMUM_PROPOSAL_ENABLED &&
-      value === 'true'
-    ) {
+    if (key === SettingKey.MINIMUM_PROPOSAL_ENABLED && value === 'true') {
       throw new BadRequestException({
         success: false,
         error: {
