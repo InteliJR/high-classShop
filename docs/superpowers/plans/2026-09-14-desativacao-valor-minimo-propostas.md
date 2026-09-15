@@ -241,7 +241,7 @@ it('clears a legacy minimum error even when an outdated API enables it', () => {
 Run:
 
 ```bash
-cd frontend && npm test -- src/lib/negotiation-money.test.ts --pool=forks --poolOptions.forks.maxForks=2
+cd frontend && npm test -- src/lib/negotiation-money.test.ts --pool=forks --maxWorkers=2
 ```
 
 Expected: FAIL porque `getMinimumPresentation` ainda retorna `visible: true` quando a API antiga envia a funcionalidade ativa.
@@ -273,7 +273,7 @@ Manter o ramo de formatação existente depois da condição para preservar o su
 Run:
 
 ```bash
-cd frontend && npm test -- src/lib/negotiation-money.test.ts --pool=forks --poolOptions.forks.maxForks=2
+cd frontend && npm test -- src/lib/negotiation-money.test.ts --pool=forks --maxWorkers=2
 ```
 
 Expected: PASS em todos os testes de apresentação, erro e validação positiva.
@@ -339,7 +339,7 @@ describe('minimum proposal UI', () => {
 Run:
 
 ```bash
-cd frontend && npm test -- src/pages/minimum-proposal-ui.test.ts --pool=forks --poolOptions.forks.maxForks=2
+cd frontend && npm test -- src/pages/minimum-proposal-ui.test.ts --pool=forks --maxWorkers=2
 ```
 
 Expected: FAIL para `SettingsPage.tsx`, `NegotiationPage.tsx` e `ConsultantProcessDetailPage.tsx`; o caso do catálogo passa.
@@ -393,7 +393,7 @@ setFormError(normalizeMinimumFormError(message, processInfo));
 Run:
 
 ```bash
-cd frontend && npm test -- src/lib/negotiation-money.test.ts src/pages/minimum-proposal-ui.test.ts --pool=forks --poolOptions.forks.maxForks=2
+cd frontend && npm test -- src/lib/negotiation-money.test.ts src/pages/minimum-proposal-ui.test.ts --pool=forks --maxWorkers=2
 ```
 
 Expected: PASS; nenhuma das três páginas contém cópia ou controles de proposta mínima, e o catálogo ainda contém `Preço mínimo`.
@@ -442,7 +442,7 @@ Expected: memória suficiente para uma suíte serial; todos os testes PASS.
 Run:
 
 ```bash
-cd frontend && npm test -- --pool=forks --poolOptions.forks.maxForks=2
+cd frontend && npm test -- --pool=forks --maxWorkers=2
 ```
 
 Expected: todos os testes PASS, incluindo a proteção do filtro do catálogo.
