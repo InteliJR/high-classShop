@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { Settings, Check, AlertCircle, Save, Video, X, Loader2 } from "lucide-react";
-import { getSettings, updateSetting } from "../../services/settings.service";
+import { Settings, Check, AlertCircle, Video, X, Loader2 } from "lucide-react";
 import {
   getGoogleMeetStatus,
   getGoogleMeetAuthorizeUrl,
@@ -9,25 +8,14 @@ import {
 } from "../../services/googleMeet.service";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
-import {
-  fractionToPercentageInput,
-  percentageInputToFraction,
-} from "../../lib/minimum-proposal-percentage";
 
 /**
  * Admin Settings Page
  * Allows admins to configure system-wide settings
  */
 export default function SettingsPage() {
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-  // Local state for editing
-  const [minimumProposalEnabled, setMinimumProposalEnabled] = useState(false);
-  const [minimumProposalPercentage, setMinimumProposalPercentage] =
-    useState("80");
 
   // Google Meet connection state
   const [meetStatus, setMeetStatus] = useState<GoogleMeetStatus | null>(null);
@@ -95,90 +83,6 @@ export default function SettingsPage() {
     loadMeetStatus();
   }, []);
 
-  // Load settings on mount
-  useEffect(() => {
-    async function loadSettings() {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const data = await getSettings();
-
-        // Set local state from loaded settings
-        const enabledSetting = data.find(
-          (s) => s.key === "minimum_proposal_enabled",
-        );
-        const percentageSetting = data.find(
-          (s) => s.key === "minimum_proposal_percentage",
-        );
-
-        if (enabledSetting) {
-          setMinimumProposalEnabled(enabledSetting.value === "true");
-        }
-        if (percentageSetting) {
-          setMinimumProposalPercentage(
-            fractionToPercentageInput(percentageSetting.value),
-          );
-        }
-      } catch (err) {
-        setError(
-          (err as any)?.friendlyMessage || (err instanceof Error ? err.message : "Erro ao carregar configurações"),
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    loadSettings();
-  }, []);
-
-  // Handle toggle minimum proposal enabled
-  const handleToggleMinimumProposal = async () => {
-    try {
-      setIsSaving("minimum_proposal_enabled");
-      const newValue = !minimumProposalEnabled;
-
-      await updateSetting("minimum_proposal_enabled", String(newValue));
-
-      setMinimumProposalEnabled(newValue);
-      setSuccessMessage("Configuração atualizada com sucesso!");
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      setError(
-        (err as any)?.friendlyMessage || (err instanceof Error ? err.message : "Erro ao salvar configuração"),
-      );
-    } finally {
-      setIsSaving(null);
-    }
-  };
-
-  // Handle save minimum proposal percentage
-  const handleSavePercentage = async () => {
-    try {
-      const percentage = Number(minimumProposalPercentage);
-      if (isNaN(percentage) || percentage < 0 || percentage > 100) {
-        setError("A porcentagem deve ser um número entre 0 e 100");
-        return;
-      }
-
-      setIsSaving("minimum_proposal_percentage");
-
-      await updateSetting(
-        "minimum_proposal_percentage",
-        percentageInputToFraction(minimumProposalPercentage),
-      );
-
-      setSuccessMessage("Porcentagem atualizada com sucesso!");
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      setError(
-        (err as any)?.friendlyMessage || (err instanceof Error ? err.message : "Erro ao salvar configuração"),
-      );
-    } finally {
-      setIsSaving(null);
-    }
-  };
-
   return (
     <div className="text-text-main w-full">
       <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
@@ -217,111 +121,7 @@ export default function SettingsPage() {
           </Alert>
         )}
 
-        {/* Loading State */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <Loader2 className="animate-spin mx-auto h-10 w-10 text-ink" />
-              <p className="mt-4 text-muted">Carregando configurações...</p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Proposals Settings Section */}
-            <div className="bg-surface rounded-lg border border-border shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-border-soft bg-border-soft">
-                <h2 className="text-lg font-semibold text-ink">
-                  Configurações de Propostas
-                </h2>
-                <p className="text-sm text-muted mt-1">
-                  Configure regras para propostas de negociação
-                </p>
-              </div>
-
-              <div className="p-6 space-y-6">
-                {/* Enable/Disable Minimum Proposal */}
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <label
-                      htmlFor="minimumProposalEnabled"
-                      className="text-sm font-medium text-ink"
-                    >
-                      Habilitar valor mínimo de proposta
-                    </label>
-                    <p className="text-sm text-muted mt-1">
-                      Quando ativado, propostas devem ter no mínimo a
-                      porcentagem definida abaixo do valor original do produto.
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleToggleMinimumProposal}
-                    disabled={isSaving === "minimum_proposal_enabled"}
-                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-2 ${
-                      minimumProposalEnabled ? "bg-action" : "bg-border"
-                    } ${
-                      isSaving === "minimum_proposal_enabled"
-                        ? "opacity-50"
-                        : ""
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        minimumProposalEnabled
-                          ? "translate-x-5"
-                          : "translate-x-0"
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {/* Minimum Proposal Percentage */}
-                {minimumProposalEnabled && (
-                  <div className="pt-4 border-t border-border-soft">
-                    <label
-                      htmlFor="minimumProposalPercentage"
-                      className="block text-sm font-medium text-ink mb-1"
-                    >
-                      Porcentagem mínima do valor original
-                    </label>
-                    <p className="text-sm text-muted mb-3">
-                      Propostas devem ser no mínimo este percentual do valor do
-                      produto. Por exemplo: 80% significa que uma proposta para
-                      um produto de R$ 100.000 deve ser no mínimo R$ 80.000.
-                    </p>
-                    <div className="flex items-center gap-3">
-                      <div className="relative w-32">
-                        <input
-                          type="number"
-                          id="minimumProposalPercentage"
-                          value={minimumProposalPercentage}
-                          onChange={(e) =>
-                            setMinimumProposalPercentage(e.target.value)
-                          }
-                          min="0"
-                          max="100"
-                          className="w-full px-4 py-2 pr-8 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                          %
-                        </span>
-                      </div>
-                      <Button
-                        onClick={handleSavePercentage}
-                        disabled={isSaving === "minimum_proposal_percentage"}
-                      >
-                        {isSaving === "minimum_proposal_percentage" ? (
-                          <Loader2 className="animate-spin h-4 w-4 text-white" />
-                        ) : (
-                          <Save size={16} />
-                        )}
-                        Salvar
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
+        <div className="space-y-6">
             {/* Google Meet Connection Section */}
             <div className="bg-surface rounded-lg border border-border shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-border-soft bg-border-soft">
@@ -397,8 +197,7 @@ export default function SettingsPage() {
                 </p>
               </div>
             </Alert>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
