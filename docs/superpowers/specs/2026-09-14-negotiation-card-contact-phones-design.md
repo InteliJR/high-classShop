@@ -26,9 +26,11 @@ receba telefones antes do momento permitido.
 
 Uma função privada e pura no `ProcessesService` identificará os estados que
 liberam contato. Os mapeamentos das listagens de cliente e especialista usarão
-essa função para preencher somente o telefone da contraparte. A rota de detalhe
-usará a mesma condição, incluindo `COMPLETED`, para que os contratos da API não
-divirjam entre si.
+essa função para preencher somente o telefone da contraparte. Além do status, a
+projeção validará o solicitante: apenas o cliente dono da lista recebe o telefone
+do especialista, e apenas o especialista dono da lista recebe o telefone do
+cliente. A rota de detalhe usará a mesma condição, incluindo `COMPLETED`, para
+que os contratos da API não divirjam entre si.
 
 O frontend continuará apenas apresentando o dado recebido. A tipagem local da
 página de processos do cliente será alinhada ao contrato que já existe no
@@ -48,6 +50,8 @@ serviço compartilhado.
 - A autorização atual das rotas permanece inalterada.
 - A decisão de exposição fica no backend; não depende de esconder elementos
   apenas na interface.
+- Admin, consultor e especialista que não seja a contraparte recebem `null`,
+  mesmo quando o agendamento consultado estiver confirmado.
 - `PENDING`, `CANCELLED`, agendamento ausente e status desconhecido permanecem
   sem telefone.
 - A resposta não usa o telefone de um participante como fallback para o outro.

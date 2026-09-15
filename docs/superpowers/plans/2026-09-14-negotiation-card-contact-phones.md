@@ -13,6 +13,8 @@
 - `PENDING`, `CANCELLED` e ausência de agendamento não podem expor o telefone da contraparte.
 - `SCHEDULED` e `COMPLETED` devem expor o telefone cadastrado da contraparte.
 - Telefone não cadastrado permanece `null`.
+- Admin, consultor e participante que não seja a contraparte permanecem sem o
+  telefone nas listagens especializadas.
 - Não alterar e-mails, autorização, ciclo do agendamento ou comportamento visual/cópia do card.
 - Executar Jest com `--runInBand` ou `--maxWorkers=2` devido ao limite de memória.
 
@@ -22,11 +24,13 @@
 
 **Files:**
 - Modify: `backend/src/features/processes/processes.service.ts:64-120,760-1000,1624-1710`
+- Modify: `backend/src/features/processes/processes.controller.ts:168-205`
 - Test: `backend/src/features/processes/processes.service.spec.ts`
+- Test: `backend/src/features/processes/processes.controller.spec.ts`
 
 **Interfaces:**
 - Consumes: `StatusAgendamento` e `process.appointment?.status`.
-- Produces: `ProcessesService.isAppointmentContactVisible(status): boolean`; `client.phone` e `specialist.phone` como `string | null`.
+- Produces: `ProcessesService.isAppointmentContactVisible(status): boolean`; projeção condicionada ao solicitante; `client.phone` e `specialist.phone` como `string | null`.
 
 - [ ] **Step 1: Escrever os testes regressivos das listagens**
 
@@ -164,20 +168,38 @@ private isAppointmentContactVisible(
 }
 ```
 
-Em `getBySpecialistId` e `getBySpecialistIdWithFilters`, completar `client`:
+Fazer `getBySpecialistIdWithFilters` receber o solicitante autenticado:
 
 ```ts
-phone: this.isAppointmentContactVisible(process.appointment?.status)
-  ? (process.client?.phone ?? null)
-  : null,
+requester: Pick<ProcessesRequester, 'id' | 'role'>,
 ```
 
-Em `getByClientId`, completar `specialist`:
+Calcular a permissão e completar `client`:
 
 ```ts
-phone: this.isAppointmentContactVisible(process.appointment?.status)
-  ? (process.specialist.phone ?? null)
-  : null,
+const canSeeClientPhone =
+  requester.role === UserRole.SPECIALIST && requester.id === specialistId;
+
+phone:
+  canSeeClientPhone &&
+  this.isAppointmentContactVisible(process.appointment?.status)
+    ? (process.client?.phone ?? null)
+    : null,
+```
+
+No controller, encaminhar `{ id: user.id, role: user.role }`. Em
+`getByClientId`, liberar apenas para o cliente dono da lista e completar
+`specialist`:
+
+```ts
+const canSeeSpecialistPhone =
+  userRole === UserRole.CUSTOMER && userId === clientId;
+
+phone:
+  canSeeSpecialistPhone &&
+  this.isAppointmentContactVisible(process.appointment?.status)
+    ? (process.specialist.phone ?? null)
+    : null,
 ```
 
 Em `getById`, calcular e usar a mesma regra para a contraparte:
@@ -230,6 +252,12 @@ it('mantém null quando a contraparte não cadastrou telefone', async () => {
 });
 ```
 
+No mesmo `describe`, adicionar testes que esperem `null` para admin,
+consultor e outro especialista na lista do cliente, além de admin na lista do
+especialista. Em `processes.controller.spec.ts`, verificar que o controller
+encaminha `{ id: specialistId, role: UserRole.SPECIALIST }` como terceiro
+argumento do serviço.
+
 - [ ] **Step 6: Executar todo o arquivo de testes do serviço**
 
 ```bash
@@ -237,7 +265,7 @@ cd backend
 npm test -- --runInBand src/features/processes/processes.service.spec.ts
 ```
 
-Expected: PASS, 49 testes e 0 falhas.
+Expected: PASS, 53 testes e 0 falhas.
 
 - [ ] **Step 7: Commitar o backend**
 
@@ -313,7 +341,7 @@ cd backend
 npm test -- --runInBand src/features/processes/processes.service.spec.ts
 ```
 
-Expected: PASS, 49 testes e 0 falhas.
+Expected: PASS, 53 testes e 0 falhas.
 
 - [ ] **Step 2: Executar o build do backend**
 

@@ -985,9 +985,15 @@ describe('ProcessesService — telefone da contraparte após confirmação', () 
 
   function listService(status: StatusAgendamento | null) {
     const prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          consultant_id: 'consultant-1',
+        }),
+      },
       process: {
         findMany: jest.fn().mockResolvedValue([processWithAppointment(status)]),
         count: jest.fn().mockResolvedValue(1),
+        findFirst: jest.fn().mockResolvedValue({ id: 'related-process' }),
       },
     } as any;
     return new ProcessesService(prisma, {} as any);
@@ -1033,12 +1039,12 @@ describe('ProcessesService — telefone da contraparte após confirmação', () 
   ])(
     'especialista recebe telefone do cliente em %s: %s',
     async (status, expected) => {
-      const result = await listService(
-        status,
-      ).getBySpecialistIdWithFilters(specialistId, {
-        page: 1,
-        perPage: 20,
-      });
+      const service = listService(status);
+      const result = await service.getBySpecialistIdWithFilters(
+        specialistId,
+        { page: 1, perPage: 20 },
+        { id: specialistId, role: UserRole.SPECIALIST },
+      );
 
       expect(result.processes[0].client.phone).toBe(expected);
     },
@@ -1065,9 +1071,7 @@ describe('ProcessesService — telefone da contraparte após confirmação', () 
   });
 
   it('mantém null quando a contraparte não cadastrou telefone', async () => {
-    const process = processWithAppointment(
-      StatusAgendamento.SCHEDULED,
-    ) as any;
+    const process = processWithAppointment(StatusAgendamento.SCHEDULED) as any;
     process.specialist.phone = null;
     const prisma = {
       process: {
@@ -1085,5 +1089,36 @@ describe('ProcessesService — telefone da contraparte após confirmação', () 
     );
 
     expect(result.processes[0].specialist.phone).toBeNull();
+  });
+
+  it.each([
+    [UserRole.ADMIN, 'admin-1'],
+    [UserRole.CONSULTANT, 'consultant-1'],
+    [UserRole.SPECIALIST, 'other-specialist-1'],
+  ])(
+    'não expõe telefone do especialista na lista do cliente para %s',
+    async (role, requesterId) => {
+      const result = await listService(
+        StatusAgendamento.SCHEDULED,
+      ).getByClientId(
+        clientId,
+        { page: 1, perPage: 20 } as any,
+        requesterId,
+        role,
+      );
+
+      expect(result.processes[0].specialist.phone).toBeNull();
+    },
+  );
+
+  it('não expõe telefone do cliente na lista do especialista para ADMIN', async () => {
+    const service = listService(StatusAgendamento.SCHEDULED);
+    const result = await service.getBySpecialistIdWithFilters(
+      specialistId,
+      { page: 1, perPage: 20 },
+      { id: 'admin-1', role: UserRole.ADMIN },
+    );
+
+    expect(result.processes[0].client.phone).toBeNull();
   });
 });

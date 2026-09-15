@@ -185,14 +185,21 @@ export class ProcessesController {
     const perPage = Number(filters.perPage) || 20;
 
     const { processes, count } =
-      await this.processesService.getBySpecialistIdWithFilters(specialistId, {
-        page,
-        perPage,
-        status: filters.status,
-        search: filters.search,
-        sortBy: filters.sortBy,
-        order: filters.order,
-      });
+      await this.processesService.getBySpecialistIdWithFilters(
+        specialistId,
+        {
+          page,
+          perPage,
+          status: filters.status,
+          search: filters.search,
+          sortBy: filters.sortBy,
+          order: filters.order,
+        },
+        {
+          id: user.id,
+          role: user.role,
+        },
+      );
 
     // Criação do objeto de pagination
     const skip = (page - 1) * perPage;

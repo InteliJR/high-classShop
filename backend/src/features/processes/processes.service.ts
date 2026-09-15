@@ -888,9 +888,6 @@ export class ProcessesService {
           id: process.client_id,
           email: process.client?.email,
           name: process.client?.name,
-          phone: this.isAppointmentContactVisible(process.appointment?.status)
-            ? (process.client?.phone ?? null)
-            : null,
         },
         specialist: {
           especialidade: process.specialist.speciality,
@@ -926,6 +923,7 @@ export class ProcessesService {
       sortBy?: string;
       order?: 'asc' | 'desc';
     },
+    requester: Pick<ProcessesRequester, 'id' | 'role'>,
   ): Promise<{
     processes: ProcessResponse[];
     count: number;
@@ -935,6 +933,8 @@ export class ProcessesService {
     const skip = (pageNum - 1) * perPageNum;
     const sortBy = options.sortBy || 'created_at';
     const order = options.order || 'desc';
+    const canSeeClientPhone =
+      requester.role === UserRole.SPECIALIST && requester.id === specialistId;
 
     // Build where clause
     const where: any = {
@@ -999,9 +999,11 @@ export class ProcessesService {
           id: process.client_id,
           email: process.client?.email,
           name: process.client?.name,
-          phone: this.isAppointmentContactVisible(process.appointment?.status)
-            ? (process.client?.phone ?? null)
-            : null,
+          phone:
+            canSeeClientPhone &&
+            this.isAppointmentContactVisible(process.appointment?.status)
+              ? (process.client?.phone ?? null)
+              : null,
         },
         specialist: {
           especialidade: process.specialist.speciality,
@@ -1675,6 +1677,8 @@ export class ProcessesService {
     const pageNum = Number(page) || 1;
     const perPageNum = Number(perPage) || 20;
     const skip = (pageNum - 1) * perPageNum;
+    const canSeeSpecialistPhone =
+      userRole === UserRole.CUSTOMER && userId === clientId;
 
     const [processes, count] = await Promise.all([
       this.prismaService.process.findMany({
@@ -1722,9 +1726,11 @@ export class ProcessesService {
         especialidade: process.specialist.speciality,
         id: process.specialist.id,
         name: process.specialist.name,
-        phone: this.isAppointmentContactVisible(process.appointment?.status)
-          ? (process.specialist.phone ?? null)
-          : null,
+        phone:
+          canSeeSpecialistPhone &&
+          this.isAppointmentContactVisible(process.appointment?.status)
+            ? (process.specialist.phone ?? null)
+            : null,
       },
       product: this.buildProduct(process),
       created_at: process.created_at,
