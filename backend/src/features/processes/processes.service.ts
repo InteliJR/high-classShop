@@ -123,6 +123,19 @@ export class ProcessesService {
   }
 
   /**
+   * Telefones da contraparte só ficam disponíveis após a confirmação do
+   * agendamento e permanecem visíveis quando ele é concluído.
+   */
+  private isAppointmentContactVisible(
+    status: StatusAgendamento | null | undefined,
+  ): boolean {
+    return (
+      status === StatusAgendamento.SCHEDULED ||
+      status === StatusAgendamento.COMPLETED
+    );
+  }
+
+  /**
    * Helper: Retorna descrição formatada do produto para emails
    *
    * @param process - processo com produto incluído
@@ -772,15 +785,13 @@ export class ProcessesService {
         }
       }
 
-      const appointmentScheduled =
-        process.appointment?.status === StatusAgendamento.SCHEDULED;
+      const contactVisible = this.isAppointmentContactVisible(
+        process.appointment?.status,
+      );
       const isClient = userId === process.client_id;
       const isSpecialist = userId === process.specialist_id;
-      const canSeeSpecialistPhone =
-        userRole === 'ADMIN' ||
-        isSpecialist ||
-        !isClient ||
-        appointmentScheduled;
+      const canSeeClientPhone = !isSpecialist || contactVisible;
+      const canSeeSpecialistPhone = !isClient || contactVisible;
 
       return {
         id: process.id,
@@ -793,9 +804,7 @@ export class ProcessesService {
           id: process.client_id,
           email: process.client?.email || '',
           name: process.client?.name || '',
-          phone: isClient
-            ? (process.client?.phone ?? null)
-            : (process.client?.phone ?? null),
+          phone: canSeeClientPhone ? (process.client?.phone ?? null) : null,
         },
         specialist: {
           especialidade: process.specialist.speciality,
@@ -879,6 +888,9 @@ export class ProcessesService {
           id: process.client_id,
           email: process.client?.email,
           name: process.client?.name,
+          phone: this.isAppointmentContactVisible(process.appointment?.status)
+            ? (process.client?.phone ?? null)
+            : null,
         },
         specialist: {
           especialidade: process.specialist.speciality,
@@ -987,6 +999,9 @@ export class ProcessesService {
           id: process.client_id,
           email: process.client?.email,
           name: process.client?.name,
+          phone: this.isAppointmentContactVisible(process.appointment?.status)
+            ? (process.client?.phone ?? null)
+            : null,
         },
         specialist: {
           especialidade: process.specialist.speciality,
@@ -1707,6 +1722,9 @@ export class ProcessesService {
         especialidade: process.specialist.speciality,
         id: process.specialist.id,
         name: process.specialist.name,
+        phone: this.isAppointmentContactVisible(process.appointment?.status)
+          ? (process.specialist.phone ?? null)
+          : null,
       },
       product: this.buildProduct(process),
       created_at: process.created_at,
