@@ -39,3 +39,60 @@ describe('SettingsService minimum proposal percentage', () => {
     },
   );
 });
+
+describe('SettingsService minimum proposal availability', () => {
+  function setup(storedValue = 'true') {
+    const findUnique = jest.fn().mockResolvedValue({
+      key: SettingKey.MINIMUM_PROPOSAL_ENABLED,
+      value: storedValue,
+      description: null,
+    });
+    const upsert = jest.fn().mockResolvedValue({
+      key: SettingKey.MINIMUM_PROPOSAL_ENABLED,
+      value: 'false',
+      description: null,
+    });
+    const service = new SettingsService({
+      settings: { findUnique, upsert },
+    } as any);
+
+    return { service, findUnique, upsert };
+  }
+
+  it('permanece desligado mesmo quando o banco contém true', async () => {
+    const { service, findUnique } = setup('true');
+
+    await expect(service.isMinimumProposalEnabled()).resolves.toBe(false);
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+
+  it('recusa tentativa administrativa de ativação', async () => {
+    const { service, upsert } = setup();
+
+    await expect(
+      service.update(SettingKey.MINIMUM_PROPOSAL_ENABLED, 'true'),
+    ).rejects.toMatchObject({
+      response: {
+        error: {
+          code: 400,
+          message: 'A validação de valor mínimo de propostas está indisponível',
+        },
+      },
+    });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('permite persistir explicitamente o estado desligado', async () => {
+    const { service, upsert } = setup();
+
+    await expect(
+      service.update(SettingKey.MINIMUM_PROPOSAL_ENABLED, 'false'),
+    ).resolves.toMatchObject({ value: 'false' });
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: { value: 'false' },
+        create: expect.objectContaining({ value: 'false' }),
+      }),
+    );
+  });
+});
