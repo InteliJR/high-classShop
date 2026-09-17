@@ -308,6 +308,125 @@ export class AppointmentsService {
     return this.mapToResponseEntity(appointment, client, specialist, product);
   }
 
+  async reschedule(
+    appointmentId: string,
+    appointmentDatetime: string,
+    userId: string,
+  ): Promise<AppointmentResponseEntity> {
+    const nextDate = parseDate(appointmentDatetime);
+    if (!nextDate || !isFutureDate(nextDate)) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message: 'O novo horário deve ser uma data futura válida',
+        },
+      });
+    }
+
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: { client: true, specialist: true, process: true },
+    });
+    if (!appointment) {
+      throw new NotFoundException('Agendamento não encontrado');
+    }
+    if (appointment.specialist_id !== userId) {
+      throw new ForbiddenException(
+        'Apenas o especialista responsável pode alterar o horário',
+      );
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
+
+      const lockedAppointment = await tx.appointment.findUnique({
+        where: { id: appointmentId },
+        include: { client: true, specialist: true, process: true },
+      });
+      if (!lockedAppointment) {
+        throw new NotFoundException('Agendamento não encontrado');
+      }
+      if (lockedAppointment.specialist_id !== userId) {
+        throw new ForbiddenException(
+          'Apenas o especialista responsável pode alterar o horário',
+        );
+      }
+      if (lockedAppointment.status !== StatusAgendamento.SCHEDULED) {
+        throw new BadRequestException(
+          'Apenas agendamentos confirmados podem ter o horário alterado',
+        );
+      }
+      if (!lockedAppointment.appointment_datetime) {
+        throw new BadRequestException(
+          'O agendamento atual não possui horário definido',
+        );
+      }
+      if (lockedAppointment.specialist_rescheduled_at) {
+        throw this.buildRescheduleAlreadyUsedError(appointmentId);
+      }
+      if (lockedAppointment.appointment_datetime.getTime() === nextDate.getTime()) {
+        throw new BadRequestException(
+          'O novo horário deve ser diferente do horário atual',
+        );
+      }
+
+      await assertSpecialistScheduleAvailable(
+        tx,
+        lockedAppointment.specialist_id,
+        nextDate,
+        appointmentId,
+      );
+
+      const rescheduledAt = new Date();
+      const claim = await tx.appointment.updateMany({
+        where: {
+          id: appointmentId,
+          status: StatusAgendamento.SCHEDULED,
+          specialist_rescheduled_at: null,
+        },
+        data: {
+          appointment_datetime: nextDate,
+          specialist_rescheduled_from:
+            lockedAppointment.appointment_datetime,
+          specialist_rescheduled_at: rescheduledAt,
+        },
+      });
+      if (claim.count !== 1) {
+        throw this.buildRescheduleAlreadyUsedError(appointmentId);
+      }
+
+      return tx.appointment.findUniqueOrThrow({
+        where: { id: appointmentId },
+        include: { client: true, specialist: true, process: true },
+      });
+    });
+
+    const product = await this.getProductByType(
+      updated.product_type,
+      updated.product_id,
+    );
+    return this.mapToResponseEntity(
+      updated,
+      updated.client,
+      updated.specialist,
+      product,
+    );
+  }
+
+  private buildRescheduleAlreadyUsedError(
+    appointmentId: string,
+  ): ConflictException {
+    return new ConflictException({
+      success: false,
+      error: {
+        code: 'APPOINTMENT_RESCHEDULE_ALREADY_USED',
+        message: 'A alteração definitiva deste agendamento já foi utilizada',
+        details: { appointment_id: appointmentId },
+      },
+    });
+  }
+
   /**
    * Lista agendamentos com paginação, filtros e ordenação
    * Respeita permissões por role:

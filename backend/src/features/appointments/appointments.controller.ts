@@ -2,8 +2,10 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Put,
   Param,
+  ParseUUIDPipe,
   Body,
   Query,
   UseGuards,
@@ -17,6 +19,7 @@ import {
   CalendlyScheduledDto,
   GetAppointmentsQueryDto,
   UpdateAppointmentStatusDto,
+  RescheduleAppointmentDto,
 } from './dto';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { AppointmentResponseEntity } from './entities/appointment.response';
@@ -392,6 +395,25 @@ export class AppointmentsController {
     return {
       success: true,
       message: 'Agendamento atualizado com sucesso',
+      data: appointment,
+    };
+  }
+
+  @Patch(':id/reschedule')
+  async reschedule(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: RescheduleAppointmentDto,
+    @Request() req: any,
+  ) {
+    const appointment = await this.appointmentsService.reschedule(
+      id,
+      dto.appointment_datetime,
+      req.user.id,
+    );
+
+    return {
+      success: true,
+      message: 'Horário alterado definitivamente',
       data: appointment,
     };
   }

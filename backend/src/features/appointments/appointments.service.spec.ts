@@ -896,3 +896,178 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
     expect(tx.appointment.update).not.toHaveBeenCalled();
   });
 });
+
+describe('AppointmentsService.reschedule — alteração definitiva', () => {
+  const oldDate = new Date('2099-01-01T10:00:00.000Z');
+  const newDateIso = '2099-01-02T13:00:00.000Z';
+
+  function makeService(options?: {
+    appointment?: Record<string, unknown>;
+    conflict?: Record<string, unknown> | null;
+    claimCount?: number;
+  }) {
+    const client = {
+      id: 'client-1',
+      name: 'Client',
+      surname: 'Example',
+      email: 'client@example.com',
+    };
+    const specialist = {
+      id: 'specialist-1',
+      name: 'Specialist',
+      surname: 'Example',
+      email: 'specialist@example.com',
+      role: UserRole.SPECIALIST,
+      speciality: ProductType.CAR,
+      calendly_url: null,
+    };
+    const product = {
+      id: 'product-1',
+      marca: 'Porsche',
+      modelo: '911',
+      valor: new Prisma.Decimal('100000'),
+      currency: ProductCurrency.BRL,
+    };
+    let current = {
+      id: 'appointment-1',
+      client_id: client.id,
+      specialist_id: specialist.id,
+      product_type: ProductType.CAR,
+      product_id: product.id,
+      status: StatusAgendamento.SCHEDULED,
+      appointment_datetime: oldDate,
+      scheduling_method: AppointmentSchedulingMethod.PLATFORM,
+      specialist_rescheduled_at: null,
+      specialist_rescheduled_from: null,
+      notes: null,
+      created_at: new Date('2098-01-01T00:00:00.000Z'),
+      updated_at: new Date('2098-01-01T00:00:00.000Z'),
+      client,
+      specialist,
+      process: { id: 'process-1' },
+      ...options?.appointment,
+    };
+    const updateMany = jest.fn(async ({ data }) => {
+      if ((options?.claimCount ?? 1) === 1) current = { ...current, ...data };
+      return { count: options?.claimCount ?? 1 };
+    });
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      appointment: {
+        findUnique: jest.fn(async () => current),
+        findUniqueOrThrow: jest.fn(async () => current),
+        findFirst: jest.fn().mockResolvedValue(options?.conflict ?? null),
+        updateMany,
+      },
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(current) },
+      car: { findUnique: jest.fn().mockResolvedValue(product) },
+      boat: { findUnique: jest.fn() },
+      aircraft: { findUnique: jest.fn() },
+      $transaction: jest.fn(async (callback: any) => callback(tx)),
+    } as any;
+    const notifications = {
+      sendAppointmentRescheduledEmail: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    return {
+      service: new AppointmentsService(prisma, notifications, {} as any),
+      prisma,
+      tx,
+      updateMany,
+    };
+  }
+
+  it('stores old and new datetimes and consumes the single change', async () => {
+    const { service, tx, updateMany } = makeService();
+
+    await (service as any).reschedule(
+      'appointment-1',
+      newDateIso,
+      'specialist-1',
+    );
+
+    expect(tx.$queryRaw).toHaveBeenCalledWith(
+      expect.anything(),
+      'appointment-schedule:specialist-1',
+    );
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'appointment-1',
+        status: StatusAgendamento.SCHEDULED,
+        specialist_rescheduled_at: null,
+      },
+      data: {
+        appointment_datetime: new Date(newDateIso),
+        specialist_rescheduled_from: oldDate,
+        specialist_rescheduled_at: expect.any(Date),
+      },
+    });
+  });
+
+  it('rejects a second specialist change', async () => {
+    const { service, updateMany } = makeService({
+      appointment: { specialist_rescheduled_at: new Date() },
+    });
+
+    await expect(
+      (service as any).reschedule(
+        'appointment-1',
+        newDateIso,
+        'specialist-1',
+      ),
+    ).rejects.toThrow(ConflictException);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects anyone other than the responsible specialist', async () => {
+    const { service, updateMany } = makeService();
+
+    await expect(
+      (service as any).reschedule('appointment-1', newDateIso, 'client-1'),
+    ).rejects.toThrow(ForbiddenException);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects past and conflicting datetimes', async () => {
+    const past = makeService();
+    await expect(
+      (past.service as any).reschedule(
+        'appointment-1',
+        '2020-01-01T10:00:00.000Z',
+        'specialist-1',
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    const conflict = makeService({
+      conflict: {
+        id: 'appointment-2',
+        client_id: 'client-2',
+        appointment_datetime: new Date(newDateIso),
+      },
+    });
+    await expect(
+      (conflict.service as any).reschedule(
+        'appointment-1',
+        newDateIso,
+        'specialist-1',
+      ),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('rejects a concurrent request that loses the conditional update', async () => {
+    const { service } = makeService({ claimCount: 0 });
+
+    await expect(
+      (service as any).reschedule(
+        'appointment-1',
+        newDateIso,
+        'specialist-1',
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        error: { code: 'APPOINTMENT_RESCHEDULE_ALREADY_USED' },
+      },
+    });
+  });
+});
