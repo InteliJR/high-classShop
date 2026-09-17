@@ -544,6 +544,72 @@ describe('ProcessesService.getAll — escopo de visibilidade', () => {
     expect(findMany.mock.calls[0][0].where.status).toBe('NEGOTIATION');
     expect(groupBy.mock.calls[0][0].where.status).toBeUndefined();
   });
+
+  it('maps appointment origin and definitive reschedule audit', async () => {
+    const rescheduledAt = new Date('2099-01-02T10:00:00.000Z');
+    const rescheduledFrom = new Date('2099-01-01T10:00:00.000Z');
+    const process = {
+      id: 'process-1',
+      appointment_id: 'appointment-1',
+      client_id: clientId,
+      specialist_id: specialistId,
+      status: ProcessStatus.SCHEDULING,
+      product_type: ProductType.CAR,
+      car_id: productId,
+      boat_id: null,
+      aircraft_id: null,
+      client: { id: clientId, name: 'Client', email: 'client@example.com' },
+      specialist: {
+        id: specialistId,
+        name: 'Specialist',
+        speciality: ProductType.CAR,
+      },
+      car: { id: productId, marca: 'Porsche', modelo: '911' },
+      boat: null,
+      aircraft: null,
+      appointment: {
+        status: StatusAgendamento.SCHEDULED,
+        appointment_datetime: new Date('2099-01-02T10:00:00.000Z'),
+        scheduling_method: 'EMAIL',
+        specialist_rescheduled_at: rescheduledAt,
+        specialist_rescheduled_from: rescheduledFrom,
+      },
+      created_at: new Date(),
+      notes: null,
+    };
+    const findMany = jest.fn().mockReturnValue([process]);
+    const prisma = {
+      process: {
+        findMany,
+        count: jest.fn().mockReturnValue(1),
+        groupBy: jest.fn().mockReturnValue([]),
+      },
+      $transaction: jest.fn(async (queries: any[]) => queries),
+    } as any;
+    const service = new ProcessesService(prisma, {} as any);
+
+    const result = await service.getAll({
+      page: 1,
+      perPage: 20,
+      requester: { id: 'admin-1', role: UserRole.ADMIN },
+    });
+
+    expect(findMany.mock.calls[0][0].include.appointment.select).toEqual(
+      expect.objectContaining({
+        scheduling_method: true,
+        specialist_rescheduled_at: true,
+        specialist_rescheduled_from: true,
+      }),
+    );
+    expect(result.processes[0]).toEqual(
+      expect.objectContaining({
+        appointment_id: 'appointment-1',
+        appointment_scheduling_method: 'EMAIL',
+        specialist_rescheduled_at: rescheduledAt,
+        specialist_rescheduled_from: rescheduledFrom,
+      }),
+    );
+  });
 });
 
 describe('ProcessesService — snapshot de entrada na negociação', () => {

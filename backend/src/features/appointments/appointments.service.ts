@@ -365,7 +365,9 @@ export class AppointmentsService {
       if (lockedAppointment.specialist_rescheduled_at) {
         throw this.buildRescheduleAlreadyUsedError(appointmentId);
       }
-      if (lockedAppointment.appointment_datetime.getTime() === nextDate.getTime()) {
+      if (
+        lockedAppointment.appointment_datetime.getTime() === nextDate.getTime()
+      ) {
         throw new BadRequestException(
           'O novo horário deve ser diferente do horário atual',
         );
@@ -406,6 +408,38 @@ export class AppointmentsService {
       updated.product_type,
       updated.product_id,
     );
+    if (
+      updated.process?.id &&
+      updated.specialist_rescheduled_from &&
+      updated.appointment_datetime
+    ) {
+      const previousAppointmentDate = updated.specialist_rescheduled_from;
+      const appointmentDate = updated.appointment_datetime;
+      const productDetails = product
+        ? `${(product as any).marca || ''} ${(product as any).modelo || ''}`.trim()
+        : '';
+      setImmediate(() => {
+        this.notificationService
+          .sendAppointmentRescheduledEmail({
+            clientEmail: updated.client.email,
+            clientName:
+              `${updated.client.name} ${updated.client.surname || ''}`.trim(),
+            specialistName:
+              `${updated.specialist.name} ${updated.specialist.surname || ''}`.trim(),
+            previousAppointmentDate,
+            appointmentDate,
+            productDetails,
+            processId: updated.process!.id,
+          })
+          .catch((error) => {
+            this.logger.error('Notification failed (non-critical)', {
+              method: 'reschedule',
+              appointmentId,
+              error: error.message,
+            });
+          });
+      });
+    }
     return this.mapToResponseEntity(
       updated,
       updated.client,
@@ -1043,6 +1077,11 @@ export class AppointmentsService {
     entity.id = appointment.id;
     entity.appointment_datetime = appointment.appointment_datetime;
     entity.status = appointment.status;
+    entity.scheduling_method = appointment.scheduling_method ?? null;
+    entity.specialist_rescheduled_at =
+      appointment.specialist_rescheduled_at ?? null;
+    entity.specialist_rescheduled_from =
+      appointment.specialist_rescheduled_from ?? null;
     entity.notes = appointment.notes || undefined;
     entity.created_at = appointment.created_at;
     entity.updated_at = appointment.updated_at;

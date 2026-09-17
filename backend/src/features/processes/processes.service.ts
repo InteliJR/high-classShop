@@ -17,6 +17,7 @@ import {
 } from './entity/process.response.entity';
 import { QueryDto } from 'src/shared/dto/query.dto';
 import {
+  AppointmentSchedulingMethod,
   ProcessStatus,
   ProductType,
   StatusAgendamento,
@@ -447,6 +448,7 @@ export class ProcessesService {
         specialist_id: input.specialist_id,
         appointment_datetime: null,
         status: 'PENDING',
+        scheduling_method: AppointmentSchedulingMethod.EMAIL,
         notes: isConsultancy
           ? `Consultoria criada pelo ${input.actorLabel} em nome do cliente (${new Date().toISOString()})`
           : `Processo criado pelo ${input.actorLabel} em nome do cliente (${new Date().toISOString()})`,
@@ -672,7 +674,13 @@ export class ProcessesService {
             car: true,
             specialist: true,
             appointment: {
-              select: { status: true, appointment_datetime: true },
+              select: {
+                status: true,
+                appointment_datetime: true,
+                scheduling_method: true,
+                specialist_rescheduled_at: true,
+                specialist_rescheduled_from: true,
+              },
             },
           },
         }),
@@ -705,8 +713,15 @@ export class ProcessesService {
       (process: any) => ({
         id: process.id,
         status: process.status,
+        appointment_id: process.appointment_id ?? null,
         appointment_status: process.appointment?.status ?? null,
         appointment_datetime: process.appointment?.appointment_datetime ?? null,
+        appointment_scheduling_method:
+          process.appointment?.scheduling_method ?? null,
+        specialist_rescheduled_at:
+          process.appointment?.specialist_rescheduled_at ?? null,
+        specialist_rescheduled_from:
+          process.appointment?.specialist_rescheduled_from ?? null,
         product_type: process.product_type,
         product_id: this.getProductId(process),
         client: {
@@ -754,7 +769,13 @@ export class ProcessesService {
           aircraft: true,
           specialist: true,
           appointment: {
-            select: { status: true, appointment_datetime: true },
+            select: {
+              status: true,
+              appointment_datetime: true,
+              scheduling_method: true,
+              specialist_rescheduled_at: true,
+              specialist_rescheduled_from: true,
+            },
           },
         },
       });
@@ -790,8 +811,15 @@ export class ProcessesService {
       return {
         id: process.id,
         status: process.status,
+        appointment_id: process.appointment_id ?? null,
         appointment_status: process.appointment?.status ?? null,
         appointment_datetime: process.appointment?.appointment_datetime ?? null,
+        appointment_scheduling_method:
+          process.appointment?.scheduling_method ?? null,
+        specialist_rescheduled_at:
+          process.appointment?.specialist_rescheduled_at ?? null,
+        specialist_rescheduled_from:
+          process.appointment?.specialist_rescheduled_from ?? null,
         product_type: process.product_type,
         product_id: this.getProductId(process),
         client: {
@@ -857,7 +885,13 @@ export class ProcessesService {
           aircraft: true,
           specialist: true,
           appointment: {
-            select: { status: true, appointment_datetime: true },
+            select: {
+              status: true,
+              appointment_datetime: true,
+              scheduling_method: true,
+              specialist_rescheduled_at: true,
+              specialist_rescheduled_from: true,
+            },
           },
         },
         orderBy: { created_at: 'desc' },
@@ -876,8 +910,15 @@ export class ProcessesService {
       (process: any) => ({
         id: process.id,
         status: process.status,
+        appointment_id: process.appointment_id ?? null,
         appointment_status: process.appointment?.status ?? null,
         appointment_datetime: process.appointment?.appointment_datetime ?? null,
+        appointment_scheduling_method:
+          process.appointment?.scheduling_method ?? null,
+        specialist_rescheduled_at:
+          process.appointment?.specialist_rescheduled_at ?? null,
+        specialist_rescheduled_from:
+          process.appointment?.specialist_rescheduled_from ?? null,
         product_type: process.product_type,
         product_id: this.getProductId(process),
         client: {
@@ -969,7 +1010,13 @@ export class ProcessesService {
           aircraft: true,
           specialist: true,
           appointment: {
-            select: { status: true, appointment_datetime: true },
+            select: {
+              status: true,
+              appointment_datetime: true,
+              scheduling_method: true,
+              specialist_rescheduled_at: true,
+              specialist_rescheduled_from: true,
+            },
           },
         },
         orderBy: { [sortBy]: order },
@@ -984,8 +1031,15 @@ export class ProcessesService {
       (process: any) => ({
         id: process.id,
         status: process.status,
+        appointment_id: process.appointment_id ?? null,
         appointment_status: process.appointment?.status ?? null,
         appointment_datetime: process.appointment?.appointment_datetime ?? null,
+        appointment_scheduling_method:
+          process.appointment?.scheduling_method ?? null,
+        specialist_rescheduled_at:
+          process.appointment?.specialist_rescheduled_at ?? null,
+        specialist_rescheduled_from:
+          process.appointment?.specialist_rescheduled_from ?? null,
         product_type: process.product_type,
         product_id: this.getProductId(process),
         client: {
@@ -1678,7 +1732,13 @@ export class ProcessesService {
           aircraft: true,
           specialist: true,
           appointment: {
-            select: { status: true, appointment_datetime: true },
+            select: {
+              status: true,
+              appointment_datetime: true,
+              scheduling_method: true,
+              specialist_rescheduled_at: true,
+              specialist_rescheduled_from: true,
+            },
           },
           rejections: {
             orderBy: { rejected_at: 'desc' },
@@ -1699,8 +1759,15 @@ export class ProcessesService {
     const processEntities = processes.map((process: any) => ({
       id: process.id,
       status: process.status,
+      appointment_id: process.appointment_id ?? null,
       appointment_status: process.appointment?.status ?? null,
       appointment_datetime: process.appointment?.appointment_datetime ?? null,
+      appointment_scheduling_method:
+        process.appointment?.scheduling_method ?? null,
+      specialist_rescheduled_at:
+        process.appointment?.specialist_rescheduled_at ?? null,
+      specialist_rescheduled_from:
+        process.appointment?.specialist_rescheduled_from ?? null,
       product_type: process.product_type,
       product_id: this.getProductId(process),
       client: {

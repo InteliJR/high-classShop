@@ -86,4 +86,36 @@ describe('NotificationService proposal emails', () => {
     expect(htmlBody).toContain('R$');
     expect(textBody).toContain('R$');
   });
+
+  it('describes the meeting without prematurely inviting negotiation', async () => {
+    await service.sendAppointmentConfirmedEmail({
+      clientEmail: 'client@example.com',
+      clientName: 'Client',
+      specialistName: 'Specialist',
+      appointmentDate: new Date('2099-09-20T15:00:00.000Z'),
+      productDetails: 'Porsche 911',
+      processId: 'process-1',
+    });
+
+    const serialized = JSON.stringify(sendEmailSafely.mock.calls[0]);
+    expect(serialized).toContain('reunião');
+    expect(serialized).not.toContain('iniciar a negociação');
+  });
+
+  it('includes previous and definitive datetimes in reschedule email', async () => {
+    await (service as any).sendAppointmentRescheduledEmail({
+      clientEmail: 'client@example.com',
+      clientName: 'Client',
+      specialistName: 'Specialist',
+      previousAppointmentDate: new Date('2099-09-20T15:00:00.000Z'),
+      appointmentDate: new Date('2099-09-21T16:00:00.000Z'),
+      productDetails: 'Porsche 911',
+      processId: 'process-1',
+    });
+
+    const serialized = JSON.stringify(sendEmailSafely.mock.calls[0]);
+    expect(serialized).toContain('20/09/2099');
+    expect(serialized).toContain('21/09/2099');
+    expect(serialized).toContain('definitivo');
+  });
 });

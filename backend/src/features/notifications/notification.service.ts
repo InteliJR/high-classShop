@@ -8,6 +8,7 @@ import { formatCurrency } from 'src/shared/utils/format.utils';
 import {
   AppointmentConfirmedEmailDto,
   AppointmentCreatedEmailDto,
+  AppointmentRescheduledEmailDto,
   AppointmentCancelledEmailDto,
   MeetingStartedEmailDto,
   MeetingAdvancedEmailDto,
@@ -382,7 +383,7 @@ BMF Lux Brokerage - Marketplace de Bens de Luxo
             <p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${data.productDetails}</p>
           </div>
           <p style="font-size: 16px; color: #334155;">
-            Agora você pode iniciar a negociação! Acesse o processo e envie sua primeira proposta.
+            Acesse o processo no horário combinado para acompanhar e entrar na reunião.
           </p>
           <div style="text-align: center; margin: 30px 0;">
             <a href="${this.frontendUrl}/processes/${data.processId}"
@@ -411,13 +412,68 @@ Data: ${new Date(data.appointmentDate).toLocaleDateString('pt-BR')}
 Horário: ${new Date(data.appointmentDate).toLocaleTimeString('pt-BR')}
 Produto: ${data.productDetails}
 
-Acesse ${this.frontendUrl}/processes/${data.processId} para ver detalhes e iniciar a negociação.
+Acesse ${this.frontendUrl}/processes/${data.processId} para ver os detalhes da reunião.
 
 © 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
       'APPOINTMENT_CONFIRMED',
+      data.clientEmail,
+      subject,
+      html,
+      text,
+    );
+  }
+
+  async sendAppointmentRescheduledEmail(
+    data: AppointmentRescheduledEmailDto,
+  ): Promise<void> {
+    if (!this.notificationsEnabled) {
+      this.logger.debug(
+        'Notifications disabled - skipping sendAppointmentRescheduledEmail',
+      );
+      return;
+    }
+
+    const formatDateTime = (date: Date) =>
+      new Date(date).toLocaleString('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+      });
+    const previous = formatDateTime(data.previousAppointmentDate);
+    const next = formatDateTime(data.appointmentDate);
+    const subject = 'Horário da reunião alterado | BMF Lux Brokerage';
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>Horário alterado definitivamente</h2>
+        <p>Olá <strong>${data.clientName}</strong>,</p>
+        <p>O especialista <strong>${data.specialistName}</strong> alterou o horário da sua reunião.</p>
+        <p><strong>Horário anterior:</strong> ${previous}</p>
+        <p><strong>Novo horário definitivo:</strong> ${next}</p>
+        <p><strong>Produto:</strong> ${data.productDetails}</p>
+        <p><a href="${this.frontendUrl}/processes/${data.processId}">Ver processo</a></p>
+      </body>
+      </html>
+    `;
+    const text = `
+BMF Lux Brokerage - Horário alterado definitivamente
+
+Olá ${data.clientName},
+
+O especialista ${data.specialistName} alterou o horário da sua reunião.
+Horário anterior: ${previous}
+Novo horário definitivo: ${next}
+Produto: ${data.productDetails}
+
+Acesse ${this.frontendUrl}/processes/${data.processId} para ver o processo.
+    `.trim();
+
+    await this.sendEmailSafely(
+      'APPOINTMENT_RESCHEDULED',
       data.clientEmail,
       subject,
       html,
