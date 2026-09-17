@@ -33,6 +33,11 @@ import {
 } from '../products/product-monetary-lock';
 import { validateSpecialistProductAssociation } from '../products/product-association-validator';
 import { lockAndAssertNoActiveProcess } from './process-dedup-lock';
+import { parseDate, isFutureDate } from 'src/shared/utils/date.utils';
+import {
+  acquireSpecialistScheduleLock,
+  assertSpecialistScheduleAvailable,
+} from '../appointments/appointment-schedule-lock';
 
 /**
  * Quem está pedindo a operação. `companyId` só é usado por OFFICE.
@@ -1850,7 +1855,11 @@ export class ProcessesService {
    * @throws {ForbiddenException} - Usuário não autorizado
    * @throws {BadRequestException} - Processo não está em status SCHEDULING
    */
-  async confirmAppointment(processId: string, userId: string): Promise<any> {
+  async confirmAppointment(
+    processId: string,
+    userId: string,
+    appointmentDatetime?: string,
+  ): Promise<any> {
     this.logger.log(
       `[confirmAppointment] Confirmando agendamento do processo ${processId}`,
     );
@@ -1904,13 +1913,60 @@ export class ProcessesService {
       throw new BadRequestException('Agendamento já foi confirmado');
     }
 
+    const confirmedDate = parseDate(
+      appointmentDatetime ??
+        process.appointment.appointment_datetime ??
+        undefined,
+    );
+    if (!confirmedDate || !isFutureDate(confirmedDate)) {
+      throw new BadRequestException(
+        'Informe uma data e hora futura para confirmar o agendamento',
+      );
+    }
+
     // Confirmar appointment em transação (sem alterar status do processo)
     await this.prismaService.$transaction(async (tx) => {
+      await acquireSpecialistScheduleLock(tx, process.specialist_id);
+
+      const lockedProcess = await tx.process.findUnique({
+        where: { id: processId },
+        include: { appointment: true },
+      });
+      if (!lockedProcess) {
+        throw new NotFoundException('Processo não encontrado');
+      }
+      if (lockedProcess.specialist_id !== userId) {
+        throw new ForbiddenException(
+          'Apenas o especialista pode confirmar o agendamento',
+        );
+      }
+      if (lockedProcess.status !== ProcessStatus.SCHEDULING) {
+        throw new BadRequestException(
+          'Apenas processos em status SCHEDULING podem ter o agendamento confirmado',
+        );
+      }
+      if (!lockedProcess.appointment) {
+        throw new NotFoundException(
+          'Agendamento não encontrado para este processo',
+        );
+      }
+      if (lockedProcess.appointment.status !== StatusAgendamento.PENDING) {
+        throw new BadRequestException('Agendamento já foi confirmado');
+      }
+
+      await assertSpecialistScheduleAvailable(
+        tx,
+        lockedProcess.specialist_id,
+        confirmedDate,
+        lockedProcess.appointment.id,
+      );
+
       // Atualizar appointment para SCHEDULED
       await tx.appointment.update({
-        where: { id: process.appointment!.id },
+        where: { id: lockedProcess.appointment.id },
         data: {
           status: StatusAgendamento.SCHEDULED,
+          appointment_datetime: confirmedDate,
           confirmed_at: new Date(),
           confirmed_by_id: userId,
         },
@@ -1941,7 +1997,7 @@ export class ProcessesService {
           specialistName:
             `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
           appointmentDate:
-            process.appointment!.appointment_datetime || new Date(),
+            confirmedDate,
           productDetails: this.getProductDetails(process),
           processId,
         })
@@ -1958,6 +2014,7 @@ export class ProcessesService {
       processId,
       status: 'SCHEDULING',
       appointment_status: StatusAgendamento.SCHEDULED,
+      appointment_datetime: confirmedDate,
     };
   }
 

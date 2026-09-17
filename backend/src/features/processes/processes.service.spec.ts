@@ -946,3 +946,118 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
     expect(historyCreate).not.toHaveBeenCalled();
   });
 });
+
+describe('ProcessesService.confirmAppointment — horário acordado', () => {
+  const futureIso = '2099-01-01T13:00:00.000Z';
+
+  function makeService(appointmentOverrides: Record<string, unknown> = {}) {
+    const appointment = {
+      id: 'appointment-1',
+      specialist_id: specialistId,
+      client_id: clientId,
+      status: StatusAgendamento.PENDING,
+      appointment_datetime: null,
+      scheduling_method: 'EMAIL',
+      ...appointmentOverrides,
+    };
+    const process = {
+      id: 'process-1',
+      specialist_id: specialistId,
+      client_id: clientId,
+      status: ProcessStatus.SCHEDULING,
+      notes: null,
+      appointment,
+      client: {
+        id: clientId,
+        email: 'client@example.com',
+        name: 'Client',
+        surname: 'Example',
+      },
+      specialist: {
+        id: specialistId,
+        email: 'specialist@example.com',
+        name: 'Specialist',
+        surname: 'Example',
+      },
+      car: null,
+      boat: null,
+      aircraft: null,
+    };
+    const appointmentUpdate = jest.fn().mockResolvedValue({
+      ...appointment,
+      status: StatusAgendamento.SCHEDULED,
+    });
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(appointment),
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: appointmentUpdate,
+      },
+      process: {
+        findUnique: jest.fn().mockResolvedValue(process),
+        update: jest.fn().mockResolvedValue(process),
+      },
+    };
+    const prisma = {
+      process: { findUnique: jest.fn().mockResolvedValue(process) },
+      $transaction: jest.fn(async (callback: any) => callback(tx)),
+    } as any;
+    const notifications = {
+      sendAppointmentConfirmedEmail: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    return {
+      service: new ProcessesService(prisma, notifications),
+      tx,
+      appointmentUpdate,
+    };
+  }
+
+  it('requires a datetime when an EMAIL request has none', async () => {
+    const { service, appointmentUpdate } = makeService();
+
+    await expect(
+      (service.confirmAppointment as any)('process-1', specialistId, undefined),
+    ).rejects.toThrow(BadRequestException);
+    expect(appointmentUpdate).not.toHaveBeenCalled();
+  });
+
+  it('stores the initial datetime without consuming the definitive change', async () => {
+    const { service, tx, appointmentUpdate } = makeService();
+
+    await (service.confirmAppointment as any)(
+      'process-1',
+      specialistId,
+      futureIso,
+    );
+
+    expect(tx.$queryRaw).toHaveBeenCalledWith(
+      expect.anything(),
+      `appointment-schedule:${specialistId}`,
+    );
+    expect(appointmentUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          appointment_datetime: new Date(futureIso),
+          status: StatusAgendamento.SCHEDULED,
+        }),
+      }),
+    );
+    const updateData = appointmentUpdate.mock.calls[0][0].data;
+    expect(updateData).not.toHaveProperty('specialist_rescheduled_at');
+    expect(updateData).not.toHaveProperty('specialist_rescheduled_from');
+  });
+
+  it('rejects a past datetime before writing', async () => {
+    const { service, appointmentUpdate } = makeService();
+
+    await expect(
+      (service.confirmAppointment as any)(
+        'process-1',
+        specialistId,
+        '2020-01-01T13:00:00.000Z',
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(appointmentUpdate).not.toHaveBeenCalled();
+  });
+});
