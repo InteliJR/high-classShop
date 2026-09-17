@@ -6,7 +6,12 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { CalendlySyncStatus, Prisma, UserRole } from '@prisma/client';
+import {
+  AppointmentSchedulingMethod,
+  CalendlySyncStatus,
+  Prisma,
+  UserRole,
+} from '@prisma/client';
 import axios from 'axios';
 import {
   createCipheriv,
@@ -386,6 +391,23 @@ export class CalendlyIntegrationService {
       };
     }
 
+    if (
+      appointment.scheduling_method &&
+      appointment.scheduling_method !== AppointmentSchedulingMethod.CALENDLY
+    ) {
+      return {
+        processed: false,
+        message: 'Agendamento não pertence ao fluxo do Calendly',
+      };
+    }
+
+    if (appointment.specialist_rescheduled_at) {
+      return {
+        processed: false,
+        message: 'Horário já foi alterado definitivamente pelo especialista',
+      };
+    }
+
     if (eventType === 'invitee.created') {
       const startTimeRaw =
         payload.scheduled_event?.start_time ||
@@ -393,13 +415,22 @@ export class CalendlyIntegrationService {
         payload.start_time;
       const parsedStartTime = startTimeRaw ? parseDate(startTimeRaw) : null;
 
-      await this.prisma.$transaction(async (tx) => {
+      const processed = await this.prisma.$transaction(async (tx) => {
         await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
         const lockedAppointment = await tx.appointment.findUnique({
           where: { id: appointment.id },
         });
         if (!lockedAppointment) {
           throw new NotFoundException('Agendamento não encontrado');
+        }
+
+        if (
+          (lockedAppointment.scheduling_method &&
+            lockedAppointment.scheduling_method !==
+              AppointmentSchedulingMethod.CALENDLY) ||
+          lockedAppointment.specialist_rescheduled_at
+        ) {
+          return false;
         }
 
         const targetDateTime =
@@ -426,7 +457,15 @@ export class CalendlyIntegrationService {
             appointment_datetime: targetDateTime,
           },
         });
+        return true;
       });
+
+      if (!processed) {
+        return {
+          processed: false,
+          message: 'Webhook ignorado para preservar o horário atual',
+        };
+      }
 
       return {
         processed: true,

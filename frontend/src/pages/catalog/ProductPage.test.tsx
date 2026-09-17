@@ -147,9 +147,13 @@ describe("ProductPage scheduling", () => {
   });
 
   it("creates the email request with its explicit scheduling method", async () => {
-    vi.mocked(createPendingAppointment).mockImplementation(
-      () => new Promise(() => undefined),
-    );
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    vi.mocked(createPendingAppointment).mockResolvedValue({
+      ...appointment,
+      status: "PENDING",
+      appointment_datetime: null,
+      scheduling_method: "EMAIL",
+    });
     renderPage();
 
     expect(
@@ -163,7 +167,20 @@ describe("ProductPage scheduling", () => {
       expect(createPendingAppointment).toHaveBeenCalledWith(
         expect.objectContaining({ scheduling_method: "EMAIL" }),
       );
+      expect(openSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/^mailto:especialista@example\.com/),
+        "_self",
+      );
     });
+    expect(
+      screen.getByRole("link", { name: "especialista@example.com" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Acompanhar em Meus Processos" }),
+    ).toBeTruthy();
+    expect(
+      vi.mocked(createPendingAppointment).mock.invocationCallOrder[0],
+    ).toBeLessThan(openSpy.mock.invocationCallOrder[0]);
   });
 
   it("creates an internal appointment with the selected datetime", async () => {

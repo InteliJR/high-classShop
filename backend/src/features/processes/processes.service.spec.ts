@@ -576,6 +576,7 @@ describe('ProcessesService.getAll — escopo de visibilidade', () => {
       },
       created_at: new Date(),
       notes: null,
+      updated_at: new Date('2026-01-01T00:00:00.000Z'),
     };
     const findMany = jest.fn().mockReturnValue([process]);
     const prisma = {
@@ -1016,7 +1017,10 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
 describe('ProcessesService.confirmAppointment — horário acordado', () => {
   const futureIso = '2099-01-01T13:00:00.000Z';
 
-  function makeService(appointmentOverrides: Record<string, unknown> = {}) {
+  function makeService(
+    appointmentOverrides: Record<string, unknown> = {},
+    processClaimCount = 1,
+  ) {
     const appointment = {
       id: 'appointment-1',
       specialist_id: specialistId,
@@ -1032,6 +1036,7 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
       client_id: clientId,
       status: ProcessStatus.SCHEDULING,
       notes: null,
+      updated_at: new Date('2026-01-01T00:00:00.000Z'),
       appointment,
       client: {
         id: clientId,
@@ -1062,7 +1067,7 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
       },
       process: {
         findUnique: jest.fn().mockResolvedValue(process),
-        update: jest.fn().mockResolvedValue(process),
+        updateMany: jest.fn().mockResolvedValue({ count: processClaimCount }),
       },
     };
     const prisma = {
@@ -1081,6 +1086,17 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
 
   it('requires a datetime when an EMAIL request has none', async () => {
     const { service, appointmentUpdate } = makeService();
+
+    await expect(
+      (service.confirmAppointment as any)('process-1', specialistId, undefined),
+    ).rejects.toThrow(BadRequestException);
+    expect(appointmentUpdate).not.toHaveBeenCalled();
+  });
+
+  it('requires an explicit datetime for EMAIL even when legacy data has one', async () => {
+    const { service, appointmentUpdate } = makeService({
+      appointment_datetime: new Date(futureIso),
+    });
 
     await expect(
       (service.confirmAppointment as any)('process-1', specialistId, undefined),
@@ -1109,6 +1125,15 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
         }),
       }),
     );
+    expect(tx.process.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'process-1',
+          status: ProcessStatus.SCHEDULING,
+          updated_at: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      }),
+    );
     const updateData = appointmentUpdate.mock.calls[0][0].data;
     expect(updateData).not.toHaveProperty('specialist_rescheduled_at');
     expect(updateData).not.toHaveProperty('specialist_rescheduled_from');
@@ -1125,5 +1150,13 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
       ),
     ).rejects.toThrow(BadRequestException);
     expect(appointmentUpdate).not.toHaveBeenCalled();
+  });
+
+  it('aborts when the process changes during confirmation', async () => {
+    const { service } = makeService({}, 0);
+
+    await expect(
+      (service.confirmAppointment as any)('process-1', specialistId, futureIso),
+    ).rejects.toThrow(ConflictException);
   });
 });

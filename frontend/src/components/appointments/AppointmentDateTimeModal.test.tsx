@@ -90,4 +90,21 @@ describe("AppointmentDateTimeModal", () => {
       }) as HTMLButtonElement).disabled,
     ).toBe(true);
   });
+
+  it("clears a backend error when the user changes the datetime", () => {
+    const onClearServerError = vi.fn();
+    render(
+      <AppointmentDateTimeModal
+        {...defaultProps}
+        serverError="Esse horário não está mais disponível."
+        onClearServerError={onClearServerError}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Data e hora"), {
+      target: { value: "2099-09-20T14:30" },
+    });
+
+    expect(onClearServerError).toHaveBeenCalledOnce();
+  });
 });

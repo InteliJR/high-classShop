@@ -196,7 +196,7 @@ export default function ProcessCard({
     };
 
     loadDetails();
-  }, [process.id, process.status, canStartOrJoinMeeting]);
+  }, [process, canStartOrJoinMeeting]);
 
   const handleStartMeeting = async () => {
     if (isStartingMeeting) return;
@@ -527,31 +527,38 @@ export default function ProcessCard({
                       </>
                     )}
                   </button>
-                  <button
-                    onClick={() => {
-                      if (hasValidScheduledMeetingDate && scheduledMeetingDate) {
-                        void handleConfirmAppointment(
-                          scheduledMeetingDate.toISOString(),
-                        );
-                      } else {
-                        setDateTimeActionError(null);
-                        setDateTimeAction("confirm");
-                      }
-                    }}
-                    disabled={isConfirming || isCancelling}
-                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50"
-                  >
-                    {isConfirming ? (
-                      <Loader2 className="animate-spin h-4 w-4 text-white" />
-                    ) : (
-                      <>
-                        <CheckCircle size={16} />
-                        {hasValidScheduledMeetingDate
-                          ? "Confirmar"
-                          : "Definir data e hora"}
-                      </>
-                    )}
-                  </button>
+                  {hasValidScheduledMeetingDate ||
+                  process.appointment_scheduling_method === "EMAIL" ? (
+                    <button
+                      onClick={() => {
+                        if (hasValidScheduledMeetingDate && scheduledMeetingDate) {
+                          void handleConfirmAppointment(
+                            scheduledMeetingDate.toISOString(),
+                          );
+                        } else {
+                          setDateTimeActionError(null);
+                          setDateTimeAction("confirm");
+                        }
+                      }}
+                      disabled={isConfirming || isCancelling}
+                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50"
+                    >
+                      {isConfirming ? (
+                        <Loader2 className="animate-spin h-4 w-4 text-white" />
+                      ) : (
+                        <>
+                          <CheckCircle size={16} />
+                          {hasValidScheduledMeetingDate
+                            ? "Confirmar"
+                            : "Definir data e hora"}
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <p className="flex-1 self-center text-center text-xs text-amber-800">
+                      Aguardando sincronização do Calendly
+                    </p>
+                  )}
                 </div>
               ) : (
                 // Client view - Only Cancel button
@@ -1050,6 +1057,7 @@ export default function ProcessCard({
         }
         busy={isConfirming || isRescheduling}
         serverError={dateTimeActionError}
+        onClearServerError={() => setDateTimeActionError(null)}
         onOpenChange={(open) => {
           if (!open) {
             setDateTimeAction(null);

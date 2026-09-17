@@ -118,4 +118,23 @@ describe('NotificationService proposal emails', () => {
     expect(serialized).toContain('21/09/2099');
     expect(serialized).toContain('definitivo');
   });
+
+  it('escapes user-controlled fields in reschedule email HTML', async () => {
+    await service.sendAppointmentRescheduledEmail({
+      clientEmail: 'client@example.com',
+      clientName: '<img src=x onerror=alert(1)>',
+      specialistName: '<b>Specialist</b>',
+      previousAppointmentDate: new Date('2099-09-20T15:00:00.000Z'),
+      appointmentDate: new Date('2099-09-21T16:00:00.000Z'),
+      productDetails: '<script>alert(1)</script>',
+      processId: 'process-1',
+    });
+
+    const htmlBody = sendEmailSafely.mock.calls[0][3];
+    expect(htmlBody).toContain('&lt;img');
+    expect(htmlBody).toContain('&lt;b&gt;Specialist&lt;/b&gt;');
+    expect(htmlBody).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(htmlBody).not.toContain('<img src=x');
+    expect(htmlBody).not.toContain('<script>alert(1)</script>');
+  });
 });

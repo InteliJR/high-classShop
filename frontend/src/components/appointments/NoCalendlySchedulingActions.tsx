@@ -5,6 +5,7 @@ import Button from "../ui/button";
 interface NoCalendlySchedulingActionsProps {
   specialistEmail: string;
   busy?: boolean;
+  showActions?: boolean;
   onEmail(): void;
   onChooseDateTime(): void;
 }
@@ -12,6 +13,7 @@ interface NoCalendlySchedulingActionsProps {
 export default function NoCalendlySchedulingActions({
   specialistEmail,
   busy = false,
+  showActions = true,
   onEmail,
   onChooseDateTime,
 }: NoCalendlySchedulingActionsProps) {
@@ -28,33 +30,37 @@ export default function NoCalendlySchedulingActions({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-ink-soft">
-        Este especialista não usa agenda online. Você pode combinar o horário
-        por e-mail ou escolher agora uma data e hora para a reunião na
-        plataforma.
-      </p>
+      {showActions && (
+        <>
+          <p className="text-sm text-ink-soft">
+            Este especialista não usa agenda online. Você pode combinar o horário
+            por e-mail ou escolher agora uma data e hora para a reunião na
+            plataforma.
+          </p>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Button
-          type="button"
-          onClick={onEmail}
-          disabled={busy}
-          className="w-full"
-        >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail size={18} />}
-          Enviar e-mail
-        </Button>
-        <Button
-          type="button"
-          variant="light"
-          onClick={onChooseDateTime}
-          disabled={busy}
-          className="w-full"
-        >
-          <CalendarClock size={18} />
-          Escolher data e hora
-        </Button>
-      </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button
+              type="button"
+              onClick={onEmail}
+              disabled={busy}
+              className="w-full"
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail size={18} />}
+              Enviar e-mail
+            </Button>
+            <Button
+              type="button"
+              variant="light"
+              onClick={onChooseDateTime}
+              disabled={busy}
+              className="w-full"
+            >
+              <CalendarClock size={18} />
+              Escolher data e hora
+            </Button>
+          </div>
+        </>
+      )}
 
       <div className="rounded-lg border border-border bg-border-soft p-3 text-sm">
         <p className="mb-1 text-xs text-muted">E-mail do especialista</p>

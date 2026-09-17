@@ -15,6 +15,7 @@ interface AppointmentDateTimeModalProps {
   definitiveWarning?: string;
   busy?: boolean;
   serverError?: string | null;
+  onClearServerError?(): void;
   onOpenChange(open: boolean): void;
   onSubmit(appointmentDatetime: string): Promise<void> | void;
 }
@@ -40,6 +41,7 @@ export default function AppointmentDateTimeModal({
   definitiveWarning,
   busy = false,
   serverError,
+  onClearServerError,
   onOpenChange,
   onSubmit,
 }: AppointmentDateTimeModalProps) {
@@ -103,6 +105,7 @@ export default function AppointmentDateTimeModal({
               onChange={(event) => {
                 setLocalDateTime(event.target.value);
                 setValidationError(null);
+                onClearServerError?.();
               }}
               className="w-full rounded-lg border border-border px-3 py-2 text-ink focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
             />

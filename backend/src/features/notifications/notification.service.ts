@@ -26,6 +26,15 @@ import {
   WelcomeEmailDto,
 } from './dto/notification-email.dto';
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // ============================================================================
 // NOTIFICATION SERVICE
 // ============================================================================
@@ -440,9 +449,14 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para ver os detalhes da r
       new Date(date).toLocaleString('pt-BR', {
         dateStyle: 'short',
         timeStyle: 'short',
+        timeZone: 'America/Sao_Paulo',
       });
     const previous = formatDateTime(data.previousAppointmentDate);
     const next = formatDateTime(data.appointmentDate);
+    const clientName = escapeHtml(data.clientName);
+    const specialistName = escapeHtml(data.specialistName);
+    const productDetails = escapeHtml(data.productDetails);
+    const processId = encodeURIComponent(data.processId);
     const subject = 'Horário da reunião alterado | BMF Lux Brokerage';
     const html = `
       <!DOCTYPE html>
@@ -450,12 +464,12 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para ver os detalhes da r
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2>Horário alterado definitivamente</h2>
-        <p>Olá <strong>${data.clientName}</strong>,</p>
-        <p>O especialista <strong>${data.specialistName}</strong> alterou o horário da sua reunião.</p>
+        <p>Olá <strong>${clientName}</strong>,</p>
+        <p>O especialista <strong>${specialistName}</strong> alterou o horário da sua reunião.</p>
         <p><strong>Horário anterior:</strong> ${previous}</p>
         <p><strong>Novo horário definitivo:</strong> ${next}</p>
-        <p><strong>Produto:</strong> ${data.productDetails}</p>
-        <p><a href="${this.frontendUrl}/processes/${data.processId}">Ver processo</a></p>
+        <p><strong>Produto:</strong> ${productDetails}</p>
+        <p><a href="${this.frontendUrl}/processes/${processId}">Ver processo</a></p>
       </body>
       </html>
     `;

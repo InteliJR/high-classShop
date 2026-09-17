@@ -56,9 +56,9 @@ describe('CreateAppointmentDto — seleção de produto', () => {
 
     const errors = await validate(dto);
 
-    expect(
-      errors.some((error) => error.property === 'scheduling_method'),
-    ).toBe(true);
+    expect(errors.some((error) => error.property === 'scheduling_method')).toBe(
+      true,
+    );
   });
 });
 
@@ -112,6 +112,7 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
       if (options.processFailure) throw options.processFailure;
       return { id: 'process-1' };
     });
+    const historyCreate = jest.fn().mockResolvedValue({});
     const userFindUnique = jest.fn(async ({ where }) =>
       where.id === client.id ? client : specialist,
     );
@@ -136,6 +137,7 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
         findFirst: jest.fn().mockResolvedValue(null),
         create: processCreate,
       },
+      processStatusHistory: { create: historyCreate },
     };
     const prisma = {
       user: { findUnique: userFindUnique },
@@ -169,6 +171,7 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
       tx,
       appointmentCreate,
       processCreate,
+      historyCreate,
       rootAppointmentCreate,
       rootProcessCreate,
       storedAppointments,
@@ -194,9 +197,7 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
 
       await expect(
         service.create(dto as any, client.id, UserRole.CUSTOMER),
-      ).rejects.toThrow(
-        expectedError,
-      );
+      ).rejects.toThrow(expectedError);
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(tx.car.findUnique).toHaveBeenCalled();
       expect(appointmentCreate).not.toHaveBeenCalled();
@@ -247,7 +248,7 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
   });
 
   it('stores direct scheduling as SCHEDULED and PLATFORM', async () => {
-    const { service, appointmentCreate } = harness({});
+    const { service, appointmentCreate, historyCreate } = harness({});
 
     await (service.create as any)(dto, client.id, UserRole.CUSTOMER);
 
@@ -259,6 +260,13 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
         }),
       }),
     );
+    expect(historyCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        processId: 'process-1',
+        status: ProcessStatus.SCHEDULING,
+        changed_by: client.id,
+      }),
+    });
   });
 
   it('serializa a verificação e a inserção do horário por especialista', async () => {
@@ -310,6 +318,26 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
 });
 
 describe('AppointmentsService.createPending — integridade das partes', () => {
+  it('rejeita horário pré-preenchido em uma solicitação por e-mail', async () => {
+    const prisma = {
+      user: { findUnique: jest.fn() },
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await expect(
+      service.createPending(
+        {
+          client_id: 'client-1',
+          specialist_id: 'specialist-1',
+          scheduling_method: AppointmentSchedulingMethod.EMAIL,
+          appointment_datetime: '2099-01-01T10:00:00.000Z',
+        } as CreatePendingAppointmentDto,
+        'client-1',
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
   it('não permite que CUSTOMER se informe como especialista', async () => {
     const customer = {
       id: '22222222-2222-4222-8222-222222222222',
@@ -348,40 +376,40 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
   ])(
     'locks active-process dedup and persists pending source %s as %s',
     async (inputMethod, expectedMethod) => {
-    const client = {
-      id: 'client-1',
-      name: 'Client',
-      role: UserRole.CUSTOMER,
-    };
-    const specialist = {
-      id: 'specialist-1',
-      name: 'Specialist',
-      role: UserRole.SPECIALIST,
-      speciality: ProductType.CAR,
-    };
-    const tx = {
-      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
-      user: { findUnique: jest.fn().mockResolvedValue(specialist) },
-      car: { findUnique: jest.fn() },
-      boat: { findUnique: jest.fn() },
-      aircraft: { findUnique: jest.fn() },
-      appointment: {
-        findFirst: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockRejectedValue(new Error('stop after checks')),
-      },
-      process: { findFirst: jest.fn().mockResolvedValue(null) },
-    };
-    const prisma = {
-      user: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValueOnce(client)
-          .mockResolvedValueOnce(specialist),
-      },
-      appointment: { findFirst: jest.fn().mockResolvedValue(null) },
-      $transaction: jest.fn(async (callback: any) => callback(tx)),
-    } as any;
-    const service = new AppointmentsService(prisma, {} as any, {} as any);
+      const client = {
+        id: 'client-1',
+        name: 'Client',
+        role: UserRole.CUSTOMER,
+      };
+      const specialist = {
+        id: 'specialist-1',
+        name: 'Specialist',
+        role: UserRole.SPECIALIST,
+        speciality: ProductType.CAR,
+      };
+      const tx = {
+        $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+        user: { findUnique: jest.fn().mockResolvedValue(specialist) },
+        car: { findUnique: jest.fn() },
+        boat: { findUnique: jest.fn() },
+        aircraft: { findUnique: jest.fn() },
+        appointment: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          create: jest.fn().mockRejectedValue(new Error('stop after checks')),
+        },
+        process: { findFirst: jest.fn().mockResolvedValue(null) },
+      };
+      const prisma = {
+        user: {
+          findUnique: jest
+            .fn()
+            .mockResolvedValueOnce(client)
+            .mockResolvedValueOnce(specialist),
+        },
+        appointment: { findFirst: jest.fn().mockResolvedValue(null) },
+        $transaction: jest.fn(async (callback: any) => callback(tx)),
+      } as any;
+      const service = new AppointmentsService(prisma, {} as any, {} as any);
 
       await expect(
         service.createPending(
@@ -411,6 +439,62 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
 });
 
 describe('AppointmentsService.updateStatus — snapshot da negociação', () => {
+  it('impede o cliente de concluir o agendamento e avançar a negociação', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.SCHEDULED,
+      appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+      process: { id: 'process-1', status: ProcessStatus.SCHEDULING },
+    };
+    const prisma = {
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(appointment),
+      },
+      $transaction: jest.fn(),
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await expect(
+      service.updateStatus(
+        appointment.id,
+        { status: StatusAgendamento.COMPLETED },
+        appointment.client_id,
+        UserRole.CUSTOMER,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('impede que a rota genérica confirme ou reabra um agendamento', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.PENDING,
+      appointment_datetime: null,
+      process: { id: 'process-1', status: ProcessStatus.SCHEDULING },
+    };
+    const prisma = {
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(appointment),
+      },
+      $transaction: jest.fn(),
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await expect(
+      service.updateStatus(
+        appointment.id,
+        { status: StatusAgendamento.SCHEDULED },
+        appointment.specialist_id,
+        UserRole.SPECIALIST,
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('grava appointment, snapshot USD, status e histórico na mesma transação', async () => {
     const product = {
       id: 'product-1',
@@ -664,6 +748,28 @@ describe('AppointmentsService.confirmPending — snapshot da negociação', () =
     immediateSpy.mockRestore();
   });
 
+  it('direciona solicitações EMAIL para a confirmação do processo', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.PENDING,
+      scheduling_method: AppointmentSchedulingMethod.EMAIL,
+      appointment_datetime: null,
+      process: { id: 'process-1' },
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      $transaction: jest.fn(),
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await expect(
+      service.confirmPending(appointment.id, appointment.specialist_id),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it.each([
     [false, ProductCurrency.BRL],
     [false, ProductCurrency.USD],
@@ -809,6 +915,59 @@ describe('AppointmentsService.confirmPending — snapshot da negociação', () =
 });
 
 describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () => {
+  it.each([
+    AppointmentSchedulingMethod.EMAIL,
+    AppointmentSchedulingMethod.PLATFORM,
+  ])('rejeita sincronização Calendly para origem %s', async (method) => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.PENDING,
+      scheduling_method: method,
+      specialist_rescheduled_at: null,
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      $transaction: jest.fn(),
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await expect(
+      service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
+        event_uri: 'https://calendly.test/events/1',
+        invitee_uri: 'https://calendly.test/invitees/1',
+        scheduled_start_time: '2099-01-01T10:00:00.000Z',
+      } as any),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('não permite que o Calendly sobrescreva a alteração definitiva', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.SCHEDULED,
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      specialist_rescheduled_at: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      $transaction: jest.fn(),
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await expect(
+      service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
+        event_uri: 'https://calendly.test/events/2',
+        invitee_uri: 'https://calendly.test/invitees/2',
+        scheduled_start_time: '2099-01-02T10:00:00.000Z',
+      } as any),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('serializes and rechecks the resolved time in the write transaction', async () => {
     const appointment = {
       id: 'appointment-1',
@@ -1011,11 +1170,7 @@ describe('AppointmentsService.reschedule — alteração definitiva', () => {
     });
 
     await expect(
-      (service as any).reschedule(
-        'appointment-1',
-        newDateIso,
-        'specialist-1',
-      ),
+      (service as any).reschedule('appointment-1', newDateIso, 'specialist-1'),
     ).rejects.toThrow(ConflictException);
     expect(updateMany).not.toHaveBeenCalled();
   });
@@ -1059,11 +1214,7 @@ describe('AppointmentsService.reschedule — alteração definitiva', () => {
     const { service } = makeService({ claimCount: 0 });
 
     await expect(
-      (service as any).reschedule(
-        'appointment-1',
-        newDateIso,
-        'specialist-1',
-      ),
+      (service as any).reschedule('appointment-1', newDateIso, 'specialist-1'),
     ).rejects.toMatchObject({
       response: {
         error: { code: 'APPOINTMENT_RESCHEDULE_ALREADY_USED' },

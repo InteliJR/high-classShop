@@ -355,17 +355,10 @@ export default function ProductPage() {
       const body = encodeURIComponent(
         `Olá ${specialist.name},\n\nTenho interesse no ${product?.marca} ${product?.modelo} e gostaria de agendar uma reunião.\n\nAtenciosamente.`,
       );
-      window.location.href = `mailto:${specialist.email}?subject=${subject}&body=${body}`;
-
-      // Redirecionar para página de processos do cliente
-      setTimeout(() => {
-        navigate("/customer/processes", {
-          state: {
-            message:
-              "Solicitação criada! Combine o horário por e-mail; o especialista irá registrá-lo na plataforma.",
-          },
-        });
-      }, 500);
+      window.open(
+        `mailto:${specialist.email}?subject=${subject}&body=${body}`,
+        "_self",
+      );
     } catch (err: any) {
       // Se já existe agendamento, apenas abrir o email
       if (err.response?.status === 409) {
@@ -391,10 +384,9 @@ export default function ProductPage() {
         const body = encodeURIComponent(
           `Olá ${specialist.name},\n\nTenho interesse no ${product?.marca} ${product?.modelo} e gostaria de agendar uma reunião.\n\nAtenciosamente.`,
         );
-        window.location.href = `mailto:${specialist.email}?subject=${subject}&body=${body}`;
-        redirectToProcesses(
-          "Você já possui uma solicitação para este produto. Acompanhe em Meus Processos.",
-          700,
+        window.open(
+          `mailto:${specialist.email}?subject=${subject}&body=${body}`,
+          "_self",
         );
       } else {
         console.error("Erro ao criar agendamento pendente:", err);
@@ -603,9 +595,10 @@ export default function ProductPage() {
               </p>
             </Alert>
           ) : currentAppointment ? (
-            <Alert variant="success">
-              <CheckCircle size={20} className="flex-shrink-0 mt-0.5" />
-              <div>
+            <div className="space-y-4">
+              <Alert variant="success">
+                <CheckCircle size={20} className="flex-shrink-0 mt-0.5" />
+                <div>
                 <p className="font-semibold">
                   {currentAppointment.status === "PENDING"
                     ? "Aguardando confirmação do especialista"
@@ -632,8 +625,28 @@ export default function ProductPage() {
                     </>
                   )}
                 </p>
-              </div>
-            </Alert>
+                </div>
+              </Alert>
+              {currentAppointment.status === "PENDING" &&
+                currentAppointment.scheduling_method === "EMAIL" && (
+                  <>
+                    <NoCalendlySchedulingActions
+                      specialistEmail={specialist.email}
+                      showActions={false}
+                      onEmail={() => undefined}
+                      onChooseDateTime={() => undefined}
+                    />
+                    <Button
+                      type="button"
+                      variant="light"
+                      className="w-full"
+                      onClick={() => navigate("/customer/processes")}
+                    >
+                      Acompanhar em Meus Processos
+                    </Button>
+                  </>
+                )}
+            </div>
           ) : specialist.calendly_url?.trim() ? (
             /* Com Calendly URL - Botão para acessar e criar PENDING */
             <div className="space-y-4">
@@ -718,6 +731,7 @@ export default function ProductPage() {
         submitLabel="Confirmar agendamento"
         busy={isCreatingPending}
         serverError={dateTimeError}
+        onClearServerError={() => setDateTimeError(null)}
         onOpenChange={setIsDateTimeModalOpen}
         onSubmit={handlePlatformScheduling}
       />

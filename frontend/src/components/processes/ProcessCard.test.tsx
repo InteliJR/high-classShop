@@ -91,6 +91,18 @@ describe("ProcessCard appointment time actions", () => {
     ).toBeNull();
   });
 
+  it("does not offer manual confirmation for an undated Calendly request", () => {
+    renderCard({
+      ...baseProcess,
+      appointment_scheduling_method: "CALENDLY",
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Definir data e hora" }),
+    ).toBeNull();
+    expect(screen.getByText("Aguardando sincronização do Calendly")).toBeTruthy();
+  });
+
   it("confirms the time selected by the specialist", async () => {
     const onStatusUpdated = vi.fn();
     renderCard(baseProcess, { onStatusUpdated });
@@ -182,5 +194,38 @@ describe("ProcessCard appointment time actions", () => {
     ).toBeTruthy();
     expect(screen.getByLabelText("Data e hora")).toBeTruthy();
     expect(onStatusUpdated).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the meeting action when the polled process changes", async () => {
+    const scheduledProcess = {
+      ...baseProcess,
+      appointment_status: "SCHEDULED" as const,
+      appointment_datetime: "2099-09-20T17:30:00.000Z",
+    };
+    vi.mocked(getMeetingByProcess)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "meeting-1",
+        process_id: scheduledProcess.id,
+        meet_link: "https://meet.example/1",
+        started_at: "2026-09-16T20:00:00.000Z",
+      });
+
+    const view = renderCard(scheduledProcess, { isClientView: true });
+    await waitFor(() => expect(getMeetingByProcess).toHaveBeenCalledTimes(1));
+
+    view.rerender(
+      <MemoryRouter>
+        <ProcessCard
+          process={{ ...scheduledProcess }}
+          isClientView
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Entrar Reunião" }),
+    ).toBeTruthy();
+    expect(getMeetingByProcess).toHaveBeenCalledTimes(2);
   });
 });

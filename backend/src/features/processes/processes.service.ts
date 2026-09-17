@@ -1980,19 +1980,29 @@ export class ProcessesService {
       throw new BadRequestException('Agendamento já foi confirmado');
     }
 
-    const confirmedDate = parseDate(
+    if (
+      process.appointment.scheduling_method ===
+        AppointmentSchedulingMethod.EMAIL &&
+      !appointmentDatetime
+    ) {
+      throw new BadRequestException(
+        'Informe uma data e hora futura para confirmar o agendamento',
+      );
+    }
+
+    const requestedDate = parseDate(
       appointmentDatetime ??
         process.appointment.appointment_datetime ??
         undefined,
     );
-    if (!confirmedDate || !isFutureDate(confirmedDate)) {
+    if (!requestedDate || !isFutureDate(requestedDate)) {
       throw new BadRequestException(
         'Informe uma data e hora futura para confirmar o agendamento',
       );
     }
 
     // Confirmar appointment em transação (sem alterar status do processo)
-    await this.prismaService.$transaction(async (tx) => {
+    const confirmedDate = await this.prismaService.$transaction(async (tx) => {
       await acquireSpecialistScheduleLock(tx, process.specialist_id);
 
       const lockedProcess = await tx.process.findUnique({
@@ -2021,10 +2031,31 @@ export class ProcessesService {
         throw new BadRequestException('Agendamento já foi confirmado');
       }
 
+      if (
+        lockedProcess.appointment.scheduling_method ===
+          AppointmentSchedulingMethod.EMAIL &&
+        !appointmentDatetime
+      ) {
+        throw new BadRequestException(
+          'Informe uma data e hora futura para confirmar o agendamento',
+        );
+      }
+
+      const lockedConfirmedDate = parseDate(
+        appointmentDatetime ??
+          lockedProcess.appointment.appointment_datetime ??
+          undefined,
+      );
+      if (!lockedConfirmedDate || !isFutureDate(lockedConfirmedDate)) {
+        throw new BadRequestException(
+          'Informe uma data e hora futura para confirmar o agendamento',
+        );
+      }
+
       await assertSpecialistScheduleAvailable(
         tx,
         lockedProcess.specialist_id,
-        confirmedDate,
+        lockedConfirmedDate,
         lockedProcess.appointment.id,
       );
 
@@ -2033,21 +2064,32 @@ export class ProcessesService {
         where: { id: lockedProcess.appointment.id },
         data: {
           status: StatusAgendamento.SCHEDULED,
-          appointment_datetime: confirmedDate,
+          appointment_datetime: lockedConfirmedDate,
           confirmed_at: new Date(),
           confirmed_by_id: userId,
         },
       });
 
       // Manter process em SCHEDULING e apenas registrar no histórico/notas
-      await tx.process.update({
-        where: { id: processId },
+      const processClaim = await tx.process.updateMany({
+        where: {
+          id: processId,
+          status: ProcessStatus.SCHEDULING,
+          updated_at: lockedProcess.updated_at,
+        },
         data: {
-          notes: process.notes
-            ? `${process.notes}\n\nAgendamento confirmado pelo especialista (${new Date().toISOString()})`
+          notes: lockedProcess.notes
+            ? `${lockedProcess.notes}\n\nAgendamento confirmado pelo especialista (${new Date().toISOString()})`
             : `Agendamento confirmado pelo especialista (${new Date().toISOString()})`,
         },
       });
+      if (processClaim.count !== 1) {
+        throw new ConflictException(
+          'O processo foi alterado enquanto o agendamento era confirmado',
+        );
+      }
+
+      return lockedConfirmedDate;
     });
 
     this.logger.log(
@@ -2063,8 +2105,7 @@ export class ProcessesService {
             `${process.client.name} ${process.client.surname || ''}`.trim(),
           specialistName:
             `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
-          appointmentDate:
-            confirmedDate,
+          appointmentDate: confirmedDate,
           productDetails: this.getProductDetails(process),
           processId,
         })

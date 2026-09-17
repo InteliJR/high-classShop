@@ -69,4 +69,20 @@ describe("NoCalendlySchedulingActions", () => {
       }) as HTMLButtonElement).disabled,
     ).toBe(true);
   });
+
+  it("can preserve only the copyable email after creating the request", () => {
+    render(
+      <NoCalendlySchedulingActions
+        specialistEmail="especialista@example.com"
+        onEmail={vi.fn()}
+        onChooseDateTime={vi.fn()}
+        showActions={false}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Enviar e-mail" })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "especialista@example.com" }),
+    ).toBeTruthy();
+  });
 });

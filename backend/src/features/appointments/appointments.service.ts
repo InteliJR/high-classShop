@@ -275,6 +275,15 @@ export class AppointmentsService {
           },
         });
 
+        await tx.processStatusHistory.create({
+          data: {
+            processId: process.id,
+            status: ProcessStatus.SCHEDULING,
+            changed_by: userId,
+            changed_at: new Date(),
+          },
+        });
+
         return { appointment, process, product };
       },
     );
@@ -389,8 +398,7 @@ export class AppointmentsService {
         },
         data: {
           appointment_datetime: nextDate,
-          specialist_rescheduled_from:
-            lockedAppointment.appointment_datetime,
+          specialist_rescheduled_from: lockedAppointment.appointment_datetime,
           specialist_rescheduled_at: rescheduledAt,
         },
       });
@@ -756,6 +764,41 @@ export class AppointmentsService {
           details: { appointment_id: id },
         },
       });
+    }
+
+    if (
+      dto.status === StatusAgendamento.PENDING ||
+      dto.status === StatusAgendamento.SCHEDULED
+    ) {
+      throw new BadRequestException(
+        'Use o fluxo específico de confirmação para agendar uma reunião',
+      );
+    }
+
+    if (dto.status === StatusAgendamento.COMPLETED) {
+      if (appointment.specialist_id !== userId && userRole !== UserRole.ADMIN) {
+        throw new ForbiddenException(
+          'Apenas o especialista responsável pode concluir a reunião',
+        );
+      }
+      if (
+        appointment.status !== StatusAgendamento.SCHEDULED ||
+        !appointment.appointment_datetime
+      ) {
+        throw new BadRequestException(
+          'Apenas uma reunião agendada pode ser concluída',
+        );
+      }
+    }
+
+    if (
+      dto.status === StatusAgendamento.CANCELLED &&
+      appointment.status !== StatusAgendamento.PENDING &&
+      appointment.status !== StatusAgendamento.SCHEDULED
+    ) {
+      throw new BadRequestException(
+        'Apenas agendamentos pendentes ou agendados podem ser cancelados',
+      );
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -1132,6 +1175,15 @@ export class AppointmentsService {
 
     const schedulingMethod =
       dto.scheduling_method ?? AppointmentSchedulingMethod.CALENDLY;
+
+    if (
+      schedulingMethod === AppointmentSchedulingMethod.EMAIL &&
+      dto.appointment_datetime
+    ) {
+      throw new BadRequestException(
+        'Solicitações por e-mail devem ter o horário definido pelo especialista',
+      );
+    }
 
     // Validar que quem está criando é o próprio cliente
     this.logger.log(
@@ -1529,6 +1581,15 @@ export class AppointmentsService {
       });
     }
 
+    if (
+      appointment.scheduling_method === AppointmentSchedulingMethod.EMAIL ||
+      appointment.scheduling_method === AppointmentSchedulingMethod.PLATFORM
+    ) {
+      throw new BadRequestException(
+        'Use a confirmação do processo para este tipo de agendamento',
+      );
+    }
+
     // Atualizar para SCHEDULED e atualizar Process para NEGOTIATION em transação
     const [updated, process] = await this.prisma.$transaction(async (tx) => {
       await validateSpecialistProductAssociation(tx, {
@@ -1577,6 +1638,16 @@ export class AppointmentsService {
             details: { current_status: lockedAppointment.status },
           },
         });
+      }
+      if (
+        lockedAppointment.scheduling_method ===
+          AppointmentSchedulingMethod.EMAIL ||
+        lockedAppointment.scheduling_method ===
+          AppointmentSchedulingMethod.PLATFORM
+      ) {
+        throw new BadRequestException(
+          'Use a confirmação do processo para este tipo de agendamento',
+        );
       }
       const confirmedDateTime =
         appointmentDatetime ||
@@ -1955,6 +2026,19 @@ export class AppointmentsService {
     }
 
     if (
+      appointment.scheduling_method &&
+      appointment.scheduling_method !== AppointmentSchedulingMethod.CALENDLY
+    ) {
+      throw new BadRequestException(
+        'Este agendamento não foi criado pelo Calendly',
+      );
+    }
+
+    if (appointment.specialist_rescheduled_at) {
+      throw this.buildRescheduleAlreadyUsedError(appointmentId);
+    }
+
+    if (
       appointment.calendly_event_uri &&
       appointment.calendly_event_uri === dto.event_uri
     ) {
@@ -2028,12 +2112,29 @@ export class AppointmentsService {
           },
         });
       }
+      if (
+        lockedAppointment.scheduling_method &&
+        lockedAppointment.scheduling_method !==
+          AppointmentSchedulingMethod.CALENDLY
+      ) {
+        throw new BadRequestException(
+          'Este agendamento não foi criado pelo Calendly',
+        );
+      }
+      if (lockedAppointment.specialist_rescheduled_at) {
+        throw this.buildRescheduleAlreadyUsedError(appointmentId);
+      }
       if (lockedAppointment.calendly_event_uri === dto.event_uri) {
         return lockedAppointment;
       }
 
       const targetDateTime =
         scheduledStartTime || lockedAppointment.appointment_datetime;
+      if (targetDateTime && !isFutureDate(targetDateTime)) {
+        throw new BadRequestException(
+          'O horário sincronizado do Calendly deve ser futuro',
+        );
+      }
       await assertSpecialistScheduleAvailable(
         tx,
         lockedAppointment.specialist_id,
