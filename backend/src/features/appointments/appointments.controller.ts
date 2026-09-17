@@ -12,7 +12,8 @@ import {
 } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
 import {
-  CreateAppointmentDto,
+  CreatePendingAppointmentDto,
+  CreatePlatformAppointmentDto,
   CalendlyScheduledDto,
   GetAppointmentsQueryDto,
   UpdateAppointmentStatusDto,
@@ -245,7 +246,7 @@ export class AppointmentsController {
    */
   @Post()
   async create(
-    @Body() createAppointmentDto: CreateAppointmentDto,
+    @Body() createAppointmentDto: CreatePlatformAppointmentDto,
     @Request() req: any,
   ) {
     // userId vem do AuthGuard
@@ -254,6 +255,7 @@ export class AppointmentsController {
     const appointment = await this.appointmentsService.create(
       createAppointmentDto,
       userId,
+      req.user.role,
     );
 
     return {
@@ -416,7 +418,10 @@ export class AppointmentsController {
    * - 403 Forbidden: Apenas o próprio cliente pode criar
    */
   @Post('pending')
-  async createPending(@Body() dto: CreateAppointmentDto, @Request() req: any) {
+  async createPending(
+    @Body() dto: CreatePendingAppointmentDto,
+    @Request() req: any,
+  ) {
     const userId = req.user.id;
 
     const appointment = await this.appointmentsService.createPending(

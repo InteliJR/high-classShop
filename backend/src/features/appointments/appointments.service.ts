@@ -10,6 +10,8 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import {
   CalendlyScheduledDto,
   CreateAppointmentDto,
+  CreatePendingAppointmentDto,
+  CreatePlatformAppointmentDto,
   GetAppointmentsQueryDto,
   UpdateAppointmentStatusDto,
 } from './dto';
@@ -20,6 +22,7 @@ import {
   ProductResponseDto,
 } from './entities/appointment.response';
 import {
+  AppointmentSchedulingMethod,
   CalendlySyncStatus,
   StatusAgendamento,
   UserRole,
@@ -95,51 +98,39 @@ export class AppointmentsService {
    * @throws NotFoundException Se usuário ou produto não encontrado
    */
   async create(
-    dto: CreateAppointmentDto,
+    dto: CreatePlatformAppointmentDto,
     userId: string,
+    userRole: UserRole,
   ): Promise<AppointmentResponseEntity> {
+    if (userRole !== UserRole.CUSTOMER || dto.client_id !== userId) {
+      throw new ForbiddenException({
+        success: false,
+        error: {
+          code: 403,
+          message: 'Apenas o próprio cliente pode criar este agendamento',
+        },
+      });
+    }
+
     this.logger.log(
       `[create] Criando agendamento para cliente ${dto.client_id} com especialista ${dto.specialist_id}`,
     );
 
-    // Validação 1: appointment_datetime deve ser futuro (se fornecido)
-    // Generate the fallback once. The exact instant checked under the
-    // specialist lock must be the same instant persisted below.
-    let appointmentDateTime: Date = new Date();
-    if (dto.appointment_datetime) {
-      const parsedAppointmentDateTime = parseDate(dto.appointment_datetime);
-      if (!parsedAppointmentDateTime) {
-        this.logger.warn('[create] Data/hora do agendamento é inválida');
-        throw new BadRequestException({
-          success: false,
-          error: {
-            code: 400,
-            message: 'Data/hora do agendamento é inválida',
-            details: {
-              appointment_datetime: [
-                'appointment_datetime deve estar em formato ISO 8601 UTC válido',
-              ],
-            },
+    const appointmentDateTime = parseDate(dto.appointment_datetime);
+    if (!appointmentDateTime || !isFutureDate(appointmentDateTime)) {
+      this.logger.warn('[create] Data/hora do agendamento é inválida');
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message: 'Data/hora do agendamento deve ser futura',
+          details: {
+            appointment_datetime: [
+              'appointment_datetime deve ser uma data ISO 8601 futura',
+            ],
           },
-        });
-      }
-      appointmentDateTime = parsedAppointmentDateTime;
-
-      if (!isFutureDate(appointmentDateTime)) {
-        this.logger.warn('[create] Data/hora do agendamento é no passado');
-        throw new BadRequestException({
-          success: false,
-          error: {
-            code: 400,
-            message: 'Data/hora do agendamento deve ser futura',
-            details: {
-              appointment_datetime: [
-                'appointment_datetime deve ser futuro, não pode ser no passado ou presente',
-              ],
-            },
-          },
-        });
-      }
+        },
+      });
     }
 
     // Validação 2: Verificar que cliente existe
@@ -257,6 +248,7 @@ export class AppointmentsService {
             product_id: dto.product_id,
             appointment_datetime: appointmentDateTime,
             status: StatusAgendamento.SCHEDULED,
+            scheduling_method: AppointmentSchedulingMethod.PLATFORM,
             notes: dto.notes,
           },
           include: {
@@ -279,7 +271,7 @@ export class AppointmentsService {
                 ? 'boat_id'
                 : 'aircraft_id']: dto.product_id,
             status: 'SCHEDULING', // ProcessStatus enum
-            notes: `Criado via agendamento (Calendly integration). Cliente agendou em ${appointment.appointment_datetime?.toISOString() || 'data pendente'}`,
+            notes: `Criado via agendamento interno. Cliente agendou em ${appointment.appointment_datetime?.toISOString()}`,
           },
         });
 
@@ -824,6 +816,11 @@ export class AppointmentsService {
     entity.id = appointment.id;
     entity.appointment_datetime = appointment.appointment_datetime;
     entity.status = appointment.status;
+    entity.scheduling_method = appointment.scheduling_method ?? null;
+    entity.specialist_rescheduled_at =
+      appointment.specialist_rescheduled_at ?? null;
+    entity.specialist_rescheduled_from =
+      appointment.specialist_rescheduled_from ?? null;
     entity.notes = appointment.notes;
     entity.calendly_event_uri = appointment.calendly_event_uri;
     entity.calendly_invitee_uri = appointment.calendly_invitee_uri;
@@ -968,12 +965,15 @@ export class AppointmentsService {
    * @returns Appointment em status PENDING
    */
   async createPending(
-    dto: CreateAppointmentDto,
+    dto: CreatePendingAppointmentDto,
     userId: string,
   ): Promise<AppointmentResponseEntity> {
     this.logger.log(
       `[createPending] Criando agendamento PENDING para cliente ${dto.client_id}`,
     );
+
+    const schedulingMethod =
+      dto.scheduling_method ?? AppointmentSchedulingMethod.CALENDLY;
 
     // Validar que quem está criando é o próprio cliente
     this.logger.log(
@@ -1152,6 +1152,7 @@ export class AppointmentsService {
           specialist_id: dto.specialist_id,
           appointment_datetime: pendingDateTime,
           status: StatusAgendamento.PENDING,
+          scheduling_method: schedulingMethod,
           notes:
             dto.notes ||
             (isConsultancy

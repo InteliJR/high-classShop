@@ -1,4 +1,5 @@
 import {
+  AppointmentSchedulingMethod,
   Prisma,
   ProcessStatus,
   ProductCurrency,
@@ -8,6 +9,8 @@ import {
 } from '@prisma/client';
 import { validate } from 'class-validator';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { CreatePendingAppointmentDto } from './dto/create-pending-appointment.dto';
+import { CreatePlatformAppointmentDto } from './dto/create-platform-appointment.dto';
 import { AppointmentsService } from './appointments.service';
 import {
   BadRequestException,
@@ -33,6 +36,28 @@ describe('CreateAppointmentDto — seleção de produto', () => {
       errors.some((error) =>
         ['product_type', 'product_id'].includes(error.property),
       ),
+    ).toBe(true);
+  });
+
+  it('exige appointment_datetime no agendamento interno', async () => {
+    const dto = Object.assign(new CreatePlatformAppointmentDto(), base);
+
+    const errors = await validate(dto);
+
+    expect(
+      errors.some((error) => error.property === 'appointment_datetime'),
+    ).toBe(true);
+  });
+
+  it('rejeita PLATFORM no endpoint de agendamento pendente', async () => {
+    const dto = Object.assign(new CreatePendingAppointmentDto(), base, {
+      scheduling_method: AppointmentSchedulingMethod.PLATFORM,
+    });
+
+    const errors = await validate(dto);
+
+    expect(
+      errors.some((error) => error.property === 'scheduling_method'),
     ).toBe(true);
   });
 });
@@ -167,7 +192,9 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
         },
       );
 
-      await expect(service.create(dto, client.id)).rejects.toThrow(
+      await expect(
+        service.create(dto as any, client.id, UserRole.CUSTOMER),
+      ).rejects.toThrow(
         expectedError,
       );
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
@@ -189,17 +216,55 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
       processFailure,
     });
 
-    await expect(service.create(dto, client.id)).rejects.toBe(processFailure);
+    await expect(
+      service.create(dto as any, client.id, UserRole.CUSTOMER),
+    ).rejects.toBe(processFailure);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(storedAppointments).toHaveLength(0);
     expect(rootAppointmentCreate).not.toHaveBeenCalled();
     expect(rootProcessCreate).not.toHaveBeenCalled();
   });
 
+  it.each([UserRole.SPECIALIST, UserRole.CONSULTANT, UserRole.ADMIN])(
+    'rejects direct scheduling by %s',
+    async (role) => {
+      const { service, appointmentCreate } = harness({});
+
+      await expect(
+        (service.create as any)(dto, client.id, role),
+      ).rejects.toThrow(ForbiddenException);
+      expect(appointmentCreate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a customer scheduling for another client', async () => {
+    const { service, appointmentCreate } = harness({});
+
+    await expect(
+      (service.create as any)(dto, 'another-client', UserRole.CUSTOMER),
+    ).rejects.toThrow(ForbiddenException);
+    expect(appointmentCreate).not.toHaveBeenCalled();
+  });
+
+  it('stores direct scheduling as SCHEDULED and PLATFORM', async () => {
+    const { service, appointmentCreate } = harness({});
+
+    await (service.create as any)(dto, client.id, UserRole.CUSTOMER);
+
+    expect(appointmentCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: StatusAgendamento.SCHEDULED,
+          scheduling_method: AppointmentSchedulingMethod.PLATFORM,
+        }),
+      }),
+    );
+  });
+
   it('serializa a verificação e a inserção do horário por especialista', async () => {
     const { service, tx } = harness({});
 
-    await service.create(dto, client.id);
+    await service.create(dto as any, client.id, UserRole.CUSTOMER);
 
     expect(tx.$queryRaw).toHaveBeenCalledWith(
       expect.anything(),
@@ -210,28 +275,26 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
     );
   });
 
-  it('checks the exact generated timestamp when no datetime is supplied', async () => {
+  it('rejects platform scheduling when no datetime is supplied', async () => {
     const { service, tx, appointmentCreate } = harness({});
     const withoutDate = { ...dto, appointment_datetime: undefined };
 
-    await service.create(withoutDate as CreateAppointmentDto, client.id);
+    await expect(
+      (service.create as any)(
+        withoutDate as CreateAppointmentDto,
+        client.id,
+        UserRole.CUSTOMER,
+      ),
+    ).rejects.toThrow(BadRequestException);
 
-    const insertedAt = appointmentCreate.mock.calls[0][0].data
-      .appointment_datetime as Date;
-    expect(tx.appointment.findFirst).toHaveBeenCalledWith({
-      where: expect.objectContaining({
-        appointment_datetime: {
-          gte: new Date(insertedAt.getTime() - 60 * 60 * 1000),
-          lte: new Date(insertedAt.getTime() + 60 * 60 * 1000),
-        },
-      }),
-    });
+    expect(tx.appointment.findFirst).not.toHaveBeenCalled();
+    expect(appointmentCreate).not.toHaveBeenCalled();
   });
 
   it('serializa e repete a deduplicação do processo antes de criá-lo', async () => {
     const { service, tx } = harness({});
 
-    await service.create(dto, client.id);
+    await service.create(dto as any, client.id, UserRole.CUSTOMER);
 
     expect(tx.$queryRaw).toHaveBeenCalledWith(
       expect.anything(),
@@ -279,7 +342,12 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it('locks and rechecks active-process dedup inside the write transaction', async () => {
+  it.each([
+    [undefined, AppointmentSchedulingMethod.CALENDLY],
+    [AppointmentSchedulingMethod.EMAIL, AppointmentSchedulingMethod.EMAIL],
+  ])(
+    'locks active-process dedup and persists pending source %s as %s',
+    async (inputMethod, expectedMethod) => {
     const client = {
       id: 'client-1',
       name: 'Client',
@@ -315,22 +383,31 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
     } as any;
     const service = new AppointmentsService(prisma, {} as any, {} as any);
 
-    await expect(
-      service.createPending(
-        {
-          client_id: client.id,
-          specialist_id: specialist.id,
-        } as CreateAppointmentDto,
-        client.id,
-      ),
-    ).rejects.toThrow('stop after checks');
+      await expect(
+        service.createPending(
+          {
+            client_id: client.id,
+            specialist_id: specialist.id,
+            scheduling_method: inputMethod,
+          } as CreatePendingAppointmentDto,
+          client.id,
+        ),
+      ).rejects.toThrow('stop after checks');
 
-    expect(tx.$queryRaw).toHaveBeenCalledWith(
-      expect.anything(),
-      'process-dedup:client-1:specialist-1:CONSULTANCY:none',
-    );
-    expect(tx.process.findFirst).toHaveBeenCalledTimes(1);
-  });
+      expect(tx.$queryRaw).toHaveBeenCalledWith(
+        expect.anything(),
+        'process-dedup:client-1:specialist-1:CONSULTANCY:none',
+      );
+      expect(tx.process.findFirst).toHaveBeenCalledTimes(1);
+      expect(tx.appointment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            scheduling_method: expectedMethod,
+          }),
+        }),
+      );
+    },
+  );
 });
 
 describe('AppointmentsService.updateStatus — snapshot da negociação', () => {
