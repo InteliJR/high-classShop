@@ -22,6 +22,7 @@ import type { Product, SpecialityType } from "../../types/types";
 import React from "react";
 import UpdateProcessStatusModal from "./UpdateProcessStatusModal";
 import CopyableContact from "./CopyableContact";
+import AppointmentDateTimeModal from "../appointments/AppointmentDateTimeModal";
 import { applyPhoneMask } from "../../utils/mask";
 import { getContextualStatusMessage } from "../../utils/processStatusMessages";
 import {
@@ -35,6 +36,7 @@ import {
   updateProcessStatus,
   type MeetingSession,
 } from "../../services/processes.service";
+import { rescheduleAppointment } from "../../services/appointments.service";
 
 function getActionErrorMessage(error: unknown, fallback: string): string {
   if (typeof error === "object" && error !== null) {
@@ -110,6 +112,13 @@ export default function ProcessCard({
   const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false);
   const [isAdvancing, setIsAdvancing] = useState(false);
   const [advanceError, setAdvanceError] = useState<string | null>(null);
+  const [dateTimeAction, setDateTimeAction] = useState<
+    "confirm" | "reschedule" | null
+  >(null);
+  const [dateTimeActionError, setDateTimeActionError] = useState<string | null>(
+    null,
+  );
+  const [isRescheduling, setIsRescheduling] = useState(false);
 
   // Verifica se é um processo de consultoria (sem produto atribuído)
   const isConsultancy = !process.product_type || !process.product_id;
@@ -134,6 +143,13 @@ export default function ProcessCard({
   // Cliente só vê botão se reunião já foi iniciada pelo especialista
   const canStartOrJoinMeeting =
     isAppointmentConfirmed && process.status === "SCHEDULING";
+  const canSpecialistReschedule =
+    !isClientView &&
+    process.status === "SCHEDULING" &&
+    process.appointment_status === "SCHEDULED" &&
+    Boolean(process.appointment_id) &&
+    Boolean(process.appointment_datetime) &&
+    !process.specialist_rescheduled_at;
 
   const formattedAppointmentDate = hasValidScheduledMeetingDate
     ? (scheduledMeetingDate as Date).toLocaleDateString("pt-BR", {
@@ -233,26 +249,49 @@ export default function ProcessCard({
   };
 
   // Handle confirm appointment
-  const handleConfirmAppointment = async () => {
+  const handleConfirmAppointment = async (appointmentDatetime: string) => {
     if (isConfirming) return;
 
     try {
       setIsConfirming(true);
-      await confirmAppointment(process.id);
+      setDateTimeActionError(null);
+      await confirmAppointment(process.id, appointmentDatetime);
+      setDateTimeAction(null);
+      onStatusUpdated?.();
     } catch (error) {
       console.error("Error confirming appointment:", error);
-      alert(
+      const message = getActionErrorMessage(
+        error,
+        "Erro ao confirmar agendamento. Tente novamente.",
+      );
+      if (dateTimeAction === "confirm") {
+        setDateTimeActionError(message);
+      } else {
+        alert(message);
+      }
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  const handleReschedule = async (appointmentDatetime: string) => {
+    if (isRescheduling || !process.appointment_id) return;
+
+    try {
+      setIsRescheduling(true);
+      setDateTimeActionError(null);
+      await rescheduleAppointment(process.appointment_id, appointmentDatetime);
+      setDateTimeAction(null);
+      onStatusUpdated?.();
+    } catch (error) {
+      setDateTimeActionError(
         getActionErrorMessage(
           error,
-          "Erro ao confirmar agendamento. Tente novamente.",
+          "Não foi possível alterar o horário. Tente novamente.",
         ),
       );
     } finally {
-      setIsConfirming(false);
-      // Recarrega a lista mesmo em erro: se o processo já não existe mais
-      // (ex.: cancelado em outra aba/pela outra parte), o card some em vez
-      // de continuar mostrando uma ação que vai sempre falhar.
-      onStatusUpdated?.();
+      setIsRescheduling(false);
     }
   };
 
@@ -454,6 +493,11 @@ export default function ProcessCard({
                 : " (aguardando confirmação do especialista)."}
             </p>
           )}
+          {process.specialist_rescheduled_at && (
+            <p className="mt-2 text-xs font-semibold text-amber-700">
+              Horário alterado definitivamente
+            </p>
+          )}
         </div>
 
         {/* Appointment Confirmation Buttons - SCHEDULING Status (before appointment confirmation) */}
@@ -484,7 +528,16 @@ export default function ProcessCard({
                     )}
                   </button>
                   <button
-                    onClick={handleConfirmAppointment}
+                    onClick={() => {
+                      if (hasValidScheduledMeetingDate && scheduledMeetingDate) {
+                        void handleConfirmAppointment(
+                          scheduledMeetingDate.toISOString(),
+                        );
+                      } else {
+                        setDateTimeActionError(null);
+                        setDateTimeAction("confirm");
+                      }
+                    }}
                     disabled={isConfirming || isCancelling}
                     className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50"
                   >
@@ -493,7 +546,9 @@ export default function ProcessCard({
                     ) : (
                       <>
                         <CheckCircle size={16} />
-                        Confirmar
+                        {hasValidScheduledMeetingDate
+                          ? "Confirmar"
+                          : "Definir data e hora"}
                       </>
                     )}
                   </button>
@@ -533,6 +588,19 @@ export default function ProcessCard({
                       ? "Agora selecione o produto para iniciar a negociação com o cliente."
                       : "Inicie a reunião com o cliente ou entre na reunião já criada."}
                   </p>
+                  {canSpecialistReschedule && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDateTimeActionError(null);
+                        setDateTimeAction("reschedule");
+                      }}
+                      className="w-full mb-2 inline-flex items-center justify-center gap-2 px-4 py-2 bg-white border border-amber-400 text-amber-800 rounded-lg font-medium hover:bg-amber-50 transition"
+                    >
+                      <Clock size={16} />
+                      Alterar horário
+                    </button>
+                  )}
                   <button
                     onClick={
                       meetingSession ? handleJoinMeeting : handleStartMeeting
@@ -956,6 +1024,43 @@ export default function ProcessCard({
           onStatusUpdated?.();
         }}
         process={process}
+      />
+
+      <AppointmentDateTimeModal
+        open={dateTimeAction !== null}
+        title={
+          dateTimeAction === "reschedule"
+            ? "Alterar horário"
+            : "Definir data e hora"
+        }
+        description={
+          dateTimeAction === "reschedule"
+            ? "Escolha o novo horário da reunião."
+            : "Informe a data e a hora combinadas com o cliente."
+        }
+        submitLabel={
+          dateTimeAction === "reschedule"
+            ? "Confirmar alteração"
+            : "Confirmar horário"
+        }
+        definitiveWarning={
+          dateTimeAction === "reschedule"
+            ? "Esta é a única alteração permitida. O novo horário passa a valer imediatamente e não dependerá de confirmação do cliente."
+            : undefined
+        }
+        busy={isConfirming || isRescheduling}
+        serverError={dateTimeActionError}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDateTimeAction(null);
+            setDateTimeActionError(null);
+          }
+        }}
+        onSubmit={
+          dateTimeAction === "reschedule"
+            ? handleReschedule
+            : handleConfirmAppointment
+        }
       />
     </div>
   );
