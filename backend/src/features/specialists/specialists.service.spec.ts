@@ -61,6 +61,25 @@ describe('SpecialistsService.findAll', () => {
   });
 });
 
+describe('SpecialistsService.findAllGroupedByCategory', () => {
+  it('não seleciona a comissão na resposta consumida por clientes', async () => {
+    const prisma = {
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+    } as any;
+    const service = new SpecialistsService(
+      prisma,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    await service.findAllGroupedByCategory();
+
+    const select = prisma.user.findMany.mock.calls[0][0].select;
+    expect(select).not.toHaveProperty('commission_rate');
+  });
+});
+
 describe('SpecialistsService.create', () => {
   const base = {
     name: 'Ana',
@@ -117,4 +136,23 @@ describe('SpecialistsService.create', () => {
       expect(prisma.user.create).not.toHaveBeenCalled();
     },
   );
+
+  it('normaliza a comissão Decimal para número na resposta', async () => {
+    const { prisma, service } = makeService();
+    prisma.user.create.mockResolvedValue({
+      id: 'specialist-1',
+      name: 'Ana',
+      surname: 'Silva',
+      email: 'ana@example.com',
+      role: 'SPECIALIST',
+      commission_rate: { toString: () => '12.5' },
+    });
+
+    const result = await service.create({
+      ...base,
+      commission_rate: 12.5,
+    } as any);
+
+    expect(result.commission_rate).toBe(12.5);
+  });
 });

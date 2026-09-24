@@ -51,6 +51,37 @@ describe("AdminUserManagementDialog", () => {
     );
   });
 
+  it("aceita vírgula decimal ao promover para especialista", async () => {
+    render(
+      <AdminUserManagementDialog
+        state={{ userId: "user-1", mode: "role" }}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Novo cargo"), {
+      target: { value: "SPECIALIST" },
+    });
+    fireEvent.change(screen.getByLabelText("Especialidade"), {
+      target: { value: "BOAT" },
+    });
+    fireEvent.change(screen.getByLabelText("Taxa de comissão (%)"), {
+      target: { value: "1,5" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Verificar alteração" }),
+    );
+
+    await waitFor(() =>
+      expect(management.validateRoleChange).toHaveBeenCalledWith("user-1", {
+        role: "SPECIALIST",
+        speciality: "BOAT",
+        commission_rate: 1.5,
+      }),
+    );
+  });
+
   it("envia comissão ao substituir um gerente por especialista", async () => {
     vi.mocked(getCompanies).mockResolvedValueOnce([
       { id: "office-1", name: "Matriz", cnpj: "00.000.000/0001-00" },

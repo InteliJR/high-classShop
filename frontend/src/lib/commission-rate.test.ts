@@ -8,13 +8,14 @@ import {
 describe("commission-rate", () => {
   it.each([
     ["0", 0],
+    ["1,5", 1.5],
     ["12.34", 12.34],
     ["100", 100],
   ])("aceita %s", (raw, value) => {
     expect(parseCommissionRateInput(raw)).toEqual({ ok: true, value });
   });
 
-  it.each(["", "-1", "100.01", "12.345", "abc"])(
+  it.each(["", "-1", "100.01", "12.345", "1,234", "1,2.3", "1.2,3", "abc"])(
     "rejeita %s",
     (raw) => expect(parseCommissionRateInput(raw).ok).toBe(false),
   );

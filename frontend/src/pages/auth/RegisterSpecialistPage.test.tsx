@@ -32,7 +32,9 @@ describe("RegisterSpecialistPage", () => {
 
     render(<RegisterSpecialistPage />);
 
-    expect(await screen.findByDisplayValue("25%")).toHaveProperty(
+    expect(
+      await screen.findByLabelText("Comissão definida pelo administrador"),
+    ).toHaveProperty(
       "readOnly",
       true,
     );

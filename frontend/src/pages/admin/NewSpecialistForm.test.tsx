@@ -42,4 +42,31 @@ describe("NewSpecialistForm", () => {
       }),
     );
   });
+
+  it("aceita vírgula decimal no convite", async () => {
+    vi.mocked(inviteSpecialist).mockResolvedValue({
+      inviteLink: "https://example.test/invite",
+      email: "especialista@example.com",
+    });
+    render(<NewSpecialistForm onSuccess={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("E-mail do especialista"), {
+      target: { value: "especialista@example.com" },
+    });
+    fireEvent.change(
+      screen.getByLabelText(
+        "Comissão do especialista (% da comissão total)",
+      ),
+      { target: { value: "1,5" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Gerar convite" }));
+
+    await waitFor(() =>
+      expect(inviteSpecialist).toHaveBeenCalledWith({
+        email: "especialista@example.com",
+        speciality: "CAR",
+        commission_rate: 1.5,
+      }),
+    );
+  });
 });

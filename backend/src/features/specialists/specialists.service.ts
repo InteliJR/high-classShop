@@ -141,7 +141,7 @@ export class SpecialistsService {
           .catch(() => {});
       });
 
-      return user;
+      return this.toResponse(user);
     } catch (error) {
       if (error instanceof ConflictException) {
         throw error;
@@ -287,7 +287,6 @@ export class SpecialistsService {
         rg: true,
         speciality: true,
         company_id: true,
-        commission_rate: true,
         calendly_url: true,
       },
     });

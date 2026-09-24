@@ -525,10 +525,9 @@ function RateRow({
       </span>
       <div className="flex items-center gap-2">
         <input
-          type="number"
-          step="0.01"
-          min={0}
-          max={100}
+          type="text"
+          inputMode="decimal"
+          aria-label={label}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           className="w-24 px-2 py-1 border border-border rounded-md text-right"

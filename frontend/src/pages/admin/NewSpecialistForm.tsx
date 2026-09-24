@@ -180,10 +180,8 @@ export default function NewSpecialistForm({
         </label>
         <input
           id="commission-rate"
-          type="number"
-          min="0"
-          max="100"
-          step="0.01"
+          type="text"
+          inputMode="decimal"
           value={commissionRate}
           onChange={(event) => setCommissionRate(event.target.value)}
           className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"

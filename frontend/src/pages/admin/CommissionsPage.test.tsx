@@ -69,7 +69,7 @@ describe("CommissionsPage", () => {
     ]);
 
     render(<CommissionsPage />);
-    const input = await screen.findByRole("spinbutton");
+    const input = await screen.findByLabelText("Bruno Costa");
     fireEvent.change(input, { target: { value: "12.345" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
 
@@ -77,5 +77,45 @@ describe("CommissionsPage", () => {
       await screen.findByText("A comissão deve ter no máximo duas casas decimais."),
     ).toBeTruthy();
     expect(updateSpecialist).not.toHaveBeenCalled();
+  });
+
+  it("aceita vírgula decimal ao editar a taxa", async () => {
+    vi.mocked(updateSpecialist).mockClear();
+    vi.mocked(getSpecialists).mockResolvedValue([
+      {
+        id: "specialist-3",
+        name: "Carla",
+        surname: "Lima",
+        email: "carla@example.com",
+        cpf: "",
+        rg: "",
+        password_hash: "",
+        speciality: "CAR",
+        commission_rate: 12,
+      },
+    ]);
+    vi.mocked(updateSpecialist).mockResolvedValue({
+      id: "specialist-3",
+      name: "Carla",
+      surname: "Lima",
+      email: "carla@example.com",
+      cpf: "",
+      rg: "",
+      password_hash: "",
+      speciality: "CAR",
+      commission_rate: 1.5,
+    });
+
+    render(<CommissionsPage />);
+    fireEvent.change(await screen.findByLabelText("Carla Lima"), {
+      target: { value: "1,5" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() =>
+      expect(updateSpecialist).toHaveBeenCalledWith("specialist-3", {
+        commission_rate: 1.5,
+      }),
+    );
   });
 });

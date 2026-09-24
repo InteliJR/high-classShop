@@ -495,10 +495,8 @@ function AdminUserManagementDialogSession({
                   </label>
                   <input
                     id="admin-user-role-commission-rate"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={commissionRate}
                     onChange={(event) => {
                       setCommissionRate(event.target.value);
@@ -580,10 +578,8 @@ function AdminUserManagementDialogSession({
                       </label>
                       <input
                         id="admin-user-replacement-commission-rate"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={replacementCommissionRate}
                         onChange={(event) => {
                           setReplacementCommissionRate(event.target.value);
@@ -617,10 +613,8 @@ function AdminUserManagementDialogSession({
                 </label>
                 <input
                   id="admin-user-commission-rate"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={commissionRate}
                   onChange={(event) => {
                     setCommissionRate(event.target.value);

@@ -214,10 +214,14 @@ export default function RegisterSpecialistPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-ink-soft">
+            <label
+              htmlFor="specialist-commission-rate"
+              className="block text-sm font-medium text-ink-soft"
+            >
               Comissão definida pelo administrador
             </label>
             <input
+              id="specialist-commission-rate"
               readOnly
               value={`${effectiveCommissionRate(commissionRate)}%`}
               className="mt-1 block w-full rounded-md border border-border bg-border-soft px-3 py-2 text-muted"

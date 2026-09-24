@@ -10,7 +10,8 @@ export function parseCommissionRateInput(
     return { ok: false, message: "Informe a comissão do especialista." };
   }
 
-  const parsed = Number(value);
+  const normalized = value.replace(",", ".");
+  const parsed = Number(normalized);
   if (!Number.isFinite(parsed)) {
     return { ok: false, message: "A comissão deve ser um número." };
   }
@@ -20,7 +21,7 @@ export function parseCommissionRateInput(
       message: "A comissão deve estar entre 0% e 100%.",
     };
   }
-  if (!/^\d+(?:\.\d{1,2})?$/.test(value)) {
+  if (!/^\d+(?:[.,]\d{1,2})?$/.test(value)) {
     return {
       ok: false,
       message: "A comissão deve ter no máximo duas casas decimais.",
