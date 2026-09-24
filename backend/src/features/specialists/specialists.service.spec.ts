@@ -33,3 +33,26 @@ describe('SpecialistsService.inviteSpecialist', () => {
     });
   });
 });
+
+describe('SpecialistsService.findAll', () => {
+  it('preserva null e zero como estados distintos', async () => {
+    const prisma = {
+      user: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'legacy', commission_rate: null },
+          { id: 'zero', commission_rate: 0 },
+        ]),
+      },
+    } as any;
+    const service = new SpecialistsService(
+      prisma,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    const result = await service.findAll();
+
+    expect(result.map((item) => item.commission_rate)).toEqual([null, 0]);
+  });
+});

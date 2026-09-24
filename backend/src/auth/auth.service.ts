@@ -25,6 +25,7 @@ import { UserRole } from '@prisma/client';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { S3Service } from 'src/aws/s3.service';
 import { resolveCompanyLogoUrl } from './utils/company-logo.util';
+import { SpecialistInvitePayload } from './types/specialist-invite-payload';
 
 @Injectable()
 export class AuthService {
@@ -597,7 +598,7 @@ export class AuthService {
 
   async validateSpecialistInviteToken(token: string) {
     try {
-      const payload = this.jwtService.verify(token, {
+      const payload = this.jwtService.verify<SpecialistInvitePayload>(token, {
         secret: this.getJwtSecret('JWT_SECRET_REFERRAL'),
       });
 
@@ -615,9 +616,18 @@ export class AuthService {
         );
       }
 
+      const rate = payload.commission_rate;
+      if (
+        rate !== undefined &&
+        (!Number.isFinite(rate) || rate < 0 || rate > 100)
+      ) {
+        throw new UnauthorizedException('Token de convite inválido');
+      }
+
       return {
         email: payload.email,
-        speciality: payload.speciality as 'CAR' | 'BOAT' | 'AIRCRAFT',
+        speciality: payload.speciality,
+        commission_rate: rate ?? null,
       };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
@@ -628,7 +638,7 @@ export class AuthService {
   async registerSpecialist(dto: RegisterSpecialistDto) {
     const { invite_token, password, cnpj, ...rest } = dto;
 
-    const { email, speciality } =
+    const { email, speciality, commission_rate } =
       await this.validateSpecialistInviteToken(invite_token);
 
     const existingByCnpj = await this.prismaService.user.findUnique({
@@ -649,6 +659,7 @@ export class AuthService {
         password_hash: passwordHash,
         role: UserRole.SPECIALIST,
         speciality,
+        commission_rate,
       },
     });
 

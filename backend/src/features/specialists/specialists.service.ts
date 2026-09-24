@@ -25,6 +25,16 @@ export class SpecialistsService {
     private notificationService: NotificationService,
   ) {}
 
+  private toResponse<T extends { commission_rate: unknown }>(specialist: T) {
+    return {
+      ...specialist,
+      commission_rate:
+        specialist.commission_rate == null
+          ? null
+          : Number(specialist.commission_rate),
+    };
+  }
+
   // Gera link de convite para que um especialista se cadastre via self-registration.
   async inviteSpecialist(dto: InviteSpecialistDto) {
     const { email, speciality, commission_rate } = dto;
@@ -66,10 +76,7 @@ export class SpecialistsService {
       where: { role: 'SPECIALIST' },
       include: { company: true },
     });
-    return specialists.map((s) => ({
-      ...s,
-      commission_rate: s.commission_rate ? Number(s.commission_rate) : null,
-    }));
+    return specialists.map((specialist) => this.toResponse(specialist));
   }
 
   // Cria um novo especialista na base de dados.
@@ -170,12 +177,7 @@ export class SpecialistsService {
     if (!specialist || specialist.role !== 'SPECIALIST') {
       throw new NotFoundException('Especialista não encontrado');
     }
-    return {
-      ...specialist,
-      commission_rate: specialist.commission_rate
-        ? Number(specialist.commission_rate)
-        : null,
-    };
+    return this.toResponse(specialist);
   }
 
   // Atualiza os dados de um especialista existente.
@@ -225,10 +227,11 @@ export class SpecialistsService {
         updateData.password_hash = await bcrypt.hash(data.password_hash, 10);
       }
 
-      return await this.prisma.user.update({
+      const specialist = await this.prisma.user.update({
         where: { id },
         data: updateData,
       });
+      return this.toResponse(specialist);
     } catch (error) {
       if (
         error instanceof NotFoundException ||
