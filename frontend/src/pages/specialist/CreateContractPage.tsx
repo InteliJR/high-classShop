@@ -678,7 +678,7 @@ export default function CreateContractPage() {
 
   // Calcular valor do vendedor automaticamente (seller = price - comissão total)
   useEffect(() => {
-    if (vehiclePrice && totalCommissionValue) {
+    if (vehiclePrice > 0 && Number.isFinite(totalCommissionValue)) {
       setValue(
         "payment_seller_value",
         sellerNetPreviewValue > 0 ? sellerNetPreviewValue : 0,
@@ -821,7 +821,12 @@ export default function CreateContractPage() {
             currency={prefillData.currency}
             vehiclePrice={vehiclePrice || 0}
             specialistValue={specialistValue}
-            showEarningsPreview={vehiclePrice > 0 && totalCommissionValue > 0}
+            showEarningsPreview={
+              vehiclePrice > 0 &&
+              Number.isFinite(totalCommissionRate) &&
+              totalCommissionRate > 0 &&
+              totalCommissionRate <= 100
+            }
             onCancel={() => navigate(-1)}
             onContinue={async () => {
               // Valida só a comissão: o resto do contrato ainda nem foi exibido.

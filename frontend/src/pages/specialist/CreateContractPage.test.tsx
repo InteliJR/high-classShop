@@ -287,4 +287,48 @@ describe("CreateContractPage preview lifecycle", () => {
       }),
     );
   });
+
+  it("recalcula o líquido do vendedor ao alterar a comissão para zero", async () => {
+    renderPage();
+    await screen.findByText("Gerar Contrato de Venda");
+
+    fireEvent.change(
+      screen.getByLabelText(/Comissão total da venda/i),
+      { target: { value: "0" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Continuar para os dados do contrato/i,
+      }),
+    );
+    const previewButton = await screen.findByRole("button", {
+      name: /Pré-visualizar e Enviar Contrato/i,
+    });
+    await waitFor(() =>
+      expect((previewButton as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(previewButton);
+
+    await waitFor(() => expect(previewContract).toHaveBeenCalledTimes(1));
+    expect(previewContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        total_commission_rate: 0,
+        payment_seller_value: 100_000,
+      }),
+    );
+  });
+
+  it("oculta o ganho estimado enquanto a comissão está acima de 100%", async () => {
+    renderPage();
+    await screen.findByText("Seu ganho estimado");
+
+    fireEvent.change(
+      screen.getByLabelText(/Comissão total da venda/i),
+      { target: { value: "101" } },
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByText("Seu ganho estimado")).toBeNull(),
+    );
+  });
 });
