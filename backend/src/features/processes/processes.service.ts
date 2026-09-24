@@ -790,8 +790,8 @@ export class ProcessesService {
       );
       const isClient = userId === process.client_id;
       const isSpecialist = userId === process.specialist_id;
-      const canSeeClientPhone = !isSpecialist || contactVisible;
-      const canSeeSpecialistPhone = !isClient || contactVisible;
+      const canSeeClientPhone = isSpecialist && contactVisible;
+      const canSeeSpecialistPhone = isClient && contactVisible;
 
       return {
         id: process.id,

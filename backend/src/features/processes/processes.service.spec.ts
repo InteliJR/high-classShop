@@ -963,7 +963,7 @@ describe('ProcessesService — telefone da contraparte após confirmação', () 
         name: 'Cliente',
         email: 'cliente@example.com',
         phone: clientPhone,
-        consultant_id: null,
+        consultant_id: 'consultant-1',
       },
       specialist: {
         id: specialistId,
@@ -1069,6 +1069,21 @@ describe('ProcessesService — telefone da contraparte após confirmação', () 
 
     expect(result.specialist.phone).toBe(specialistPhone);
   });
+
+  it.each([
+    [UserRole.ADMIN, 'admin-1'],
+    [UserRole.CONSULTANT, 'consultant-1'],
+  ])(
+    'detalhe não expõe telefones para %s mesmo após confirmação',
+    async (role, requesterId) => {
+      const result = await detailService(
+        StatusAgendamento.SCHEDULED,
+      ).getById('process-1', requesterId, role);
+
+      expect(result.client.phone).toBeNull();
+      expect(result.specialist.phone).toBeNull();
+    },
+  );
 
   it('mantém null quando a contraparte não cadastrou telefone', async () => {
     const process = processWithAppointment(StatusAgendamento.SCHEDULED) as any;
