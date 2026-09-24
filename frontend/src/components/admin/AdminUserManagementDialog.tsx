@@ -291,16 +291,12 @@ function AdminUserManagementDialogSession({
       setError("Selecione a nova especialidade.");
       return null;
     }
-    if (!commissionRate.trim()) {
-      setError("Informe a taxa de comissão.");
+    const parsed = parseCommissionRateInput(commissionRate);
+    if (!parsed.ok) {
+      setError(parsed.message);
       return null;
     }
-    const rate = Number(commissionRate);
-    if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
-      setError("A taxa de comissão deve estar entre 0 e 100.");
-      return null;
-    }
-    return { speciality, commission_rate: rate };
+    return { speciality, commission_rate: parsed.value };
   }
 
   async function verify() {

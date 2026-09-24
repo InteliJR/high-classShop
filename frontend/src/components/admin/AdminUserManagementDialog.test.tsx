@@ -11,6 +11,11 @@ vi.spyOn(management, "validateRoleChange").mockResolvedValue({
   summary: "Alteração permitida.",
   blockers: [],
 });
+vi.spyOn(management, "validateSpecialistDetailsChange").mockResolvedValue({
+  allowed: true,
+  summary: "Alteração permitida.",
+  blockers: [],
+});
 
 afterEach(cleanup);
 
@@ -115,5 +120,34 @@ describe("AdminUserManagementDialog", () => {
         },
       ),
     );
+  });
+
+  it("rejeita comissão com mais de duas casas ao editar especialista", async () => {
+    render(
+      <AdminUserManagementDialog
+        state={{
+          userId: "user-1",
+          mode: "specialist",
+          speciality: "BOAT",
+          commissionRate: 10,
+        }}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Taxa de comissão (%)"), {
+      target: { value: "12.345" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Verificar alteração" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "A comissão deve ter no máximo duas casas decimais.",
+      ),
+    ).toBeTruthy();
+    expect(management.validateSpecialistDetailsChange).not.toHaveBeenCalled();
   });
 });
