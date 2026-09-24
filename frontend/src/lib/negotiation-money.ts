@@ -6,6 +6,8 @@ type MinimumSource = {
   minimum_value: number | null;
 };
 
+export const MINIMUM_PROPOSAL_PRESENTATION_AVAILABLE: boolean = false;
+
 export function getProposalSubmissionError(value: number): string | null {
   if (!Number.isFinite(value) || value <= 0) {
     return "Por favor, insira um valor válido";
@@ -18,7 +20,11 @@ export function getMinimumPresentation(source: MinimumSource): {
   visible: boolean;
   formattedValue: string | null;
 } {
-  if (!source.minimum_enabled || source.minimum_value === null) {
+  if (
+    !MINIMUM_PROPOSAL_PRESENTATION_AVAILABLE ||
+    !source.minimum_enabled ||
+    source.minimum_value === null
+  ) {
     return { visible: false, formattedValue: null };
   }
 

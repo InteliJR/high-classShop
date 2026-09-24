@@ -1160,3 +1160,194 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
     ).rejects.toThrow(ConflictException);
   });
 });
+
+describe('ProcessesService — telefone da contraparte após confirmação', () => {
+  const clientPhone = '11987654321';
+  const specialistPhone = '11912345678';
+
+  function processWithAppointment(status: StatusAgendamento | null) {
+    return {
+      id: 'process-1',
+      status: ProcessStatus.SCHEDULING,
+      product_type: ProductType.CAR,
+      client_id: clientId,
+      specialist_id: specialistId,
+      client: {
+        id: clientId,
+        name: 'Cliente',
+        email: 'cliente@example.com',
+        phone: clientPhone,
+        consultant_id: 'consultant-1',
+      },
+      specialist: {
+        id: specialistId,
+        name: 'Especialista',
+        email: 'especialista@example.com',
+        phone: specialistPhone,
+        speciality: ProductType.CAR,
+      },
+      appointment: status
+        ? { status, appointment_datetime: new Date('2026-09-14T15:00:00Z') }
+        : null,
+      car: { id: productId, marca: 'Porsche', modelo: '911' },
+      boat: null,
+      aircraft: null,
+      created_at: new Date('2026-09-14T12:00:00Z'),
+      notes: null,
+    };
+  }
+
+  function listService(status: StatusAgendamento | null) {
+    const prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          consultant_id: 'consultant-1',
+        }),
+      },
+      process: {
+        findMany: jest.fn().mockResolvedValue([processWithAppointment(status)]),
+        count: jest.fn().mockResolvedValue(1),
+        findFirst: jest.fn().mockResolvedValue({ id: 'related-process' }),
+      },
+    } as any;
+    return new ProcessesService(prisma, {} as any);
+  }
+
+  function detailService(status: StatusAgendamento) {
+    const prisma = {
+      process: {
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValue(processWithAppointment(status)),
+      },
+    } as any;
+    return new ProcessesService(prisma, {} as any);
+  }
+
+  it.each([
+    [StatusAgendamento.PENDING, null],
+    [StatusAgendamento.SCHEDULED, specialistPhone],
+    [StatusAgendamento.COMPLETED, specialistPhone],
+    [StatusAgendamento.CANCELLED, null],
+    [null, null],
+  ])(
+    'cliente recebe telefone do especialista em %s: %s',
+    async (status, expected) => {
+      const result = await listService(status).getByClientId(
+        clientId,
+        { page: 1, perPage: 20 } as any,
+        clientId,
+        UserRole.CUSTOMER,
+      );
+
+      expect(result.processes[0].specialist.phone).toBe(expected);
+    },
+  );
+
+  it.each([
+    [StatusAgendamento.PENDING, null],
+    [StatusAgendamento.SCHEDULED, clientPhone],
+    [StatusAgendamento.COMPLETED, clientPhone],
+    [StatusAgendamento.CANCELLED, null],
+    [null, null],
+  ])(
+    'especialista recebe telefone do cliente em %s: %s',
+    async (status, expected) => {
+      const service = listService(status);
+      const result = await service.getBySpecialistIdWithFilters(
+        specialistId,
+        { page: 1, perPage: 20 },
+        { id: specialistId, role: UserRole.SPECIALIST },
+      );
+
+      expect(result.processes[0].client.phone).toBe(expected);
+    },
+  );
+
+  it('detalhe oculta o telefone do cliente para especialista em PENDING', async () => {
+    const result = await detailService(StatusAgendamento.PENDING).getById(
+      'process-1',
+      specialistId,
+      UserRole.SPECIALIST,
+    );
+
+    expect(result.client.phone).toBeNull();
+  });
+
+  it('detalhe libera o telefone do especialista para cliente em COMPLETED', async () => {
+    const result = await detailService(StatusAgendamento.COMPLETED).getById(
+      'process-1',
+      clientId,
+      UserRole.CUSTOMER,
+    );
+
+    expect(result.specialist.phone).toBe(specialistPhone);
+  });
+
+  it.each([
+    [UserRole.ADMIN, 'admin-1'],
+    [UserRole.CONSULTANT, 'consultant-1'],
+  ])(
+    'detalhe não expõe telefones para %s mesmo após confirmação',
+    async (role, requesterId) => {
+      const result = await detailService(
+        StatusAgendamento.SCHEDULED,
+      ).getById('process-1', requesterId, role);
+
+      expect(result.client.phone).toBeNull();
+      expect(result.specialist.phone).toBeNull();
+    },
+  );
+
+  it('mantém null quando a contraparte não cadastrou telefone', async () => {
+    const process = processWithAppointment(StatusAgendamento.SCHEDULED) as any;
+    process.specialist.phone = null;
+    const prisma = {
+      process: {
+        findMany: jest.fn().mockResolvedValue([process]),
+        count: jest.fn().mockResolvedValue(1),
+      },
+    } as any;
+    const service = new ProcessesService(prisma, {} as any);
+
+    const result = await service.getByClientId(
+      clientId,
+      { page: 1, perPage: 20 } as any,
+      clientId,
+      UserRole.CUSTOMER,
+    );
+
+    expect(result.processes[0].specialist.phone).toBeNull();
+  });
+
+  it.each([
+    [UserRole.ADMIN, 'admin-1'],
+    [UserRole.CONSULTANT, 'consultant-1'],
+    [UserRole.SPECIALIST, 'other-specialist-1'],
+  ])(
+    'não expõe telefone do especialista na lista do cliente para %s',
+    async (role, requesterId) => {
+      const result = await listService(
+        StatusAgendamento.SCHEDULED,
+      ).getByClientId(
+        clientId,
+        { page: 1, perPage: 20 } as any,
+        requesterId,
+        role,
+      );
+
+      expect(result.processes[0].specialist.phone).toBeNull();
+    },
+  );
+
+  it('não expõe telefone do cliente na lista do especialista para ADMIN', async () => {
+    const service = listService(StatusAgendamento.SCHEDULED);
+    const result = await service.getBySpecialistIdWithFilters(
+      specialistId,
+      { page: 1, perPage: 20 },
+      { id: 'admin-1', role: UserRole.ADMIN },
+    );
+
+    expect(result.processes[0].client.phone).toBeNull();
+  });
+});

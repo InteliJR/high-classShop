@@ -33,6 +33,7 @@ interface ProcessClient {
     id: string;
     email?: string;
     name?: string;
+    phone?: string | null;
   };
   product?: {
     id: string;
@@ -43,6 +44,7 @@ interface ProcessClient {
     id: string;
     name?: string;
     especialidade?: string;
+    phone?: string | null;
   };
 }
 

@@ -15,6 +15,8 @@ export enum SettingKey {
   MINIMUM_PROPOSAL_PERCENTAGE = 'minimum_proposal_percentage',
 }
 
+export const MINIMUM_PROPOSAL_FEATURE_AVAILABLE: boolean = false;
+
 export interface SettingResponse {
   key: string;
   value: string;
@@ -84,6 +86,17 @@ export class SettingsService {
   async update(key: string, value: string): Promise<SettingResponse> {
     this.logger.log(`[update] Atualizando configuração ${key} para ${value}`);
 
+    if (key === SettingKey.MINIMUM_PROPOSAL_ENABLED && value === 'true') {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message: 'A validação de valor mínimo de propostas está indisponível',
+          details: { key, requested_value: value },
+        },
+      });
+    }
+
     if (key === SettingKey.MINIMUM_PROPOSAL_PERCENTAGE) {
       const percentage = Number(value);
       if (!Number.isFinite(percentage) || percentage < 0 || percentage > 1) {
@@ -118,6 +131,10 @@ export class SettingsService {
   async isMinimumProposalEnabled(
     client: PrismaService | Prisma.TransactionClient = this.prisma,
   ): Promise<boolean> {
+    if (!MINIMUM_PROPOSAL_FEATURE_AVAILABLE) {
+      return false;
+    }
+
     try {
       const setting = await this.findByKey(
         SettingKey.MINIMUM_PROPOSAL_ENABLED,
