@@ -18,6 +18,7 @@ import {
   type SpecialityCode,
   type UserRoleCode,
 } from "../../lib/admin-user-management";
+import { parseCommissionRateInput } from "../../lib/commission-rate";
 import {
   getCompanies,
   type Company,
@@ -107,6 +108,8 @@ function AdminUserManagementDialogSession({
   const [replacementCompanyId, setReplacementCompanyId] = useState("");
   const [replacementSpeciality, setReplacementSpeciality] =
     useState<SpecialityCode | "">("");
+  const [replacementCommissionRate, setReplacementCommissionRate] =
+    useState("");
   const [hasOfficeConflict, setHasOfficeConflict] = useState(false);
   const [companies, setCompanies] = useState<Company[] | null>(null);
   const [loadingCompanies, setLoadingCompanies] = useState(false);
@@ -173,6 +176,7 @@ function AdminUserManagementDialogSession({
     setReplacementRole("");
     setReplacementCompanyId("");
     setReplacementSpeciality("");
+    setReplacementCommissionRate("");
     setHasOfficeConflict(false);
     setCompanies(null);
     setLoadingCompanies(false);
@@ -208,6 +212,7 @@ function AdminUserManagementDialogSession({
     setReplacementRole("");
     setReplacementCompanyId("");
     setReplacementSpeciality("");
+    setReplacementCommissionRate("");
     setHasOfficeConflict(false);
     invalidateValidation();
   }
@@ -247,6 +252,14 @@ function AdminUserManagementDialogSession({
     if (requirements.includes("speciality") && speciality) {
       payload.speciality = speciality;
     }
+    if (requirements.includes("commission")) {
+      const parsed = parseCommissionRateInput(commissionRate);
+      if (!parsed.ok) {
+        setError(parsed.message);
+        return null;
+      }
+      payload.commission_rate = parsed.value;
+    }
     if (requirements.includes("replacement") && replacementRole) {
       payload.replacement = { role: replacementRole };
       if (
@@ -260,6 +273,14 @@ function AdminUserManagementDialogSession({
         replacementSpeciality
       ) {
         payload.replacement.speciality = replacementSpeciality;
+      }
+      if (replacementRequirements.includes("commission")) {
+        const parsed = parseCommissionRateInput(replacementCommissionRate);
+        if (!parsed.ok) {
+          setError(parsed.message);
+          return null;
+        }
+        payload.replacement.commission_rate = parsed.value;
       }
     }
     return payload;
@@ -450,6 +471,7 @@ function AdminUserManagementDialogSession({
                     setReplacementRole("");
                     setReplacementCompanyId("");
                     setReplacementSpeciality("");
+                    setReplacementCommissionRate("");
                     invalidateValidation();
                   }}
                 />
@@ -465,6 +487,30 @@ function AdminUserManagementDialogSession({
                     invalidateValidation();
                   }}
                 />
+              ) : null}
+
+              {requirements.includes("commission") ? (
+                <div>
+                  <label
+                    htmlFor="admin-user-role-commission-rate"
+                    className="mb-1 block text-sm font-medium text-ink-soft"
+                  >
+                    Taxa de comissão (%)
+                  </label>
+                  <input
+                    id="admin-user-role-commission-rate"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={commissionRate}
+                    onChange={(event) => {
+                      setCommissionRate(event.target.value);
+                      invalidateValidation();
+                    }}
+                    className={selectClassName}
+                  />
+                </div>
               ) : null}
 
               {requirements.includes("replacement") ? (
@@ -488,6 +534,7 @@ function AdminUserManagementDialogSession({
                         );
                         setReplacementCompanyId("");
                         setReplacementSpeciality("");
+                        setReplacementCommissionRate("");
                         invalidateValidation();
                       }}
                       className={selectClassName}
@@ -526,6 +573,31 @@ function AdminUserManagementDialogSession({
                       }}
                     />
                   ) : null}
+
+                  {replacementRequirements.includes("commission") ? (
+                    <div>
+                      <label
+                        htmlFor="admin-user-replacement-commission-rate"
+                        className="mb-1 block text-sm font-medium text-ink-soft"
+                      >
+                        Taxa de comissão do gerente atual (%)
+                      </label>
+                      <input
+                        id="admin-user-replacement-commission-rate"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={replacementCommissionRate}
+                        onChange={(event) => {
+                          setReplacementCommissionRate(event.target.value);
+                          invalidateValidation();
+                        }}
+                        className={selectClassName}
+                      />
+                    </div>
+                  ) : null}
+
                 </fieldset>
               ) : null}
             </>

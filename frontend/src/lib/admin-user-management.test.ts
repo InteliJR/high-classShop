@@ -57,7 +57,10 @@ describe("admin-user-management", () => {
 
   it("pede contexto do destino", () => {
     expect(getDialogRequirements("CONSULTANT")).toEqual(["company"]);
-    expect(getDialogRequirements("SPECIALIST")).toEqual(["speciality"]);
+    expect(getDialogRequirements("SPECIALIST")).toEqual([
+      "speciality",
+      "commission",
+    ]);
     expect(getDialogRequirements("ADMIN")).toEqual([]);
   });
 
@@ -73,6 +76,12 @@ describe("admin-user-management", () => {
       "replacement",
     ]);
     expect(getDialogRequirements("OFFICE", false)).toEqual(["company"]);
+  });
+
+  it("explica quando a comissão do especialista é obrigatória", () => {
+    expect(blockerMessage({ code: "COMMISSION_REQUIRED" })).toBe(
+      "Informe a comissão para o cargo de Especialista.",
+    );
   });
 
   it("usa Não informado para enum ausente ou desconhecido", () => {
