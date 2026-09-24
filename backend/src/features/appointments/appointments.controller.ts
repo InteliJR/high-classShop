@@ -24,6 +24,7 @@ import {
 import { AuthGuard } from 'src/auth/auth.guard';
 import { AppointmentResponseEntity } from './entities/appointment.response';
 import { UserEntity } from 'src/auth/entities/user.entity';
+import { ConfirmProcessAppointmentDto } from 'src/features/processes/dto/confirm-process-appointment.dto';
 
 /**
  * AppointmentsController
@@ -449,6 +450,7 @@ export class AppointmentsController {
     const appointment = await this.appointmentsService.createPending(
       dto,
       userId,
+      req.user.role,
     );
 
     return {
@@ -491,19 +493,16 @@ export class AppointmentsController {
    */
   @Post('pending/:id/confirm')
   async confirmPending(
-    @Param('id') id: string,
-    @Body() body: { appointment_datetime?: string },
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: ConfirmProcessAppointmentDto,
     @Request() req: any,
   ) {
     const userId = req.user.id;
-    const appointmentDatetime = body.appointment_datetime
-      ? new Date(body.appointment_datetime)
-      : undefined;
 
     const appointment = await this.appointmentsService.confirmPending(
       id,
       userId,
-      appointmentDatetime,
+      body.appointment_datetime,
     );
 
     return {

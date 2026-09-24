@@ -102,6 +102,42 @@ describe('NotificationService proposal emails', () => {
     expect(serialized).not.toContain('iniciar a negociação');
   });
 
+  it('escapes user-controlled fields in confirmed appointment HTML', async () => {
+    await service.sendAppointmentConfirmedEmail({
+      clientEmail: 'client@example.com',
+      clientName: '<img src=x onerror=alert(1)>',
+      specialistName: '<b>Specialist</b>',
+      appointmentDate: new Date('2099-09-20T15:00:00.000Z'),
+      productDetails: '<script>alert(1)</script>',
+      processId: 'process-1',
+    });
+
+    const htmlBody = sendEmailSafely.mock.calls[0][3];
+    expect(htmlBody).toContain('&lt;img');
+    expect(htmlBody).toContain('&lt;b&gt;Specialist&lt;/b&gt;');
+    expect(htmlBody).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(htmlBody).not.toContain('<img src=x');
+    expect(htmlBody).not.toContain('<script>alert(1)</script>');
+  });
+
+  it('escapes user-controlled fields in created appointment HTML', async () => {
+    await service.sendAppointmentCreatedEmail({
+      specialistEmail: 'specialist@example.com',
+      specialistName: '<img src=x onerror=alert(1)>',
+      clientName: '<b>Client</b>',
+      appointmentDate: new Date('2099-09-20T15:00:00.000Z'),
+      productDetails: '<script>alert(1)</script>',
+      processId: 'process-1',
+    });
+
+    const htmlBody = sendEmailSafely.mock.calls[0][3];
+    expect(htmlBody).toContain('&lt;img');
+    expect(htmlBody).toContain('&lt;b&gt;Client&lt;/b&gt;');
+    expect(htmlBody).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(htmlBody).not.toContain('<img src=x');
+    expect(htmlBody).not.toContain('<script>alert(1)</script>');
+  });
+
   it('includes previous and definitive datetimes in reschedule email', async () => {
     await (service as any).sendAppointmentRescheduledEmail({
       clientEmail: 'client@example.com',

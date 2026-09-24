@@ -226,4 +226,44 @@ describe("ProductPage scheduling", () => {
 
     expect(await screen.findByText("Meus processos")).toBeTruthy();
   });
+
+  it("redirects when an active process exists without an appointment", async () => {
+    vi.mocked(createPlatformAppointment).mockRejectedValue({
+      response: {
+        status: 409,
+        data: { error: { code: "ACTIVE_PROCESS_EXISTS" } },
+      },
+    });
+    renderPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Escolher data e hora" }),
+    );
+    fireEvent.change(screen.getByLabelText("Data e hora"), {
+      target: { value: "2099-09-20T14:30" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirmar agendamento" }),
+    );
+
+    expect(await screen.findByText("Meus processos")).toBeTruthy();
+  });
+
+  it("does not open email when an active process already exists", async () => {
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    vi.mocked(createPendingAppointment).mockRejectedValue({
+      response: {
+        status: 409,
+        data: { error: { code: "ACTIVE_PROCESS_EXISTS" } },
+      },
+    });
+    renderPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Enviar e-mail" }),
+    );
+
+    expect(await screen.findByText("Meus processos")).toBeTruthy();
+    expect(openSpy).not.toHaveBeenCalled();
+  });
 });

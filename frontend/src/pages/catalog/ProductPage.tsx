@@ -40,6 +40,10 @@ interface Specialist {
   speciality: string | null;
 }
 
+const isActiveProcessConflict = (error: any): boolean =>
+  error?.response?.status === 409 &&
+  error?.response?.data?.error?.code === "ACTIVE_PROCESS_EXISTS";
+
 /**
  * ProductPage
  *
@@ -362,6 +366,16 @@ export default function ProductPage() {
     } catch (err: any) {
       // Se já existe agendamento, apenas abrir o email
       if (err.response?.status === 409) {
+        if (isActiveProcessConflict(err)) {
+          navigate("/customer/processes", {
+            state: {
+              message:
+                "Você já possui um processo ativo para este produto. Acompanhe o processo existente.",
+            },
+          });
+          return;
+        }
+
         try {
           if (user?.id && specialist?.id && product?.id && productType) {
             const existing = await checkExistingAppointment(
@@ -421,6 +435,17 @@ export default function ProductPage() {
       });
     } catch (err: any) {
       if (err.response?.status === 409) {
+        if (isActiveProcessConflict(err)) {
+          setIsDateTimeModalOpen(false);
+          navigate("/customer/processes", {
+            state: {
+              message:
+                "Você já possui um processo ativo para este produto. Acompanhe o processo existente.",
+            },
+          });
+          return;
+        }
+
         const existing = await checkExistingAppointment(
           user.id,
           specialist.id,

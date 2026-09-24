@@ -528,7 +528,8 @@ export default function ProcessCard({
                     )}
                   </button>
                   {hasValidScheduledMeetingDate ||
-                  process.appointment_scheduling_method === "EMAIL" ? (
+                  process.appointment_scheduling_method === "EMAIL" ||
+                  process.appointment_scheduling_method == null ? (
                     <button
                       onClick={() => {
                         if (hasValidScheduledMeetingDate && scheduledMeetingDate) {

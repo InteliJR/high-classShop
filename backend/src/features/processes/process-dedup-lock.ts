@@ -59,11 +59,15 @@ export async function assertNoActiveProcess(
 
   const existing = await tx.process.findFirst({ where });
   if (existing) {
-    throw new ConflictException(
-      isConsultancy
-        ? 'Já existe consultoria ativa entre este cliente e este especialista.'
-        : 'Já existe processo ativo para este cliente com este produto.',
-    );
+    throw new ConflictException({
+      success: false,
+      error: {
+        code: 'ACTIVE_PROCESS_EXISTS',
+        message: isConsultancy
+          ? 'Já existe consultoria ativa entre este cliente e este especialista.'
+          : 'Já existe processo ativo para este cliente com este produto.',
+      },
+    });
   }
 }
 

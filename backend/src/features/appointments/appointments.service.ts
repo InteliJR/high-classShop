@@ -732,6 +732,56 @@ export class AppointmentsService {
     userId: string,
     userRole: UserRole,
   ): Promise<AppointmentResponseEntity> {
+    const assertTransitionAllowed = (current: any): void => {
+      const isParticipant =
+        current.client_id === userId || current.specialist_id === userId;
+      if (!isParticipant && userRole !== UserRole.ADMIN) {
+        throw new ForbiddenException({
+          success: false,
+          error: {
+            code: 403,
+            message: 'Não tem permissão para atualizar este agendamento',
+            details: { appointment_id: id },
+          },
+        });
+      }
+
+      if (
+        dto.status === StatusAgendamento.PENDING ||
+        dto.status === StatusAgendamento.SCHEDULED
+      ) {
+        throw new BadRequestException(
+          'Use o fluxo específico de confirmação para agendar uma reunião',
+        );
+      }
+
+      if (dto.status === StatusAgendamento.COMPLETED) {
+        if (current.specialist_id !== userId && userRole !== UserRole.ADMIN) {
+          throw new ForbiddenException(
+            'Apenas o especialista responsável pode concluir a reunião',
+          );
+        }
+        if (
+          current.status !== StatusAgendamento.SCHEDULED ||
+          !current.appointment_datetime
+        ) {
+          throw new BadRequestException(
+            'Apenas uma reunião agendada pode ser concluída',
+          );
+        }
+      }
+
+      if (
+        dto.status === StatusAgendamento.CANCELLED &&
+        current.status !== StatusAgendamento.PENDING &&
+        current.status !== StatusAgendamento.SCHEDULED
+      ) {
+        throw new BadRequestException(
+          'Apenas agendamentos pendentes ou agendados podem ser cancelados',
+        );
+      }
+    };
+
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
       include: {
@@ -752,63 +802,56 @@ export class AppointmentsService {
       });
     }
 
-    // Verificar permissão: apenas participantes ou admin
-    const isParticipant =
-      appointment.client_id === userId || appointment.specialist_id === userId;
-    if (!isParticipant && userRole !== UserRole.ADMIN) {
-      throw new ForbiddenException({
-        success: false,
-        error: {
-          code: 403,
-          message: 'Não tem permissão para atualizar este agendamento',
-          details: { appointment_id: id },
-        },
-      });
-    }
-
-    if (
-      dto.status === StatusAgendamento.PENDING ||
-      dto.status === StatusAgendamento.SCHEDULED
-    ) {
-      throw new BadRequestException(
-        'Use o fluxo específico de confirmação para agendar uma reunião',
-      );
-    }
-
-    if (dto.status === StatusAgendamento.COMPLETED) {
-      if (appointment.specialist_id !== userId && userRole !== UserRole.ADMIN) {
-        throw new ForbiddenException(
-          'Apenas o especialista responsável pode concluir a reunião',
-        );
-      }
-      if (
-        appointment.status !== StatusAgendamento.SCHEDULED ||
-        !appointment.appointment_datetime
-      ) {
-        throw new BadRequestException(
-          'Apenas uma reunião agendada pode ser concluída',
-        );
-      }
-    }
-
-    if (
-      dto.status === StatusAgendamento.CANCELLED &&
-      appointment.status !== StatusAgendamento.PENDING &&
-      appointment.status !== StatusAgendamento.SCHEDULED
-    ) {
-      throw new BadRequestException(
-        'Apenas agendamentos pendentes ou agendados podem ser cancelados',
-      );
-    }
+    assertTransitionAllowed(appointment);
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const updatedAppointment = await tx.appointment.update({
+      await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
+      const lockedAppointment = await tx.appointment.findUnique({
         where: { id },
+        include: {
+          client: true,
+          specialist: true,
+          process: true,
+        },
+      });
+      if (!lockedAppointment) {
+        throw new NotFoundException({
+          success: false,
+          error: {
+            code: 404,
+            message: 'Agendamento não encontrado',
+            details: { appointment_id: id },
+          },
+        });
+      }
+      assertTransitionAllowed(lockedAppointment);
+
+      const claim = await tx.appointment.updateMany({
+        where: {
+          id,
+          status: lockedAppointment.status,
+          updated_at: lockedAppointment.updated_at,
+        },
         data: {
           status: dto.status,
-          notes: dto.notes || appointment.notes,
+          notes: dto.notes || lockedAppointment.notes,
           updated_at: new Date(),
         },
+      });
+      if (claim.count !== 1) {
+        throw new ConflictException({
+          success: false,
+          error: {
+            code: 'APPOINTMENT_STATUS_TRANSITION_CONFLICT',
+            message:
+              'O agendamento foi alterado enquanto o status era atualizado',
+            details: { appointment_id: id },
+          },
+        });
+      }
+
+      const updatedAppointment = await tx.appointment.findUniqueOrThrow({
+        where: { id },
         include: {
           client: true,
           specialist: true,
@@ -817,8 +860,11 @@ export class AppointmentsService {
       });
 
       // LÓGICA CRÍTICA: Se status muda para COMPLETED, atualizar Process vinculado
-      if (dto.status === StatusAgendamento.COMPLETED && appointment.process) {
-        const process = appointment.process;
+      if (
+        dto.status === StatusAgendamento.COMPLETED &&
+        lockedAppointment.process
+      ) {
+        const process = lockedAppointment.process;
 
         // Só move para NEGOTIATION se Process está em SCHEDULING
         // Evita conflito se já está em NEGOTIATION+ (não retrocede)
@@ -1168,6 +1214,7 @@ export class AppointmentsService {
   async createPending(
     dto: CreatePendingAppointmentDto,
     userId: string,
+    userRole: UserRole,
   ): Promise<AppointmentResponseEntity> {
     this.logger.log(
       `[createPending] Criando agendamento PENDING para cliente ${dto.client_id}`,
@@ -1189,7 +1236,7 @@ export class AppointmentsService {
     this.logger.log(
       `[createPending] Validando permissão: userId=${userId} vs client_id=${dto.client_id}`,
     );
-    if (dto.client_id !== userId) {
+    if (userRole !== UserRole.CUSTOMER || dto.client_id !== userId) {
       this.logger.error(
         `[createPending] ERRO: Cliente tentando criar agendamento para outro usuário`,
       );
@@ -1540,7 +1587,7 @@ export class AppointmentsService {
   async confirmPending(
     appointmentId: string,
     userId: string,
-    appointmentDatetime?: Date,
+    appointmentDatetime?: string | Date,
   ): Promise<AppointmentResponseEntity> {
     this.logger.log(
       `[confirmPending] Confirmando agendamento ${appointmentId} por ${userId}`,
@@ -1587,6 +1634,15 @@ export class AppointmentsService {
     ) {
       throw new BadRequestException(
         'Use a confirmação do processo para este tipo de agendamento',
+      );
+    }
+
+    const requestedDate = parseDate(
+      appointmentDatetime ?? appointment.appointment_datetime ?? undefined,
+    );
+    if (!requestedDate || !isFutureDate(requestedDate)) {
+      throw new BadRequestException(
+        'Informe uma data e hora futura para confirmar o agendamento',
       );
     }
 
@@ -1649,10 +1705,16 @@ export class AppointmentsService {
           'Use a confirmação do processo para este tipo de agendamento',
         );
       }
-      const confirmedDateTime =
-        appointmentDatetime ||
-        lockedAppointment.appointment_datetime ||
-        new Date();
+      const confirmedDateTime = parseDate(
+        appointmentDatetime ??
+          lockedAppointment.appointment_datetime ??
+          undefined,
+      );
+      if (!confirmedDateTime || !isFutureDate(confirmedDateTime)) {
+        throw new BadRequestException(
+          'Informe uma data e hora futura para confirmar o agendamento',
+        );
+      }
       await assertSpecialistScheduleAvailable(
         tx,
         lockedAppointment.specialist_id,

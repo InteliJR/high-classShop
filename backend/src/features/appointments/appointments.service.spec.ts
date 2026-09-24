@@ -318,6 +318,26 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
 });
 
 describe('AppointmentsService.createPending — integridade das partes', () => {
+  it('rejeita usuário que não seja CUSTOMER antes de consultar o banco', async () => {
+    const prisma = {
+      user: { findUnique: jest.fn() },
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await expect(
+      service.createPending(
+        {
+          client_id: 'specialist-1',
+          specialist_id: 'other-specialist-1',
+          scheduling_method: AppointmentSchedulingMethod.EMAIL,
+        } as CreatePendingAppointmentDto,
+        'specialist-1',
+        UserRole.SPECIALIST,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
   it('rejeita horário pré-preenchido em uma solicitação por e-mail', async () => {
     const prisma = {
       user: { findUnique: jest.fn() },
@@ -333,6 +353,7 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
           appointment_datetime: '2099-01-01T10:00:00.000Z',
         } as CreatePendingAppointmentDto,
         'client-1',
+        UserRole.CUSTOMER,
       ),
     ).rejects.toThrow(BadRequestException);
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
@@ -366,6 +387,7 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
           specialist_id: customer.id,
         } as CreateAppointmentDto,
         customer.id,
+        UserRole.CUSTOMER,
       ),
     ).rejects.toThrow(BadRequestException);
   });
@@ -419,6 +441,7 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
             scheduling_method: inputMethod,
           } as CreatePendingAppointmentDto,
           client.id,
+          UserRole.CUSTOMER,
         ),
       ).rejects.toThrow('stop after checks');
 
@@ -439,6 +462,51 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
 });
 
 describe('AppointmentsService.updateStatus — snapshot da negociação', () => {
+  it('rejeita a transição quando perde a reivindicação concorrente do appointment', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      product_type: null,
+      product_id: null,
+      status: StatusAgendamento.SCHEDULED,
+      appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+      notes: null,
+      updated_at: new Date('2099-01-01T00:00:00.000Z'),
+      client: { id: 'client-1' },
+      specialist: { id: 'specialist-1' },
+      process: null,
+    };
+    const appointmentUpdate = jest.fn().mockResolvedValue({
+      ...appointment,
+      status: StatusAgendamento.COMPLETED,
+    });
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(appointment),
+        update: appointmentUpdate,
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      $transaction: jest.fn(async (callback: any) => callback(tx)),
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await expect(
+      service.updateStatus(
+        appointment.id,
+        { status: StatusAgendamento.COMPLETED },
+        appointment.specialist_id,
+        UserRole.SPECIALIST,
+      ),
+    ).rejects.toThrow(ConflictException);
+    expect(tx.appointment.updateMany).toHaveBeenCalledTimes(1);
+    expect(appointmentUpdate).not.toHaveBeenCalled();
+  });
+
   it('impede o cliente de concluir o agendamento e avançar a negociação', async () => {
     const appointment = {
       id: 'appointment-1',
@@ -545,15 +613,11 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
       specialist,
       process,
     };
-    const appointmentUpdate = jest.fn().mockImplementation(({ data }) =>
-      Promise.resolve({
-        ...appointment,
-        ...data,
-        client,
-        specialist,
-        process,
-      }),
-    );
+    const appointmentUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const updatedAppointment = {
+      ...appointment,
+      status: StatusAgendamento.COMPLETED,
+    };
     const processUpdate = jest.fn().mockResolvedValue({});
     const processUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
     const rootAppointmentUpdate = jest.fn();
@@ -561,7 +625,11 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
     const historyCreate = jest.fn().mockResolvedValue({});
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
-      appointment: { update: appointmentUpdate },
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(appointment),
+        updateMany: appointmentUpdateMany,
+        findUniqueOrThrow: jest.fn().mockResolvedValue(updatedAppointment),
+      },
       process: {
         findUniqueOrThrow: jest.fn().mockResolvedValue(process),
         update: processUpdate,
@@ -589,9 +657,21 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
     );
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
-    expect(tx.$queryRaw.mock.calls[0][1]).toBe('product-money:CAR:product-1');
-    expect(appointmentUpdate).toHaveBeenCalled();
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(tx.$queryRaw.mock.calls[0][1]).toBe(
+      'appointment-schedule:specialist-1',
+    );
+    expect(tx.$queryRaw.mock.calls[1][1]).toBe('product-money:CAR:product-1');
+    expect(appointmentUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: appointment.id,
+          status: StatusAgendamento.SCHEDULED,
+          updated_at: appointment.updated_at,
+        }),
+        data: expect.objectContaining({ status: StatusAgendamento.COMPLETED }),
+      }),
+    );
     expect(rootAppointmentUpdate).not.toHaveBeenCalled();
     expect(rootProcessUpdate).not.toHaveBeenCalled();
     expect(processUpdate).not.toHaveBeenCalled();
@@ -679,21 +759,21 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
         specialist,
         process,
       };
-      const appointmentUpdate = jest.fn().mockImplementation(({ data }) =>
-        Promise.resolve({
-          ...appointment,
-          ...data,
-          client,
-          specialist,
-          process,
-        }),
-      );
+      const appointmentUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+      const updatedAppointment = {
+        ...appointment,
+        status: StatusAgendamento.COMPLETED,
+      };
       const processUpdate = jest.fn().mockResolvedValue({});
       const processUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
       const historyCreate = jest.fn().mockResolvedValue({});
       const tx = {
         $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
-        appointment: { update: appointmentUpdate },
+        appointment: {
+          findUnique: jest.fn().mockResolvedValue(appointment),
+          updateMany: appointmentUpdateMany,
+          findUniqueOrThrow: jest.fn().mockResolvedValue(updatedAppointment),
+        },
         process: {
           findUniqueOrThrow: jest
             .fn()
@@ -746,6 +826,32 @@ describe('AppointmentsService.confirmPending — snapshot da negociação', () =
 
   afterEach(() => {
     immediateSpy.mockRestore();
+  });
+
+  it('rejeita data passada antes de iniciar a transação', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.PENDING,
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      appointment_datetime: null,
+      process: null,
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      $transaction: jest.fn(),
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await expect(
+      service.confirmPending(
+        appointment.id,
+        appointment.specialist_id,
+        new Date('2000-01-01T10:00:00.000Z'),
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('direciona solicitações EMAIL para a confirmação do processo', async () => {
@@ -826,7 +932,7 @@ describe('AppointmentsService.confirmPending — snapshot da negociação', () =
         product_id: product.id,
         status: StatusAgendamento.PENDING,
         notes: null,
-        appointment_datetime: new Date('2026-01-01T10:00:00.000Z'),
+        appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
         created_at: new Date('2026-01-01T00:00:00.000Z'),
         updated_at: new Date('2026-01-01T00:00:00.000Z'),
         client,

@@ -103,6 +103,20 @@ describe("ProcessCard appointment time actions", () => {
     expect(screen.getByText("Aguardando sincronização do Calendly")).toBeTruthy();
   });
 
+  it("lets the specialist recover a legacy undated request", () => {
+    renderCard({
+      ...baseProcess,
+      appointment_scheduling_method: null,
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Definir data e hora" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("Aguardando sincronização do Calendly"),
+    ).toBeNull();
+  });
+
   it("confirms the time selected by the specialist", async () => {
     const onStatusUpdated = vi.fn();
     renderCard(baseProcess, { onStatusUpdated });

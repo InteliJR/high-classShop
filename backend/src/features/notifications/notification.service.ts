@@ -358,6 +358,10 @@ BMF Lux Brokerage - Marketplace de Bens de Luxo
     }
 
     const subject = `Confirmação de Agendamento | BMF Lux Brokerage`;
+    const clientName = escapeHtml(data.clientName);
+    const specialistName = escapeHtml(data.specialistName);
+    const productDetails = escapeHtml(data.productDetails);
+    const processId = encodeURIComponent(data.processId);
 
     const html = `
       <!DOCTYPE html>
@@ -369,9 +373,9 @@ BMF Lux Brokerage - Marketplace de Bens de Luxo
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Agendamento Confirmado</h2>
-          <p style="font-size: 16px; color: #334155;">Olá <strong>${data.clientName}</strong>,</p>
+          <p style="font-size: 16px; color: #334155;">Olá <strong>${clientName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
-            Temos uma ótima notícia! O especialista <strong>${data.specialistName}</strong> 
+            Temos uma ótima notícia! O especialista <strong>${specialistName}</strong> 
             confirmou sua reunião.
           </p>
           <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
@@ -389,13 +393,13 @@ BMF Lux Brokerage - Marketplace de Bens de Luxo
               hour: '2-digit',
               minute: '2-digit',
             })}</p>
-            <p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${data.productDetails}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${productDetails}</p>
           </div>
           <p style="font-size: 16px; color: #334155;">
             Acesse o processo no horário combinado para acompanhar e entrar na reunião.
           </p>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${this.frontendUrl}/processes/${data.processId}"
+            <a href="${this.frontendUrl}/processes/${processId}"
                style="display: inline-block; background-color: #1e293b; color: #fff;
                       padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
@@ -789,6 +793,10 @@ ${
     }
 
     const subject = `Novo Agendamento Criado | BMF Lux Brokerage`;
+    const specialistName = escapeHtml(data.specialistName);
+    const clientName = escapeHtml(data.clientName);
+    const productDetails = escapeHtml(data.productDetails);
+    const processId = encodeURIComponent(data.processId);
 
     const html = `
       <!DOCTYPE html>
@@ -800,9 +808,9 @@ ${
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Novo Agendamento</h2>
-          <p style="font-size: 16px; color: #334155;">Olá <strong>${data.specialistName}</strong>,</p>
+          <p style="font-size: 16px; color: #334155;">Olá <strong>${specialistName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
-            O cliente <strong>${data.clientName}</strong> criou um novo agendamento com você.
+            O cliente <strong>${clientName}</strong> criou um novo agendamento com você.
           </p>
           <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
             <p style="margin: 8px 0; color: #334155;"><strong>Data:</strong> ${new Date(
@@ -819,14 +827,14 @@ ${
               hour: '2-digit',
               minute: '2-digit',
             })}</p>
-            <p style="margin: 8px 0; color: #334155;"><strong>Cliente:</strong> ${data.clientName}</p>
-            <p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${data.productDetails}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Cliente:</strong> ${clientName}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${productDetails}</p>
           </div>
           <p style="font-size: 16px; color: #334155;">
             Acesse o processo para confirmar ou ajustar o horário do agendamento.
           </p>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${this.frontendUrl}/processes/${data.processId}"
+            <a href="${this.frontendUrl}/processes/${processId}"
                style="display: inline-block; background-color: #1e293b; color: #fff;
                       padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
