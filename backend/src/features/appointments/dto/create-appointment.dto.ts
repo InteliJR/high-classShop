@@ -88,7 +88,7 @@ export class CreateAppointmentDto {
    * - Verificar conflitos de horário do especialista
    */
   @IsOptional()
-  appointment_datetime?: Date; // Será validado como DateTime no service
+  appointment_datetime?: string | Date; // Será validado como DateTime no service
 
   /**
    * Anotações opcionais sobre o agendamento

@@ -1,6 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { ConflictException } from '@nestjs/common';
-import { PrismaClient, ProductCurrency, ProductType, UserRole } from '@prisma/client';
+import {
+  AppointmentSchedulingMethod,
+  PrismaClient,
+  ProductCurrency,
+  ProductType,
+  StatusAgendamento,
+  UserRole,
+} from '@prisma/client';
 import { AppointmentsService } from './appointments.service';
 
 type Deferred = { promise: Promise<void>; resolve: () => void };
@@ -205,6 +212,7 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
           appointment_datetime,
         } as any,
         firstClientId,
+        UserRole.CUSTOMER,
       ),
       serviceB.create(
         {
@@ -215,6 +223,7 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
           appointment_datetime,
         } as any,
         secondClientId,
+        UserRole.CUSTOMER,
       ),
     ]);
     await Promise.all([firstAttempted.promise, secondAttempted.promise]);
@@ -229,52 +238,48 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
     await expect(holder.appointment.count({ where: { specialist_id: specialistId } })).resolves.toBe(1);
   }, 15_000);
 
-  it('allows only one concurrent direct appointment when both omit datetime', async () => {
-    const lockKey = `appointment-schedule:${specialistId}`;
-    const holderReady = deferred();
+  it('allows only one definitive reschedule under concurrent requests', async () => {
+    const appointment = await holder.appointment.create({
+      data: {
+        client_id: firstClientId,
+        specialist_id: specialistId,
+        product_type: ProductType.CAR,
+        product_id: firstCarId,
+        status: StatusAgendamento.SCHEDULED,
+        scheduling_method: AppointmentSchedulingMethod.PLATFORM,
+        appointment_datetime: new Date('2099-01-01T09:00:00.000Z'),
+      },
+    });
+    await holder.process.create({
+      data: {
+        client_id: firstClientId,
+        specialist_id: specialistId,
+        product_type: ProductType.CAR,
+        car_id: firstCarId,
+        appointment_id: appointment.id,
+        status: 'SCHEDULING',
+      },
+    });
+
     const releaseHolder = deferred();
+    const holderReady = deferred();
     const firstAttempted = deferred();
     const secondAttempted = deferred();
-    const held = holder.$transaction(async (tx) => {
-      await tx.$queryRaw`
-        SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
-      `;
-      holderReady.resolve();
-      await releaseHolder.promise;
-    });
+    const held = holdScheduleLock(releaseHolder, holderReady);
     await holderReady.promise;
-    const notification = {
-      sendAppointmentCreatedEmail: jest.fn().mockResolvedValue(undefined),
-    } as any;
-    const serviceA = new AppointmentsService(
-      signalScheduleLockAttempt(first, firstAttempted) as any,
-      notification,
-      {} as any,
-    );
-    const serviceB = new AppointmentsService(
-      signalScheduleLockAttempt(second, secondAttempted) as any,
-      notification,
-      {} as any,
-    );
+    const serviceA = service(first, firstAttempted);
+    const serviceB = service(second, secondAttempted);
 
     const outcomesPromise = Promise.allSettled([
-      serviceA.create(
-        {
-          client_id: firstClientId,
-          specialist_id: specialistId,
-          product_type: ProductType.CAR,
-          product_id: firstCarId,
-        } as any,
-        firstClientId,
+      serviceA.reschedule(
+        appointment.id,
+        '2099-01-02T10:00:00.000Z',
+        specialistId,
       ),
-      serviceB.create(
-        {
-          client_id: secondClientId,
-          specialist_id: specialistId,
-          product_type: ProductType.CAR,
-          product_id: secondCarId,
-        } as any,
-        secondClientId,
+      serviceB.reschedule(
+        appointment.id,
+        '2099-01-03T10:00:00.000Z',
+        specialistId,
       ),
     ]);
     const bothAttemptedBeforeCompletion = await Promise.race([
@@ -292,6 +297,13 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
     expect(outcomes.find(({ status }) => status === 'rejected')).toMatchObject({
       reason: expect.any(ConflictException),
     });
+    const stored = await holder.appointment.findUniqueOrThrow({
+      where: { id: appointment.id },
+    });
+    expect(stored.specialist_rescheduled_at).not.toBeNull();
+    expect(stored.specialist_rescheduled_from).toEqual(
+      new Date('2099-01-01T09:00:00.000Z'),
+    );
   }, 15_000);
 
   async function createPendingWithProcess(clientId: string, carId: string) {
@@ -334,6 +346,7 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
       {
         sendAppointmentCreatedEmail: jest.fn().mockResolvedValue(undefined),
         sendAppointmentConfirmedEmail: jest.fn().mockResolvedValue(undefined),
+        sendAppointmentRescheduledEmail: jest.fn().mockResolvedValue(undefined),
       } as any,
       {} as any,
     );
@@ -360,6 +373,7 @@ describeWithPostgres('appointment schedule lock — PostgreSQL concurrency', () 
         appointment_datetime: scheduledAt.toISOString(),
       } as any,
       firstClientId,
+      UserRole.CUSTOMER,
     );
     const confirming = serviceB.confirmPending(pending.id, specialistId, scheduledAt);
     const bothAttemptedBeforeCompletion = await Promise.race([

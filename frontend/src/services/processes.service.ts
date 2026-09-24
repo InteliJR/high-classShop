@@ -1,4 +1,5 @@
 import api from "./api";
+import type { AppointmentSchedulingMethod } from "./appointments.service";
 
 export interface Process {
   id: string;
@@ -16,6 +17,10 @@ export interface Process {
     | "CANCELLED"
     | null;
   appointment_datetime?: string | null;
+  appointment_id?: string | null;
+  appointment_scheduling_method?: AppointmentSchedulingMethod | null;
+  specialist_rescheduled_at?: string | null;
+  specialist_rescheduled_from?: string | null;
   product_type?: "CAR" | "BOAT" | "AIRCRAFT" | null;
   client_id: string;
   specialist_id: string;
@@ -312,15 +317,21 @@ export async function rejectProcess(
 
 /**
  * Confirm appointment for a process in SCHEDULING status
- * Moves process to NEGOTIATION and updates appointment to SCHEDULED
+ * Defines the agreed time and updates the appointment to SCHEDULED.
+ * The process remains in SCHEDULING until the meeting workflow advances it.
  * @param processId - ID of the process
  */
 export async function confirmAppointment(
   processId: string,
-): Promise<{ processId: string; status: string }> {
+  appointmentDatetime: string,
+): Promise<{
+  processId: string;
+  status: string;
+  appointment_status: string;
+}> {
   const response = await api.post<ApiResponse<any>>(
     `/processes/${processId}/confirm-appointment`,
-    {},
+    { appointment_datetime: appointmentDatetime },
     { withCredentials: true },
   );
   return response.data.data;

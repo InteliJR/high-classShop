@@ -1,6 +1,8 @@
 import api from "./api";
 import type { ProductCurrency } from "../types/types";
 
+export type AppointmentSchedulingMethod = "CALENDLY" | "EMAIL" | "PLATFORM";
+
 export interface Appointment {
   id: string;
   client_id: string;
@@ -21,6 +23,9 @@ export interface Appointment {
   calendly_scheduled_at?: string | null;
   calendly_last_sync_at?: string | null;
   calendly_sync_status?: "PENDING" | "SYNCED" | "FAILED";
+  scheduling_method?: AppointmentSchedulingMethod | null;
+  specialist_rescheduled_at?: string | null;
+  specialist_rescheduled_from?: string | null;
   client?: {
     id: string;
     name: string;
@@ -116,6 +121,7 @@ export async function createPendingAppointment(data: {
   specialist_id: string;
   product_type: "CAR" | "BOAT" | "AIRCRAFT";
   product_id: string;
+  scheduling_method: "CALENDLY" | "EMAIL";
   notes?: string;
 }): Promise<Appointment> {
   const response = await api.post<ApiResponse<Appointment>>(
@@ -135,6 +141,7 @@ export async function createPendingAppointment(data: {
 export async function createConsultancyAppointment(data: {
   client_id: string;
   specialist_id: string;
+  scheduling_method: "CALENDLY" | "EMAIL";
   notes?: string;
 }): Promise<Appointment> {
   const response = await api.post<ApiResponse<Appointment>>(
@@ -143,6 +150,34 @@ export async function createConsultancyAppointment(data: {
       ...data,
       // Não envia product_type e product_id para consultoria
     },
+    { withCredentials: true },
+  );
+  return response.data.data;
+}
+
+export async function createPlatformAppointment(data: {
+  client_id: string;
+  specialist_id: string;
+  product_type: "CAR" | "BOAT" | "AIRCRAFT";
+  product_id: string;
+  appointment_datetime: string;
+  notes?: string;
+}): Promise<Appointment> {
+  const response = await api.post<ApiResponse<Appointment>>(
+    "/appointments",
+    data,
+    { withCredentials: true },
+  );
+  return response.data.data;
+}
+
+export async function rescheduleAppointment(
+  appointmentId: string,
+  appointmentDatetime: string,
+): Promise<Appointment> {
+  const response = await api.patch<ApiResponse<Appointment>>(
+    `/appointments/${appointmentId}/reschedule`,
+    { appointment_datetime: appointmentDatetime },
     { withCredentials: true },
   );
   return response.data.data;

@@ -2,8 +2,10 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Put,
   Param,
+  ParseUUIDPipe,
   Body,
   Query,
   UseGuards,
@@ -12,14 +14,17 @@ import {
 } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
 import {
-  CreateAppointmentDto,
+  CreatePendingAppointmentDto,
+  CreatePlatformAppointmentDto,
   CalendlyScheduledDto,
   GetAppointmentsQueryDto,
   UpdateAppointmentStatusDto,
+  RescheduleAppointmentDto,
 } from './dto';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { AppointmentResponseEntity } from './entities/appointment.response';
 import { UserEntity } from 'src/auth/entities/user.entity';
+import { ConfirmProcessAppointmentDto } from 'src/features/processes/dto/confirm-process-appointment.dto';
 
 /**
  * AppointmentsController
@@ -245,7 +250,7 @@ export class AppointmentsController {
    */
   @Post()
   async create(
-    @Body() createAppointmentDto: CreateAppointmentDto,
+    @Body() createAppointmentDto: CreatePlatformAppointmentDto,
     @Request() req: any,
   ) {
     // userId vem do AuthGuard
@@ -254,6 +259,7 @@ export class AppointmentsController {
     const appointment = await this.appointmentsService.create(
       createAppointmentDto,
       userId,
+      req.user.role,
     );
 
     return {
@@ -394,6 +400,25 @@ export class AppointmentsController {
     };
   }
 
+  @Patch(':id/reschedule')
+  async reschedule(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: RescheduleAppointmentDto,
+    @Request() req: any,
+  ) {
+    const appointment = await this.appointmentsService.reschedule(
+      id,
+      dto.appointment_datetime,
+      req.user.id,
+    );
+
+    return {
+      success: true,
+      message: 'Horário alterado definitivamente',
+      data: appointment,
+    };
+  }
+
   /**
    * POST /api/appointments/pending
    *
@@ -416,12 +441,16 @@ export class AppointmentsController {
    * - 403 Forbidden: Apenas o próprio cliente pode criar
    */
   @Post('pending')
-  async createPending(@Body() dto: CreateAppointmentDto, @Request() req: any) {
+  async createPending(
+    @Body() dto: CreatePendingAppointmentDto,
+    @Request() req: any,
+  ) {
     const userId = req.user.id;
 
     const appointment = await this.appointmentsService.createPending(
       dto,
       userId,
+      req.user.role,
     );
 
     return {
@@ -464,19 +493,16 @@ export class AppointmentsController {
    */
   @Post('pending/:id/confirm')
   async confirmPending(
-    @Param('id') id: string,
-    @Body() body: { appointment_datetime?: string },
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: ConfirmProcessAppointmentDto,
     @Request() req: any,
   ) {
     const userId = req.user.id;
-    const appointmentDatetime = body.appointment_datetime
-      ? new Date(body.appointment_datetime)
-      : undefined;
 
     const appointment = await this.appointmentsService.confirmPending(
       id,
       userId,
-      appointmentDatetime,
+      body.appointment_datetime,
     );
 
     return {

@@ -238,6 +238,12 @@ enum StatusAgendamento {
   CANCELLED @map("cancelled")
 }
 
+enum AppointmentSchedulingMethod {
+  CALENDLY
+  EMAIL
+  PLATFORM
+}
+
 // Status de sincronização do agendamento com dados do Calendly
 enum CalendlySyncStatus {
   PENDING @map("pending")
@@ -1156,6 +1162,12 @@ model Appointment {
 
   // Anotações sobre o agendamento (ex: "Test drive do Ferrari F8")
   notes String?
+
+  // Origem do agendamento e auditoria da única alteração definitiva do especialista.
+  // Nullable para não classificar incorretamente registros históricos.
+  scheduling_method           AppointmentSchedulingMethod?
+  specialist_rescheduled_at   DateTime?
+  specialist_rescheduled_from DateTime?
 
   // Campos para fluxo PENDING:
   // - user_clicked_at: momento que cliente clicou no link do Calendly

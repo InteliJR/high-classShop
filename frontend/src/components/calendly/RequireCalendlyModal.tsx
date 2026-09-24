@@ -68,13 +68,13 @@ export default function RequireCalendlyModal() {
       >
         <div className="space-y-4">
           <p className="text-sm text-ink-soft">
-            Para que clientes possam agendar reuniões com você, conecte sua
-            conta do Calendly à plataforma.
+            O Calendly é opcional e facilita o agendamento automático de
+            reuniões com seus clientes.
           </p>
 
           <p className="text-sm text-ink-soft">
-            Sem a conexão ativa, clientes não conseguem marcar agendamentos com
-            você e seu fluxo de negociação fica bloqueado.
+            Você pode continuar sem Calendly, cadastrar produtos e receber
+            solicitações normalmente pela plataforma.
           </p>
 
           {error && <Alert variant="danger">{error}</Alert>}
@@ -84,7 +84,7 @@ export default function RequireCalendlyModal() {
               {loading ? "Abrindo..." : "Conectar agora"}
             </Button>
             <Button variant="light" onClick={handleDismiss} className="flex-1">
-              Lembrar mais tarde
+              Continuar sem Calendly
             </Button>
           </div>
         </div>

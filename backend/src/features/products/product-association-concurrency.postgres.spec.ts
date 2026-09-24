@@ -217,6 +217,7 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
         appointment_datetime: '2099-01-01T10:00:00.000Z',
       } as any,
       clientId,
+      UserRole.CUSTOMER,
     );
     await consumerAttemptedLock.promise;
     releaseMutation.resolve();
@@ -281,6 +282,7 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
         appointment_datetime: '2099-01-01T10:00:00.000Z',
       } as any,
       clientId,
+      UserRole.CUSTOMER,
     );
     await Promise.all([assignAttempted.promise, createAttempted.promise]);
     releaseHolder.resolve();

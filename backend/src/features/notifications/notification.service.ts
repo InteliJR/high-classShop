@@ -8,6 +8,7 @@ import { formatCurrency } from 'src/shared/utils/format.utils';
 import {
   AppointmentConfirmedEmailDto,
   AppointmentCreatedEmailDto,
+  AppointmentRescheduledEmailDto,
   AppointmentCancelledEmailDto,
   MeetingStartedEmailDto,
   MeetingAdvancedEmailDto,
@@ -24,6 +25,15 @@ import {
   PasswordResetEmailDto,
   WelcomeEmailDto,
 } from './dto/notification-email.dto';
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 // ============================================================================
 // NOTIFICATION SERVICE
@@ -348,6 +358,10 @@ BMF Lux Brokerage - Marketplace de Bens de Luxo
     }
 
     const subject = `Confirmação de Agendamento | BMF Lux Brokerage`;
+    const clientName = escapeHtml(data.clientName);
+    const specialistName = escapeHtml(data.specialistName);
+    const productDetails = escapeHtml(data.productDetails);
+    const processId = encodeURIComponent(data.processId);
 
     const html = `
       <!DOCTYPE html>
@@ -359,9 +373,9 @@ BMF Lux Brokerage - Marketplace de Bens de Luxo
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Agendamento Confirmado</h2>
-          <p style="font-size: 16px; color: #334155;">Olá <strong>${data.clientName}</strong>,</p>
+          <p style="font-size: 16px; color: #334155;">Olá <strong>${clientName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
-            Temos uma ótima notícia! O especialista <strong>${data.specialistName}</strong> 
+            Temos uma ótima notícia! O especialista <strong>${specialistName}</strong> 
             confirmou sua reunião.
           </p>
           <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
@@ -379,13 +393,13 @@ BMF Lux Brokerage - Marketplace de Bens de Luxo
               hour: '2-digit',
               minute: '2-digit',
             })}</p>
-            <p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${data.productDetails}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${productDetails}</p>
           </div>
           <p style="font-size: 16px; color: #334155;">
-            Agora você pode iniciar a negociação! Acesse o processo e envie sua primeira proposta.
+            Acesse o processo no horário combinado para acompanhar e entrar na reunião.
           </p>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${this.frontendUrl}/processes/${data.processId}"
+            <a href="${this.frontendUrl}/processes/${processId}"
                style="display: inline-block; background-color: #1e293b; color: #fff;
                       padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
@@ -411,13 +425,73 @@ Data: ${new Date(data.appointmentDate).toLocaleDateString('pt-BR')}
 Horário: ${new Date(data.appointmentDate).toLocaleTimeString('pt-BR')}
 Produto: ${data.productDetails}
 
-Acesse ${this.frontendUrl}/processes/${data.processId} para ver detalhes e iniciar a negociação.
+Acesse ${this.frontendUrl}/processes/${data.processId} para ver os detalhes da reunião.
 
 © 2026 BMF Lux Brokerage
     `.trim();
 
     await this.sendEmailSafely(
       'APPOINTMENT_CONFIRMED',
+      data.clientEmail,
+      subject,
+      html,
+      text,
+    );
+  }
+
+  async sendAppointmentRescheduledEmail(
+    data: AppointmentRescheduledEmailDto,
+  ): Promise<void> {
+    if (!this.notificationsEnabled) {
+      this.logger.debug(
+        'Notifications disabled - skipping sendAppointmentRescheduledEmail',
+      );
+      return;
+    }
+
+    const formatDateTime = (date: Date) =>
+      new Date(date).toLocaleString('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+        timeZone: 'America/Sao_Paulo',
+      });
+    const previous = formatDateTime(data.previousAppointmentDate);
+    const next = formatDateTime(data.appointmentDate);
+    const clientName = escapeHtml(data.clientName);
+    const specialistName = escapeHtml(data.specialistName);
+    const productDetails = escapeHtml(data.productDetails);
+    const processId = encodeURIComponent(data.processId);
+    const subject = 'Horário da reunião alterado | BMF Lux Brokerage';
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>Horário alterado definitivamente</h2>
+        <p>Olá <strong>${clientName}</strong>,</p>
+        <p>O especialista <strong>${specialistName}</strong> alterou o horário da sua reunião.</p>
+        <p><strong>Horário anterior:</strong> ${previous}</p>
+        <p><strong>Novo horário definitivo:</strong> ${next}</p>
+        <p><strong>Produto:</strong> ${productDetails}</p>
+        <p><a href="${this.frontendUrl}/processes/${processId}">Ver processo</a></p>
+      </body>
+      </html>
+    `;
+    const text = `
+BMF Lux Brokerage - Horário alterado definitivamente
+
+Olá ${data.clientName},
+
+O especialista ${data.specialistName} alterou o horário da sua reunião.
+Horário anterior: ${previous}
+Novo horário definitivo: ${next}
+Produto: ${data.productDetails}
+
+Acesse ${this.frontendUrl}/processes/${data.processId} para ver o processo.
+    `.trim();
+
+    await this.sendEmailSafely(
+      'APPOINTMENT_RESCHEDULED',
       data.clientEmail,
       subject,
       html,
@@ -719,6 +793,10 @@ ${
     }
 
     const subject = `Novo Agendamento Criado | BMF Lux Brokerage`;
+    const specialistName = escapeHtml(data.specialistName);
+    const clientName = escapeHtml(data.clientName);
+    const productDetails = escapeHtml(data.productDetails);
+    const processId = encodeURIComponent(data.processId);
 
     const html = `
       <!DOCTYPE html>
@@ -730,9 +808,9 @@ ${
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Novo Agendamento</h2>
-          <p style="font-size: 16px; color: #334155;">Olá <strong>${data.specialistName}</strong>,</p>
+          <p style="font-size: 16px; color: #334155;">Olá <strong>${specialistName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">
-            O cliente <strong>${data.clientName}</strong> criou um novo agendamento com você.
+            O cliente <strong>${clientName}</strong> criou um novo agendamento com você.
           </p>
           <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
             <p style="margin: 8px 0; color: #334155;"><strong>Data:</strong> ${new Date(
@@ -749,14 +827,14 @@ ${
               hour: '2-digit',
               minute: '2-digit',
             })}</p>
-            <p style="margin: 8px 0; color: #334155;"><strong>Cliente:</strong> ${data.clientName}</p>
-            <p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${data.productDetails}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Cliente:</strong> ${clientName}</p>
+            <p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${productDetails}</p>
           </div>
           <p style="font-size: 16px; color: #334155;">
             Acesse o processo para confirmar ou ajustar o horário do agendamento.
           </p>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${this.frontendUrl}/processes/${data.processId}"
+            <a href="${this.frontendUrl}/processes/${processId}"
                style="display: inline-block; background-color: #1e293b; color: #fff;
                       padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">
