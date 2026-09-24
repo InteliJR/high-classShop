@@ -8,11 +8,13 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSpecialistDto } from './dto/create-specialist.dto';
 import { UpdateSpecialistDto } from './dto/update-specialist.dto';
+import { InviteSpecialistDto } from './dto/invite-specialist.dto';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { SesService } from 'src/aws/ses.service';
 import { jwtConstants } from 'src/auth/constants';
 import { NotificationService } from '../notifications/notification.service';
+import { SpecialistInvitePayload } from '../../auth/types/specialist-invite-payload';
 
 @Injectable()
 export class SpecialistsService {
@@ -24,10 +26,8 @@ export class SpecialistsService {
   ) {}
 
   // Gera link de convite para que um especialista se cadastre via self-registration.
-  async inviteSpecialist(
-    email: string,
-    speciality: 'CAR' | 'BOAT' | 'AIRCRAFT',
-  ) {
+  async inviteSpecialist(dto: InviteSpecialistDto) {
+    const { email, speciality, commission_rate } = dto;
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
@@ -35,10 +35,16 @@ export class SpecialistsService {
       throw new BadRequestException('Já existe um usuário com este email');
     }
 
-    const token = this.jwtService.sign(
-      { type: 'SPECIALIST_INVITE', email, speciality },
-      { expiresIn: '7d', secret: jwtConstants.referral },
-    );
+    const payload: SpecialistInvitePayload = {
+      type: 'SPECIALIST_INVITE',
+      email,
+      speciality,
+      commission_rate,
+    };
+    const token = this.jwtService.sign(payload, {
+      expiresIn: '7d',
+      secret: jwtConstants.referral,
+    });
 
     const frontendUrl = (
       process.env.FRONTEND_URL || 'http://localhost:5173'
