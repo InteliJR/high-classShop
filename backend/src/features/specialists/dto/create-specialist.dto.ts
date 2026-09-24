@@ -6,11 +6,13 @@ import {
   Matches,
   IsEnum,
   IsOptional,
+  IsDefined,
   IsNumber,
   Min,
   Max,
 } from 'class-validator';
 import { IsValidCNPJ } from 'src/shared/validators/cnpj.validator';
+import { HasValidCommissionRatePrecision } from 'src/shared/validators/commission-rate.validator';
 
 export enum SpecialityEnum {
   CAR = 'CAR',
@@ -54,11 +56,14 @@ export class CreateSpecialistDto {
   @IsNotEmpty({ message: 'Especialidade é obrigatória' })
   speciality: SpecialityEnum;
 
+  @IsDefined({ message: 'Taxa de comissão é obrigatória' })
   @IsNumber({}, { message: 'Taxa de comissão deve ser um número' })
-  @IsOptional()
+  @HasValidCommissionRatePrecision({
+    message: 'Taxa de comissão deve ter no máximo duas casas decimais',
+  })
   @Min(0, { message: 'Taxa de comissão deve ser >= 0' })
   @Max(100, { message: 'Taxa de comissão deve ser <= 100' })
-  commission_rate?: number;
+  commission_rate: number;
 
   @IsString()
   @IsOptional()

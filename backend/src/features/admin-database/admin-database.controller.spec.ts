@@ -149,6 +149,12 @@ describe('AdminDatabaseController — gestão de usuários', () => {
         'O novo cargo do gerente atual deve ser Cliente, Consultor, Especialista ou Administrador.',
     },
     {
+      metatype: ChangeRoleDto,
+      payload: { role: UserRole.SPECIALIST, commission_rate: 12.345 },
+      expected:
+        'A comissão deve ser um número com no máximo duas casas decimais.',
+    },
+    {
       metatype: ChangeSpecialityDto,
       payload: { speciality: 'MOTORCYCLE' },
       expected: 'A especialidade deve ser Carros, Embarcações ou Aeronaves.',
@@ -178,6 +184,107 @@ describe('AdminDatabaseController — gestão de usuários', () => {
       );
     },
   );
+
+  it('aceita comissão 0 na mudança de cargo', async () => {
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      exceptionFactory: localizedValidationExceptionFactory,
+    });
+
+    await expect(
+      pipe.transform(
+        { role: UserRole.SPECIALIST, commission_rate: 0 },
+        { type: 'body', metatype: ChangeRoleDto },
+      ),
+    ).resolves.toMatchObject({
+      role: UserRole.SPECIALIST,
+      commission_rate: 0,
+    });
+  });
+
+  it.each([
+    {
+      name: 'promoção com null',
+      payload: {
+        role: UserRole.SPECIALIST,
+        speciality: ProductType.CAR,
+        commission_rate: null,
+      },
+    },
+    {
+      name: 'promoção em notação exponencial',
+      payload: {
+        role: UserRole.SPECIALIST,
+        speciality: ProductType.CAR,
+        commission_rate: 1e-7,
+      },
+    },
+    {
+      name: 'substituição com null',
+      payload: {
+        role: UserRole.OFFICE,
+        replacement: {
+          role: UserRole.SPECIALIST,
+          speciality: ProductType.CAR,
+          commission_rate: null,
+        },
+      },
+    },
+    {
+      name: 'substituição em notação exponencial',
+      payload: {
+        role: UserRole.OFFICE,
+        replacement: {
+          role: UserRole.SPECIALIST,
+          speciality: ProductType.CAR,
+          commission_rate: 1e-7,
+        },
+      },
+    },
+  ])('rejeita $name com BadRequest em vez de exceção interna', async ({ payload }) => {
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      exceptionFactory: localizedValidationExceptionFactory,
+    });
+
+    await expect(
+      pipe.transform(payload, { type: 'body', metatype: ChangeRoleDto }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('aceita zero e rejeita mais de duas casas nos detalhes do especialista', async () => {
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      exceptionFactory: localizedValidationExceptionFactory,
+    });
+
+    await expect(
+      pipe.transform(
+        { speciality: ProductType.CAR, commission_rate: 0 },
+        { type: 'body', metatype: ChangeSpecialistDetailsDto },
+      ),
+    ).resolves.toMatchObject({ commission_rate: 0 });
+
+    await expect(
+      pipe.transform(
+        { speciality: ProductType.CAR, commission_rate: 12.345 },
+        { type: 'body', metatype: ChangeSpecialistDetailsDto },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    await expect(
+      pipe.transform(
+        { speciality: ProductType.CAR, commission_rate: 1e-7 },
+        { type: 'body', metatype: ChangeSpecialistDetailsDto },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
 
   it('omite detalhes de validação em produção', async () => {
     const previousNodeEnv = process.env.NODE_ENV;

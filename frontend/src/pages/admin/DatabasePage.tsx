@@ -25,6 +25,7 @@ import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
 import { Dialog, DialogContent } from "../../components/ui/dialog";
 import { EmptyState } from "../../components/patterns/EmptyState";
+import CommissionConfigurationBadge from "../../components/commission/CommissionConfigurationBadge";
 import AdminUserManagementDialog, {
   type AdminUserManagementDialogState,
 } from "../../components/admin/AdminUserManagementDialog";
@@ -35,6 +36,7 @@ import {
   shouldInvalidateRecordsRequest,
   type RecordsOrigin,
 } from "../../lib/admin-user-management";
+import { effectiveCommissionRate } from "../../lib/commission-rate";
 
 const PAGE_SIZE = 20;
 
@@ -284,6 +286,11 @@ export default function DatabasePage() {
                     {row.map((cell, j) => {
                       const wide = columns[j]?.wide;
                       const text = cellText(cell);
+                      const isLegacySpecialistCommission =
+                        active === "users" &&
+                        columns[j]?.label === "Taxa de comissão" &&
+                        rowMeta[i]?.role === "SPECIALIST" &&
+                        rowMeta[i]?.commission_rate == null;
                       return (
                         <td
                           key={j}
@@ -296,7 +303,14 @@ export default function DatabasePage() {
                           }
                           title={text}
                         >
-                          {typeof cell === "string" ? (
+                          {isLegacySpecialistCommission ? (
+                            <div className="flex flex-col items-start gap-1">
+                              <span>
+                                {effectiveCommissionRate(rowMeta[i]?.commission_rate)}%
+                              </span>
+                              <CommissionConfigurationBadge rate={null} />
+                            </div>
+                          ) : typeof cell === "string" ? (
                             cell
                           ) : cell.url ? (
                             <img

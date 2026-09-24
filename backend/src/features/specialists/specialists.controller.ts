@@ -8,11 +8,11 @@ import {
   Body,
   HttpCode,
   HttpStatus,
-  BadRequestException,
 } from '@nestjs/common';
 import { SpecialistsService } from './specialists.service';
 import { CreateSpecialistDto } from './dto/create-specialist.dto';
 import { UpdateSpecialistDto } from './dto/update-specialist.dto';
+import { InviteSpecialistDto } from './dto/invite-specialist.dto';
 import { Roles } from 'src/shared/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 
@@ -52,16 +52,8 @@ export class SpecialistsController {
   @Post('invite')
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.OK)
-  async inviteSpecialist(
-    @Body() body: { email: string; speciality: 'CAR' | 'BOAT' | 'AIRCRAFT' },
-  ) {
-    if (!body.email || !body.speciality) {
-      throw new BadRequestException('Email e especialidade são obrigatórios');
-    }
-    const result = await this.specialistsService.inviteSpecialist(
-      body.email,
-      body.speciality,
-    );
+  async inviteSpecialist(@Body() body: InviteSpecialistDto) {
+    const result = await this.specialistsService.inviteSpecialist(body);
     return {
       success: true,
       message: 'Convite enviado com sucesso',

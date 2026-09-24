@@ -8,6 +8,10 @@ import { getCalendlyAuthorizeUrl } from "../../services/appointments.service";
 import { useAuth } from "../../store/authStateManager";
 import { applyCnpjMask, applyRgMask, applyPhoneMask } from "../../utils/mask";
 import Button from "../../components/ui/button";
+import {
+  effectiveCommissionRate,
+  isCommissionConfigured,
+} from "../../lib/commission-rate";
 
 type SpecialityType = "CAR" | "BOAT" | "AIRCRAFT";
 
@@ -25,6 +29,7 @@ export default function RegisterSpecialistPage() {
 
   const [speciality, setSpeciality] = useState<SpecialityType | null>(null);
   const [email, setEmail] = useState("");
+  const [commissionRate, setCommissionRate] = useState<number | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(true);
 
@@ -51,6 +56,7 @@ export default function RegisterSpecialistPage() {
       .then((data) => {
         setSpeciality(data.speciality);
         setEmail(data.email);
+        setCommissionRate(data.commission_rate);
         setIsValidating(false);
       })
       .catch(() => {
@@ -205,6 +211,26 @@ export default function RegisterSpecialistPage() {
               readOnly
               className="mt-1 block w-full px-3 py-2 border border-border rounded-md bg-border-soft text-muted cursor-not-allowed"
             />
+          </div>
+
+          <div>
+            <label
+              htmlFor="specialist-commission-rate"
+              className="block text-sm font-medium text-ink-soft"
+            >
+              Comissão definida pelo administrador
+            </label>
+            <input
+              id="specialist-commission-rate"
+              readOnly
+              value={`${effectiveCommissionRate(commissionRate)}%`}
+              className="mt-1 block w-full rounded-md border border-border bg-border-soft px-3 py-2 text-muted"
+            />
+            {!isCommissionConfigured(commissionRate) ? (
+              <p className="mt-1 text-xs text-amber-700">
+                Comissão ainda não configurada; o valor efetivo atual é 0%.
+              </p>
+            ) : null}
           </div>
 
           <div className="grid grid-cols-2 gap-4">

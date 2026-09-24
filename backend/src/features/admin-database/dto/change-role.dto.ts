@@ -1,6 +1,16 @@
 import { ProductType, UserRole } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { IsEnum, IsOptional, IsUUID, ValidateNested } from 'class-validator';
+import {
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsUUID,
+  Max,
+  Min,
+  ValidateNested,
+  ValidateIf,
+} from 'class-validator';
+import { HasValidCommissionRatePrecision } from 'src/shared/validators/commission-rate.validator';
 
 export class OfficeManagerReplacementDto {
   @IsEnum(UserRole, {
@@ -18,6 +28,19 @@ export class OfficeManagerReplacementDto {
     message: 'A especialidade deve ser Carros, Embarcações ou Aeronaves.',
   })
   speciality?: ProductType;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsNumber(
+    {},
+    { message: 'A comissão deve ser um número com no máximo duas casas decimais.' },
+  )
+  @HasValidCommissionRatePrecision({
+    message:
+      'A comissão deve ser um número com no máximo duas casas decimais.',
+  })
+  @Min(0, { message: 'A comissão deve estar entre 0% e 100%.' })
+  @Max(100, { message: 'A comissão deve estar entre 0% e 100%.' })
+  commission_rate?: number;
 }
 
 export class ChangeRoleDto {
@@ -36,6 +59,19 @@ export class ChangeRoleDto {
     message: 'A especialidade deve ser Carros, Embarcações ou Aeronaves.',
   })
   speciality?: ProductType;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsNumber(
+    {},
+    { message: 'A comissão deve ser um número com no máximo duas casas decimais.' },
+  )
+  @HasValidCommissionRatePrecision({
+    message:
+      'A comissão deve ser um número com no máximo duas casas decimais.',
+  })
+  @Min(0, { message: 'A comissão deve estar entre 0% e 100%.' })
+  @Max(100, { message: 'A comissão deve estar entre 0% e 100%.' })
+  commission_rate?: number;
 
   @IsOptional()
   @ValidateNested({

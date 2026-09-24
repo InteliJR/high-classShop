@@ -117,6 +117,55 @@ describe('AuthService.registerSpecialist — auto-login', () => {
       }),
     );
   });
+
+  it('persiste a comissão assinada e ignora tentativa de sobrescrita no corpo', async () => {
+    const prisma = mkSpecialistPrisma();
+    const jwt = mkJwt();
+    jwt.verify.mockReturnValue({
+      type: 'SPECIALIST_INVITE',
+      email: 'bruno@example.com',
+      speciality: 'CAR',
+      commission_rate: 25,
+    });
+    const svc = new AuthService(prisma, jwt, {} as any, {} as any);
+    (svc as any).queueWelcomeEmail = jest.fn();
+
+    await svc.registerSpecialist({
+      ...specialistDto,
+      commission_rate: 99,
+    } as any);
+
+    expect(prisma.user.create.mock.calls[0][0].data.commission_rate).toBe(25);
+  });
+
+  it('mantém comissão nula para convite legado', async () => {
+    const prisma = mkSpecialistPrisma();
+    const jwt = mkJwt();
+    const svc = new AuthService(prisma, jwt, {} as any, {} as any);
+    (svc as any).queueWelcomeEmail = jest.fn();
+
+    await svc.registerSpecialist(specialistDto);
+
+    expect(prisma.user.create.mock.calls[0][0].data.commission_rate).toBeNull();
+  });
+
+  it('rejeita comissão assinada com mais de duas casas decimais', async () => {
+    const prisma = mkSpecialistPrisma();
+    const jwt = mkJwt();
+    jwt.verify.mockReturnValue({
+      type: 'SPECIALIST_INVITE',
+      email: 'bruno@example.com',
+      speciality: 'CAR',
+      commission_rate: 12.345,
+    });
+    const svc = new AuthService(prisma, jwt, {} as any, {} as any);
+    (svc as any).queueWelcomeEmail = jest.fn();
+
+    await expect(svc.registerSpecialist(specialistDto)).rejects.toThrow(
+      'Token de convite inválido ou expirado',
+    );
+    expect(prisma.user.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('AuthService.refresh — conta desativada ou excluída', () => {

@@ -51,6 +51,8 @@ const blockerMessages: Record<ChangeBlockerCode, (count?: number) => string> = {
   COMPANY_NOT_FOUND: () => 'O escritório informado não foi encontrado.',
   SPECIALITY_REQUIRED: () =>
     'Informe a especialidade para o cargo de Especialista.',
+  COMMISSION_REQUIRED: () =>
+    'Informe a comissão para o cargo de Especialista.',
   CUSTOMER_HAS_CONSULTANT: () =>
     'O cliente ainda possui um consultor vinculado.',
   CUSTOMER_HAS_ADVISOR: () => 'O cliente ainda possui um assessor vinculado.',

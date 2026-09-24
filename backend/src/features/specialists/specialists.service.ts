@@ -8,11 +8,14 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSpecialistDto } from './dto/create-specialist.dto';
 import { UpdateSpecialistDto } from './dto/update-specialist.dto';
+import { InviteSpecialistDto } from './dto/invite-specialist.dto';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { SesService } from 'src/aws/ses.service';
 import { jwtConstants } from 'src/auth/constants';
 import { NotificationService } from '../notifications/notification.service';
+import { SpecialistInvitePayload } from '../../auth/types/specialist-invite-payload';
+import { isValidCommissionRate } from '../../shared/validators/commission-rate.validator';
 
 @Injectable()
 export class SpecialistsService {
@@ -23,11 +26,19 @@ export class SpecialistsService {
     private notificationService: NotificationService,
   ) {}
 
+  private toResponse<T extends { commission_rate: unknown }>(specialist: T) {
+    return {
+      ...specialist,
+      commission_rate:
+        specialist.commission_rate == null
+          ? null
+          : Number(specialist.commission_rate),
+    };
+  }
+
   // Gera link de convite para que um especialista se cadastre via self-registration.
-  async inviteSpecialist(
-    email: string,
-    speciality: 'CAR' | 'BOAT' | 'AIRCRAFT',
-  ) {
+  async inviteSpecialist(dto: InviteSpecialistDto) {
+    const { email, speciality, commission_rate } = dto;
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
@@ -35,10 +46,16 @@ export class SpecialistsService {
       throw new BadRequestException('Já existe um usuário com este email');
     }
 
-    const token = this.jwtService.sign(
-      { type: 'SPECIALIST_INVITE', email, speciality },
-      { expiresIn: '7d', secret: jwtConstants.referral },
-    );
+    const payload: SpecialistInvitePayload = {
+      type: 'SPECIALIST_INVITE',
+      email,
+      speciality,
+      commission_rate,
+    };
+    const token = this.jwtService.sign(payload, {
+      expiresIn: '7d',
+      secret: jwtConstants.referral,
+    });
 
     const frontendUrl = (
       process.env.FRONTEND_URL || 'http://localhost:5173'
@@ -60,14 +77,15 @@ export class SpecialistsService {
       where: { role: 'SPECIALIST' },
       include: { company: true },
     });
-    return specialists.map((s) => ({
-      ...s,
-      commission_rate: s.commission_rate ? Number(s.commission_rate) : null,
-    }));
+    return specialists.map((specialist) => this.toResponse(specialist));
   }
 
   // Cria um novo especialista na base de dados.
   async create(data: CreateSpecialistDto) {
+    if (!isValidCommissionRate(data.commission_rate)) {
+      throw new BadRequestException('Taxa de comissão inválida');
+    }
+
     try {
       // Verifica se já existe usuário com o mesmo email
       const existingUserByEmail = await this.prisma.user.findUnique({
@@ -104,7 +122,7 @@ export class SpecialistsService {
           password_hash: hashedPassword,
           speciality: data.speciality,
           role: 'SPECIALIST',
-          commission_rate: data.commission_rate ?? null,
+          commission_rate: data.commission_rate,
           bank: data.bank || null,
           agency: data.agency || null,
           checking_account: data.checking_account || null,
@@ -123,7 +141,7 @@ export class SpecialistsService {
           .catch(() => {});
       });
 
-      return user;
+      return this.toResponse(user);
     } catch (error) {
       if (error instanceof ConflictException) {
         throw error;
@@ -164,12 +182,7 @@ export class SpecialistsService {
     if (!specialist || specialist.role !== 'SPECIALIST') {
       throw new NotFoundException('Especialista não encontrado');
     }
-    return {
-      ...specialist,
-      commission_rate: specialist.commission_rate
-        ? Number(specialist.commission_rate)
-        : null,
-    };
+    return this.toResponse(specialist);
   }
 
   // Atualiza os dados de um especialista existente.
@@ -219,10 +232,11 @@ export class SpecialistsService {
         updateData.password_hash = await bcrypt.hash(data.password_hash, 10);
       }
 
-      return await this.prisma.user.update({
+      const specialist = await this.prisma.user.update({
         where: { id },
         data: updateData,
       });
+      return this.toResponse(specialist);
     } catch (error) {
       if (
         error instanceof NotFoundException ||
@@ -273,7 +287,6 @@ export class SpecialistsService {
         rg: true,
         speciality: true,
         company_id: true,
-        commission_rate: true,
         calendly_url: true,
       },
     });
