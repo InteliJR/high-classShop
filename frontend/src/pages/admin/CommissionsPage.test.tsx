@@ -51,4 +51,31 @@ describe("CommissionsPage", () => {
       expect(screen.queryByText("Comissão não configurada")).toBeNull(),
     );
   });
+
+  it("mostra a mensagem de precisão sem salvar uma comissão inválida", async () => {
+    vi.mocked(updateSpecialist).mockClear();
+    vi.mocked(getSpecialists).mockResolvedValue([
+      {
+        id: "specialist-2",
+        name: "Bruno",
+        surname: "Costa",
+        email: "bruno@example.com",
+        cpf: "",
+        rg: "",
+        password_hash: "",
+        speciality: "CAR",
+        commission_rate: 12,
+      },
+    ]);
+
+    render(<CommissionsPage />);
+    const input = await screen.findByRole("spinbutton");
+    fireEvent.change(input, { target: { value: "12.345" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+
+    expect(
+      await screen.findByText("A comissão deve ter no máximo duas casas decimais."),
+    ).toBeTruthy();
+    expect(updateSpecialist).not.toHaveBeenCalled();
+  });
 });

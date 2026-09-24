@@ -491,22 +491,26 @@ function RateRow({
   const [value, setValue] = useState(String(initialRate));
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const dirty = !configured || value !== String(initialRate);
 
   const handleSave = async () => {
     const parsed = parseCommissionRateInput(value);
     if (!parsed.ok) {
+      setErrorMessage(parsed.message);
       setStatus("error");
       return;
     }
     setSaving(true);
+    setErrorMessage(null);
     setStatus("idle");
     try {
       await onSave(parsed.value);
       setStatus("saved");
       setTimeout(() => setStatus("idle"), 2000);
     } catch {
+      setErrorMessage("Erro ao salvar");
       setStatus("error");
     } finally {
       setSaving(false);
@@ -543,7 +547,7 @@ function RateRow({
         <Check className="w-4 h-4 text-status-ok" aria-label="Salvo" />
       )}
       {status === "error" && (
-        <span className="text-xs text-status-bad">Erro ao salvar</span>
+        <span className="text-xs text-status-bad">{errorMessage}</span>
       )}
     </div>
   );
