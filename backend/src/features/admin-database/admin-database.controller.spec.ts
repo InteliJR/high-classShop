@@ -204,6 +204,29 @@ describe('AdminDatabaseController — gestão de usuários', () => {
     });
   });
 
+  it('aceita zero e rejeita mais de duas casas nos detalhes do especialista', async () => {
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      exceptionFactory: localizedValidationExceptionFactory,
+    });
+
+    await expect(
+      pipe.transform(
+        { speciality: ProductType.CAR, commission_rate: 0 },
+        { type: 'body', metatype: ChangeSpecialistDetailsDto },
+      ),
+    ).resolves.toMatchObject({ commission_rate: 0 });
+
+    await expect(
+      pipe.transform(
+        { speciality: ProductType.CAR, commission_rate: 12.345 },
+        { type: 'body', metatype: ChangeSpecialistDetailsDto },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('omite detalhes de validação em produção', async () => {
     const previousNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';

@@ -32,6 +32,12 @@ import { openPrintablePdf } from "../../utils/export";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
 import { Card } from "../../components/ui/card";
+import CommissionConfigurationBadge from "../../components/commission/CommissionConfigurationBadge";
+import {
+  effectiveCommissionRate,
+  isCommissionConfigured,
+  parseCommissionRateInput,
+} from "../../lib/commission-rate";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -245,7 +251,8 @@ export default function CommissionsPage() {
                     <RateRow
                       key={specialist.id}
                       label={`${specialist.name} ${specialist.surname}`}
-                      initialRate={specialist.commission_rate ?? 0}
+                      initialRate={effectiveCommissionRate(specialist.commission_rate)}
+                      configured={isCommissionConfigured(specialist.commission_rate)}
                       onSave={(rate) => saveSpecialistRate(specialist.id, rate)}
                     />
                   ))
@@ -473,28 +480,30 @@ function SplitBar({
 function RateRow({
   label,
   initialRate,
+  configured = true,
   onSave,
 }: {
   label: string;
   initialRate: number;
+  configured?: boolean;
   onSave: (rate: number) => Promise<void>;
 }) {
   const [value, setValue] = useState(String(initialRate));
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
 
-  const dirty = value !== String(initialRate);
+  const dirty = !configured || value !== String(initialRate);
 
   const handleSave = async () => {
-    const rate = parseFloat(value);
-    if (isNaN(rate) || rate < 0 || rate > 100) {
+    const parsed = parseCommissionRateInput(value);
+    if (!parsed.ok) {
       setStatus("error");
       return;
     }
     setSaving(true);
     setStatus("idle");
     try {
-      await onSave(rate);
+      await onSave(parsed.value);
       setStatus("saved");
       setTimeout(() => setStatus("idle"), 2000);
     } catch {
@@ -508,6 +517,7 @@ function RateRow({
     <div className="flex flex-wrap items-center gap-3 bg-border-soft border border-border rounded-lg px-4 py-3">
       <span className="flex-1 min-w-[160px] font-medium text-ink-soft">
         {label}
+        <CommissionConfigurationBadge rate={configured ? initialRate : null} />
       </span>
       <div className="flex items-center gap-2">
         <input

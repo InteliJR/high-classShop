@@ -17,6 +17,8 @@ import { Pencil, Trash2, UserCog } from "lucide-react";
 import AdminUserManagementDialog, {
   type AdminUserManagementDialogState,
 } from "../../components/admin/AdminUserManagementDialog";
+import CommissionConfigurationBadge from "../../components/commission/CommissionConfigurationBadge";
+import { effectiveCommissionRate } from "../../lib/commission-rate";
 
 // Interface para armazenar os dados de cada especialista
 interface SpecialistWithStats extends Specialist {
@@ -144,10 +146,11 @@ export default function SpecialistsPage() {
                 <TableHead>Especialidade</TableHead>
                 <TableHead>Processos Abertos</TableHead>
                 <TableHead>Taxa de Conversão</TableHead>
+                <TableHead>Comissão</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </tr>
             </TableHeader>
-            <TableBody isLoading={isLoading} columns={5}>
+            <TableBody isLoading={isLoading} columns={6}>
               {filteredSpecialists.map((specialist) => (
                 <tr key={specialist.id} className="border-b border-border-soft">
                   <TableCell>
@@ -160,6 +163,12 @@ export default function SpecialistsPage() {
                   </TableCell>
                   <TableCell>{specialist.activeProcesses ?? 0}</TableCell>
                   <TableCell>{specialist.conversionRate ?? 0}%</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col items-start gap-1">
+                      <span>{effectiveCommissionRate(specialist.commission_rate)}%</span>
+                      <CommissionConfigurationBadge rate={specialist.commission_rate} />
+                    </div>
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end items-center gap-4 text-subtle">
                       <button

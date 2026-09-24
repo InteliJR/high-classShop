@@ -53,7 +53,7 @@ export class UpdateSpecialistDto {
   speciality?: SpecialityEnum;
 
   @IsOptional()
-  @IsNumber({}, { message: 'Taxa de comissão deve ser um número' })
+  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Taxa de comissão deve ser um número' })
   @Min(0, { message: 'Taxa de comissão deve ser >= 0' })
   @Max(100, { message: 'Taxa de comissão deve ser <= 100' })
   commission_rate?: number;

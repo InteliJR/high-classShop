@@ -7,7 +7,7 @@ export class ChangeSpecialistDetailsDto {
   })
   speciality: ProductType;
 
-  @IsNumber({}, { message: 'A taxa de comissão deve ser um número.' })
+  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'A taxa de comissão deve ser um número.' })
   @Min(0, { message: 'A taxa de comissão deve ser maior ou igual a 0.' })
   @Max(100, { message: 'A taxa de comissão deve ser menor ou igual a 100.' })
   commission_rate: number;
