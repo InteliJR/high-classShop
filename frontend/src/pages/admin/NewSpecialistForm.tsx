@@ -7,6 +7,7 @@ import {
   inviteSpecialist,
   type Specialist,
 } from "../../services/specialists.service";
+import { parseCommissionRateInput } from "../../lib/commission-rate";
 
 interface NewSpecialistFormProps {
   onSuccess: () => void;
@@ -19,6 +20,7 @@ export default function NewSpecialistForm({
 }: NewSpecialistFormProps) {
   const [email, setEmail] = useState("");
   const [speciality, setSpeciality] = useState<"CAR" | "BOAT" | "AIRCRAFT">("CAR");
+  const [commissionRate, setCommissionRate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
@@ -53,9 +55,19 @@ export default function NewSpecialistForm({
       return;
     }
 
+    const parsedCommission = parseCommissionRateInput(commissionRate);
+    if (!parsedCommission.ok) {
+      setError(parsedCommission.message);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const result = await inviteSpecialist(email.trim(), speciality);
+      const result = await inviteSpecialist({
+        email: email.trim(),
+        speciality,
+        commission_rate: parsedCommission.value,
+      });
       setInviteLink(result.inviteLink);
     } catch (err) {
       setError(
@@ -111,7 +123,7 @@ export default function NewSpecialistForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form noValidate onSubmit={handleSubmit} className="space-y-6">
       <h2 className="text-h2 font-semibold text-ink">Convidar Especialista</h2>
       <p className="text-sm text-gray-500">
         O especialista receberá um link para concluir o cadastro (nome, CPF,
@@ -157,6 +169,29 @@ export default function NewSpecialistForm({
           <option value="BOAT">Embarcações</option>
           <option value="AIRCRAFT">Aeronaves</option>
         </select>
+      </div>
+
+      <div>
+        <label
+          htmlFor="commission-rate"
+          className="block text-sm font-medium text-text-secondary"
+        >
+          Comissão do especialista (% da comissão total)
+        </label>
+        <input
+          id="commission-rate"
+          type="number"
+          min="0"
+          max="100"
+          step="0.01"
+          value={commissionRate}
+          onChange={(event) => setCommissionRate(event.target.value)}
+          className="mt-1 block w-full px-3 py-2 border border-brand-border rounded-md shadow-sm focus:outline-none focus:ring-brand-dark focus:border-brand-dark"
+          required
+        />
+        <p className="mt-1 text-xs text-muted">
+          Percentual que o especialista recebe sobre a comissão total da venda.
+        </p>
       </div>
 
       {error && <p className="text-red-500 text-sm">{error}</p>}

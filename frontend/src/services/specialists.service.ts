@@ -124,12 +124,17 @@ export async function deleteSpecialist(id: string): Promise<void> {
  * Envia um convite de cadastro para um novo especialista.
  * Retorna o link de convite (também enviado por e-mail).
  */
+export type InviteSpecialistData = {
+  email: string;
+  speciality: "CAR" | "BOAT" | "AIRCRAFT";
+  commission_rate: number;
+};
+
 export async function inviteSpecialist(
-  email: string,
-  speciality: "CAR" | "BOAT" | "AIRCRAFT",
+  payload: InviteSpecialistData,
 ): Promise<{ inviteLink: string; email: string }> {
   try {
-    const response = await api.post("/specialists/invite", { email, speciality });
+    const response = await api.post("/specialists/invite", payload);
     return response.data.data;
   } catch (error) {
     throw new Error(getErrorMessage(error));
@@ -139,9 +144,15 @@ export async function inviteSpecialist(
 /**
  * Valida um token de convite de especialista.
  */
+export type ValidatedSpecialistInvite = {
+  email: string;
+  speciality: "CAR" | "BOAT" | "AIRCRAFT";
+  commission_rate: number | null;
+};
+
 export async function validateSpecialistInvite(
   token: string,
-): Promise<{ email: string; speciality: "CAR" | "BOAT" | "AIRCRAFT" }> {
+): Promise<ValidatedSpecialistInvite> {
   const response = await api.post("/auth/validate-specialist-invite", { token });
   return response.data.data;
 }
