@@ -37,11 +37,26 @@ export type CreateSpecialistData = {
   password_hash: string;
   speciality: "CAR" | "BOAT" | "AIRCRAFT";
   company_id?: string;
-  commission_rate?: number;
+  commission_rate: number;
   bank?: string;
   agency?: string;
   checking_account?: string;
   calendly_url?: string;
+};
+
+export type UpdateSpecialistData = {
+  name?: string;
+  surname?: string;
+  email?: string;
+  cnpj?: string;
+  rg?: string;
+  password_hash?: string;
+  speciality?: "CAR" | "BOAT" | "AIRCRAFT";
+  commission_rate?: number;
+  bank?: string | null;
+  agency?: string | null;
+  checking_account?: string | null;
+  calendly_url?: string | null;
 };
 
 // Função auxiliar para extrair mensagem de erro
@@ -98,7 +113,7 @@ export async function createSpecialist(
 // Atualiza os dados de um especialista existente.
 export async function updateSpecialist(
   id: string,
-  data: Partial<Specialist>,
+  data: UpdateSpecialistData,
 ): Promise<Specialist> {
   try {
     const { data: updatedSpecialist } = await api.put<Specialist>(
