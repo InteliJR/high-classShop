@@ -204,6 +204,58 @@ describe('AdminDatabaseController — gestão de usuários', () => {
     });
   });
 
+  it.each([
+    {
+      name: 'promoção com null',
+      payload: {
+        role: UserRole.SPECIALIST,
+        speciality: ProductType.CAR,
+        commission_rate: null,
+      },
+    },
+    {
+      name: 'promoção em notação exponencial',
+      payload: {
+        role: UserRole.SPECIALIST,
+        speciality: ProductType.CAR,
+        commission_rate: 1e-7,
+      },
+    },
+    {
+      name: 'substituição com null',
+      payload: {
+        role: UserRole.OFFICE,
+        replacement: {
+          role: UserRole.SPECIALIST,
+          speciality: ProductType.CAR,
+          commission_rate: null,
+        },
+      },
+    },
+    {
+      name: 'substituição em notação exponencial',
+      payload: {
+        role: UserRole.OFFICE,
+        replacement: {
+          role: UserRole.SPECIALIST,
+          speciality: ProductType.CAR,
+          commission_rate: 1e-7,
+        },
+      },
+    },
+  ])('rejeita $name com BadRequest em vez de exceção interna', async ({ payload }) => {
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      exceptionFactory: localizedValidationExceptionFactory,
+    });
+
+    await expect(
+      pipe.transform(payload, { type: 'body', metatype: ChangeRoleDto }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('aceita zero e rejeita mais de duas casas nos detalhes do especialista', async () => {
     const pipe = new ValidationPipe({
       whitelist: true,
@@ -222,6 +274,13 @@ describe('AdminDatabaseController — gestão de usuários', () => {
     await expect(
       pipe.transform(
         { speciality: ProductType.CAR, commission_rate: 12.345 },
+        { type: 'body', metatype: ChangeSpecialistDetailsDto },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    await expect(
+      pipe.transform(
+        { speciality: ProductType.CAR, commission_rate: 1e-7 },
         { type: 'body', metatype: ChangeSpecialistDetailsDto },
       ),
     ).rejects.toBeInstanceOf(BadRequestException);

@@ -264,6 +264,59 @@ describe('AdminUserManagementService', () => {
     });
   });
 
+  it('exige comissão ao substituir o gerente por Especialista', async () => {
+    const currentManager = user(officeId, UserRole.OFFICE, {
+      company_id: companyId,
+    });
+    const candidate = user(candidateId, UserRole.CUSTOMER);
+    const { prisma, service } = makeService([currentManager, candidate]);
+    prisma.transactionUser.findFirst.mockResolvedValue(currentManager);
+
+    await expect(
+      service.validateRoleChange(candidateId, {
+        role: UserRole.OFFICE,
+        company_id: companyId,
+        replacement: {
+          role: UserRole.SPECIALIST,
+          speciality: ProductType.CAR,
+        },
+      }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      blockers: expect.arrayContaining([
+        expect.objectContaining({ code: 'COMMISSION_REQUIRED' }),
+      ]),
+    });
+  });
+
+  it('persiste comissão zero ao substituir o gerente por Especialista', async () => {
+    const currentManager = user(officeId, UserRole.OFFICE, {
+      company_id: companyId,
+    });
+    const candidate = user(candidateId, UserRole.CUSTOMER);
+    const { prisma, service } = makeService([currentManager, candidate]);
+    prisma.transactionUser.findFirst.mockResolvedValue(currentManager);
+
+    await service.changeRole(candidateId, {
+      role: UserRole.OFFICE,
+      company_id: companyId,
+      replacement: {
+        role: UserRole.SPECIALIST,
+        speciality: ProductType.CAR,
+        commission_rate: 0,
+      },
+    });
+
+    expect(prisma.transactionUser.update).toHaveBeenNthCalledWith(1, {
+      where: { id: officeId },
+      data: {
+        role: UserRole.SPECIALIST,
+        speciality: ProductType.CAR,
+        commission_rate: 0,
+      },
+    });
+  });
+
   it('bloqueia gerente saindo do cargo fora de uma substituição atômica', async () => {
     const manager = user(officeId, UserRole.OFFICE, {
       company_id: companyId,

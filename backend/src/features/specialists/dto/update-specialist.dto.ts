@@ -5,10 +5,12 @@ import {
   IsEnum,
   IsOptional,
   IsNumber,
+  ValidateIf,
   Min,
   Max,
 } from 'class-validator';
 import { SpecialityEnum } from './create-specialist.dto';
+import { HasValidCommissionRatePrecision } from 'src/shared/validators/commission-rate.validator';
 
 /**
  * Não usa PartialType(CreateSpecialistDto): o campo de documento do
@@ -52,8 +54,11 @@ export class UpdateSpecialistDto {
   })
   speciality?: SpecialityEnum;
 
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Taxa de comissão deve ser um número' })
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsNumber({}, { message: 'Taxa de comissão deve ser um número' })
+  @HasValidCommissionRatePrecision({
+    message: 'Taxa de comissão deve ter no máximo duas casas decimais',
+  })
   @Min(0, { message: 'Taxa de comissão deve ser >= 0' })
   @Max(100, { message: 'Taxa de comissão deve ser <= 100' })
   commission_rate?: number;

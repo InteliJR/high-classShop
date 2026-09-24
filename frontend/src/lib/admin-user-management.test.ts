@@ -79,9 +79,31 @@ describe("admin-user-management", () => {
   });
 
   it("explica quando a comissão do especialista é obrigatória", () => {
-    expect(blockerMessage({ code: "COMMISSION_REQUIRED" })).toBe(
+    expect(
+      blockerMessage({ code: "COMMISSION_REQUIRED", message: "backend" }),
+    ).toBe(
       "Informe a comissão para o cargo de Especialista.",
     );
+  });
+
+  it("explica quando especialidade e comissão permanecem iguais", () => {
+    expect(
+      blockerMessage({
+        code: "SPECIALIST_DETAILS_UNCHANGED",
+        message: "backend",
+      }),
+    ).toBe(
+      "A especialidade e a taxa de comissão informadas já estão atribuídas a este especialista.",
+    );
+  });
+
+  it("usa a mensagem do backend para código desconhecido", () => {
+    expect(
+      blockerMessage({
+        code: "FUTURE_BLOCKER" as never,
+        message: "Bloqueio informado pelo servidor.",
+      }),
+    ).toBe("Bloqueio informado pelo servidor.");
   });
 
   it("usa Não informado para enum ausente ou desconhecido", () => {

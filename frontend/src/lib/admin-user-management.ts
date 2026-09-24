@@ -12,6 +12,7 @@ export type SpecialityCode = "CAR" | "BOAT" | "AIRCRAFT";
 export type ChangeBlockerCode =
   | "ROLE_UNCHANGED"
   | "SPECIALITY_UNCHANGED"
+  | "SPECIALIST_DETAILS_UNCHANGED"
   | "COMPANY_REQUIRED"
   | "COMPANY_NOT_FOUND"
   | "SPECIALITY_REQUIRED"
@@ -130,6 +131,8 @@ export const BLOCKER_MESSAGES: Record<
   ROLE_UNCHANGED: () => "O cargo selecionado já está atribuído a este usuário.",
   SPECIALITY_UNCHANGED: () =>
     "A especialidade selecionada já está atribuída a este especialista.",
+  SPECIALIST_DETAILS_UNCHANGED: () =>
+    "A especialidade e a taxa de comissão informadas já estão atribuídas a este especialista.",
   COMPANY_REQUIRED: () => "Informe o escritório para o cargo selecionado.",
   COMPANY_NOT_FOUND: () => "O escritório informado não foi encontrado.",
   SPECIALITY_REQUIRED: () =>
@@ -173,9 +176,13 @@ export function specialityLabel(speciality?: string | null): string {
 }
 
 export function blockerMessage(
-  blocker: Pick<ChangeBlocker, "code" | "count">,
+  blocker: Pick<ChangeBlocker, "code" | "count"> &
+    Partial<Pick<ChangeBlocker, "message">>,
 ): string {
-  return BLOCKER_MESSAGES[blocker.code](blocker.count);
+  const formatter = BLOCKER_MESSAGES[blocker.code as ChangeBlockerCode];
+  return formatter
+    ? formatter(blocker.count)
+    : blocker.message ?? "A alteração não pode ser concluída.";
 }
 
 export function getDialogRequirements(

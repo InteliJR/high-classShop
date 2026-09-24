@@ -1,5 +1,9 @@
 import { SpecialistsService } from './specialists.service';
 
+jest.mock('bcrypt', () => ({
+  hash: jest.fn().mockResolvedValue('hashed-password'),
+}));
+
 describe('SpecialistsService.inviteSpecialist', () => {
   it('assina a comissão definida pelo administrador', async () => {
     const prisma = {
@@ -55,4 +59,62 @@ describe('SpecialistsService.findAll', () => {
 
     expect(result.map((item) => item.commission_rate)).toEqual([null, 0]);
   });
+});
+
+describe('SpecialistsService.create', () => {
+  const base = {
+    name: 'Ana',
+    surname: 'Silva',
+    email: 'ana@example.com',
+    cnpj: '11222333000181',
+    rg: '1234567',
+    password_hash: 'senha-segura',
+    speciality: 'CAR',
+  };
+
+  function makeService() {
+    const prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockImplementation(({ data }) =>
+          Promise.resolve({ id: 'specialist-1', ...data }),
+        ),
+      },
+    } as any;
+    const notifications = {
+      sendWelcomeEmail: jest.fn().mockResolvedValue(undefined),
+    } as any;
+
+    return {
+      prisma,
+      service: new SpecialistsService(
+        prisma,
+        {} as any,
+        {} as any,
+        notifications,
+      ),
+    };
+  }
+
+  it.each([0, 100])('persiste comissão obrigatória %s', async (commission_rate) => {
+    const { prisma, service } = makeService();
+
+    await service.create({ ...base, commission_rate } as any);
+
+    expect(prisma.user.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ commission_rate }),
+    });
+  });
+
+  it.each([undefined, null, 12.345, 1e-7])(
+    'rejeita comissão inválida %s antes de persistir',
+    async (commission_rate) => {
+      const { prisma, service } = makeService();
+
+      await expect(
+        service.create({ ...base, commission_rate } as any),
+      ).rejects.toThrow('Taxa de comissão inválida');
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -10,7 +10,7 @@ describe('UpdateSpecialistDto', () => {
     ).resolves.toHaveLength(0);
   });
 
-  it.each([-0.01, 12.345, 100.01])(
+  it.each([null, -0.01, 12.345, 100.01])(
     'rejeita comissão %s',
     async (commission_rate) => {
       expect(
@@ -20,4 +20,18 @@ describe('UpdateSpecialistDto', () => {
       ).not.toHaveLength(0);
     },
   );
+
+  it('permite omitir a comissão em atualização parcial', async () => {
+    await expect(
+      validate(plainToInstance(UpdateSpecialistDto, {})),
+    ).resolves.toHaveLength(0);
+  });
+
+  it('rejeita notação exponencial sem lançar exceção', async () => {
+    await expect(
+      validate(
+        plainToInstance(UpdateSpecialistDto, { commission_rate: 1e-7 }),
+      ),
+    ).resolves.not.toHaveLength(0);
+  });
 });

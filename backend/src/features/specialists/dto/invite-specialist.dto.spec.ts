@@ -8,7 +8,7 @@ const base = {
   speciality: 'CAR',
 };
 
-async function errorsFor(commission_rate?: number) {
+async function errorsFor(commission_rate?: unknown) {
   return validate(
     plainToInstance(InviteSpecialistDto, { ...base, commission_rate }),
   );
@@ -30,10 +30,14 @@ describe('InviteSpecialistDto', () => {
     await expect(errorsFor(rate)).resolves.toHaveLength(0);
   });
 
-  it.each([undefined, -0.01, 100.01, 12.345])(
+  it.each([undefined, null, -0.01, 100.01, 12.345])(
     'rejeita comissão %s',
     async (rate) => {
       expect(await errorsFor(rate)).not.toHaveLength(0);
     },
   );
+
+  it('rejeita notação exponencial sem lançar exceção', async () => {
+    await expect(errorsFor(1e-7)).resolves.not.toHaveLength(0);
+  });
 });

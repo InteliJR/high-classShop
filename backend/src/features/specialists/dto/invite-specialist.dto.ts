@@ -8,6 +8,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { HasValidCommissionRatePrecision } from 'src/shared/validators/commission-rate.validator';
 
 export class InviteSpecialistDto {
   @Transform(({ value }) =>
@@ -23,12 +24,15 @@ export class InviteSpecialistDto {
 
   @IsDefined({ message: 'Informe a comissão do especialista.' })
   @IsNumber(
-    { maxDecimalPlaces: 2 },
+    {},
     {
       message:
         'A comissão deve ser um número com no máximo duas casas decimais.',
     },
   )
+  @HasValidCommissionRatePrecision({
+    message: 'A comissão deve ter no máximo duas casas decimais.',
+  })
   @Min(0, { message: 'A comissão deve estar entre 0% e 100%.' })
   @Max(100, { message: 'A comissão deve estar entre 0% e 100%.' })
   commission_rate: number;

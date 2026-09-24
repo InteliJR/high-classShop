@@ -15,6 +15,7 @@ import { SesService } from 'src/aws/ses.service';
 import { jwtConstants } from 'src/auth/constants';
 import { NotificationService } from '../notifications/notification.service';
 import { SpecialistInvitePayload } from '../../auth/types/specialist-invite-payload';
+import { isValidCommissionRate } from '../../shared/validators/commission-rate.validator';
 
 @Injectable()
 export class SpecialistsService {
@@ -81,6 +82,10 @@ export class SpecialistsService {
 
   // Cria um novo especialista na base de dados.
   async create(data: CreateSpecialistDto) {
+    if (!isValidCommissionRate(data.commission_rate)) {
+      throw new BadRequestException('Taxa de comissão inválida');
+    }
+
     try {
       // Verifica se já existe usuário com o mesmo email
       const existingUserByEmail = await this.prisma.user.findUnique({
@@ -117,7 +122,7 @@ export class SpecialistsService {
           password_hash: hashedPassword,
           speciality: data.speciality,
           role: 'SPECIALIST',
-          commission_rate: data.commission_rate ?? null,
+          commission_rate: data.commission_rate,
           bank: data.bank || null,
           agency: data.agency || null,
           checking_account: data.checking_account || null,
