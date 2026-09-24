@@ -231,16 +231,15 @@ export default function CreateContractPage() {
   const totalCommissionRate = watch("total_commission_rate");
 
   // A porcentagem total é a única entrada: a API preserva as regras de split
-  // cadastradas e o especialista confere todas as parcelas antes do envio.
+  // cadastradas, enquanto o especialista vê somente a própria comissão.
   const specialistRate = prefillData?.specialist?.rate ?? 0;
   const officeRate = prefillData?.office?.rate ?? 0;
-  const { totalCommissionValue, platformValue, officeValue, specialistValue } =
-    getCommissionPreview({
-      saleValue: vehiclePrice,
-      totalCommissionRate,
-      specialistShareRate: specialistRate,
-      officeShareRate: officeRate,
-    });
+  const { totalCommissionValue, specialistValue } = getCommissionPreview({
+    saleValue: vehiclePrice,
+    totalCommissionRate,
+    specialistShareRate: specialistRate,
+    officeShareRate: officeRate,
+  });
   const sellerNetPreviewValue = (vehiclePrice || 0) - totalCommissionValue;
 
   // Load prefill data on mount
@@ -680,10 +679,12 @@ export default function CreateContractPage() {
   // Calcular valor do vendedor automaticamente (seller = price - comissão total)
   useEffect(() => {
     if (vehiclePrice && totalCommissionValue) {
-      const sellerValue = vehiclePrice - totalCommissionValue;
-      setValue("payment_seller_value", sellerValue > 0 ? sellerValue : 0);
+      setValue(
+        "payment_seller_value",
+        sellerNetPreviewValue > 0 ? sellerNetPreviewValue : 0,
+      );
     }
-  }, [vehiclePrice, totalCommissionValue, setValue]);
+  }, [vehiclePrice, totalCommissionValue, sellerNetPreviewValue, setValue]);
 
   const getProductTypeLabel = (type?: string) => {
     switch (type) {
@@ -1391,57 +1392,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Valor do Vendedor
-                    </label>
-                    <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
-                      {formatCurrency(
-                        sellerNetPreviewValue,
-                        prefillData.currency,
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Comissão Total
-                    </label>
-                    <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
-                      {formatCurrency(
-                        totalCommissionValue,
-                        prefillData.currency,
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Valor da Plataforma
-                    </label>
-                    <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
-                      {formatCurrency(platformValue, prefillData.currency)}
-                    </div>
-                  </div>
-
-                  {prefillData.office && (
-                    <div>
-                      <label className="block text-sm font-medium text-ink-soft mb-1">
-                        Valor do Escritório
-                        <span className="text-xs text-muted ml-1">
-                          ({officeRate.toFixed(2)}% da comissão)
-                        </span>
-                      </label>
-                      <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
-                        {formatCurrency(officeValue, prefillData.currency)}
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Valor do Especialista
-                      <span className="text-xs text-muted ml-1">
-                        ({specialistRate.toFixed(2)}% da comissão)
-                      </span>
+                      Valor da sua comissão
                     </label>
                     <div className="w-full px-3 py-2 bg-border-soft border border-border rounded-lg text-ink-soft cursor-default text-sm min-h-[38px] font-medium">
                       {formatCurrency(specialistValue, prefillData.currency)}
