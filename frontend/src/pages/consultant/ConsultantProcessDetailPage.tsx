@@ -41,7 +41,6 @@ import { ProposalStatusBadge } from "../../components/patterns/ProposalStatusBad
 import { currencySymbol, formatCurrency } from "../../lib/currency";
 import {
   getProposalSubmissionError,
-  getMinimumPresentation,
   normalizeMinimumFormError,
 } from "../../lib/negotiation-money";
 
@@ -215,8 +214,10 @@ export default function ConsultantProcessDetailPage() {
       await load();
     } catch (err) {
       console.error("[ConsultantProcessDetailPage] Erro ao enviar:", err);
+      const errorMessage =
+        err instanceof Error ? err.message : "Erro ao enviar proposta.";
       setFormError(
-        err instanceof Error ? err.message : "Erro ao enviar proposta.",
+        normalizeMinimumFormError(errorMessage, processInfo),
       );
     } finally {
       setIsSending(false);
@@ -305,10 +306,6 @@ export default function ConsultantProcessDetailPage() {
   const isAppointmentConfirmed =
     process.appointment_status === "SCHEDULED" ||
     process.appointment_status === "COMPLETED";
-  const minimum = processInfo
-    ? getMinimumPresentation(processInfo)
-    : { visible: false, formattedValue: null };
-
   return (
     <div className="text-text-main w-full">
       <PageHeader
@@ -409,16 +406,6 @@ export default function ConsultantProcessDetailPage() {
               {formatCurrency(processInfo.product_value, processInfo.currency)}
             </span>
           </div>
-          {minimum.visible && minimum.formattedValue && (
-            <div className="flex items-center gap-2">
-              {/* laranja mantido de propósito — destaque de atenção ao valor, não é um dos 6 status de processo */}
-              <AlertCircle size={16} className="text-orange-500" />
-              <span className="text-muted">Valor mínimo:</span>
-              <span className="font-semibold text-orange-600">
-                {minimum.formattedValue}
-              </span>
-            </div>
-          )}
           {acceptedProposal && (
             <div className="flex items-center gap-2">
               <Check size={16} className="text-status-ok" />
@@ -652,11 +639,6 @@ export default function ConsultantProcessDetailPage() {
                 Enviar proposta
               </Button>
             </form>
-            {minimum.visible && minimum.formattedValue && (
-              <p className="mt-2 text-xs text-muted">
-                Valor mínimo aceito: {minimum.formattedValue}
-              </p>
-            )}
           </div>
         )}
 

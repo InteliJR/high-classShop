@@ -36,14 +36,14 @@ describe("minimum presentation", () => {
     ).toEqual({ visible: false, formattedValue: null });
   });
 
-  it("formats an enabled minimum in the process currency", () => {
+  it("hides minimum even when an outdated API marks it as enabled", () => {
     expect(
       getMinimumPresentation({
         currency: "USD",
         minimum_enabled: true,
         minimum_value: 80000,
       }),
-    ).toEqual({ visible: true, formattedValue: "US$ 80.000,00" });
+    ).toEqual({ visible: false, formattedValue: null });
   });
 });
 
@@ -67,6 +67,19 @@ describe("minimum form error normalization", () => {
     expect(
       normalizeMinimumFormError("Erro ao enviar proposta.", hiddenMinimum),
     ).toBe("Erro ao enviar proposta.");
+  });
+
+  it("clears a legacy minimum error even when an outdated API enables it", () => {
+    expect(
+      normalizeMinimumFormError(
+        "O valor mínimo permitido é US$ 80.000,00.",
+        {
+          currency: "USD",
+          minimum_enabled: true,
+          minimum_value: 80000,
+        },
+      ),
+    ).toBeNull();
   });
 });
 

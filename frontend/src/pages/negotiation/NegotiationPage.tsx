@@ -29,7 +29,6 @@ import { EmptyState } from "../../components/patterns/EmptyState";
 import { currencySymbol, formatCurrency } from "../../lib/currency";
 import {
   getProposalSubmissionError,
-  getMinimumPresentation,
   normalizeMinimumFormError,
 } from "../../lib/negotiation-money";
 
@@ -161,8 +160,10 @@ export default function NegotiationPage() {
       await loadProposals();
     } catch (err) {
       console.error("[NegotiationPage] Erro ao enviar proposta:", err);
+      const errorMessage =
+        err instanceof Error ? err.message : "Erro ao enviar proposta";
       setFormError(
-        err instanceof Error ? err.message : "Erro ao enviar proposta",
+        normalizeMinimumFormError(errorMessage, processInfo),
       );
     } finally {
       setIsSending(false);
@@ -246,10 +247,6 @@ export default function NegotiationPage() {
     if (!user || proposal.status !== "PENDING") return false;
     return proposal.proposed_to.id === user.id;
   };
-
-  const minimum = processInfo
-    ? getMinimumPresentation(processInfo)
-    : { visible: false, formattedValue: null };
 
   // Loading state
   if (isLoading) {
@@ -336,15 +333,6 @@ export default function NegotiationPage() {
                   {formatCurrency(processInfo.product_value, processInfo.currency)}
                 </span>
               </div>
-              {minimum.visible && minimum.formattedValue && (
-                <div className="flex items-center gap-2">
-                  <AlertCircle size={16} className="text-orange-500" />
-                  <span className="text-muted">Valor mínimo:</span>
-                  <span className="font-semibold text-orange-600">
-                    {minimum.formattedValue}
-                  </span>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -559,12 +547,6 @@ export default function NegotiationPage() {
               </button>
             </form>
 
-            {/* Minimum value hint */}
-            {minimum.visible && minimum.formattedValue && (
-              <p className="mt-2 text-xs text-muted text-center md:text-left">
-                O valor mínimo aceito é {minimum.formattedValue}
-              </p>
-            )}
           </div>
         </footer>
       )}
