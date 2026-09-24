@@ -149,6 +149,12 @@ describe('AdminDatabaseController — gestão de usuários', () => {
         'O novo cargo do gerente atual deve ser Cliente, Consultor, Especialista ou Administrador.',
     },
     {
+      metatype: ChangeRoleDto,
+      payload: { role: UserRole.SPECIALIST, commission_rate: 12.345 },
+      expected:
+        'A comissão deve ser um número com no máximo duas casas decimais.',
+    },
+    {
       metatype: ChangeSpecialityDto,
       payload: { speciality: 'MOTORCYCLE' },
       expected: 'A especialidade deve ser Carros, Embarcações ou Aeronaves.',
@@ -178,6 +184,25 @@ describe('AdminDatabaseController — gestão de usuários', () => {
       );
     },
   );
+
+  it('aceita comissão 0 na mudança de cargo', async () => {
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      exceptionFactory: localizedValidationExceptionFactory,
+    });
+
+    await expect(
+      pipe.transform(
+        { role: UserRole.SPECIALIST, commission_rate: 0 },
+        { type: 'body', metatype: ChangeRoleDto },
+      ),
+    ).resolves.toMatchObject({
+      role: UserRole.SPECIALIST,
+      commission_rate: 0,
+    });
+  });
 
   it('omite detalhes de validação em produção', async () => {
     const previousNodeEnv = process.env.NODE_ENV;

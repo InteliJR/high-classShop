@@ -330,6 +330,12 @@ export class AdminUserManagementService {
     if (dto.role === UserRole.SPECIALIST && !dto.speciality) {
       this.add(blockers, 'SPECIALITY_REQUIRED');
     }
+    if (
+      dto.role === UserRole.SPECIALIST &&
+      dto.commission_rate == null
+    ) {
+      this.add(blockers, 'COMMISSION_REQUIRED');
+    }
     if (dto.company_id) {
       const company = await db.company.findUnique({
         where: { id: dto.company_id },
@@ -521,7 +527,11 @@ export class AdminUserManagementService {
       return { role: dto.role, company_id: dto.company_id };
     }
     if (dto.role === UserRole.SPECIALIST) {
-      return { role: dto.role, speciality: dto.speciality };
+      return {
+        role: dto.role,
+        speciality: dto.speciality,
+        commission_rate: dto.commission_rate,
+      };
     }
     return { role: dto.role };
   }
