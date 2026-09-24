@@ -619,7 +619,10 @@ export class AuthService {
       const rate = payload.commission_rate;
       if (
         rate !== undefined &&
-        (!Number.isFinite(rate) || rate < 0 || rate > 100)
+        (!Number.isFinite(rate) ||
+          rate < 0 ||
+          rate > 100 ||
+          rate !== Number(rate.toFixed(2)))
       ) {
         throw new UnauthorizedException('Token de convite inválido');
       }
