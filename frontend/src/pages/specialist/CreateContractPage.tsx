@@ -819,12 +819,8 @@ export default function CreateContractPage() {
             productLabel={getProductTypeLabel(prefillData.product_type)}
             currency={prefillData.currency}
             vehiclePrice={vehiclePrice || 0}
-            totalCommissionValue={totalCommissionValue}
-            sellerNetPreviewValue={sellerNetPreviewValue}
-            platformValue={platformValue}
-            officeValue={officeValue}
             specialistValue={specialistValue}
-            showOffice={Boolean(prefillData.office)}
+            showEarningsPreview={vehiclePrice > 0 && totalCommissionValue > 0}
             onCancel={() => navigate(-1)}
             onContinue={async () => {
               // Valida só a comissão: o resto do contrato ainda nem foi exibido.

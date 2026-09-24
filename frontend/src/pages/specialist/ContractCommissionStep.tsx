@@ -21,12 +21,8 @@ interface Props {
   productLabel: string;
   currency: ProductCurrency;
   vehiclePrice: number;
-  totalCommissionValue: number;
-  sellerNetPreviewValue: number;
-  platformValue: number;
-  officeValue: number;
   specialistValue: number;
-  showOffice: boolean;
+  showEarningsPreview: boolean;
   onContinue: () => void;
   onCancel: () => void;
 }
@@ -37,12 +33,8 @@ export default function ContractCommissionStep({
   productLabel,
   currency,
   vehiclePrice,
-  totalCommissionValue,
-  sellerNetPreviewValue,
-  platformValue,
-  officeValue,
   specialistValue,
-  showOffice,
+  showEarningsPreview,
   onContinue,
   onCancel,
 }: Props) {
@@ -97,8 +89,7 @@ export default function ContractCommissionStep({
               className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
             />
             <p className="text-xs text-subtle mt-1">
-              Único valor editável — as três partes são recalculadas a partir
-              deste total e das taxas cadastradas.
+              Informe o percentual combinado para calcular o seu ganho estimado.
             </p>
             {commissionError && (
               <p className="text-status-bad text-sm mt-1">
@@ -108,51 +99,12 @@ export default function ContractCommissionStep({
           </div>
         </div>
 
-        {/* Consequência do percentual, para a escolha não ser às cegas. */}
-        {vehiclePrice > 0 && totalCommissionValue > 0 && (
+        {showEarningsPreview && (
           <div className="mt-6 pt-5 border-t">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-subtle">Comissão total</p>
-                <p className="text-sm font-medium text-ink mt-0.5">
-                  {formatCurrency(totalCommissionValue, currency)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-subtle">
-                  Valor líquido do vendedor
-                </p>
-                <p className="text-sm font-medium text-ink mt-0.5">
-                  {formatCurrency(sellerNetPreviewValue, currency)}
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs font-semibold uppercase tracking-wider text-subtle mt-5 mb-3">
-              Distribuição da comissão
+            <p className="text-xs text-subtle">Seu ganho estimado</p>
+            <p className="text-sm font-medium text-ink mt-0.5">
+              {formatCurrency(specialistValue, currency)}
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <p className="text-xs text-subtle">Plataforma</p>
-                <p className="text-sm font-medium text-ink mt-0.5">
-                  {formatCurrency(platformValue, currency)}
-                </p>
-              </div>
-              {showOffice && (
-                <div>
-                  <p className="text-xs text-subtle">Escritório</p>
-                  <p className="text-sm font-medium text-ink mt-0.5">
-                    {formatCurrency(officeValue, currency)}
-                  </p>
-                </div>
-              )}
-              <div>
-                <p className="text-xs text-subtle">Especialista</p>
-                <p className="text-sm font-medium text-ink mt-0.5">
-                  {formatCurrency(specialistValue, currency)}
-                </p>
-              </div>
-            </div>
           </div>
         )}
       </section>
