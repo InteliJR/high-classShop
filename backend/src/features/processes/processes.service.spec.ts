@@ -544,6 +544,73 @@ describe('ProcessesService.getAll — escopo de visibilidade', () => {
     expect(findMany.mock.calls[0][0].where.status).toBe('NEGOTIATION');
     expect(groupBy.mock.calls[0][0].where.status).toBeUndefined();
   });
+
+  it('maps appointment origin and definitive reschedule audit', async () => {
+    const rescheduledAt = new Date('2099-01-02T10:00:00.000Z');
+    const rescheduledFrom = new Date('2099-01-01T10:00:00.000Z');
+    const process = {
+      id: 'process-1',
+      appointment_id: 'appointment-1',
+      client_id: clientId,
+      specialist_id: specialistId,
+      status: ProcessStatus.SCHEDULING,
+      product_type: ProductType.CAR,
+      car_id: productId,
+      boat_id: null,
+      aircraft_id: null,
+      client: { id: clientId, name: 'Client', email: 'client@example.com' },
+      specialist: {
+        id: specialistId,
+        name: 'Specialist',
+        speciality: ProductType.CAR,
+      },
+      car: { id: productId, marca: 'Porsche', modelo: '911' },
+      boat: null,
+      aircraft: null,
+      appointment: {
+        status: StatusAgendamento.SCHEDULED,
+        appointment_datetime: new Date('2099-01-02T10:00:00.000Z'),
+        scheduling_method: 'EMAIL',
+        specialist_rescheduled_at: rescheduledAt,
+        specialist_rescheduled_from: rescheduledFrom,
+      },
+      created_at: new Date(),
+      notes: null,
+      updated_at: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    const findMany = jest.fn().mockReturnValue([process]);
+    const prisma = {
+      process: {
+        findMany,
+        count: jest.fn().mockReturnValue(1),
+        groupBy: jest.fn().mockReturnValue([]),
+      },
+      $transaction: jest.fn(async (queries: any[]) => queries),
+    } as any;
+    const service = new ProcessesService(prisma, {} as any);
+
+    const result = await service.getAll({
+      page: 1,
+      perPage: 20,
+      requester: { id: 'admin-1', role: UserRole.ADMIN },
+    });
+
+    expect(findMany.mock.calls[0][0].include.appointment.select).toEqual(
+      expect.objectContaining({
+        scheduling_method: true,
+        specialist_rescheduled_at: true,
+        specialist_rescheduled_from: true,
+      }),
+    );
+    expect(result.processes[0]).toEqual(
+      expect.objectContaining({
+        appointment_id: 'appointment-1',
+        appointment_scheduling_method: 'EMAIL',
+        specialist_rescheduled_at: rescheduledAt,
+        specialist_rescheduled_from: rescheduledFrom,
+      }),
+    );
+  });
 });
 
 describe('ProcessesService — snapshot de entrada na negociação', () => {
@@ -944,5 +1011,343 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
     expect(processUpdate).not.toHaveBeenCalled();
     expect(processUpdateMany).not.toHaveBeenCalled();
     expect(historyCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('ProcessesService.confirmAppointment — horário acordado', () => {
+  const futureIso = '2099-01-01T13:00:00.000Z';
+
+  function makeService(
+    appointmentOverrides: Record<string, unknown> = {},
+    processClaimCount = 1,
+  ) {
+    const appointment = {
+      id: 'appointment-1',
+      specialist_id: specialistId,
+      client_id: clientId,
+      status: StatusAgendamento.PENDING,
+      appointment_datetime: null,
+      scheduling_method: 'EMAIL',
+      ...appointmentOverrides,
+    };
+    const process = {
+      id: 'process-1',
+      specialist_id: specialistId,
+      client_id: clientId,
+      status: ProcessStatus.SCHEDULING,
+      notes: null,
+      updated_at: new Date('2026-01-01T00:00:00.000Z'),
+      appointment,
+      client: {
+        id: clientId,
+        email: 'client@example.com',
+        name: 'Client',
+        surname: 'Example',
+      },
+      specialist: {
+        id: specialistId,
+        email: 'specialist@example.com',
+        name: 'Specialist',
+        surname: 'Example',
+      },
+      car: null,
+      boat: null,
+      aircraft: null,
+    };
+    const appointmentUpdate = jest.fn().mockResolvedValue({
+      ...appointment,
+      status: StatusAgendamento.SCHEDULED,
+    });
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(appointment),
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: appointmentUpdate,
+      },
+      process: {
+        findUnique: jest.fn().mockResolvedValue(process),
+        updateMany: jest.fn().mockResolvedValue({ count: processClaimCount }),
+      },
+    };
+    const prisma = {
+      process: { findUnique: jest.fn().mockResolvedValue(process) },
+      $transaction: jest.fn(async (callback: any) => callback(tx)),
+    } as any;
+    const notifications = {
+      sendAppointmentConfirmedEmail: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    return {
+      service: new ProcessesService(prisma, notifications),
+      tx,
+      appointmentUpdate,
+    };
+  }
+
+  it('requires a datetime when an EMAIL request has none', async () => {
+    const { service, appointmentUpdate } = makeService();
+
+    await expect(
+      (service.confirmAppointment as any)('process-1', specialistId, undefined),
+    ).rejects.toThrow(BadRequestException);
+    expect(appointmentUpdate).not.toHaveBeenCalled();
+  });
+
+  it('requires an explicit datetime for EMAIL even when legacy data has one', async () => {
+    const { service, appointmentUpdate } = makeService({
+      appointment_datetime: new Date(futureIso),
+    });
+
+    await expect(
+      (service.confirmAppointment as any)('process-1', specialistId, undefined),
+    ).rejects.toThrow(BadRequestException);
+    expect(appointmentUpdate).not.toHaveBeenCalled();
+  });
+
+  it('stores the initial datetime without consuming the definitive change', async () => {
+    const { service, tx, appointmentUpdate } = makeService();
+
+    await (service.confirmAppointment as any)(
+      'process-1',
+      specialistId,
+      futureIso,
+    );
+
+    expect(tx.$queryRaw).toHaveBeenCalledWith(
+      expect.anything(),
+      `appointment-schedule:${specialistId}`,
+    );
+    expect(appointmentUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          appointment_datetime: new Date(futureIso),
+          status: StatusAgendamento.SCHEDULED,
+        }),
+      }),
+    );
+    expect(tx.process.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'process-1',
+          status: ProcessStatus.SCHEDULING,
+          updated_at: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      }),
+    );
+    const updateData = appointmentUpdate.mock.calls[0][0].data;
+    expect(updateData).not.toHaveProperty('specialist_rescheduled_at');
+    expect(updateData).not.toHaveProperty('specialist_rescheduled_from');
+  });
+
+  it('rejects a past datetime before writing', async () => {
+    const { service, appointmentUpdate } = makeService();
+
+    await expect(
+      (service.confirmAppointment as any)(
+        'process-1',
+        specialistId,
+        '2020-01-01T13:00:00.000Z',
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(appointmentUpdate).not.toHaveBeenCalled();
+  });
+
+  it('aborts when the process changes during confirmation', async () => {
+    const { service } = makeService({}, 0);
+
+    await expect(
+      (service.confirmAppointment as any)('process-1', specialistId, futureIso),
+    ).rejects.toThrow(ConflictException);
+  });
+});
+
+describe('ProcessesService — telefone da contraparte após confirmação', () => {
+  const clientPhone = '11987654321';
+  const specialistPhone = '11912345678';
+
+  function processWithAppointment(status: StatusAgendamento | null) {
+    return {
+      id: 'process-1',
+      status: ProcessStatus.SCHEDULING,
+      product_type: ProductType.CAR,
+      client_id: clientId,
+      specialist_id: specialistId,
+      client: {
+        id: clientId,
+        name: 'Cliente',
+        email: 'cliente@example.com',
+        phone: clientPhone,
+        consultant_id: 'consultant-1',
+      },
+      specialist: {
+        id: specialistId,
+        name: 'Especialista',
+        email: 'especialista@example.com',
+        phone: specialistPhone,
+        speciality: ProductType.CAR,
+      },
+      appointment: status
+        ? { status, appointment_datetime: new Date('2026-09-14T15:00:00Z') }
+        : null,
+      car: { id: productId, marca: 'Porsche', modelo: '911' },
+      boat: null,
+      aircraft: null,
+      created_at: new Date('2026-09-14T12:00:00Z'),
+      notes: null,
+    };
+  }
+
+  function listService(status: StatusAgendamento | null) {
+    const prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          consultant_id: 'consultant-1',
+        }),
+      },
+      process: {
+        findMany: jest.fn().mockResolvedValue([processWithAppointment(status)]),
+        count: jest.fn().mockResolvedValue(1),
+        findFirst: jest.fn().mockResolvedValue({ id: 'related-process' }),
+      },
+    } as any;
+    return new ProcessesService(prisma, {} as any);
+  }
+
+  function detailService(status: StatusAgendamento) {
+    const prisma = {
+      process: {
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValue(processWithAppointment(status)),
+      },
+    } as any;
+    return new ProcessesService(prisma, {} as any);
+  }
+
+  it.each([
+    [StatusAgendamento.PENDING, null],
+    [StatusAgendamento.SCHEDULED, specialistPhone],
+    [StatusAgendamento.COMPLETED, specialistPhone],
+    [StatusAgendamento.CANCELLED, null],
+    [null, null],
+  ])(
+    'cliente recebe telefone do especialista em %s: %s',
+    async (status, expected) => {
+      const result = await listService(status).getByClientId(
+        clientId,
+        { page: 1, perPage: 20 } as any,
+        clientId,
+        UserRole.CUSTOMER,
+      );
+
+      expect(result.processes[0].specialist.phone).toBe(expected);
+    },
+  );
+
+  it.each([
+    [StatusAgendamento.PENDING, null],
+    [StatusAgendamento.SCHEDULED, clientPhone],
+    [StatusAgendamento.COMPLETED, clientPhone],
+    [StatusAgendamento.CANCELLED, null],
+    [null, null],
+  ])(
+    'especialista recebe telefone do cliente em %s: %s',
+    async (status, expected) => {
+      const service = listService(status);
+      const result = await service.getBySpecialistIdWithFilters(
+        specialistId,
+        { page: 1, perPage: 20 },
+        { id: specialistId, role: UserRole.SPECIALIST },
+      );
+
+      expect(result.processes[0].client.phone).toBe(expected);
+    },
+  );
+
+  it('detalhe oculta o telefone do cliente para especialista em PENDING', async () => {
+    const result = await detailService(StatusAgendamento.PENDING).getById(
+      'process-1',
+      specialistId,
+      UserRole.SPECIALIST,
+    );
+
+    expect(result.client.phone).toBeNull();
+  });
+
+  it('detalhe libera o telefone do especialista para cliente em COMPLETED', async () => {
+    const result = await detailService(StatusAgendamento.COMPLETED).getById(
+      'process-1',
+      clientId,
+      UserRole.CUSTOMER,
+    );
+
+    expect(result.specialist.phone).toBe(specialistPhone);
+  });
+
+  it.each([
+    [UserRole.ADMIN, 'admin-1'],
+    [UserRole.CONSULTANT, 'consultant-1'],
+  ])(
+    'detalhe não expõe telefones para %s mesmo após confirmação',
+    async (role, requesterId) => {
+      const result = await detailService(
+        StatusAgendamento.SCHEDULED,
+      ).getById('process-1', requesterId, role);
+
+      expect(result.client.phone).toBeNull();
+      expect(result.specialist.phone).toBeNull();
+    },
+  );
+
+  it('mantém null quando a contraparte não cadastrou telefone', async () => {
+    const process = processWithAppointment(StatusAgendamento.SCHEDULED) as any;
+    process.specialist.phone = null;
+    const prisma = {
+      process: {
+        findMany: jest.fn().mockResolvedValue([process]),
+        count: jest.fn().mockResolvedValue(1),
+      },
+    } as any;
+    const service = new ProcessesService(prisma, {} as any);
+
+    const result = await service.getByClientId(
+      clientId,
+      { page: 1, perPage: 20 } as any,
+      clientId,
+      UserRole.CUSTOMER,
+    );
+
+    expect(result.processes[0].specialist.phone).toBeNull();
+  });
+
+  it.each([
+    [UserRole.ADMIN, 'admin-1'],
+    [UserRole.CONSULTANT, 'consultant-1'],
+    [UserRole.SPECIALIST, 'other-specialist-1'],
+  ])(
+    'não expõe telefone do especialista na lista do cliente para %s',
+    async (role, requesterId) => {
+      const result = await listService(
+        StatusAgendamento.SCHEDULED,
+      ).getByClientId(
+        clientId,
+        { page: 1, perPage: 20 } as any,
+        requesterId,
+        role,
+      );
+
+      expect(result.processes[0].specialist.phone).toBeNull();
+    },
+  );
+
+  it('não expõe telefone do cliente na lista do especialista para ADMIN', async () => {
+    const service = listService(StatusAgendamento.SCHEDULED);
+    const result = await service.getBySpecialistIdWithFilters(
+      specialistId,
+      { page: 1, perPage: 20 },
+      { id: 'admin-1', role: UserRole.ADMIN },
+    );
+
+    expect(result.processes[0].client.phone).toBeNull();
   });
 });

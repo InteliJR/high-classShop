@@ -85,12 +85,28 @@ describe('AdminUserManagementService', () => {
   it('exige especialidade para Especialista', async () => {
     const { service } = makeService();
 
-    await expect(
-      service.validateRoleChange(customerId, { role: UserRole.SPECIALIST }),
-    ).resolves.toMatchObject({
-      allowed: false,
-      blockers: [{ code: 'SPECIALITY_REQUIRED' }],
+    const result = await service.validateRoleChange(customerId, {
+      role: UserRole.SPECIALIST,
     });
+
+    expect(result.allowed).toBe(false);
+    expect(result.blockers.map((blocker) => blocker.code)).toEqual(
+      expect.arrayContaining(['SPECIALITY_REQUIRED', 'COMMISSION_REQUIRED']),
+    );
+  });
+
+  it('exige comissão ao promover para Especialista', async () => {
+    const { service } = makeService();
+
+    const result = await service.validateRoleChange(customerId, {
+      role: UserRole.SPECIALIST,
+      speciality: ProductType.CAR,
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.blockers.map((blocker) => blocker.code)).toContain(
+      'COMMISSION_REQUIRED',
+    );
   });
 
   it('atualiza promoção válida na transação serializável', async () => {
@@ -99,6 +115,7 @@ describe('AdminUserManagementService', () => {
     await service.changeRole(customerId, {
       role: UserRole.SPECIALIST,
       speciality: ProductType.AIRCRAFT,
+      commission_rate: 18,
     });
 
     expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
@@ -106,7 +123,30 @@ describe('AdminUserManagementService', () => {
     });
     expect(prisma.transactionUser.update).toHaveBeenCalledWith({
       where: { id: customerId },
-      data: { role: UserRole.SPECIALIST, speciality: ProductType.AIRCRAFT },
+      data: {
+        role: UserRole.SPECIALIST,
+        speciality: ProductType.AIRCRAFT,
+        commission_rate: 18,
+      },
+    });
+  });
+
+  it.each([0, 18.5])('persiste comissão %s na promoção', async (rate) => {
+    const { prisma, service } = makeService();
+
+    await service.changeRole(customerId, {
+      role: UserRole.SPECIALIST,
+      speciality: ProductType.AIRCRAFT,
+      commission_rate: rate,
+    });
+
+    expect(prisma.transactionUser.update).toHaveBeenCalledWith({
+      where: { id: customerId },
+      data: {
+        role: UserRole.SPECIALIST,
+        speciality: ProductType.AIRCRAFT,
+        commission_rate: rate,
+      },
     });
   });
 
@@ -224,6 +264,59 @@ describe('AdminUserManagementService', () => {
     });
   });
 
+  it('exige comissão ao substituir o gerente por Especialista', async () => {
+    const currentManager = user(officeId, UserRole.OFFICE, {
+      company_id: companyId,
+    });
+    const candidate = user(candidateId, UserRole.CUSTOMER);
+    const { prisma, service } = makeService([currentManager, candidate]);
+    prisma.transactionUser.findFirst.mockResolvedValue(currentManager);
+
+    await expect(
+      service.validateRoleChange(candidateId, {
+        role: UserRole.OFFICE,
+        company_id: companyId,
+        replacement: {
+          role: UserRole.SPECIALIST,
+          speciality: ProductType.CAR,
+        },
+      }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      blockers: expect.arrayContaining([
+        expect.objectContaining({ code: 'COMMISSION_REQUIRED' }),
+      ]),
+    });
+  });
+
+  it('persiste comissão zero ao substituir o gerente por Especialista', async () => {
+    const currentManager = user(officeId, UserRole.OFFICE, {
+      company_id: companyId,
+    });
+    const candidate = user(candidateId, UserRole.CUSTOMER);
+    const { prisma, service } = makeService([currentManager, candidate]);
+    prisma.transactionUser.findFirst.mockResolvedValue(currentManager);
+
+    await service.changeRole(candidateId, {
+      role: UserRole.OFFICE,
+      company_id: companyId,
+      replacement: {
+        role: UserRole.SPECIALIST,
+        speciality: ProductType.CAR,
+        commission_rate: 0,
+      },
+    });
+
+    expect(prisma.transactionUser.update).toHaveBeenNthCalledWith(1, {
+      where: { id: officeId },
+      data: {
+        role: UserRole.SPECIALIST,
+        speciality: ProductType.CAR,
+        commission_rate: 0,
+      },
+    });
+  });
+
   it('bloqueia gerente saindo do cargo fora de uma substituição atômica', async () => {
     const manager = user(officeId, UserRole.OFFICE, {
       company_id: companyId,
@@ -291,8 +384,13 @@ describe('AdminUserManagementService', () => {
         role: UserRole.SPECIALIST,
         company_id: companyId,
         speciality: ProductType.AIRCRAFT,
+        commission_rate: 18,
       },
-      data: { role: UserRole.SPECIALIST, speciality: ProductType.AIRCRAFT },
+      data: {
+        role: UserRole.SPECIALIST,
+        speciality: ProductType.AIRCRAFT,
+        commission_rate: 18,
+      },
     },
   ])(
     'persiste somente o contexto permitido para $name',

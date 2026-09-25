@@ -24,6 +24,12 @@ describe('admin-user-management.labels', () => {
     expect(specialityLabel(value)).toBe(expected);
   });
 
+  it('traduz o bloqueio de comissão obrigatória', () => {
+    expect(blockerMessage({ code: 'COMMISSION_REQUIRED' })).toBe(
+      'Informe a comissão para o cargo de Especialista.',
+    );
+  });
+
   it.each([
     [
       'CONSULTANT_HAS_CLIENTS' as const,

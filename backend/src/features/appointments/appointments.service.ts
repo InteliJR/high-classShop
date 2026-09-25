@@ -10,6 +10,8 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import {
   CalendlyScheduledDto,
   CreateAppointmentDto,
+  CreatePendingAppointmentDto,
+  CreatePlatformAppointmentDto,
   GetAppointmentsQueryDto,
   UpdateAppointmentStatusDto,
 } from './dto';
@@ -20,6 +22,7 @@ import {
   ProductResponseDto,
 } from './entities/appointment.response';
 import {
+  AppointmentSchedulingMethod,
   CalendlySyncStatus,
   StatusAgendamento,
   UserRole,
@@ -95,51 +98,39 @@ export class AppointmentsService {
    * @throws NotFoundException Se usuário ou produto não encontrado
    */
   async create(
-    dto: CreateAppointmentDto,
+    dto: CreatePlatformAppointmentDto,
     userId: string,
+    userRole: UserRole,
   ): Promise<AppointmentResponseEntity> {
+    if (userRole !== UserRole.CUSTOMER || dto.client_id !== userId) {
+      throw new ForbiddenException({
+        success: false,
+        error: {
+          code: 403,
+          message: 'Apenas o próprio cliente pode criar este agendamento',
+        },
+      });
+    }
+
     this.logger.log(
       `[create] Criando agendamento para cliente ${dto.client_id} com especialista ${dto.specialist_id}`,
     );
 
-    // Validação 1: appointment_datetime deve ser futuro (se fornecido)
-    // Generate the fallback once. The exact instant checked under the
-    // specialist lock must be the same instant persisted below.
-    let appointmentDateTime: Date = new Date();
-    if (dto.appointment_datetime) {
-      const parsedAppointmentDateTime = parseDate(dto.appointment_datetime);
-      if (!parsedAppointmentDateTime) {
-        this.logger.warn('[create] Data/hora do agendamento é inválida');
-        throw new BadRequestException({
-          success: false,
-          error: {
-            code: 400,
-            message: 'Data/hora do agendamento é inválida',
-            details: {
-              appointment_datetime: [
-                'appointment_datetime deve estar em formato ISO 8601 UTC válido',
-              ],
-            },
+    const appointmentDateTime = parseDate(dto.appointment_datetime);
+    if (!appointmentDateTime || !isFutureDate(appointmentDateTime)) {
+      this.logger.warn('[create] Data/hora do agendamento é inválida');
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message: 'Data/hora do agendamento deve ser futura',
+          details: {
+            appointment_datetime: [
+              'appointment_datetime deve ser uma data ISO 8601 futura',
+            ],
           },
-        });
-      }
-      appointmentDateTime = parsedAppointmentDateTime;
-
-      if (!isFutureDate(appointmentDateTime)) {
-        this.logger.warn('[create] Data/hora do agendamento é no passado');
-        throw new BadRequestException({
-          success: false,
-          error: {
-            code: 400,
-            message: 'Data/hora do agendamento deve ser futura',
-            details: {
-              appointment_datetime: [
-                'appointment_datetime deve ser futuro, não pode ser no passado ou presente',
-              ],
-            },
-          },
-        });
-      }
+        },
+      });
     }
 
     // Validação 2: Verificar que cliente existe
@@ -257,6 +248,7 @@ export class AppointmentsService {
             product_id: dto.product_id,
             appointment_datetime: appointmentDateTime,
             status: StatusAgendamento.SCHEDULED,
+            scheduling_method: AppointmentSchedulingMethod.PLATFORM,
             notes: dto.notes,
           },
           include: {
@@ -279,7 +271,16 @@ export class AppointmentsService {
                 ? 'boat_id'
                 : 'aircraft_id']: dto.product_id,
             status: 'SCHEDULING', // ProcessStatus enum
-            notes: `Criado via agendamento (Calendly integration). Cliente agendou em ${appointment.appointment_datetime?.toISOString() || 'data pendente'}`,
+            notes: `Criado via agendamento interno. Cliente agendou em ${appointment.appointment_datetime?.toISOString()}`,
+          },
+        });
+
+        await tx.processStatusHistory.create({
+          data: {
+            processId: process.id,
+            status: ProcessStatus.SCHEDULING,
+            changed_by: userId,
+            changed_at: new Date(),
           },
         });
 
@@ -314,6 +315,158 @@ export class AppointmentsService {
 
     // Montar resposta com dados completos
     return this.mapToResponseEntity(appointment, client, specialist, product);
+  }
+
+  async reschedule(
+    appointmentId: string,
+    appointmentDatetime: string,
+    userId: string,
+  ): Promise<AppointmentResponseEntity> {
+    const nextDate = parseDate(appointmentDatetime);
+    if (!nextDate || !isFutureDate(nextDate)) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 400,
+          message: 'O novo horário deve ser uma data futura válida',
+        },
+      });
+    }
+
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: { client: true, specialist: true, process: true },
+    });
+    if (!appointment) {
+      throw new NotFoundException('Agendamento não encontrado');
+    }
+    if (appointment.specialist_id !== userId) {
+      throw new ForbiddenException(
+        'Apenas o especialista responsável pode alterar o horário',
+      );
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
+
+      const lockedAppointment = await tx.appointment.findUnique({
+        where: { id: appointmentId },
+        include: { client: true, specialist: true, process: true },
+      });
+      if (!lockedAppointment) {
+        throw new NotFoundException('Agendamento não encontrado');
+      }
+      if (lockedAppointment.specialist_id !== userId) {
+        throw new ForbiddenException(
+          'Apenas o especialista responsável pode alterar o horário',
+        );
+      }
+      if (lockedAppointment.status !== StatusAgendamento.SCHEDULED) {
+        throw new BadRequestException(
+          'Apenas agendamentos confirmados podem ter o horário alterado',
+        );
+      }
+      if (!lockedAppointment.appointment_datetime) {
+        throw new BadRequestException(
+          'O agendamento atual não possui horário definido',
+        );
+      }
+      if (lockedAppointment.specialist_rescheduled_at) {
+        throw this.buildRescheduleAlreadyUsedError(appointmentId);
+      }
+      if (
+        lockedAppointment.appointment_datetime.getTime() === nextDate.getTime()
+      ) {
+        throw new BadRequestException(
+          'O novo horário deve ser diferente do horário atual',
+        );
+      }
+
+      await assertSpecialistScheduleAvailable(
+        tx,
+        lockedAppointment.specialist_id,
+        nextDate,
+        appointmentId,
+      );
+
+      const rescheduledAt = new Date();
+      const claim = await tx.appointment.updateMany({
+        where: {
+          id: appointmentId,
+          status: StatusAgendamento.SCHEDULED,
+          specialist_rescheduled_at: null,
+        },
+        data: {
+          appointment_datetime: nextDate,
+          specialist_rescheduled_from: lockedAppointment.appointment_datetime,
+          specialist_rescheduled_at: rescheduledAt,
+        },
+      });
+      if (claim.count !== 1) {
+        throw this.buildRescheduleAlreadyUsedError(appointmentId);
+      }
+
+      return tx.appointment.findUniqueOrThrow({
+        where: { id: appointmentId },
+        include: { client: true, specialist: true, process: true },
+      });
+    });
+
+    const product = await this.getProductByType(
+      updated.product_type,
+      updated.product_id,
+    );
+    if (
+      updated.process?.id &&
+      updated.specialist_rescheduled_from &&
+      updated.appointment_datetime
+    ) {
+      const previousAppointmentDate = updated.specialist_rescheduled_from;
+      const appointmentDate = updated.appointment_datetime;
+      const productDetails = product
+        ? `${(product as any).marca || ''} ${(product as any).modelo || ''}`.trim()
+        : '';
+      setImmediate(() => {
+        this.notificationService
+          .sendAppointmentRescheduledEmail({
+            clientEmail: updated.client.email,
+            clientName:
+              `${updated.client.name} ${updated.client.surname || ''}`.trim(),
+            specialistName:
+              `${updated.specialist.name} ${updated.specialist.surname || ''}`.trim(),
+            previousAppointmentDate,
+            appointmentDate,
+            productDetails,
+            processId: updated.process!.id,
+          })
+          .catch((error) => {
+            this.logger.error('Notification failed (non-critical)', {
+              method: 'reschedule',
+              appointmentId,
+              error: error.message,
+            });
+          });
+      });
+    }
+    return this.mapToResponseEntity(
+      updated,
+      updated.client,
+      updated.specialist,
+      product,
+    );
+  }
+
+  private buildRescheduleAlreadyUsedError(
+    appointmentId: string,
+  ): ConflictException {
+    return new ConflictException({
+      success: false,
+      error: {
+        code: 'APPOINTMENT_RESCHEDULE_ALREADY_USED',
+        message: 'A alteração definitiva deste agendamento já foi utilizada',
+        details: { appointment_id: appointmentId },
+      },
+    });
   }
 
   /**
@@ -579,6 +732,56 @@ export class AppointmentsService {
     userId: string,
     userRole: UserRole,
   ): Promise<AppointmentResponseEntity> {
+    const assertTransitionAllowed = (current: any): void => {
+      const isParticipant =
+        current.client_id === userId || current.specialist_id === userId;
+      if (!isParticipant && userRole !== UserRole.ADMIN) {
+        throw new ForbiddenException({
+          success: false,
+          error: {
+            code: 403,
+            message: 'Não tem permissão para atualizar este agendamento',
+            details: { appointment_id: id },
+          },
+        });
+      }
+
+      if (
+        dto.status === StatusAgendamento.PENDING ||
+        dto.status === StatusAgendamento.SCHEDULED
+      ) {
+        throw new BadRequestException(
+          'Use o fluxo específico de confirmação para agendar uma reunião',
+        );
+      }
+
+      if (dto.status === StatusAgendamento.COMPLETED) {
+        if (current.specialist_id !== userId && userRole !== UserRole.ADMIN) {
+          throw new ForbiddenException(
+            'Apenas o especialista responsável pode concluir a reunião',
+          );
+        }
+        if (
+          current.status !== StatusAgendamento.SCHEDULED ||
+          !current.appointment_datetime
+        ) {
+          throw new BadRequestException(
+            'Apenas uma reunião agendada pode ser concluída',
+          );
+        }
+      }
+
+      if (
+        dto.status === StatusAgendamento.CANCELLED &&
+        current.status !== StatusAgendamento.PENDING &&
+        current.status !== StatusAgendamento.SCHEDULED
+      ) {
+        throw new BadRequestException(
+          'Apenas agendamentos pendentes ou agendados podem ser cancelados',
+        );
+      }
+    };
+
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
       include: {
@@ -599,28 +802,56 @@ export class AppointmentsService {
       });
     }
 
-    // Verificar permissão: apenas participantes ou admin
-    const isParticipant =
-      appointment.client_id === userId || appointment.specialist_id === userId;
-    if (!isParticipant && userRole !== UserRole.ADMIN) {
-      throw new ForbiddenException({
-        success: false,
-        error: {
-          code: 403,
-          message: 'Não tem permissão para atualizar este agendamento',
-          details: { appointment_id: id },
-        },
-      });
-    }
+    assertTransitionAllowed(appointment);
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const updatedAppointment = await tx.appointment.update({
+      await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
+      const lockedAppointment = await tx.appointment.findUnique({
         where: { id },
+        include: {
+          client: true,
+          specialist: true,
+          process: true,
+        },
+      });
+      if (!lockedAppointment) {
+        throw new NotFoundException({
+          success: false,
+          error: {
+            code: 404,
+            message: 'Agendamento não encontrado',
+            details: { appointment_id: id },
+          },
+        });
+      }
+      assertTransitionAllowed(lockedAppointment);
+
+      const claim = await tx.appointment.updateMany({
+        where: {
+          id,
+          status: lockedAppointment.status,
+          updated_at: lockedAppointment.updated_at,
+        },
         data: {
           status: dto.status,
-          notes: dto.notes || appointment.notes,
+          notes: dto.notes || lockedAppointment.notes,
           updated_at: new Date(),
         },
+      });
+      if (claim.count !== 1) {
+        throw new ConflictException({
+          success: false,
+          error: {
+            code: 'APPOINTMENT_STATUS_TRANSITION_CONFLICT',
+            message:
+              'O agendamento foi alterado enquanto o status era atualizado',
+            details: { appointment_id: id },
+          },
+        });
+      }
+
+      const updatedAppointment = await tx.appointment.findUniqueOrThrow({
+        where: { id },
         include: {
           client: true,
           specialist: true,
@@ -629,8 +860,11 @@ export class AppointmentsService {
       });
 
       // LÓGICA CRÍTICA: Se status muda para COMPLETED, atualizar Process vinculado
-      if (dto.status === StatusAgendamento.COMPLETED && appointment.process) {
-        const process = appointment.process;
+      if (
+        dto.status === StatusAgendamento.COMPLETED &&
+        lockedAppointment.process
+      ) {
+        const process = lockedAppointment.process;
 
         // Só move para NEGOTIATION se Process está em SCHEDULING
         // Evita conflito se já está em NEGOTIATION+ (não retrocede)
@@ -824,6 +1058,11 @@ export class AppointmentsService {
     entity.id = appointment.id;
     entity.appointment_datetime = appointment.appointment_datetime;
     entity.status = appointment.status;
+    entity.scheduling_method = appointment.scheduling_method ?? null;
+    entity.specialist_rescheduled_at =
+      appointment.specialist_rescheduled_at ?? null;
+    entity.specialist_rescheduled_from =
+      appointment.specialist_rescheduled_from ?? null;
     entity.notes = appointment.notes;
     entity.calendly_event_uri = appointment.calendly_event_uri;
     entity.calendly_invitee_uri = appointment.calendly_invitee_uri;
@@ -927,6 +1166,11 @@ export class AppointmentsService {
     entity.id = appointment.id;
     entity.appointment_datetime = appointment.appointment_datetime;
     entity.status = appointment.status;
+    entity.scheduling_method = appointment.scheduling_method ?? null;
+    entity.specialist_rescheduled_at =
+      appointment.specialist_rescheduled_at ?? null;
+    entity.specialist_rescheduled_from =
+      appointment.specialist_rescheduled_from ?? null;
     entity.notes = appointment.notes || undefined;
     entity.created_at = appointment.created_at;
     entity.updated_at = appointment.updated_at;
@@ -968,18 +1212,31 @@ export class AppointmentsService {
    * @returns Appointment em status PENDING
    */
   async createPending(
-    dto: CreateAppointmentDto,
+    dto: CreatePendingAppointmentDto,
     userId: string,
+    userRole: UserRole,
   ): Promise<AppointmentResponseEntity> {
     this.logger.log(
       `[createPending] Criando agendamento PENDING para cliente ${dto.client_id}`,
     );
 
+    const schedulingMethod =
+      dto.scheduling_method ?? AppointmentSchedulingMethod.CALENDLY;
+
+    if (
+      schedulingMethod === AppointmentSchedulingMethod.EMAIL &&
+      dto.appointment_datetime
+    ) {
+      throw new BadRequestException(
+        'Solicitações por e-mail devem ter o horário definido pelo especialista',
+      );
+    }
+
     // Validar que quem está criando é o próprio cliente
     this.logger.log(
       `[createPending] Validando permissão: userId=${userId} vs client_id=${dto.client_id}`,
     );
-    if (dto.client_id !== userId) {
+    if (userRole !== UserRole.CUSTOMER || dto.client_id !== userId) {
       this.logger.error(
         `[createPending] ERRO: Cliente tentando criar agendamento para outro usuário`,
       );
@@ -1152,6 +1409,7 @@ export class AppointmentsService {
           specialist_id: dto.specialist_id,
           appointment_datetime: pendingDateTime,
           status: StatusAgendamento.PENDING,
+          scheduling_method: schedulingMethod,
           notes:
             dto.notes ||
             (isConsultancy
@@ -1329,7 +1587,7 @@ export class AppointmentsService {
   async confirmPending(
     appointmentId: string,
     userId: string,
-    appointmentDatetime?: Date,
+    appointmentDatetime?: string | Date,
   ): Promise<AppointmentResponseEntity> {
     this.logger.log(
       `[confirmPending] Confirmando agendamento ${appointmentId} por ${userId}`,
@@ -1368,6 +1626,24 @@ export class AppointmentsService {
           details: { current_status: appointment.status },
         },
       });
+    }
+
+    if (
+      appointment.scheduling_method === AppointmentSchedulingMethod.EMAIL ||
+      appointment.scheduling_method === AppointmentSchedulingMethod.PLATFORM
+    ) {
+      throw new BadRequestException(
+        'Use a confirmação do processo para este tipo de agendamento',
+      );
+    }
+
+    const requestedDate = parseDate(
+      appointmentDatetime ?? appointment.appointment_datetime ?? undefined,
+    );
+    if (!requestedDate || !isFutureDate(requestedDate)) {
+      throw new BadRequestException(
+        'Informe uma data e hora futura para confirmar o agendamento',
+      );
     }
 
     // Atualizar para SCHEDULED e atualizar Process para NEGOTIATION em transação
@@ -1419,10 +1695,26 @@ export class AppointmentsService {
           },
         });
       }
-      const confirmedDateTime =
-        appointmentDatetime ||
-        lockedAppointment.appointment_datetime ||
-        new Date();
+      if (
+        lockedAppointment.scheduling_method ===
+          AppointmentSchedulingMethod.EMAIL ||
+        lockedAppointment.scheduling_method ===
+          AppointmentSchedulingMethod.PLATFORM
+      ) {
+        throw new BadRequestException(
+          'Use a confirmação do processo para este tipo de agendamento',
+        );
+      }
+      const confirmedDateTime = parseDate(
+        appointmentDatetime ??
+          lockedAppointment.appointment_datetime ??
+          undefined,
+      );
+      if (!confirmedDateTime || !isFutureDate(confirmedDateTime)) {
+        throw new BadRequestException(
+          'Informe uma data e hora futura para confirmar o agendamento',
+        );
+      }
       await assertSpecialistScheduleAvailable(
         tx,
         lockedAppointment.specialist_id,
@@ -1796,6 +2088,19 @@ export class AppointmentsService {
     }
 
     if (
+      appointment.scheduling_method &&
+      appointment.scheduling_method !== AppointmentSchedulingMethod.CALENDLY
+    ) {
+      throw new BadRequestException(
+        'Este agendamento não foi criado pelo Calendly',
+      );
+    }
+
+    if (appointment.specialist_rescheduled_at) {
+      throw this.buildRescheduleAlreadyUsedError(appointmentId);
+    }
+
+    if (
       appointment.calendly_event_uri &&
       appointment.calendly_event_uri === dto.event_uri
     ) {
@@ -1869,12 +2174,29 @@ export class AppointmentsService {
           },
         });
       }
+      if (
+        lockedAppointment.scheduling_method &&
+        lockedAppointment.scheduling_method !==
+          AppointmentSchedulingMethod.CALENDLY
+      ) {
+        throw new BadRequestException(
+          'Este agendamento não foi criado pelo Calendly',
+        );
+      }
+      if (lockedAppointment.specialist_rescheduled_at) {
+        throw this.buildRescheduleAlreadyUsedError(appointmentId);
+      }
       if (lockedAppointment.calendly_event_uri === dto.event_uri) {
         return lockedAppointment;
       }
 
       const targetDateTime =
         scheduledStartTime || lockedAppointment.appointment_datetime;
+      if (targetDateTime && !isFutureDate(targetDateTime)) {
+        throw new BadRequestException(
+          'O horário sincronizado do Calendly deve ser futuro',
+        );
+      }
       await assertSpecialistScheduleAvailable(
         tx,
         lockedAppointment.specialist_id,

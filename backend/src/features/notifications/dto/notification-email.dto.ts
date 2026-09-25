@@ -27,6 +27,16 @@ export interface AppointmentCreatedEmailDto {
   processId: string;
 }
 
+export interface AppointmentRescheduledEmailDto {
+  clientEmail: string;
+  clientName: string;
+  specialistName: string;
+  previousAppointmentDate: Date;
+  appointmentDate: Date;
+  productDetails: string;
+  processId: string;
+}
+
 export interface AppointmentCancelledEmailDto {
   recipientEmail: string;
   recipientName: string;

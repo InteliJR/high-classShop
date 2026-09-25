@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Mail, CheckCircle, ExternalLink, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle, ExternalLink, Loader2 } from "lucide-react";
 import { PopupModal } from "react-calendly";
 import { getCarById, type RawCar } from "../../services/cars.service";
 import { getBoatById, type RawBoat } from "../../services/boats.service";
@@ -12,6 +12,7 @@ import { getUserById } from "../../services/users.service";
 import {
   checkExistingAppointment,
   createPendingAppointment,
+  createPlatformAppointment,
   type Appointment,
 } from "../../services/appointments.service";
 import { getProcessesByClient } from "../../services/processes.service";
@@ -23,6 +24,8 @@ import { Alert } from "../../components/ui/alert";
 import { Dialog, DialogContent } from "../../components/ui/dialog";
 import { PageHeader } from "../../components/patterns/PageHeader";
 import StartProcessForClientModal from "../../components/processes/StartProcessForClientModal";
+import AppointmentDateTimeModal from "../../components/appointments/AppointmentDateTimeModal";
+import NoCalendlySchedulingActions from "../../components/appointments/NoCalendlySchedulingActions";
 import { useAuth } from "../../store/authStateManager";
 import { useCheckAppointment } from "../../hooks/useCheckAppointment";
 import { useCalendlyScheduling } from "../../hooks/useCalendlyScheduling";
@@ -36,6 +39,10 @@ interface Specialist {
   calendly_url: string | null;
   speciality: string | null;
 }
+
+const isActiveProcessConflict = (error: any): boolean =>
+  error?.response?.status === 409 &&
+  error?.response?.data?.error?.code === "ACTIVE_PROCESS_EXISTS";
 
 /**
  * ProductPage
@@ -68,6 +75,8 @@ export default function ProductPage() {
   const [lockedAppointment, setLockedAppointment] =
     useState<Appointment | null>(null);
   const [isStartProcessModalOpen, setIsStartProcessModalOpen] = useState(false);
+  const [isDateTimeModalOpen, setIsDateTimeModalOpen] = useState(false);
+  const [dateTimeError, setDateTimeError] = useState<string | null>(null);
   // Aviso de resultado da tentativa de criação do agendamento PENDING, antes
   // de o popup do Calendly sequer abrir (conflito 409 / falha de rede). A
   // partir do momento que o popup abre, quem governa o aviso é o hook
@@ -283,6 +292,7 @@ export default function ProductPage() {
         product_type:
           (productType?.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT") || "CAR",
         product_id: product.id,
+        scheduling_method: "CALENDLY",
         notes: "Cliente abriu agendamento via popup da plataforma",
       });
 
@@ -330,14 +340,17 @@ export default function ProductPage() {
     setIsCreatingPending(true);
     try {
       // Criar agendamento PENDING
-      await createPendingAppointment({
+      const pendingAppointment = await createPendingAppointment({
         client_id: user.id,
         specialist_id: specialist.id,
         product_type:
           (productType?.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT") || "CAR",
         product_id: product.id,
+        scheduling_method: "EMAIL",
         notes: "Cliente entrou em contato por email",
       });
+
+      setLockedAppointment(pendingAppointment);
 
       // Abrir email
       const subject = encodeURIComponent(
@@ -346,20 +359,23 @@ export default function ProductPage() {
       const body = encodeURIComponent(
         `Olá ${specialist.name},\n\nTenho interesse no ${product?.marca} ${product?.modelo} e gostaria de agendar uma reunião.\n\nAtenciosamente.`,
       );
-      window.location.href = `mailto:${specialist.email}?subject=${subject}&body=${body}`;
-
-      // Redirecionar para página de processos do cliente
-      setTimeout(() => {
-        navigate("/customer/processes", {
-          state: {
-            message:
-              "Solicitação de agendamento criada! O especialista irá confirmar em breve.",
-          },
-        });
-      }, 500);
+      window.open(
+        `mailto:${specialist.email}?subject=${subject}&body=${body}`,
+        "_self",
+      );
     } catch (err: any) {
       // Se já existe agendamento, apenas abrir o email
       if (err.response?.status === 409) {
+        if (isActiveProcessConflict(err)) {
+          navigate("/customer/processes", {
+            state: {
+              message:
+                "Você já possui um processo ativo para este produto. Acompanhe o processo existente.",
+            },
+          });
+          return;
+        }
+
         try {
           if (user?.id && specialist?.id && product?.id && productType) {
             const existing = await checkExistingAppointment(
@@ -382,15 +398,79 @@ export default function ProductPage() {
         const body = encodeURIComponent(
           `Olá ${specialist.name},\n\nTenho interesse no ${product?.marca} ${product?.modelo} e gostaria de agendar uma reunião.\n\nAtenciosamente.`,
         );
-        window.location.href = `mailto:${specialist.email}?subject=${subject}&body=${body}`;
-        redirectToProcesses(
-          "Você já possui uma solicitação para este produto. Acompanhe em Meus Processos.",
-          700,
+        window.open(
+          `mailto:${specialist.email}?subject=${subject}&body=${body}`,
+          "_self",
         );
       } else {
         console.error("Erro ao criar agendamento pendente:", err);
         alert("Erro ao criar agendamento. Tente novamente.");
       }
+    } finally {
+      setIsCreatingPending(false);
+    }
+  };
+
+  const handlePlatformScheduling = async (appointmentDatetime: string) => {
+    if (!specialist || !user || !product || !productType) return;
+
+    setIsCreatingPending(true);
+    setDateTimeError(null);
+    try {
+      const scheduledAppointment = await createPlatformAppointment({
+        client_id: user.id,
+        specialist_id: specialist.id,
+        product_type: productType.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT",
+        product_id: product.id,
+        appointment_datetime: appointmentDatetime,
+        notes: "Cliente escolheu o horário pela plataforma",
+      });
+
+      setLockedAppointment(scheduledAppointment);
+      setIsDateTimeModalOpen(false);
+      navigate("/customer/processes", {
+        state: {
+          message: "Reunião agendada. Você já pode acompanhar o processo.",
+        },
+      });
+    } catch (err: any) {
+      if (err.response?.status === 409) {
+        if (isActiveProcessConflict(err)) {
+          setIsDateTimeModalOpen(false);
+          navigate("/customer/processes", {
+            state: {
+              message:
+                "Você já possui um processo ativo para este produto. Acompanhe o processo existente.",
+            },
+          });
+          return;
+        }
+
+        const existing = await checkExistingAppointment(
+          user.id,
+          specialist.id,
+          productType.toUpperCase() as "CAR" | "BOAT" | "AIRCRAFT",
+          product.id,
+        );
+
+        if (existing) {
+          setLockedAppointment(existing);
+          setIsDateTimeModalOpen(false);
+          navigate("/customer/processes", {
+            state: {
+              message:
+                "Você já possui uma solicitação para este produto. Acompanhe o processo existente.",
+            },
+          });
+          return;
+        }
+      }
+
+      setDateTimeError(
+        err.friendlyMessage ||
+          err.response?.data?.error?.message ||
+          "Não foi possível confirmar esse horário. Escolha outro e tente novamente.",
+      );
     } finally {
       setIsCreatingPending(false);
     }
@@ -540,9 +620,10 @@ export default function ProductPage() {
               </p>
             </Alert>
           ) : currentAppointment ? (
-            <Alert variant="success">
-              <CheckCircle size={20} className="flex-shrink-0 mt-0.5" />
-              <div>
+            <div className="space-y-4">
+              <Alert variant="success">
+                <CheckCircle size={20} className="flex-shrink-0 mt-0.5" />
+                <div>
                 <p className="font-semibold">
                   {currentAppointment.status === "PENDING"
                     ? "Aguardando confirmação do especialista"
@@ -569,8 +650,28 @@ export default function ProductPage() {
                     </>
                   )}
                 </p>
-              </div>
-            </Alert>
+                </div>
+              </Alert>
+              {currentAppointment.status === "PENDING" &&
+                currentAppointment.scheduling_method === "EMAIL" && (
+                  <>
+                    <NoCalendlySchedulingActions
+                      specialistEmail={specialist.email}
+                      showActions={false}
+                      onEmail={() => undefined}
+                      onChooseDateTime={() => undefined}
+                    />
+                    <Button
+                      type="button"
+                      variant="light"
+                      className="w-full"
+                      onClick={() => navigate("/customer/processes")}
+                    >
+                      Acompanhar em Meus Processos
+                    </Button>
+                  </>
+                )}
+            </div>
           ) : specialist.calendly_url?.trim() ? (
             /* Com Calendly URL - Botão para acessar e criar PENDING */
             <div className="space-y-4">
@@ -622,30 +723,15 @@ export default function ProductPage() {
               </Button>
             </div>
           ) : (
-            /* Sem Calendly URL - fallback email */
-            <div className="space-y-4">
-              <p className="text-muted">
-                Este especialista não possui agenda online. Entre em contato por
-                e-mail para agendar uma reunião.
-              </p>
-              <Button
-                onClick={handleEmailClick}
-                disabled={isCreatingPending}
-                className="w-full flex items-center justify-center gap-3"
-              >
-                {isCreatingPending ? (
-                  <>
-                    <Loader2 className="animate-spin h-5 w-5 text-white" />
-                    Criando solicitação...
-                  </>
-                ) : (
-                  <>
-                    <Mail size={20} />
-                    Enviar E-mail para o Especialista
-                  </>
-                )}
-              </Button>
-            </div>
+            <NoCalendlySchedulingActions
+              specialistEmail={specialist.email}
+              busy={isCreatingPending}
+              onEmail={handleEmailClick}
+              onChooseDateTime={() => {
+                setDateTimeError(null);
+                setIsDateTimeModalOpen(true);
+              }}
+            />
           )}
         </Card>
       )}
@@ -662,6 +748,18 @@ export default function ProductPage() {
           }}
         />
       )}
+
+      <AppointmentDateTimeModal
+        open={isDateTimeModalOpen}
+        title="Escolher data e hora"
+        description="Escolha quando você e o especialista irão se reunir pela plataforma."
+        submitLabel="Confirmar agendamento"
+        busy={isCreatingPending}
+        serverError={dateTimeError}
+        onClearServerError={() => setDateTimeError(null)}
+        onOpenChange={setIsDateTimeModalOpen}
+        onSubmit={handlePlatformScheduling}
+      />
 
       {/* Modal do Consultor: iniciar processo para cliente */}
       {specialist && product && productType && id && (

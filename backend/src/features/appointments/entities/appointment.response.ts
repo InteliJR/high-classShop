@@ -1,4 +1,9 @@
-import { ProductCurrency, ProductType, StatusAgendamento } from '@prisma/client';
+import {
+  AppointmentSchedulingMethod,
+  ProductCurrency,
+  ProductType,
+  StatusAgendamento,
+} from '@prisma/client';
 import { Expose, Type } from 'class-transformer';
 
 /**
@@ -159,6 +164,15 @@ export class AppointmentResponseEntity {
    */
   @Expose()
   status: StatusAgendamento;
+
+  @Expose()
+  scheduling_method?: AppointmentSchedulingMethod | null;
+
+  @Expose()
+  specialist_rescheduled_at?: Date | null;
+
+  @Expose()
+  specialist_rescheduled_from?: Date | null;
 
   /**
    * Anotações do agendamento

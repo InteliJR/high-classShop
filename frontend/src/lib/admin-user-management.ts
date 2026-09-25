@@ -12,9 +12,11 @@ export type SpecialityCode = "CAR" | "BOAT" | "AIRCRAFT";
 export type ChangeBlockerCode =
   | "ROLE_UNCHANGED"
   | "SPECIALITY_UNCHANGED"
+  | "SPECIALIST_DETAILS_UNCHANGED"
   | "COMPANY_REQUIRED"
   | "COMPANY_NOT_FOUND"
   | "SPECIALITY_REQUIRED"
+  | "COMMISSION_REQUIRED"
   | "CUSTOMER_HAS_CONSULTANT"
   | "CUSTOMER_HAS_ADVISOR"
   | "CONSULTANT_HAS_CLIENTS"
@@ -54,6 +56,7 @@ export type RoleContext = {
   role: UserRoleCode;
   company_id?: string;
   speciality?: SpecialityCode;
+  commission_rate?: number;
 };
 
 export type ChangeRolePayload = RoleContext & {
@@ -91,7 +94,11 @@ export type ManagementDialogInteractionPolicy = {
   dismissalAllowed: boolean;
 };
 
-export type DialogRequirement = "company" | "speciality" | "replacement";
+export type DialogRequirement =
+  | "company"
+  | "speciality"
+  | "commission"
+  | "replacement";
 export type UserEditMode = "role" | "specialist";
 
 export const ROLE_LABELS: Record<UserRoleCode, string> = {
@@ -124,10 +131,14 @@ export const BLOCKER_MESSAGES: Record<
   ROLE_UNCHANGED: () => "O cargo selecionado já está atribuído a este usuário.",
   SPECIALITY_UNCHANGED: () =>
     "A especialidade selecionada já está atribuída a este especialista.",
+  SPECIALIST_DETAILS_UNCHANGED: () =>
+    "A especialidade e a taxa de comissão informadas já estão atribuídas a este especialista.",
   COMPANY_REQUIRED: () => "Informe o escritório para o cargo selecionado.",
   COMPANY_NOT_FOUND: () => "O escritório informado não foi encontrado.",
   SPECIALITY_REQUIRED: () =>
     "Informe a especialidade para o cargo de Especialista.",
+  COMMISSION_REQUIRED: () =>
+    "Informe a comissão para o cargo de Especialista.",
   CUSTOMER_HAS_CONSULTANT: () =>
     "O cliente ainda possui um consultor vinculado.",
   CUSTOMER_HAS_ADVISOR: () => "O cliente ainda possui um assessor vinculado.",
@@ -165,9 +176,13 @@ export function specialityLabel(speciality?: string | null): string {
 }
 
 export function blockerMessage(
-  blocker: Pick<ChangeBlocker, "code" | "count">,
+  blocker: Pick<ChangeBlocker, "code" | "count"> &
+    Partial<Pick<ChangeBlocker, "message">>,
 ): string {
-  return BLOCKER_MESSAGES[blocker.code](blocker.count);
+  const formatter = BLOCKER_MESSAGES[blocker.code as ChangeBlockerCode];
+  return formatter
+    ? formatter(blocker.count)
+    : blocker.message ?? "A alteração não pode ser concluída.";
 }
 
 export function getDialogRequirements(
@@ -177,7 +192,7 @@ export function getDialogRequirements(
   if (role === "OFFICE")
     return hasOfficeConflict ? ["company", "replacement"] : ["company"];
   if (role === "CONSULTANT") return ["company"];
-  if (role === "SPECIALIST") return ["speciality"];
+  if (role === "SPECIALIST") return ["speciality", "commission"];
   return [];
 }
 

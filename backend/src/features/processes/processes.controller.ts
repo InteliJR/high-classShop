@@ -29,6 +29,7 @@ import { AuthGuard } from 'src/auth/auth.guard';
 import { GetProcessesFilterDto } from './dto/get-processes-filter.dto';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { UserRole } from '@prisma/client';
+import { ConfirmProcessAppointmentDto } from './dto/confirm-process-appointment.dto';
 
 @Controller('processes')
 export class ProcessesController {
@@ -185,14 +186,21 @@ export class ProcessesController {
     const perPage = Number(filters.perPage) || 20;
 
     const { processes, count } =
-      await this.processesService.getBySpecialistIdWithFilters(specialistId, {
-        page,
-        perPage,
-        status: filters.status,
-        search: filters.search,
-        sortBy: filters.sortBy,
-        order: filters.order,
-      });
+      await this.processesService.getBySpecialistIdWithFilters(
+        specialistId,
+        {
+          page,
+          perPage,
+          status: filters.status,
+          search: filters.search,
+          sortBy: filters.sortBy,
+          order: filters.order,
+        },
+        {
+          id: user.id,
+          role: user.role,
+        },
+      );
 
     // Criação do objeto de pagination
     const skip = (page - 1) * perPage;
@@ -421,7 +429,7 @@ export class ProcessesController {
   /**
    * POST /api/processes/:id/confirm-appointment
    * Confirma o agendamento de um processo em status SCHEDULING
-   * Move o processo para NEGOTIATION e atualiza o appointment para SCHEDULED
+   * Define/confirma o horário e mantém o processo em SCHEDULING
    * Apenas o especialista pode confirmar
    *
    * @param {string} processId - Id do processo
@@ -434,6 +442,7 @@ export class ProcessesController {
   @UseGuards(AuthGuard)
   async confirmAppointment(
     @Param('id', new ParseUUIDPipe()) processId: string,
+    @Body() dto: ConfirmProcessAppointmentDto,
     @Req() req: any,
   ): Promise<ApiResponseDto<any>> {
     const userId = req.user?.sub || req.user?.id;
@@ -441,6 +450,7 @@ export class ProcessesController {
     const result = await this.processesService.confirmAppointment(
       processId,
       userId,
+      dto.appointment_datetime,
     );
 
     return {

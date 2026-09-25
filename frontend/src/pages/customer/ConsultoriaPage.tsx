@@ -120,6 +120,9 @@ export default function ConsultoriaPage() {
       const pendingAppointment = await createConsultancyAppointment({
         client_id: user.id,
         specialist_id: specialist.id,
+        scheduling_method: specialist.calendly_url?.trim()
+          ? "CALENDLY"
+          : "EMAIL",
         notes: `Consultoria solicitada pelo cliente`,
       });
 

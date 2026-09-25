@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CreateContractPage from "./CreateContractPage";
+import { formatCurrency } from "../../lib/currency";
 import {
   cancelContractPreview,
   listContractTemplates,
@@ -88,10 +89,11 @@ describe("CreateContractPage preview lifecycle", () => {
         serial_number: "SERIAL",
       },
       platform: { name: "Platform", rate: 10 },
+      office: { name: "Office", rate: 20 },
       specialist: {
         name: "Specialist",
         email: "specialist@example.test",
-        rate: 0,
+        rate: 70,
       },
       suggested_total_rate: 10,
     } as any);
@@ -237,6 +239,96 @@ describe("CreateContractPage preview lifecycle", () => {
 
     expect(vi.mocked(previewContract).mock.calls[1][0].operation_id).not.toBe(
       vi.mocked(previewContract).mock.calls[0][0].operation_id,
+    );
+  });
+
+  it("mostra somente a comissão do especialista no resumo financeiro", async () => {
+    renderPage();
+    await screen.findByText("Gerar Contrato de Venda");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Continuar para os dados do contrato/i,
+      }),
+    );
+    await screen.findByText("Modelo de contrato");
+
+    expect(screen.getByText("Valor da sua comissão")).toBeTruthy();
+    expect(
+      screen.getByText(formatCurrency(7_000, "BRL").replace(/\u00a0/g, " ")),
+    ).toBeTruthy();
+    expect(screen.queryByText("Valor do Vendedor")).toBeNull();
+    expect(screen.queryByText("Comissão Total")).toBeNull();
+    expect(screen.queryByText("Valor da Plataforma")).toBeNull();
+    expect(screen.queryByText("Valor do Escritório")).toBeNull();
+    expect(screen.queryByText(/% da comissão/)).toBeNull();
+  });
+
+  it("preserva percentual e líquido do vendedor no payload do contrato", async () => {
+    renderPage();
+    await screen.findByText("Gerar Contrato de Venda");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Continuar para os dados do contrato/i,
+      }),
+    );
+    const previewButton = await screen.findByRole("button", {
+      name: /Pré-visualizar e Enviar Contrato/i,
+    });
+    await waitFor(() =>
+      expect((previewButton as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(previewButton);
+
+    await waitFor(() => expect(previewContract).toHaveBeenCalledTimes(1));
+    expect(previewContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        total_commission_rate: 10,
+        payment_seller_value: 90_000,
+      }),
+    );
+  });
+
+  it("recalcula o líquido do vendedor ao alterar a comissão para zero", async () => {
+    renderPage();
+    await screen.findByText("Gerar Contrato de Venda");
+
+    fireEvent.change(
+      screen.getByLabelText(/Comissão total da venda/i),
+      { target: { value: "0" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Continuar para os dados do contrato/i,
+      }),
+    );
+    const previewButton = await screen.findByRole("button", {
+      name: /Pré-visualizar e Enviar Contrato/i,
+    });
+    await waitFor(() =>
+      expect((previewButton as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(previewButton);
+
+    await waitFor(() => expect(previewContract).toHaveBeenCalledTimes(1));
+    expect(previewContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        total_commission_rate: 0,
+        payment_seller_value: 100_000,
+      }),
+    );
+  });
+
+  it("oculta o ganho estimado enquanto a comissão está acima de 100%", async () => {
+    renderPage();
+    await screen.findByText("Seu ganho estimado");
+
+    fireEvent.change(
+      screen.getByLabelText(/Comissão total da venda/i),
+      { target: { value: "101" } },
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByText("Seu ganho estimado")).toBeNull(),
     );
   });
 });
