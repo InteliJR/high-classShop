@@ -8,10 +8,7 @@ function mkController() {
   const productImportJobsService = {
     createJobFromCsv: jest.fn().mockResolvedValue({ id: 'job-1' }),
   } as any;
-  const controller = new (CarsController as any)(
-    carsService,
-    productImportJobsService,
-  ) as CarsController;
+  const controller = new CarsController(carsService, productImportJobsService);
   return { controller, carsService, productImportJobsService };
 }
 
