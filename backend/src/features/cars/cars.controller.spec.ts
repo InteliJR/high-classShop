@@ -1,21 +1,18 @@
+import { ProductType } from '@prisma/client';
 import { CarsController } from './cars.controller';
 
-function mkController(connection: { is_active: boolean } | null) {
+function mkController() {
   const carsService = {
     create: jest.fn().mockResolvedValue({ id: 'car-1' }),
   } as any;
-  const productImportJobsService = {} as any;
-  const prisma = {
-    calendlyConnection: {
-      findUnique: jest.fn().mockResolvedValue(connection),
-    },
+  const productImportJobsService = {
+    createJobFromCsv: jest.fn().mockResolvedValue({ id: 'job-1' }),
   } as any;
-  const controller = new CarsController(
+  const controller = new (CarsController as any)(
     carsService,
     productImportJobsService,
-    prisma,
-  );
-  return { controller, carsService, prisma };
+  ) as CarsController;
+  return { controller, carsService, productImportJobsService };
 }
 
 const specialist = {
@@ -24,22 +21,33 @@ const specialist = {
   speciality: 'CAR',
 } as any;
 
-describe('CarsController.create — gate Calendly', () => {
-  it('bloqueia criação quando o especialista não tem Calendly conectado', async () => {
-    const { controller, carsService } = mkController(null);
+describe('CarsController — Calendly opcional', () => {
+  it('permite criação manual sem consultar Calendly', async () => {
+    const { controller, carsService } = mkController();
+    const dto = {} as any;
 
-    await expect(controller.create({} as any, specialist)).rejects.toThrow(
-      /Calendly/,
-    );
-    expect(carsService.create).not.toHaveBeenCalled();
-  });
-
-  it('permite criação quando o Calendly está conectado', async () => {
-    const { controller, carsService } = mkController({ is_active: true });
-
-    await expect(controller.create({} as any, specialist)).resolves.toEqual({
+    await expect(controller.create(dto, specialist)).resolves.toEqual({
       id: 'car-1',
     });
-    expect(carsService.create).toHaveBeenCalled();
+    expect(dto.specialist_id).toBe(specialist.id);
+    expect(carsService.create).toHaveBeenCalledWith(dto);
+  });
+
+  it('permite importação CSV sem consultar Calendly', async () => {
+    const { controller, productImportJobsService } = mkController();
+    const file = {
+      buffer: Buffer.from('marca,modelo'),
+      mimetype: 'text/csv',
+      originalname: 'carros.csv',
+    } as Express.Multer.File;
+
+    await expect(controller.importCsv(file, specialist)).resolves.toEqual({
+      id: 'job-1',
+    });
+    expect(productImportJobsService.createJobFromCsv).toHaveBeenCalledWith(
+      file.buffer,
+      specialist,
+      ProductType.CAR,
+    );
   });
 });
