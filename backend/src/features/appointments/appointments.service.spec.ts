@@ -1866,3 +1866,76 @@ describe('AppointmentsService.reschedule — alteração definitiva', () => {
     });
   });
 });
+
+describe('AppointmentsService — sugestões compartilham ocupação da agenda', () => {
+  const requested = new Date('2099-01-01T10:00:00Z');
+  it.each([
+    [
+      StatusAgendamento.PENDING,
+      AppointmentSchedulingMethod.EMAIL,
+      'PENDING',
+      11,
+    ],
+    [
+      StatusAgendamento.PENDING,
+      AppointmentSchedulingMethod.CALENDLY,
+      'PENDING',
+      11,
+    ],
+    [
+      StatusAgendamento.PENDING,
+      AppointmentSchedulingMethod.CALENDLY,
+      'SYNCED',
+      13,
+    ],
+    [StatusAgendamento.PENDING, null, 'PENDING', 13],
+    [
+      StatusAgendamento.SCHEDULED,
+      AppointmentSchedulingMethod.EMAIL,
+      'PENDING',
+      13,
+    ],
+  ])(
+    'suggestions respect %s/%s/%s including the one-hour boundary',
+    async (status, method, sync, firstHour) => {
+      const record: Record<string, any> = {
+        specialist_id: 'specialist-1',
+        status,
+        scheduling_method: method,
+        calendly_sync_status: sync,
+        appointment_datetime: new Date('2099-01-01T11:00:00Z'),
+      };
+      const findFirst = jest.fn(async ({ where }) => {
+        const branches = where.OR ?? [{ status: where.status }];
+        const occupied = branches.some((branch: any) =>
+          Object.entries(branch).every(([key, value]) => record[key] === value),
+        );
+        const inWindow =
+          record.appointment_datetime >= where.appointment_datetime.gte &&
+          record.appointment_datetime <= where.appointment_datetime.lte;
+        return occupied && inWindow ? { id: 'occupied' } : null;
+      });
+      const service = new AppointmentsService(
+        { appointment: { findFirst } } as any,
+        {} as any,
+        {} as any,
+      );
+      expect(
+        await (service as any).suggestAlternativeTimes(
+          'specialist-1',
+          requested,
+        ),
+      ).toEqual(
+        [0, 1, 2].map(
+          (offset) => `2099-01-01T${Number(firstHour) + offset}:00:00.000Z`,
+        ),
+      );
+      expect(findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: { id: true },
+          where: expect.objectContaining({ OR: expect.any(Array) }),
+        }),
+      );
+    },
+  );
+});

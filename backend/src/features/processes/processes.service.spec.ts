@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AppointmentSchedulingMethod,
   Prisma,
   ProcessStatus,
   ProductCurrency,
@@ -1043,6 +1044,10 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
       status: StatusAgendamento.PENDING,
       appointment_datetime: null,
       scheduling_method: 'EMAIL',
+      confirmed_at: null,
+      confirmed_by_id: null,
+      specialist_rescheduled_at: null,
+      specialist_rescheduled_from: null,
       ...appointmentOverrides,
     };
     const process = {
@@ -1050,6 +1055,7 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
       specialist_id: specialistId,
       client_id: clientId,
       status: ProcessStatus.SCHEDULING,
+      appointment_id: appointment.id,
       notes: null,
       updated_at: new Date('2026-01-01T00:00:00.000Z'),
       appointment,
@@ -1069,9 +1075,11 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
       boat: null,
       aircraft: null,
     };
-    const appointmentUpdate = jest.fn().mockResolvedValue({
-      ...appointment,
-      status: StatusAgendamento.SCHEDULED,
+    let stored = structuredClone(process);
+    let working = stored;
+    const appointmentUpdate = jest.fn().mockImplementation(({ data }) => {
+      Object.assign(working.appointment, data);
+      return Promise.resolve(structuredClone(working.appointment));
     });
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
@@ -1081,13 +1089,28 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
         update: appointmentUpdate,
       },
       process: {
-        findUnique: jest.fn().mockResolvedValue(process),
-        updateMany: jest.fn().mockResolvedValue({ count: processClaimCount }),
+        findUnique: jest
+          .fn()
+          .mockImplementation(() => Promise.resolve(structuredClone(working))),
+        updateMany: jest.fn().mockImplementation(({ data }) => {
+          if (processClaimCount === 1) Object.assign(working, data);
+          return Promise.resolve({ count: processClaimCount });
+        }),
       },
+      processStatusHistory: { create: jest.fn() },
     };
     const prisma = {
-      process: { findUnique: jest.fn().mockResolvedValue(process) },
-      $transaction: jest.fn(async (callback: any) => callback(tx)),
+      process: {
+        findUnique: jest
+          .fn()
+          .mockImplementation(() => Promise.resolve(structuredClone(stored))),
+      },
+      $transaction: jest.fn(async (callback: any) => {
+        working = structuredClone(stored);
+        const result = await callback(tx);
+        stored = working;
+        return result;
+      }),
     } as any;
     const notifications = {
       sendAppointmentConfirmedEmail: jest.fn().mockResolvedValue(undefined),
@@ -1096,6 +1119,10 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
       service: new ProcessesService(prisma, notifications),
       tx,
       appointmentUpdate,
+      prisma,
+      notifications,
+      stored: () => structuredClone(stored),
+      mutate: (change: (value: typeof process) => void) => change(stored),
     };
   }
 
@@ -1108,15 +1135,25 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
     expect(appointmentUpdate).not.toHaveBeenCalled();
   });
 
-  it('requires an explicit datetime for EMAIL even when legacy data has one', async () => {
-    const { service, appointmentUpdate } = makeService({
+  it('confirms the stored EMAIL proposal without requiring a second datetime', async () => {
+    const { service, stored } = makeService({
       appointment_datetime: new Date(futureIso),
     });
 
     await expect(
-      (service.confirmAppointment as any)('process-1', specialistId, undefined),
-    ).rejects.toThrow(BadRequestException);
-    expect(appointmentUpdate).not.toHaveBeenCalled();
+      service.confirmAppointment('process-1', specialistId),
+    ).resolves.toMatchObject({
+      status: ProcessStatus.SCHEDULING,
+      appointment_status: StatusAgendamento.SCHEDULED,
+      appointment_datetime: new Date(futureIso),
+    });
+    expect(stored().status).toBe(ProcessStatus.SCHEDULING);
+    expect(stored().appointment).toMatchObject({
+      confirmed_by_id: specialistId,
+      confirmed_at: expect.anything(),
+      specialist_rescheduled_at: null,
+      specialist_rescheduled_from: null,
+    });
   });
 
   it('stores the initial datetime without consuming the definitive change', async () => {
@@ -1146,12 +1183,19 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
           id: 'process-1',
           status: ProcessStatus.SCHEDULING,
           updated_at: new Date('2026-01-01T00:00:00.000Z'),
+          specialist_id: specialistId,
+          client_id: clientId,
+          appointment_id: 'appointment-1',
+          notes: null,
         },
       }),
     );
     const updateData = appointmentUpdate.mock.calls[0][0].data;
     expect(updateData).not.toHaveProperty('specialist_rescheduled_at');
     expect(updateData).not.toHaveProperty('specialist_rescheduled_from');
+    expect(tx.process.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      appointmentUpdate.mock.invocationCallOrder[0],
+    );
   });
 
   it('rejects a past datetime before writing', async () => {
@@ -1168,11 +1212,290 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
   });
 
   it('aborts when the process changes during confirmation', async () => {
-    const { service } = makeService({}, 0);
+    const { service, stored } = makeService({}, 0);
+    const before = stored();
 
     await expect(
       (service.confirmAppointment as any)('process-1', specialistId, futureIso),
     ).rejects.toThrow(ConflictException);
+    expect(stored()).toEqual(before);
+  });
+
+  it('appends the original proposal and changed confirmed instant without reschedule audit', async () => {
+    const proposed = new Date('2099-01-01T10:00:00.000Z');
+    const { service, stored, mutate, tx } = makeService({
+      appointment_datetime: proposed,
+    });
+    mutate((process) => {
+      process.notes = 'Nota anterior' as any;
+    });
+    await service.confirmAppointment('process-1', specialistId, futureIso);
+    expect(stored().notes).toContain('Nota anterior');
+    expect(stored().notes).toContain(proposed.toISOString());
+    expect(stored().notes).toContain(futureIso);
+    expect(stored().appointment).toMatchObject({
+      appointment_datetime: new Date(futureIso),
+      specialist_rescheduled_at: null,
+      specialist_rescheduled_from: null,
+    });
+    expect(tx.processStatusHistory.create).not.toHaveBeenCalled();
+  });
+
+  it('returns the same confirmation on double submission without new notes or emails', async () => {
+    const { service, stored, appointmentUpdate, notifications, tx } =
+      makeService();
+    const first = await service.confirmAppointment(
+      'process-1',
+      specialistId,
+      futureIso,
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const afterFirst = stored();
+    const second = await service.confirmAppointment(
+      'process-1',
+      specialistId,
+      futureIso,
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(second).toEqual(first);
+    expect(stored()).toEqual(afterFirst);
+    expect(appointmentUpdate).toHaveBeenCalledTimes(1);
+    expect(tx.process.updateMany).toHaveBeenCalledTimes(1);
+    expect(notifications.sendAppointmentConfirmedEmail).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
+  it('accepts the identical retry after the confirmed instant has passed', async () => {
+    const { service, stored, appointmentUpdate } = makeService();
+    const first = await service.confirmAppointment(
+      'process-1',
+      specialistId,
+      futureIso,
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const before = stored();
+    jest.useFakeTimers({ now: new Date('2100-01-01T00:00:00Z') });
+    try {
+      await expect(
+        service.confirmAppointment('process-1', specialistId, futureIso),
+      ).resolves.toEqual(first);
+      expect(stored()).toEqual(before);
+      expect(appointmentUpdate).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('uses a single confirmation timestamp in the appointment and appended note', async () => {
+    const { service, stored } = makeService();
+    await service.confirmAppointment('process-1', specialistId, futureIso);
+    expect(stored().notes).toContain(
+      (stored().appointment.confirmed_at as unknown as Date).toISOString(),
+    );
+  });
+
+  it('notifies the participant snapshot reread under the schedule lock', async () => {
+    const { service, tx, stored, mutate, notifications } = makeService();
+    tx.$queryRaw.mockImplementation(async () => {
+      mutate((process) => {
+        process.client.email = 'current-client@example.com';
+      });
+      tx.process.findUnique.mockImplementation(async () => stored());
+      return [{ locked: null }];
+    });
+    await service.confirmAppointment('process-1', specialistId, futureIso);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(notifications.sendAppointmentConfirmedEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ clientEmail: 'current-client@example.com' }),
+    );
+  });
+
+  it('rolls back a claimed process when updating the appointment fails', async () => {
+    const { service, tx, stored, notifications } = makeService();
+    const before = stored();
+    tx.appointment.update.mockRejectedValue(new Error('storage failure'));
+    await expect(
+      service.confirmAppointment('process-1', specialistId, futureIso),
+    ).rejects.toThrow('storage failure');
+    expect(stored()).toEqual(before);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(notifications.sendAppointmentConfirmedEmail).not.toHaveBeenCalled();
+  });
+
+  it('never treats a different datetime as an idempotent confirmation', async () => {
+    const { service, stored } = makeService();
+    await service.confirmAppointment('process-1', specialistId, futureIso);
+    const before = stored();
+    await expect(
+      service.confirmAppointment(
+        'process-1',
+        specialistId,
+        '2099-01-02T13:00:00Z',
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(stored()).toEqual(before);
+  });
+
+  it.each([undefined, '2099-01-01T10:00:00-03:00'])(
+    'accepts an identical retry with omitted/equivalent-offset datetime %s',
+    async (datetime) => {
+      const { service, stored, appointmentUpdate } = makeService();
+      const first = await service.confirmAppointment(
+        'process-1',
+        specialistId,
+        futureIso,
+      );
+      const before = stored();
+      await expect(
+        service.confirmAppointment('process-1', specialistId, datetime),
+      ).resolves.toEqual(first);
+      expect(stored()).toEqual(before);
+      expect(appointmentUpdate).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    [StatusAgendamento.COMPLETED, specialistId, new Date()],
+    [StatusAgendamento.CANCELLED, specialistId, new Date()],
+    [StatusAgendamento.SCHEDULED, null, null],
+    [StatusAgendamento.SCHEDULED, 'another-specialist', new Date()],
+  ])(
+    'does not treat status %s with confirmation actor %s as an initial confirmation retry',
+    async (status, actor, at) => {
+      const { service, stored } = makeService({
+        status,
+        confirmed_by_id: actor,
+        confirmed_at: at,
+        appointment_datetime: new Date(futureIso),
+      });
+      const before = stored();
+      await expect(
+        service.confirmAppointment('process-1', specialistId, futureIso),
+      ).rejects.toThrow(BadRequestException);
+      expect(stored()).toEqual(before);
+    },
+  );
+
+  it.each(['owner', 'status', 'appointment-client', 'appointment-owner'])(
+    'rejects %s changed before the transactional reread',
+    async (change) => {
+      const { service, tx, stored, mutate } = makeService();
+      tx.$queryRaw.mockImplementation(async () => {
+        mutate((process) => {
+          if (change === 'owner') process.specialist_id = 'other-specialist';
+          if (change === 'status')
+            process.status = ProcessStatus.REJECTED as any;
+          if (change === 'appointment-client')
+            process.appointment.client_id = 'other-client';
+          if (change === 'appointment-owner')
+            process.appointment.specialist_id = 'other-specialist';
+        });
+        tx.process.findUnique.mockImplementation(async () => stored());
+        return [{ locked: null }];
+      });
+      await expect(
+        service.confirmAppointment('process-1', specialistId, futureIso),
+      ).rejects.toThrow(
+        change === 'owner' ? ForbiddenException : BadRequestException,
+      );
+      expect(tx.process.updateMany).not.toHaveBeenCalled();
+      expect(tx.appointment.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects an instant equal to now after rereading without writes', async () => {
+    const { service, tx } = makeService();
+    jest.useFakeTimers({ now: new Date(futureIso) });
+    try {
+      await expect(
+        service.confirmAppointment('process-1', specialistId, futureIso),
+      ).rejects.toThrow(BadRequestException);
+      expect(tx.process.updateMany).not.toHaveBeenCalled();
+      expect(tx.appointment.update).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it.each([
+    'not-a-date',
+    '2020-01-01T13:00:00Z',
+    '2099-02-30T13:00:00Z',
+    '2099-01-01',
+    '2099-01-01T13:00:00',
+  ])(
+    'rejects invalid or ambiguous instant %s before writes',
+    async (datetime) => {
+      const { service, stored, appointmentUpdate } = makeService();
+      const before = stored();
+      await expect(
+        service.confirmAppointment('process-1', specialistId, datetime),
+      ).rejects.toThrow(BadRequestException);
+      expect(stored()).toEqual(before);
+      expect(appointmentUpdate).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([clientId, 'other-specialist', 'admin-user'])(
+    'rejects confirmation by unassigned actor %s before locking',
+    async (actorId) => {
+      const { service, tx } = makeService();
+      await expect(
+        service.confirmAppointment('process-1', actorId, futureIso),
+      ).rejects.toThrow(ForbiddenException);
+      expect(tx.$queryRaw).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects an appointment whose client is inconsistent with its process', async () => {
+    const { service, stored } = makeService({ client_id: 'other-client' });
+    const before = stored();
+    await expect(
+      service.confirmAppointment('process-1', specialistId, futureIso),
+    ).rejects.toThrow(BadRequestException);
+    expect(stored()).toEqual(before);
+  });
+
+  it('uses the appointment reread after the lock for the stored proposal', async () => {
+    const { service, tx, stored, mutate } = makeService({
+      appointment_datetime: new Date(futureIso),
+    });
+    tx.$queryRaw.mockImplementation(async () => {
+      mutate((process) => {
+        process.appointment.appointment_datetime = new Date(
+          '2020-01-01T10:00:00Z',
+        ) as any;
+      });
+      tx.process.findUnique.mockImplementation(async () => stored());
+      return [{ locked: null }];
+    });
+    await expect(
+      service.confirmAppointment('process-1', specialistId),
+    ).rejects.toThrow(BadRequestException);
+    expect(tx.appointment.update).not.toHaveBeenCalled();
+  });
+
+  it('rolls back all state and returns no competing identities on a schedule conflict', async () => {
+    const { service, stored, tx, notifications } = makeService({
+      appointment_datetime: new Date(futureIso),
+    });
+    tx.appointment.findFirst.mockResolvedValue({
+      id: 'competing-appointment',
+      client_id: 'competing-client',
+      process: { id: 'competing-process' },
+    });
+    const before = stored();
+    const error = await service
+      .confirmAppointment('process-1', specialistId, futureIso)
+      .catch((error) => error);
+    expect(error).toBeInstanceOf(ConflictException);
+    expect(JSON.stringify(error.getResponse())).not.toMatch(/competing-/);
+    expect(stored()).toEqual(before);
+    expect(tx.appointment.update).not.toHaveBeenCalled();
+    expect(tx.process.updateMany).not.toHaveBeenCalled();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(notifications.sendAppointmentConfirmedEmail).not.toHaveBeenCalled();
   });
 });
 
@@ -1367,4 +1690,253 @@ describe('ProcessesService — telefone da contraparte após confirmação', () 
 
     expect(result.processes[0].client.phone).toBeNull();
   });
+});
+
+describe('ProcessesService — matriz de contatos do cliente', () => {
+  const contact = { email: 'cliente@example.com', phone: '11987654321' };
+  const cases = [
+    [
+      StatusAgendamento.PENDING,
+      AppointmentSchedulingMethod.EMAIL,
+      ProcessStatus.SCHEDULING,
+      true,
+    ],
+    [
+      StatusAgendamento.PENDING,
+      AppointmentSchedulingMethod.CALENDLY,
+      ProcessStatus.SCHEDULING,
+      false,
+    ],
+    [StatusAgendamento.PENDING, null, ProcessStatus.SCHEDULING, false],
+    [
+      StatusAgendamento.PENDING,
+      AppointmentSchedulingMethod.EMAIL,
+      ProcessStatus.REJECTED,
+      false,
+    ],
+    [
+      StatusAgendamento.SCHEDULED,
+      AppointmentSchedulingMethod.EMAIL,
+      ProcessStatus.SCHEDULING,
+      true,
+    ],
+    [
+      StatusAgendamento.COMPLETED,
+      AppointmentSchedulingMethod.EMAIL,
+      ProcessStatus.NEGOTIATION,
+      true,
+    ],
+    [
+      StatusAgendamento.CANCELLED,
+      AppointmentSchedulingMethod.EMAIL,
+      ProcessStatus.SCHEDULING,
+      false,
+    ],
+  ] as const;
+
+  function makeService(
+    status: StatusAgendamento,
+    method: AppointmentSchedulingMethod | null,
+    processStatus: ProcessStatus,
+  ) {
+    const process = {
+      id: 'process-1',
+      status: processStatus,
+      client_id: clientId,
+      specialist_id: specialistId,
+      product_type: null,
+      client: {
+        id: clientId,
+        name: 'Cliente',
+        consultant_id: 'consultant-1',
+        ...contact,
+      },
+      specialist: {
+        id: specialistId,
+        name: 'Especialista',
+        phone: '11911112222',
+        speciality: ProductType.CAR,
+      },
+      appointment: {
+        status,
+        scheduling_method: method,
+        appointment_datetime: new Date('2099-01-01T13:00:00Z'),
+      },
+      car: null,
+      boat: null,
+      aircraft: null,
+      notes: null,
+      created_at: new Date(),
+    };
+    const prisma = {
+      user: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ consultant_id: 'consultant-1' }),
+      },
+      process: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue(process),
+        findMany: jest.fn().mockResolvedValue([process]),
+        findFirst: jest.fn().mockResolvedValue({ id: process.id }),
+        count: jest.fn().mockResolvedValue(1),
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
+      $transaction: jest.fn((operations) => Promise.all(operations)),
+    } as any;
+    return new ProcessesService(prisma, {} as any);
+  }
+
+  it.each(cases)(
+    'assigned specialist list and detail expose contacts for %s/%s/%s: %s',
+    async (status, method, processStatus, visible) => {
+      const service = makeService(status, method, processStatus);
+      const detail = await service.getById(
+        'process-1',
+        specialistId,
+        UserRole.SPECIALIST,
+      );
+      const list = await service.getBySpecialistIdWithFilters(
+        specialistId,
+        {},
+        { id: specialistId, role: UserRole.SPECIALIST },
+      );
+      const generic = await service.getAll({
+        page: 1,
+        perPage: 20,
+        requester: { id: specialistId, role: UserRole.SPECIALIST },
+      });
+      for (const result of [detail, list.processes[0], generic.processes[0]]) {
+        if (visible) {
+          expect(result.client).toMatchObject(contact);
+        } else {
+          expect(result.client).not.toHaveProperty('email');
+          expect(result.client.phone).toBeNull();
+        }
+      }
+    },
+  );
+
+  it.each([
+    [UserRole.ADMIN, 'admin-1'],
+    [UserRole.CONSULTANT, 'consultant-1'],
+    [UserRole.OFFICE, 'office-1'],
+    [UserRole.SPECIALIST, 'other-specialist'],
+    [UserRole.CUSTOMER, clientId],
+  ] as const)(
+    'specialist list gives %s no client contacts even after confirmation',
+    async (role, id) => {
+      for (const status of [
+        StatusAgendamento.PENDING,
+        StatusAgendamento.SCHEDULED,
+        StatusAgendamento.COMPLETED,
+      ]) {
+        const result = await makeService(
+          status,
+          AppointmentSchedulingMethod.EMAIL,
+          ProcessStatus.SCHEDULING,
+        ).getBySpecialistIdWithFilters(specialistId, {}, { role, id });
+        expect(result.processes[0].client).not.toHaveProperty('email');
+        expect(result.processes[0].client.phone).toBeNull();
+      }
+    },
+  );
+
+  it.each([
+    [UserRole.ADMIN, 'admin-1'],
+    [UserRole.CONSULTANT, 'consultant-1'],
+    [UserRole.CUSTOMER, clientId],
+    [undefined, undefined],
+  ] as const)('detail gives %s no client contacts', async (role, id) => {
+    const result = await makeService(
+      StatusAgendamento.PENDING,
+      AppointmentSchedulingMethod.EMAIL,
+      ProcessStatus.SCHEDULING,
+    ).getById('process-1', id, role);
+    expect(result.client).not.toHaveProperty('email');
+    expect(result.client.phone).toBeNull();
+    expect(result.specialist.phone).toBeNull();
+  });
+
+  it.each([
+    [UserRole.SPECIALIST, 'other-specialist'],
+    [UserRole.OFFICE, 'office-1'],
+  ] as const)('unassigned %s cannot read the detail', async (role, id) => {
+    await expect(
+      makeService(
+        StatusAgendamento.PENDING,
+        AppointmentSchedulingMethod.EMAIL,
+        ProcessStatus.SCHEDULING,
+      ).getById('process-1', id, role),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('an actor with the specialist ID but another role cannot read client contacts', async () => {
+    const result = await makeService(
+      StatusAgendamento.PENDING,
+      AppointmentSchedulingMethod.EMAIL,
+      ProcessStatus.SCHEDULING,
+    ).getById('process-1', specialistId, UserRole.CONSULTANT);
+    expect(result.client).not.toHaveProperty('email');
+    expect(result.client.phone).toBeNull();
+  });
+
+  it('client list and unscoped legacy specialist projection contain no client contacts', async () => {
+    const service = makeService(
+      StatusAgendamento.PENDING,
+      AppointmentSchedulingMethod.EMAIL,
+      ProcessStatus.SCHEDULING,
+    );
+    const client = await service.getByClientId(
+      clientId,
+      { page: 1, perPage: 20 },
+      clientId,
+      UserRole.CUSTOMER,
+    );
+    const legacy = await service.getBySpecialistId(specialistId, {
+      page: 1,
+      perPage: 20,
+    });
+    for (const result of [client.processes[0], legacy.processes[0]]) {
+      expect(result.client).not.toHaveProperty('email');
+      expect(result.client.phone ?? null).toBeNull();
+    }
+  });
+
+  it.each([
+    UserRole.ADMIN,
+    UserRole.CONSULTANT,
+    UserRole.OFFICE,
+    UserRole.CUSTOMER,
+  ])('generic list gives %s no early client contacts', async (role) => {
+    const result = await makeService(
+      StatusAgendamento.PENDING,
+      AppointmentSchedulingMethod.EMAIL,
+      ProcessStatus.SCHEDULING,
+    ).getAll({
+      page: 1,
+      perPage: 20,
+      requester: { id: 'actor', role, companyId: 'company-1' },
+    });
+    expect(result.processes[0].client).not.toHaveProperty('email');
+    expect(result.processes[0].client.phone).toBeNull();
+  });
+
+  it.each([UserRole.ADMIN, UserRole.CONSULTANT, UserRole.SPECIALIST])(
+    'client list gives unassigned %s no client contacts',
+    async (role) => {
+      const service = makeService(
+        StatusAgendamento.SCHEDULED,
+        AppointmentSchedulingMethod.EMAIL,
+        ProcessStatus.SCHEDULING,
+      );
+      const result = await service.getByClientId(
+        clientId,
+        { page: 1, perPage: 20 },
+        role === UserRole.CONSULTANT ? 'consultant-1' : 'unassigned-actor',
+        role,
+      );
+      expect(result.processes[0].client).not.toHaveProperty('email');
+      expect(result.processes[0].client.phone).toBeNull();
+    },
+  );
 });

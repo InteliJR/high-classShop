@@ -51,6 +51,7 @@ import {
 import {
   acquireSpecialistScheduleLock,
   assertSpecialistScheduleAvailable,
+  buildOccupiedScheduleWhere,
   lockAndAssertSpecialistScheduleAvailable,
 } from './appointment-schedule-lock';
 
@@ -771,19 +772,9 @@ export class AppointmentsService {
       // Avançar 1 hora
       checkTime = new Date(checkTime.getTime() + 60 * 60 * 1000);
 
-      // Verificar se este horário está livre
-      const conflictStart = new Date(checkTime.getTime() - 60 * 60 * 1000);
-      const conflictEnd = new Date(checkTime.getTime() + 60 * 60 * 1000);
-
       const conflict = await this.prisma.appointment.findFirst({
-        where: {
-          specialist_id: specialistId,
-          appointment_datetime: {
-            gte: conflictStart,
-            lte: conflictEnd,
-          },
-          status: StatusAgendamento.SCHEDULED,
-        },
+        where: buildOccupiedScheduleWhere(specialistId, checkTime),
+        select: { id: true },
       });
 
       if (!conflict) {

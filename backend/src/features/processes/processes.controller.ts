@@ -447,6 +447,12 @@ export class ProcessesController {
   ): Promise<ApiResponseDto<any>> {
     const userId = req.user?.sub || req.user?.id;
 
+    if (!userId || req.user?.role !== UserRole.SPECIALIST) {
+      throw new ForbiddenException(
+        'Apenas o especialista pode confirmar o agendamento',
+      );
+    }
+
     const result = await this.processesService.confirmAppointment(
       processId,
       userId,

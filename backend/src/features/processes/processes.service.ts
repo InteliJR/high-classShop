@@ -35,6 +35,8 @@ import {
 import { validateSpecialistProductAssociation } from '../products/product-association-validator';
 import { lockAndAssertNoActiveProcess } from './process-dedup-lock';
 import { parseDate, isFutureDate } from 'src/shared/utils/date.utils';
+import { isISO8601 } from 'class-validator';
+import { PENDING_APPOINTMENT_DATETIME_PATTERN } from '../appointments/dto';
 import {
   acquireSpecialistScheduleLock,
   assertSpecialistScheduleAvailable,
@@ -139,6 +141,26 @@ export class ProcessesService {
       status === StatusAgendamento.SCHEDULED ||
       status === StatusAgendamento.COMPLETED
     );
+  }
+
+  private projectClientContacts(
+    process: any,
+    requester?: { id?: string; role?: string },
+  ): ProcessResponse['client'] {
+    const visible =
+      requester?.role === UserRole.SPECIALIST &&
+      requester.id === process.specialist_id &&
+      (this.isAppointmentContactVisible(process.appointment?.status) ||
+        (process.status === ProcessStatus.SCHEDULING &&
+          process.appointment?.status === StatusAgendamento.PENDING &&
+          process.appointment?.scheduling_method ===
+            AppointmentSchedulingMethod.EMAIL));
+    return {
+      id: process.client_id,
+      name: process.client?.name ?? '',
+      ...(visible ? { email: process.client?.email ?? '' } : {}),
+      phone: visible ? (process.client?.phone ?? null) : null,
+    };
   }
 
   /**
@@ -737,11 +759,7 @@ export class ProcessesService {
           process.appointment?.specialist_rescheduled_from ?? null,
         product_type: process.product_type,
         product_id: this.getProductId(process),
-        client: {
-          id: process.client_id,
-          email: process.client?.email,
-          name: process.client?.name,
-        },
+        client: this.projectClientContacts(process, requester),
         specialist: {
           especialidade: process.specialist.speciality,
           id: process.specialist.id,
@@ -815,9 +833,8 @@ export class ProcessesService {
         process.appointment?.status,
       );
       const isClient = userId === process.client_id;
-      const isSpecialist = userId === process.specialist_id;
-      const canSeeClientPhone = isSpecialist && contactVisible;
-      const canSeeSpecialistPhone = isClient && contactVisible;
+      const canSeeSpecialistPhone =
+        userRole === UserRole.CUSTOMER && isClient && contactVisible;
 
       return {
         id: process.id,
@@ -833,12 +850,10 @@ export class ProcessesService {
           process.appointment?.specialist_rescheduled_from ?? null,
         product_type: process.product_type,
         product_id: this.getProductId(process),
-        client: {
-          id: process.client_id,
-          email: process.client?.email || '',
-          name: process.client?.name || '',
-          phone: canSeeClientPhone ? (process.client?.phone ?? null) : null,
-        },
+        client: this.projectClientContacts(process, {
+          id: userId,
+          role: userRole,
+        }),
         specialist: {
           especialidade: process.specialist.speciality,
           id: process.specialist.id,
@@ -930,11 +945,7 @@ export class ProcessesService {
           process.appointment?.specialist_rescheduled_from ?? null,
         product_type: process.product_type,
         product_id: this.getProductId(process),
-        client: {
-          id: process.client_id,
-          email: process.client?.email,
-          name: process.client?.name,
-        },
+        client: this.projectClientContacts(process),
         specialist: {
           especialidade: process.specialist.speciality,
           id: process.specialist.id,
@@ -979,8 +990,6 @@ export class ProcessesService {
     const skip = (pageNum - 1) * perPageNum;
     const sortBy = options.sortBy || 'created_at';
     const order = options.order || 'desc';
-    const canSeeClientPhone =
-      requester.role === UserRole.SPECIALIST && requester.id === specialistId;
 
     // Build where clause
     const where: any = {
@@ -1054,16 +1063,7 @@ export class ProcessesService {
           process.appointment?.specialist_rescheduled_from ?? null,
         product_type: process.product_type,
         product_id: this.getProductId(process),
-        client: {
-          id: process.client_id,
-          email: process.client?.email,
-          name: process.client?.name,
-          phone:
-            canSeeClientPhone &&
-            this.isAppointmentContactVisible(process.appointment?.status)
-              ? (process.client?.phone ?? null)
-              : null,
-        },
+        client: this.projectClientContacts(process, requester),
         specialist: {
           especialidade: process.specialist.speciality,
           id: process.specialist.id,
@@ -1789,11 +1789,10 @@ export class ProcessesService {
         process.appointment?.specialist_rescheduled_from ?? null,
       product_type: process.product_type,
       product_id: this.getProductId(process),
-      client: {
-        id: process.client_id,
-        email: process.client?.email,
-        name: process.client?.name,
-      },
+      client: this.projectClientContacts(process, {
+        id: userId,
+        role: userRole,
+      }),
       specialist: {
         especialidade: process.specialist.speciality,
         id: process.specialist.id,
@@ -1955,21 +1954,10 @@ export class ProcessesService {
       `[confirmAppointment] Confirmando agendamento do processo ${processId}`,
     );
 
-    // Buscar processo com appointment, client, specialist e produtos
+    // A leitura inicial identifica apenas o especialista para o lock.
     const process = await this.prismaService.process.findUnique({
       where: { id: processId },
-      include: {
-        appointment: true,
-        client: {
-          select: { id: true, email: true, name: true, surname: true },
-        },
-        specialist: {
-          select: { id: true, email: true, name: true, surname: true },
-        },
-        car: true,
-        boat: true,
-        aircraft: true,
-      },
+      select: { id: true, specialist_id: true },
     });
 
     if (!process) {
@@ -1983,55 +1971,24 @@ export class ProcessesService {
       );
     }
 
-    // Verificar se está em status SCHEDULING
-    if (process.status !== 'SCHEDULING') {
-      throw new BadRequestException(
-        'Apenas processos em status SCHEDULING podem ter o agendamento confirmado',
-      );
-    }
-
-    // Verificar se tem appointment
-    if (!process.appointment) {
-      throw new NotFoundException(
-        'Agendamento não encontrado para este processo',
-      );
-    }
-
-    if (
-      process.appointment.status === StatusAgendamento.SCHEDULED ||
-      process.appointment.status === StatusAgendamento.COMPLETED
-    ) {
-      throw new BadRequestException('Agendamento já foi confirmado');
-    }
-
-    if (
-      process.appointment.scheduling_method ===
-        AppointmentSchedulingMethod.EMAIL &&
-      !appointmentDatetime
-    ) {
-      throw new BadRequestException(
-        'Informe uma data e hora futura para confirmar o agendamento',
-      );
-    }
-
-    const requestedDate = parseDate(
-      appointmentDatetime ??
-        process.appointment.appointment_datetime ??
-        undefined,
-    );
-    if (!requestedDate || !isFutureDate(requestedDate)) {
-      throw new BadRequestException(
-        'Informe uma data e hora futura para confirmar o agendamento',
-      );
-    }
-
     // Confirmar appointment em transação (sem alterar status do processo)
-    const confirmedDate = await this.prismaService.$transaction(async (tx) => {
+    const confirmation = await this.prismaService.$transaction(async (tx) => {
       await acquireSpecialistScheduleLock(tx, process.specialist_id);
 
       const lockedProcess = await tx.process.findUnique({
         where: { id: processId },
-        include: { appointment: true },
+        include: {
+          appointment: true,
+          client: {
+            select: { id: true, email: true, name: true, surname: true },
+          },
+          specialist: {
+            select: { id: true, email: true, name: true, surname: true },
+          },
+          car: true,
+          boat: true,
+          aircraft: true,
+        },
       });
       if (!lockedProcess) {
         throw new NotFoundException('Processo não encontrado');
@@ -2051,14 +2008,21 @@ export class ProcessesService {
           'Agendamento não encontrado para este processo',
         );
       }
-      if (lockedProcess.appointment.status !== StatusAgendamento.PENDING) {
-        throw new BadRequestException('Agendamento já foi confirmado');
-      }
-
       if (
-        lockedProcess.appointment.scheduling_method ===
-          AppointmentSchedulingMethod.EMAIL &&
-        !appointmentDatetime
+        lockedProcess.appointment.specialist_id !==
+          lockedProcess.specialist_id ||
+        lockedProcess.appointment.client_id !== lockedProcess.client_id ||
+        lockedProcess.appointment.id !== lockedProcess.appointment_id
+      ) {
+        throw new BadRequestException(
+          'Agendamento não corresponde aos participantes do processo',
+        );
+      }
+      if (
+        appointmentDatetime !== undefined &&
+        (typeof appointmentDatetime !== 'string' ||
+          !PENDING_APPOINTMENT_DATETIME_PATTERN.test(appointmentDatetime) ||
+          !isISO8601(appointmentDatetime, { strict: true }))
       ) {
         throw new BadRequestException(
           'Informe uma data e hora futura para confirmar o agendamento',
@@ -2070,6 +2034,26 @@ export class ProcessesService {
           lockedProcess.appointment.appointment_datetime ??
           undefined,
       );
+      const appointment = lockedProcess.appointment;
+      if (
+        appointment.status === StatusAgendamento.SCHEDULED &&
+        appointment.confirmed_by_id === userId &&
+        appointment.confirmed_at &&
+        lockedConfirmedDate &&
+        appointment.appointment_datetime?.getTime() ===
+          lockedConfirmedDate.getTime()
+      ) {
+        return {
+          changed: false,
+          confirmedDate: lockedConfirmedDate,
+          process: lockedProcess,
+        };
+      }
+      if (appointment.status !== StatusAgendamento.PENDING) {
+        throw new BadRequestException(
+          'Agendamento já foi confirmado ou cancelado',
+        );
+      }
       if (!lockedConfirmedDate || !isFutureDate(lockedConfirmedDate)) {
         throw new BadRequestException(
           'Informe uma data e hora futura para confirmar o agendamento',
@@ -2083,28 +2067,27 @@ export class ProcessesService {
         lockedProcess.appointment.id,
       );
 
-      // Atualizar appointment para SCHEDULED
-      await tx.appointment.update({
-        where: { id: lockedProcess.appointment.id },
-        data: {
-          status: StatusAgendamento.SCHEDULED,
-          appointment_datetime: lockedConfirmedDate,
-          confirmed_at: new Date(),
-          confirmed_by_id: userId,
-        },
-      });
-
-      // Manter process em SCHEDULING e apenas registrar no histórico/notas
+      const confirmedAt = new Date();
+      const proposal =
+        appointment.appointment_datetime?.toISOString() ??
+        'sem horário definido';
+      const note = `Agendamento confirmado pelo especialista (${confirmedAt.toISOString()}); proposta: ${proposal}; horário confirmado: ${lockedConfirmedDate.toISOString()}`;
+      // Reivindicar Process antes de Appointment mantém a ordem de cancelamento.
       const processClaim = await tx.process.updateMany({
         where: {
           id: processId,
           status: ProcessStatus.SCHEDULING,
           updated_at: lockedProcess.updated_at,
+          specialist_id: lockedProcess.specialist_id,
+          client_id: lockedProcess.client_id,
+          appointment_id: appointment.id,
+          notes: lockedProcess.notes,
         },
         data: {
           notes: lockedProcess.notes
-            ? `${lockedProcess.notes}\n\nAgendamento confirmado pelo especialista (${new Date().toISOString()})`
-            : `Agendamento confirmado pelo especialista (${new Date().toISOString()})`,
+            ? `${lockedProcess.notes}\n\n${note}`
+            : note,
+          updated_at: confirmedAt,
         },
       });
       if (processClaim.count !== 1) {
@@ -2113,7 +2096,21 @@ export class ProcessesService {
         );
       }
 
-      return lockedConfirmedDate;
+      await tx.appointment.update({
+        where: { id: appointment.id },
+        data: {
+          status: StatusAgendamento.SCHEDULED,
+          appointment_datetime: lockedConfirmedDate,
+          confirmed_at: confirmedAt,
+          confirmed_by_id: userId,
+        },
+      });
+
+      return {
+        changed: true,
+        confirmedDate: lockedConfirmedDate,
+        process: lockedProcess,
+      };
     });
 
     this.logger.log(
@@ -2121,32 +2118,34 @@ export class ProcessesService {
     );
 
     // Fire-and-forget email notification (async, non-blocking)
-    setImmediate(() => {
-      this.notificationService
-        .sendAppointmentConfirmedEmail({
-          clientEmail: process.client.email,
-          clientName:
-            `${process.client.name} ${process.client.surname || ''}`.trim(),
-          specialistName:
-            `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
-          appointmentDate: confirmedDate,
-          productDetails: this.getProductDetails(process),
-          processId,
-        })
-        .catch((err) => {
-          this.logger.error('Notification failed (non-critical)', {
-            method: 'confirmAppointment',
+    if (confirmation.changed)
+      setImmediate(() => {
+        const process = confirmation.process;
+        this.notificationService
+          .sendAppointmentConfirmedEmail({
+            clientEmail: process.client.email,
+            clientName:
+              `${process.client.name} ${process.client.surname || ''}`.trim(),
+            specialistName:
+              `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+            appointmentDate: confirmation.confirmedDate,
+            productDetails: this.getProductDetails(process),
             processId,
-            error: err.message,
+          })
+          .catch((err) => {
+            this.logger.error('Notification failed (non-critical)', {
+              method: 'confirmAppointment',
+              processId,
+              error: err.message,
+            });
           });
-        });
-    });
+      });
 
     return {
       processId,
       status: 'SCHEDULING',
       appointment_status: StatusAgendamento.SCHEDULED,
-      appointment_datetime: confirmedDate,
+      appointment_datetime: confirmation.confirmedDate,
     };
   }
 

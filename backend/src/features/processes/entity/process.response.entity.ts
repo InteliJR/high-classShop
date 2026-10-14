@@ -6,9 +6,7 @@ export class ProcessResponse {
   appointment_id?: string | null;
   appointment_status?: $Enums.StatusAgendamento | null;
   appointment_datetime?: Date | null;
-  appointment_scheduling_method?:
-    | $Enums.AppointmentSchedulingMethod
-    | null;
+  appointment_scheduling_method?: $Enums.AppointmentSchedulingMethod | null;
   specialist_rescheduled_at?: Date | null;
   specialist_rescheduled_from?: Date | null;
   product_type: $Enums.ProductType | null; // Null para processos de consultoria
@@ -16,7 +14,7 @@ export class ProcessResponse {
   client: {
     id: string;
     name: string;
-    email: string;
+    email?: string;
     phone?: string | null;
   };
   specialist: {
