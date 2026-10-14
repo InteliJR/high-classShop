@@ -158,6 +158,7 @@ export default function ProductPage() {
   const {
     isModalOpen: isCalendlyModalOpen,
     modalUrl: calendlyModalUrl,
+    modalKey: calendlyModalKey,
     syncState: calendlySyncState,
     syncMessage: calendlySyncMessage,
     openPopup,
@@ -655,6 +656,7 @@ export default function ProductPage() {
       )}
       {calendlyModalUrl && isCalendlyModalOpen && (
         <PopupModal
+          key={calendlyModalKey}
           url={calendlyModalUrl}
           open={isCalendlyModalOpen}
           onModalClose={closePopup}

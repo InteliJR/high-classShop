@@ -653,9 +653,12 @@ describe("ProductPage scheduling", () => {
 
   it("does not compose email when an EMAIL snapshot lacks owner-scoped contact", async () => {
     vi.mocked(checkExistingAppointment).mockResolvedValue({
-      ...existingRequest,
       exists: true,
-      specialist_contact_email: undefined,
+      appointment_id: "appointment-no-contact",
+      appointment_status: "PENDING",
+      scheduling_method: "EMAIL",
+      appointment_datetime: appointment.appointment_datetime!,
+      process_id: "process-1",
     });
     render(page());
 

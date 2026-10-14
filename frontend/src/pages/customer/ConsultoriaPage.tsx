@@ -52,6 +52,7 @@ export default function ConsultoriaPage() {
   const {
     isModalOpen: isCalendlyModalOpen,
     modalUrl: calendlyModalUrl,
+    modalKey: calendlyModalKey,
     syncState,
     syncMessage,
     openPopup,
@@ -251,6 +252,7 @@ export default function ConsultoriaPage() {
 
       {calendlyModalUrl && isCalendlyModalOpen && (
         <PopupModal
+          key={calendlyModalKey}
           url={calendlyModalUrl}
           open={isCalendlyModalOpen}
           onModalClose={closePopup}
