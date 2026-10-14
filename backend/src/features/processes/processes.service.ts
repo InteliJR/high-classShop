@@ -40,6 +40,7 @@ import {
   acquireSpecialistScheduleLock,
   assertSpecialistScheduleAvailable,
 } from '../appointments/appointment-schedule-lock';
+import { isStaleMeetingInitializationClaim } from '../meetings/meeting-initialization-claim';
 
 /**
  * Quem está pedindo a operação. `companyId` só é usado por OFFICE.
@@ -2042,7 +2043,14 @@ export class ProcessesService {
                   status: true,
                 },
               },
-              meeting_session: { select: { ended_at: true } },
+              meeting_session: {
+                select: {
+                  id: true,
+                  calendar_event_id: true,
+                  started_at: true,
+                  ended_at: true,
+                },
+              },
             },
           });
 
@@ -2094,9 +2102,26 @@ export class ProcessesService {
             existingProcess.meeting_session &&
             !existingProcess.meeting_session.ended_at
           ) {
-            throw new BadRequestException(
-              'Encerre a reunião antes de rejeitar o processo',
-            );
+            if (
+              isStaleMeetingInitializationClaim(existingProcess.meeting_session)
+            ) {
+              const staleClaimCleanup = await tx.meetingSession.deleteMany({
+                where: {
+                  id: existingProcess.meeting_session.id,
+                  calendar_event_id:
+                    existingProcess.meeting_session.calendar_event_id,
+                },
+              });
+              if (staleClaimCleanup.count !== 1) {
+                throw new ConflictException(
+                  'A inicialização da reunião mudou. Recarregue e tente novamente.',
+                );
+              }
+            } else {
+              throw new BadRequestException(
+                'Encerre a reunião antes de rejeitar o processo',
+              );
+            }
           }
 
           const rejectedAt = new Date();

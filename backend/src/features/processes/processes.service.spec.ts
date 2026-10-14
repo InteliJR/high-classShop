@@ -2032,6 +2032,7 @@ describe('ProcessesService — autorização centralizada de processos', () => {
       .mockResolvedValueOnce(rejectedProcess);
     const historyCreate = jest.fn().mockResolvedValue({});
     const rejectionCreate = jest.fn().mockResolvedValue({});
+    const meetingSessionDeleteMany = jest.fn().mockResolvedValue({ count: 1 });
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
       process: {
@@ -2044,6 +2045,7 @@ describe('ProcessesService — autorização centralizada de processos', () => {
         findMany: jest.fn().mockResolvedValue([]),
       },
       processRejection: { create: rejectionCreate },
+      meetingSession: { deleteMany: meetingSessionDeleteMany },
     };
     const prisma = {
       $transaction: jest.fn(async (callback) => callback(tx)),
@@ -2057,6 +2059,7 @@ describe('ProcessesService — autorização centralizada de processos', () => {
       processFindUniqueOrThrow,
       historyCreate,
       rejectionCreate,
+      meetingSessionDeleteMany,
       tx,
     };
   }
@@ -2364,6 +2367,68 @@ describe('ProcessesService — autorização centralizada de processos', () => {
       expect(rejectionCreate).not.toHaveBeenCalled();
     },
   );
+
+  it('remove claim de inicialização vencido sob lock e permite rejeitar', async () => {
+    const { service, meetingSessionDeleteMany, processUpdateMany, tx } =
+      rejectionService(
+        protectedProcess({
+          meeting_session: {
+            id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+            calendar_event_id: 'meeting-init:claim-vencido',
+            started_at: new Date(Date.now() - 3 * 60 * 1000),
+            ended_at: null,
+          },
+        }),
+      );
+
+    await expect(
+      service.rejectProcess(
+        '99999999-9999-4999-8999-999999999999',
+        ownerClientId,
+        'Não tenho mais interesse',
+        UserRole.CUSTOMER,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({ status: ProcessStatus.REJECTED }),
+    );
+
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(meetingSessionDeleteMany).toHaveBeenCalledWith({
+      where: {
+        id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        calendar_event_id: 'meeting-init:claim-vencido',
+      },
+    });
+    expect(meetingSessionDeleteMany.mock.invocationCallOrder[0]).toBeLessThan(
+      processUpdateMany.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('mantém claim de inicialização recente e bloqueia rejeição', async () => {
+    const { service, meetingSessionDeleteMany, processUpdateMany } =
+      rejectionService(
+        protectedProcess({
+          meeting_session: {
+            id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+            calendar_event_id: 'meeting-init:claim-recente',
+            started_at: new Date(),
+            ended_at: null,
+          },
+        }),
+      );
+
+    await expect(
+      service.rejectProcess(
+        '99999999-9999-4999-8999-999999999999',
+        ownerClientId,
+        undefined,
+        UserRole.CUSTOMER,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(meetingSessionDeleteMany).not.toHaveBeenCalled();
+    expect(processUpdateMany).not.toHaveBeenCalled();
+  });
 
   it('cliente pode rejeitar o próprio processo sem appointment', async () => {
     const { service, processUpdate, processUpdateMany, tx } =

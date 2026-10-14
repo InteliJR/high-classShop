@@ -248,7 +248,7 @@ describe('MeetingsService — criação via Meet REST API', () => {
       );
       for (
         let attempt = 0;
-        attempt < 10 && !fetchMock.mock.calls.length;
+        attempt < 50 && !fetchMock.mock.calls.length;
         attempt += 1
       ) {
         await Promise.resolve();
@@ -260,6 +260,117 @@ describe('MeetingsService — criação via Meet REST API', () => {
       expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
       expect(prisma.meetingSession.deleteMany).toHaveBeenCalled();
     } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('aplica a deadline enquanto o OAuth está pendente e não chama o provider', async () => {
+    jest.useFakeTimers();
+    const originalFetch = global.fetch;
+    try {
+      const process = mkProcess();
+      const prisma = mkPrisma(process);
+      let resolveOAuth!: (token: string) => void;
+      const oauth = {
+        getAccessToken: jest.fn().mockImplementation(
+          () =>
+            new Promise<string>((resolve) => {
+              resolveOAuth = resolve;
+            }),
+        ),
+      } as any;
+      const fetchMock = jest.fn();
+      global.fetch = fetchMock as any;
+      const svc = new MeetingsService(
+        prisma,
+        mkConfig('OPEN'),
+        notification,
+        oauth,
+      );
+      let caught: unknown;
+      void svc
+        .startMeetingForProcess('proc-1', 'spec-1')
+        .catch((error) => (caught = error));
+
+      for (
+        let attempt = 0;
+        attempt < 10 && !oauth.getAccessToken.mock.calls.length;
+        attempt += 1
+      ) {
+        await Promise.resolve();
+      }
+      expect(oauth.getAccessToken).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(10_000);
+      for (let attempt = 0; attempt < 10 && !caught; attempt += 1) {
+        await Promise.resolve();
+      }
+
+      expect(caught).toBeInstanceOf(ServiceUnavailableException);
+      resolveOAuth('access-token-atrasado');
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(prisma.meetingSession.updateMany).not.toHaveBeenCalled();
+      expect(prisma.meetingSession.deleteMany).toHaveBeenCalled();
+    } finally {
+      global.fetch = originalFetch;
+      jest.useRealTimers();
+    }
+  });
+
+  it('mantém a deadline até terminar o parse do body e não persiste sala atrasada', async () => {
+    jest.useFakeTimers();
+    const originalFetch = global.fetch;
+    try {
+      const process = mkProcess();
+      const prisma = mkPrisma(process);
+      const oauth = {
+        getAccessToken: jest.fn().mockResolvedValue('access-token'),
+      } as any;
+      let resolveJson!: (body: unknown) => void;
+      const json = jest.fn().mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveJson = resolve;
+          }),
+      );
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, json });
+      global.fetch = fetchMock as any;
+      const svc = new MeetingsService(
+        prisma,
+        mkConfig('OPEN'),
+        notification,
+        oauth,
+      );
+      let caught: unknown;
+      void svc
+        .startMeetingForProcess('proc-1', 'spec-1')
+        .catch((error) => (caught = error));
+
+      for (
+        let attempt = 0;
+        attempt < 50 && !json.mock.calls.length;
+        attempt += 1
+      ) {
+        await Promise.resolve();
+      }
+      expect(json).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(10_000);
+      for (let attempt = 0; attempt < 10 && !caught; attempt += 1) {
+        await Promise.resolve();
+      }
+
+      expect(caught).toBeInstanceOf(ServiceUnavailableException);
+      resolveJson({
+        name: 'spaces/atrasada',
+        meetingUri: 'https://meet.google.com/atrasada',
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(prisma.meetingSession.updateMany).not.toHaveBeenCalled();
+      expect(prisma.meetingSession.deleteMany).toHaveBeenCalled();
+    } finally {
+      global.fetch = originalFetch;
       jest.useRealTimers();
     }
   });
@@ -331,6 +442,32 @@ describe('MeetingsService — criação via Meet REST API', () => {
 
     expect(oauth.getAccessToken).not.toHaveBeenCalled();
     expect(prisma.meetingSession.create).not.toHaveBeenCalled();
+  });
+
+  it('não conclui conversa usando claim de inicialização vencido', async () => {
+    const process = mkProcess({
+      meeting_session: {
+        id: 'meet-1',
+        process_id: 'proc-1',
+        calendar_event_id: 'meeting-init:claim-vencido',
+        meet_link: '',
+        started_at: new Date(Date.now() - 3 * 60 * 1000),
+        ended_at: null,
+      },
+    });
+    const prisma = mkPrisma(process);
+    const svc = new MeetingsService(
+      prisma,
+      mkConfig('OPEN'),
+      notification,
+      {} as any,
+    );
+
+    await expect(
+      svc.markConversationDone('proc-1', 'spec-1'),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.meetingSession.deleteMany).not.toHaveBeenCalled();
   });
 
   it('só o especialista pode iniciar a reunião', async () => {

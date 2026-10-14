@@ -16,10 +16,14 @@ import { GoogleMeetOAuthService } from './google-meet-oauth.service';
 import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
 import { lockNegotiationProductMoney } from 'src/features/products/product-monetary-lock';
 import { acquireSpecialistScheduleLock } from 'src/features/appointments/appointment-schedule-lock';
+import {
+  buildReadyMeetingClaim,
+  isMeetingInitializationClaim,
+  isStaleMeetingInitializationClaim,
+  MEETING_INITIALIZATION_PREFIX,
+  parseReadyMeetingClaim,
+} from './meeting-initialization-claim';
 
-const MEETING_INITIALIZATION_PREFIX = 'meeting-init:';
-const MEETING_READY_PREFIX = 'meeting-ready:';
-const MEETING_INITIALIZATION_TTL_MS = 2 * 60 * 1000;
 const MEETING_PROVIDER_TIMEOUT_MS = 10_000;
 
 @Injectable()
@@ -79,85 +83,60 @@ export class MeetingsService {
     spaceName: string;
     meetingUri: string;
   }> {
-    const accessToken = await this.googleMeetOAuthService.getAccessToken();
-
     const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      MEETING_PROVIDER_TIMEOUT_MS,
-    );
-    let response: Response;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timeout = setTimeout(() => {
+        controller.abort();
+        reject(
+          new Error(
+            `Tempo limite de ${MEETING_PROVIDER_TIMEOUT_MS}ms excedido ao criar sala`,
+          ),
+        );
+      }, MEETING_PROVIDER_TIMEOUT_MS);
+    });
+    const beforeDeadline = <T>(operation: Promise<T>): Promise<T> =>
+      Promise.race([operation, deadline]);
+
     try {
-      response = await fetch('https://meet.googleapis.com/v2/spaces', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          config: { accessType: this.meetAccessType },
+      const accessToken = await beforeDeadline(
+        this.googleMeetOAuthService.getAccessToken(),
+      );
+
+      const response = await beforeDeadline(
+        fetch('https://meet.googleapis.com/v2/spaces', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            config: { accessType: this.meetAccessType },
+          }),
+          signal: controller.signal,
         }),
-        signal: controller.signal,
-      });
+      );
+
+      if (!response.ok) {
+        const detail = await beforeDeadline(response.text());
+        throw new Error(
+          `Meet spaces.create falhou (${response.status}): ${detail}`,
+        );
+      }
+
+      const data: any = await beforeDeadline(response.json());
+      if (!data?.meetingUri || !data?.name) {
+        throw new Error(
+          'Meet spaces.create retornou resposta sem meetingUri/name',
+        );
+      }
+
+      return { spaceName: data.name, meetingUri: data.meetingUri };
     } finally {
-      clearTimeout(timeout);
+      if (timeout) {
+        clearTimeout(timeout);
+      }
     }
-
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(
-        `Meet spaces.create falhou (${response.status}): ${detail}`,
-      );
-    }
-
-    const data: any = await response.json();
-    if (!data?.meetingUri || !data?.name) {
-      throw new Error(
-        'Meet spaces.create retornou resposta sem meetingUri/name',
-      );
-    }
-
-    return { spaceName: data.name, meetingUri: data.meetingUri };
-  }
-
-  private isInitializationClaim(meeting: any): boolean {
-    return Boolean(
-      meeting?.calendar_event_id?.startsWith(MEETING_INITIALIZATION_PREFIX),
-    );
-  }
-
-  private parseReadyClaim(meeting: any): {
-    claimId: string;
-    provider: 'JITSI' | 'GOOGLE' | 'DEMO';
-    calendarEventId: string;
-  } | null {
-    const value = meeting?.calendar_event_id;
-    if (typeof value !== 'string' || !value.startsWith(MEETING_READY_PREFIX)) {
-      return null;
-    }
-    const [claimId, provider, encodedCalendarEventId] = value
-      .slice(MEETING_READY_PREFIX.length)
-      .split(':', 3);
-    if (
-      !claimId ||
-      !encodedCalendarEventId ||
-      !['JITSI', 'GOOGLE', 'DEMO'].includes(provider)
-    ) {
-      return null;
-    }
-    return {
-      claimId,
-      provider: provider as 'JITSI' | 'GOOGLE' | 'DEMO',
-      calendarEventId: decodeURIComponent(encodedCalendarEventId),
-    };
-  }
-
-  private buildReadyClaim(
-    claimId: string,
-    provider: 'JITSI' | 'GOOGLE' | 'DEMO',
-    calendarEventId: string,
-  ): string {
-    return `${MEETING_READY_PREFIX}${claimId}:${provider}:${encodeURIComponent(calendarEventId)}`;
   }
 
   private assertMeetingCanStart(process: any, userId: string): void {
@@ -467,8 +446,8 @@ export class MeetingsService {
     const { process } = await this.getAuthorizedProcess(processId, userId);
 
     return process.meeting_session &&
-      !this.isInitializationClaim(process.meeting_session) &&
-      !this.parseReadyClaim(process.meeting_session)
+      !isMeetingInitializationClaim(process.meeting_session) &&
+      !parseReadyMeetingClaim(process.meeting_session)
       ? this.buildMeetingResponse(process.meeting_session)
       : null;
   }
@@ -530,7 +509,7 @@ export class MeetingsService {
         }
         this.assertMeetingCanStart(process, userId);
         if (process.meeting_session) {
-          const ready = this.parseReadyClaim(process.meeting_session);
+          const ready = parseReadyMeetingClaim(process.meeting_session);
           if (ready) {
             return {
               process,
@@ -540,10 +519,8 @@ export class MeetingsService {
               provider: ready.provider,
             };
           }
-          if (this.isInitializationClaim(process.meeting_session)) {
-            const claimAge =
-              Date.now() - process.meeting_session.started_at.getTime();
-            if (claimAge < MEETING_INITIALIZATION_TTL_MS) {
+          if (isMeetingInitializationClaim(process.meeting_session)) {
+            if (!isStaleMeetingInitializationClaim(process.meeting_session)) {
               throw new ConflictException(
                 'A reunião já está sendo iniciada. Tente novamente em instantes.',
               );
@@ -647,7 +624,7 @@ export class MeetingsService {
         }
       }
 
-      const readyCalendarEventId = this.buildReadyClaim(
+      const readyCalendarEventId = buildReadyMeetingClaim(
         claimId,
         provider,
         calendarEventId,
@@ -721,7 +698,7 @@ export class MeetingsService {
         try {
           this.assertMeetingCanStart(process, userId);
         } catch (error) {
-          const invalidReady = this.parseReadyClaim(process.meeting_session);
+          const invalidReady = parseReadyMeetingClaim(process.meeting_session);
           if (invalidReady?.claimId === readyClaim.claimId) {
             await tx.meetingSession.deleteMany({
               where: {
@@ -734,11 +711,11 @@ export class MeetingsService {
         }
 
         const currentMeeting = process.meeting_session;
-        const currentReady = this.parseReadyClaim(currentMeeting);
+        const currentReady = parseReadyMeetingClaim(currentMeeting);
         if (!currentReady || currentReady.claimId !== readyClaim.claimId) {
           if (
             currentMeeting &&
-            !this.isInitializationClaim(currentMeeting) &&
+            !isMeetingInitializationClaim(currentMeeting) &&
             !currentReady
           ) {
             return {
@@ -769,7 +746,7 @@ export class MeetingsService {
           const current = await tx.meetingSession.findUnique({
             where: { process_id: processId },
           });
-          if (current && !this.parseReadyClaim(current)) {
+          if (current && !parseReadyMeetingClaim(current)) {
             return {
               process,
               meeting: current,
@@ -866,8 +843,8 @@ export class MeetingsService {
     }
 
     if (
-      this.isInitializationClaim(process.meeting_session) ||
-      this.parseReadyClaim(process.meeting_session)
+      isMeetingInitializationClaim(process.meeting_session) ||
+      parseReadyMeetingClaim(process.meeting_session)
     ) {
       throw new ConflictException(
         'A reunião ainda está sendo iniciada. Tente novamente em instantes.',

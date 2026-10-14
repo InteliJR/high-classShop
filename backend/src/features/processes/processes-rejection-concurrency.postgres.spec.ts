@@ -296,6 +296,47 @@ describeWithPostgres('process rejection CAS — PostgreSQL concurrency', () => {
     ).resolves.toBe(0);
   }, 15_000);
 
+  it('remove meeting-init vencido sob lock e permite a rejeição', async () => {
+    await completionClient.process.create({
+      data: {
+        id: processId,
+        client_id: clientId,
+        specialist_id: specialistId,
+        status: ProcessStatus.SCHEDULING,
+        meeting_session: {
+          create: {
+            started_by_id: specialistId,
+            calendar_event_id: `meeting-init:${suffix}`,
+            meet_link: '',
+            started_at: new Date(Date.now() - 3 * 60 * 1000),
+          },
+        },
+      },
+    });
+    const service = new ProcessesService(
+      completionClient as any,
+      meetingNotifications(),
+    );
+
+    await expect(
+      service.rejectProcess(
+        processId,
+        clientId,
+        'claim abandonado',
+        UserRole.CUSTOMER,
+      ),
+    ).resolves.toMatchObject({ status: ProcessStatus.REJECTED });
+
+    await expect(
+      completionClient.meetingSession.count({
+        where: { process_id: processId },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      completionClient.process.findUniqueOrThrow({ where: { id: processId } }),
+    ).resolves.toMatchObject({ status: ProcessStatus.REJECTED });
+  }, 15_000);
+
   it('não ressuscita processo quando update perde a corrida para rejeição', async () => {
     await completionClient.process.create({
       data: {
