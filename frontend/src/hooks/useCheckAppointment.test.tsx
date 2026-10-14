@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkExistingAppointment } from "../services/appointments.service";
 import type { ExistingAppointmentCheck } from "../services/appointments.service";
 import { useCheckAppointment } from "./useCheckAppointment";
-import { StrictMode } from "react";
+import { StrictMode, useLayoutEffect } from "react";
 import { useAuth } from "../store/authStateManager";
 
 const customer = { id: "customer-1", name: "João", surname: "Silva", email: "joao@example.com", cpf: "", rg: "", role: "CUSTOMER" as const };
@@ -33,6 +33,129 @@ beforeEach(() => { useAuth.setState({ user: customer }); vi.useFakeTimers(); vi.
 afterEach(() => { cleanup(); useAuth.setState({ user: null }); vi.useRealTimers(); vi.resetAllMocks(); });
 
 describe("owned appointment check hook", () => {
+  const initialScope = { specialistId: "specialist-1", productType: "CAR" as "CAR" | "BOAT" | "AIRCRAFT", productId: "car-1" as string | undefined };
+  const scopeChanges = [
+    { name: "customer identity", user: { ...customer, id: "customer-2" }, params: initialScope, loading: true },
+    { name: "role", user: { ...customer, role: "SPECIALIST" as const }, params: initialScope, loading: false },
+    { name: "missing identity", user: null, params: initialScope, loading: false },
+    { name: "specialist", user: customer, params: { ...initialScope, specialistId: "specialist-2" }, loading: true },
+    { name: "product type", user: customer, params: { ...initialScope, productType: "BOAT" as const }, loading: true },
+    { name: "product ID", user: customer, params: { ...initialScope, productId: "car-2" }, loading: true },
+    { name: "missing product", user: customer, params: { ...initialScope, productId: undefined }, loading: false },
+  ];
+
+  describe.each([false, true])("render isolation with StrictMode=%s", (strict) => {
+    it("reports an eligible initial render as loading before effects", () => {
+      const renders: ReturnType<typeof useCheckAppointment>[] = [];
+      const commits: ReturnType<typeof useCheckAppointment>[] = [];
+      renderHook(() => {
+        const value = useCheckAppointment("specialist-1", "CAR", "car-1");
+        renders.push({ ...value });
+        useLayoutEffect(() => { commits.push({ ...value }); });
+        return value;
+      }, { wrapper: strict ? StrictMode : undefined });
+      const unchecked = { existingAppointment: null, isLoading: true, error: null };
+      expect(commits).toEqual(commits.map(() => unchecked));
+      expect(renders).toEqual(renders.map(() => unchecked));
+    });
+
+    it.each(scopeChanges.flatMap((change) => [
+      { ...change, previous: found, resultName: "snapshot" },
+      { ...change, previous: { exists: false } as ExistingAppointmentCheck, resultName: "verified absence" },
+    ]))("hides $resultName before effects on a change of $name", async ({ user, params, loading, previous }) => {
+      vi.mocked(checkExistingAppointment).mockResolvedValueOnce(previous);
+      const renders: ReturnType<typeof useCheckAppointment>[] = [];
+      const commits: ReturnType<typeof useCheckAppointment>[] = [];
+      const { result, rerender } = renderHook((scope) => {
+        const value = useCheckAppointment(scope.specialistId, scope.productType, scope.productId);
+        renders.push({ ...value });
+        // Layout effects observe the committed value before the hook's passive reset.
+        useLayoutEffect(() => { commits.push({ ...value }); });
+        return value;
+      }, { initialProps: initialScope, wrapper: strict ? StrictMode : undefined });
+      await advance();
+      expect(result.current).toEqual({ existingAppointment: previous, isLoading: false, error: null });
+      renders.length = 0;
+      commits.length = 0;
+
+      act(() => { useAuth.setState({ user }); rerender(params); });
+
+      expect(renders.length).toBeGreaterThan(0);
+      expect(commits.length).toBeGreaterThan(0);
+      const unchecked = { existingAppointment: null, isLoading: loading, error: null };
+      expect(commits).toEqual(commits.map(() => unchecked));
+      expect(renders).toEqual(renders.map(() => unchecked));
+    });
+
+    it("hides a former customer's error from the first new commit", async () => {
+      vi.mocked(checkExistingAppointment).mockRejectedValueOnce(new Error("Former customer error"));
+      const commits: ReturnType<typeof useCheckAppointment>[] = [];
+      const { result } = renderHook(() => {
+        const value = useCheckAppointment("specialist-1", "CAR", "car-1");
+        useLayoutEffect(() => { commits.push({ ...value }); });
+        return value;
+      }, { wrapper: strict ? StrictMode : undefined });
+      await advance();
+      expect(result.current.error).toBe("Former customer error");
+      commits.length = 0;
+      act(() => { useAuth.setState({ user: { ...customer, id: "customer-2" } }); });
+      const unchecked = { existingAppointment: null, isLoading: true, error: null };
+      expect(commits).toEqual(commits.map(() => unchecked));
+    });
+
+    it.each([
+      { name: "snapshot", value: found },
+      { name: "verified absence", value: { exists: false } as ExistingAppointmentCheck },
+      { name: "rejection", value: null },
+    ])("discards a stale $name across an account switch in every commit", async ({ value }) => {
+      const earlier = deferred();
+      const latest = deferred();
+      vi.mocked(checkExistingAppointment).mockReturnValueOnce(earlier.promise).mockReturnValueOnce(latest.promise);
+      const renders: ReturnType<typeof useCheckAppointment>[] = [];
+      const commits: ReturnType<typeof useCheckAppointment>[] = [];
+      const { result } = renderHook(() => {
+        const state = useCheckAppointment("specialist-1", "CAR", "car-1");
+        renders.push({ ...state });
+        useLayoutEffect(() => { commits.push({ ...state }); });
+        return state;
+      }, { wrapper: strict ? StrictMode : undefined });
+      await advance();
+      renders.length = 0;
+      commits.length = 0;
+      act(() => { useAuth.setState({ user: { ...customer, id: "customer-2" } }); });
+      await advance();
+      await act(async () => { if (value) earlier.resolve(value); else earlier.reject(new Error("obsolete")); });
+      const unchecked = { existingAppointment: null, isLoading: true, error: null };
+      expect(commits).toEqual(commits.map(() => unchecked));
+      expect(renders).toEqual(renders.map(() => unchecked));
+      expect(result.current).toEqual(unchecked);
+      await act(async () => { latest.resolve(found); });
+      expect(result.current).toEqual({ existingAppointment: found, isLoading: false, error: null });
+    });
+
+    it.each(scopeChanges.filter((change) => !change.loading).flatMap((change) => [
+      { ...change, outcome: "resolve" as const },
+      { ...change, outcome: "reject" as const },
+    ]))("stays unchecked after $name with an obsolete request that later $outcome", async ({ user, params, outcome }) => {
+      const pending = deferred();
+      vi.mocked(checkExistingAppointment).mockReturnValueOnce(pending.promise);
+      const commits: ReturnType<typeof useCheckAppointment>[] = [];
+      const { result, rerender } = renderHook((scope) => {
+        const value = useCheckAppointment(scope.specialistId, scope.productType, scope.productId);
+        useLayoutEffect(() => { commits.push({ ...value }); });
+        return value;
+      }, { initialProps: initialScope, wrapper: strict ? StrictMode : undefined });
+      await advance();
+      commits.length = 0;
+      act(() => { useAuth.setState({ user }); rerender(params); });
+      await act(async () => { if (outcome === "resolve") pending.resolve(found); else pending.reject(new Error("obsolete")); });
+      const unchecked = { existingAppointment: null, isLoading: false, error: null };
+      expect(commits).toEqual(commits.map(() => unchecked));
+      expect(result.current).toEqual(unchecked);
+      expect(checkExistingAppointment).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("debounces for 500ms and calls the own-only three-argument service", async () => {
     vi.mocked(checkExistingAppointment).mockResolvedValue(found);
     const { result } = renderHook(() => useCheckAppointment("specialist-1", "CAR", "car-1"));

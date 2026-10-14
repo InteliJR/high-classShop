@@ -17,38 +17,44 @@ export function useCheckAppointment(
 ): UseCheckAppointmentResult {
   const userId = useAuth((state) => state.user?.id);
   const role = useAuth((state) => state.user?.role);
-  const [existingAppointment, setExistingAppointment] = useState<ExistingAppointmentCheck | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const scopeKey = JSON.stringify([userId, role, specialistId, productType, productId]);
+  const isEligible = Boolean(userId && role === "CUSTOMER" && specialistId && productType && productId);
+  const [state, setState] = useState<UseCheckAppointmentResult & { scopeKey: string }>(() => ({
+    scopeKey, existingAppointment: null, isLoading: isEligible, error: null,
+  }));
   const requestToken = useRef(0);
 
   useEffect(() => {
     const token = ++requestToken.current;
-    setExistingAppointment(null);
-    setError(null);
     if (!userId || role !== "CUSTOMER" || !specialistId || !productType || !productId) {
-      setIsLoading(false);
+      setState({ scopeKey, existingAppointment: null, isLoading: false, error: null });
       return () => { requestToken.current = token + 1; };
     }
-    setIsLoading(true);
+    setState({ scopeKey, existingAppointment: null, isLoading: true, error: null });
     const timer = setTimeout(async () => {
       try {
         const result = await checkExistingAppointment(specialistId, productType, productId);
-        if (token === requestToken.current) setExistingAppointment(result);
+        if (token === requestToken.current) {
+          setState({ scopeKey, existingAppointment: result, isLoading: false, error: null });
+        }
       } catch (error) {
         if (token === requestToken.current) {
-          setExistingAppointment(null);
-          setError(error instanceof Error ? error.message : "Erro ao verificar agendamentos");
+          setState({
+            scopeKey, existingAppointment: null, isLoading: false,
+            error: error instanceof Error ? error.message : "Erro ao verificar agendamentos",
+          });
         }
-      } finally {
-        if (token === requestToken.current) setIsLoading(false);
       }
     }, 500);
     return () => {
       requestToken.current = token + 1;
       clearTimeout(timer);
     };
-  }, [userId, role, specialistId, productType, productId]);
+  }, [userId, role, specialistId, productType, productId, scopeKey]);
 
-  return { existingAppointment, isLoading, error };
+  // Scope changes must be safe during render, before passive effects reset state.
+  if (!isEligible || state.scopeKey !== scopeKey) {
+    return { existingAppointment: null, isLoading: isEligible, error: null };
+  }
+  return { existingAppointment: state.existingAppointment, isLoading: state.isLoading, error: state.error };
 }
