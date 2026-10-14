@@ -1983,6 +1983,8 @@ describe('ProcessesService — autorização centralizada de processos', () => {
       car: null,
       boat: null,
       aircraft: null,
+      appointment: null,
+      meeting_session: null,
       ...overrides,
     };
   }
@@ -2273,7 +2275,104 @@ describe('ProcessesService — autorização centralizada de processos', () => {
     expect(tx.$queryRaw).not.toHaveBeenCalled();
   });
 
-  it('cliente pode rejeitar o próprio processo ativo', async () => {
+  it.each([
+    [
+      'cliente',
+      StatusAgendamento.PENDING,
+      ownerClientId,
+      UserRole.CUSTOMER,
+      'Cancele o agendamento pelo fluxo próprio',
+    ],
+    [
+      'especialista',
+      StatusAgendamento.PENDING,
+      assignedSpecialistId,
+      UserRole.SPECIALIST,
+      'Cancele o agendamento pelo fluxo próprio',
+    ],
+    [
+      'cliente',
+      StatusAgendamento.SCHEDULED,
+      ownerClientId,
+      UserRole.CUSTOMER,
+      'Cancele o agendamento pelo fluxo próprio',
+    ],
+    [
+      'especialista',
+      StatusAgendamento.SCHEDULED,
+      assignedSpecialistId,
+      UserRole.SPECIALIST,
+      'Cancele o agendamento pelo fluxo próprio',
+    ],
+    [
+      'cliente',
+      StatusAgendamento.COMPLETED,
+      ownerClientId,
+      UserRole.CUSTOMER,
+      'Processo com agendamento concluído',
+    ],
+    [
+      'especialista',
+      StatusAgendamento.COMPLETED,
+      assignedSpecialistId,
+      UserRole.SPECIALIST,
+      'Processo com agendamento concluído',
+    ],
+  ])(
+    '%s não rejeita processo com appointment %s',
+    async (_label, appointmentStatus, actorId, actorRole, expectedMessage) => {
+      const { service, processUpdateMany, historyCreate, rejectionCreate, tx } =
+        rejectionService(
+          protectedProcess({
+            appointment: { status: appointmentStatus },
+          }),
+        );
+
+      await expect(
+        service.rejectProcess(
+          '99999999-9999-4999-8999-999999999999',
+          actorId,
+          undefined,
+          actorRole,
+        ),
+      ).rejects.toThrow(expectedMessage);
+
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(processUpdateMany).not.toHaveBeenCalled();
+      expect(historyCreate).not.toHaveBeenCalled();
+      expect(rejectionCreate).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['cliente', ownerClientId, UserRole.CUSTOMER],
+    ['especialista', assignedSpecialistId, UserRole.SPECIALIST],
+  ])(
+    '%s não rejeita processo com reunião ativa',
+    async (_label, actorId, actorRole) => {
+      const { service, processUpdateMany, historyCreate, rejectionCreate } =
+        rejectionService(
+          protectedProcess({
+            meeting_session: { ended_at: null },
+          }),
+        );
+
+      await expect(
+        service.rejectProcess(
+          '99999999-9999-4999-8999-999999999999',
+          actorId,
+          undefined,
+          actorRole,
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(processUpdateMany).not.toHaveBeenCalled();
+      expect(historyCreate).not.toHaveBeenCalled();
+      expect(rejectionCreate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('cliente pode rejeitar o próprio processo sem appointment', async () => {
     const { service, processUpdate, processUpdateMany, tx } =
       rejectionService();
 
@@ -2301,6 +2400,28 @@ describe('ProcessesService — autorização centralizada de processos', () => {
       data: expect.objectContaining({ status: ProcessStatus.REJECTED }),
     });
     expect(processUpdate).not.toHaveBeenCalled();
+  });
+
+  it('especialista pode rejeitar processo com appointment cancelado e reunião encerrada', async () => {
+    const { service, processUpdateMany } = rejectionService(
+      protectedProcess({
+        appointment: { status: StatusAgendamento.CANCELLED },
+        meeting_session: { ended_at: new Date('2026-01-01T12:00:00.000Z') },
+      }),
+    );
+
+    await expect(
+      service.rejectProcess(
+        '99999999-9999-4999-8999-999999999999',
+        assignedSpecialistId,
+        undefined,
+        UserRole.SPECIALIST,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({ status: ProcessStatus.REJECTED }),
+    );
+
+    expect(processUpdateMany).toHaveBeenCalledTimes(1);
   });
 
   it('rejeição perde a CAS sem criar histórico nem motivo', async () => {

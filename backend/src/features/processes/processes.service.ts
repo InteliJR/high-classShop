@@ -2034,6 +2034,8 @@ export class ProcessesService {
               car: true,
               boat: true,
               aircraft: true,
+              appointment: { select: { status: true } },
+              meeting_session: { select: { ended_at: true } },
             },
           });
 
@@ -2054,6 +2056,29 @@ export class ProcessesService {
           if (existingProcess.status === ProcessStatus.COMPLETED) {
             throw new BadRequestException(
               'Processo concluído não pode ser rejeitado',
+            );
+          }
+          if (
+            existingProcess.appointment &&
+            existingProcess.appointment.status !== StatusAgendamento.CANCELLED
+          ) {
+            const appointmentCanBeCancelled =
+              existingProcess.appointment.status ===
+                StatusAgendamento.PENDING ||
+              existingProcess.appointment.status ===
+                StatusAgendamento.SCHEDULED;
+            throw new BadRequestException(
+              appointmentCanBeCancelled
+                ? 'Cancele o agendamento pelo fluxo próprio antes de rejeitar o processo'
+                : 'Processo com agendamento concluído não pode ser rejeitado por esta rota',
+            );
+          }
+          if (
+            existingProcess.meeting_session &&
+            !existingProcess.meeting_session.ended_at
+          ) {
+            throw new BadRequestException(
+              'Encerre a reunião antes de rejeitar o processo',
             );
           }
 
