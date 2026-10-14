@@ -484,4 +484,84 @@ describeWithPostgres('process rejection CAS — PostgreSQL concurrency', () => {
     expect(notifications.sendMeetingStartedEmail).toHaveBeenCalledTimes(1);
     expect(notifications.sendMeetingAdvancedEmail).not.toHaveBeenCalled();
   }, 15_000);
+
+  it('libera pool connection_limit=1 durante provider e impede start/e-mail duplicado', async () => {
+    await completionClient.process.create({
+      data: {
+        id: processId,
+        client_id: clientId,
+        specialist_id: specialistId,
+        status: ProcessStatus.SCHEDULING,
+      },
+    });
+
+    const providerEntered = deferred();
+    const releaseProvider = deferred();
+    const notifications = meetingNotifications();
+    const oauth = {
+      getAccessToken: jest.fn().mockImplementation(async () => {
+        // Este client tem connection_limit=1. Se a transação do claim ainda
+        // estiver aberta, a própria leitura do OAuth esgota o pool.
+        await completionClient.user.count({ where: { id: specialistId } });
+        providerEntered.resolve();
+        await releaseProvider.promise;
+        return 'access-token';
+      }),
+    } as any;
+    const config = {
+      get: jest.fn((key: string, fallback?: string) => {
+        if (key === 'MEETING_PROVIDER') return 'GOOGLE';
+        if (key === 'MEETING_DEMO_FALLBACK_ENABLED') return 'false';
+        if (key === 'GOOGLE_MEET_ACCESS_TYPE') return 'OPEN';
+        return fallback;
+      }),
+    } as any;
+    const originalFetch = global.fetch;
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        name: `spaces/${suffix}`,
+        meetingUri: `https://meet.google.com/${suffix.slice(0, 10)}`,
+      }),
+    });
+    global.fetch = fetchMock as any;
+
+    try {
+      const meetingsService = new MeetingsService(
+        completionClient as any,
+        config,
+        notifications,
+        oauth,
+      );
+      const firstStart = meetingsService.startMeetingForProcess(
+        processId,
+        specialistId,
+      );
+      await providerEntered.promise;
+
+      await expect(
+        meetingsService.startMeetingForProcess(processId, specialistId),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      releaseProvider.resolve();
+      await expect(firstStart).resolves.toMatchObject({ is_active: true });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      expect(oauth.getAccessToken).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await expect(
+        completionClient.meetingSession.findUniqueOrThrow({
+          where: { process_id: processId },
+        }),
+      ).resolves.toMatchObject({
+        calendar_event_id: `spaces/${suffix}`,
+        meet_link: `https://meet.google.com/${suffix.slice(0, 10)}`,
+      });
+      expect(notifications.sendMeetingStartedEmail).toHaveBeenCalledTimes(1);
+      expect(notifications.sendMeetingAdvancedEmail).not.toHaveBeenCalled();
+    } finally {
+      global.fetch = originalFetch;
+      releaseProvider.resolve();
+    }
+  }, 15_000);
 });

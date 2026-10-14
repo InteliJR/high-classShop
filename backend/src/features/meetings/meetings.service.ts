@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -15,6 +16,11 @@ import { GoogleMeetOAuthService } from './google-meet-oauth.service';
 import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
 import { lockNegotiationProductMoney } from 'src/features/products/product-monetary-lock';
 import { acquireSpecialistScheduleLock } from 'src/features/appointments/appointment-schedule-lock';
+
+const MEETING_INITIALIZATION_PREFIX = 'meeting-init:';
+const MEETING_READY_PREFIX = 'meeting-ready:';
+const MEETING_INITIALIZATION_TTL_MS = 2 * 60 * 1000;
+const MEETING_PROVIDER_TIMEOUT_MS = 10_000;
 
 @Injectable()
 export class MeetingsService {
@@ -75,16 +81,27 @@ export class MeetingsService {
   }> {
     const accessToken = await this.googleMeetOAuthService.getAccessToken();
 
-    const response = await fetch('https://meet.googleapis.com/v2/spaces', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        config: { accessType: this.meetAccessType },
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      MEETING_PROVIDER_TIMEOUT_MS,
+    );
+    let response: Response;
+    try {
+      response = await fetch('https://meet.googleapis.com/v2/spaces', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          config: { accessType: this.meetAccessType },
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const detail = await response.text();
@@ -101,6 +118,90 @@ export class MeetingsService {
     }
 
     return { spaceName: data.name, meetingUri: data.meetingUri };
+  }
+
+  private isInitializationClaim(meeting: any): boolean {
+    return Boolean(
+      meeting?.calendar_event_id?.startsWith(MEETING_INITIALIZATION_PREFIX),
+    );
+  }
+
+  private parseReadyClaim(meeting: any): {
+    claimId: string;
+    provider: 'JITSI' | 'GOOGLE' | 'DEMO';
+    calendarEventId: string;
+  } | null {
+    const value = meeting?.calendar_event_id;
+    if (typeof value !== 'string' || !value.startsWith(MEETING_READY_PREFIX)) {
+      return null;
+    }
+    const [claimId, provider, encodedCalendarEventId] = value
+      .slice(MEETING_READY_PREFIX.length)
+      .split(':', 3);
+    if (
+      !claimId ||
+      !encodedCalendarEventId ||
+      !['JITSI', 'GOOGLE', 'DEMO'].includes(provider)
+    ) {
+      return null;
+    }
+    return {
+      claimId,
+      provider: provider as 'JITSI' | 'GOOGLE' | 'DEMO',
+      calendarEventId: decodeURIComponent(encodedCalendarEventId),
+    };
+  }
+
+  private buildReadyClaim(
+    claimId: string,
+    provider: 'JITSI' | 'GOOGLE' | 'DEMO',
+    calendarEventId: string,
+  ): string {
+    return `${MEETING_READY_PREFIX}${claimId}:${provider}:${encodeURIComponent(calendarEventId)}`;
+  }
+
+  private assertMeetingCanStart(process: any, userId: string): void {
+    if (process.specialist_id !== userId) {
+      throw new ForbiddenException(
+        'Apenas o especialista pode iniciar a reunião',
+      );
+    }
+    if (
+      Boolean(process.appointment) !== Boolean(process.appointment_id) ||
+      (process.appointment &&
+        (process.appointment.id !== process.appointment_id ||
+          process.appointment.client_id !== process.client_id ||
+          process.appointment.specialist_id !== process.specialist_id))
+    ) {
+      throw new BadRequestException(
+        'Agendamento não corresponde aos participantes do processo',
+      );
+    }
+    if (
+      process.status !== ProcessStatus.SCHEDULING &&
+      process.status !== ProcessStatus.NEGOTIATION &&
+      process.status !== ProcessStatus.PROCESSING_CONTRACT
+    ) {
+      throw new BadRequestException(
+        'Processo não está em etapa válida para iniciar reunião',
+      );
+    }
+  }
+
+  private async removeInitializationClaim(
+    processId: string,
+    specialistId: string,
+    calendarEventId: string,
+  ): Promise<void> {
+    await this.prismaService.$transaction(async (tx) => {
+      await acquireSpecialistScheduleLock(tx, specialistId);
+      await tx.meetingSession.deleteMany({
+        where: {
+          process_id: processId,
+          calendar_event_id: calendarEventId,
+        },
+      });
+    });
   }
 
   private async getAuthorizedProcess(processId: string, userId: string) {
@@ -365,7 +466,9 @@ export class MeetingsService {
   async getMeetingByProcess(processId: string, userId: string) {
     const { process } = await this.getAuthorizedProcess(processId, userId);
 
-    return process.meeting_session
+    return process.meeting_session &&
+      !this.isInitializationClaim(process.meeting_session) &&
+      !this.parseReadyClaim(process.meeting_session)
       ? this.buildMeetingResponse(process.meeting_session)
       : null;
   }
@@ -383,7 +486,7 @@ export class MeetingsService {
       );
     }
 
-    const result = await this.prismaService.$transaction(
+    const reservation = await this.prismaService.$transaction(
       async (tx) => {
         const candidate = await tx.process.findUnique({
           where: { id: processId },
@@ -425,91 +528,282 @@ export class MeetingsService {
         if (!process) {
           throw new NotFoundException('Processo não encontrado');
         }
-        if (process.specialist_id !== userId) {
-          throw new ForbiddenException(
-            'Apenas o especialista pode iniciar a reunião',
-          );
-        }
-        if (
-          Boolean(process.appointment) !== Boolean(process.appointment_id) ||
-          (process.appointment &&
-            (process.appointment.id !== process.appointment_id ||
-              process.appointment.client_id !== process.client_id ||
-              process.appointment.specialist_id !== process.specialist_id))
-        ) {
-          throw new BadRequestException(
-            'Agendamento não corresponde aos participantes do processo',
-          );
-        }
-        if (
-          process.status !== ProcessStatus.SCHEDULING &&
-          process.status !== ProcessStatus.NEGOTIATION &&
-          process.status !== ProcessStatus.PROCESSING_CONTRACT
-        ) {
-          throw new BadRequestException(
-            'Processo não está em etapa válida para iniciar reunião',
-          );
-        }
+        this.assertMeetingCanStart(process, userId);
         if (process.meeting_session) {
-          return {
-            process,
-            meeting: process.meeting_session,
-            created: false,
-            provider: 'EXISTING' as const,
-          };
-        }
-
-        let meetLink: string;
-        let calendarEventId: string;
-        let provider: 'JITSI' | 'GOOGLE' | 'DEMO';
-        if (this.meetingProvider === 'JITSI') {
-          meetLink = this.buildDemoMeetingLink(process.id);
-          calendarEventId = `jitsi-${randomUUID()}`;
-          provider = 'JITSI';
-        } else {
-          try {
-            const space = await this.createMeetSpace();
-            meetLink = space.meetingUri;
-            calendarEventId = space.spaceName;
-            provider = 'GOOGLE';
-          } catch (error) {
-            if (!this.demoMeetingFallbackEnabled) {
-              this.logger.error('Falha ao criar sala no Google Meet', {
-                processId: process.id,
-                error:
-                  error instanceof Error ? error.message : 'erro desconhecido',
-              });
-              throw new ServiceUnavailableException(
-                'Não foi possível criar a reunião no Google Meet. Verifique a conta conectada nas configurações.',
+          const ready = this.parseReadyClaim(process.meeting_session);
+          if (ready) {
+            return {
+              process,
+              meeting: process.meeting_session,
+              ready,
+              created: false,
+              provider: ready.provider,
+            };
+          }
+          if (this.isInitializationClaim(process.meeting_session)) {
+            const claimAge =
+              Date.now() - process.meeting_session.started_at.getTime();
+            if (claimAge < MEETING_INITIALIZATION_TTL_MS) {
+              throw new ConflictException(
+                'A reunião já está sendo iniciada. Tente novamente em instantes.',
               );
             }
-
-            meetLink = this.buildDemoMeetingLink(process.id);
-            calendarEventId = `demo-${randomUUID()}`;
-            provider = 'DEMO';
+            await tx.meetingSession.deleteMany({
+              where: {
+                id: process.meeting_session.id,
+                calendar_event_id: process.meeting_session.calendar_event_id,
+              },
+            });
+          } else {
+            return {
+              process,
+              meeting: process.meeting_session,
+              ready: null,
+              created: false,
+              provider: 'EXISTING' as const,
+            };
           }
         }
 
+        const claimId = randomUUID();
+        const claimCalendarEventId = `${MEETING_INITIALIZATION_PREFIX}${claimId}`;
         const meeting = await tx.meetingSession.create({
           data: {
             process_id: process.id,
             started_by_id: userId,
-            calendar_event_id: calendarEventId,
-            meet_link: meetLink,
+            calendar_event_id: claimCalendarEventId,
+            meet_link: '',
             started_at: new Date(),
           },
         });
 
-        return { process, meeting, created: true, provider };
+        return {
+          process,
+          meeting,
+          claimId,
+          claimCalendarEventId,
+          ready: null,
+          created: true,
+          provider: null,
+        };
       },
       { maxWait: 10_000, timeout: 30_000 },
     );
 
-    if (!result.created) {
-      return this.buildMeetingResponse(result.meeting);
+    if (!reservation.created && !reservation.ready) {
+      return this.buildMeetingResponse(reservation.meeting);
     }
 
-    const { process, meeting, provider } = result;
+    let ready = reservation.ready;
+    if (!ready) {
+      const claimId = reservation.claimId;
+      const claimCalendarEventId = reservation.claimCalendarEventId;
+      if (!claimId || !claimCalendarEventId) {
+        throw new ConflictException('Reserva de reunião inválida');
+      }
+      let meetLink: string;
+      let calendarEventId: string;
+      let provider: 'JITSI' | 'GOOGLE' | 'DEMO';
+      if (this.meetingProvider === 'JITSI') {
+        meetLink = this.buildDemoMeetingLink(reservation.process.id);
+        calendarEventId = `jitsi-${randomUUID()}`;
+        provider = 'JITSI';
+      } else {
+        try {
+          const space = await this.createMeetSpace();
+          meetLink = space.meetingUri;
+          calendarEventId = space.spaceName;
+          provider = 'GOOGLE';
+        } catch (error) {
+          if (!this.demoMeetingFallbackEnabled) {
+            try {
+              await this.removeInitializationClaim(
+                processId,
+                userId,
+                claimCalendarEventId,
+              );
+            } catch (cleanupError) {
+              this.logger.error('Falha ao liberar reserva de reunião', {
+                processId,
+                error:
+                  cleanupError instanceof Error
+                    ? cleanupError.message
+                    : 'erro desconhecido',
+              });
+            }
+            this.logger.error('Falha ao criar sala no Google Meet', {
+              processId: reservation.process.id,
+              error:
+                error instanceof Error ? error.message : 'erro desconhecido',
+            });
+            throw new ServiceUnavailableException(
+              'Não foi possível criar a reunião no Google Meet. Verifique a conta conectada nas configurações.',
+            );
+          }
+
+          meetLink = this.buildDemoMeetingLink(reservation.process.id);
+          calendarEventId = `demo-${randomUUID()}`;
+          provider = 'DEMO';
+        }
+      }
+
+      const readyCalendarEventId = this.buildReadyClaim(
+        claimId,
+        provider,
+        calendarEventId,
+      );
+      const checkpoint = await this.prismaService.meetingSession.updateMany({
+        where: {
+          id: reservation.meeting.id,
+          process_id: processId,
+          calendar_event_id: claimCalendarEventId,
+          meet_link: '',
+        },
+        data: {
+          calendar_event_id: readyCalendarEventId,
+          meet_link: meetLink,
+        },
+      });
+      if (checkpoint.count !== 1) {
+        throw new ConflictException(
+          'A reserva da reunião mudou durante a criação. Tente novamente.',
+        );
+      }
+      ready = { claimId, provider, calendarEventId };
+      reservation.meeting.calendar_event_id = readyCalendarEventId;
+      reservation.meeting.meet_link = meetLink;
+    }
+    if (!ready) {
+      throw new ConflictException('Reserva de reunião inválida');
+    }
+    const readyClaim = ready;
+
+    const finalized = await this.prismaService.$transaction(
+      async (tx) => {
+        const candidate = await tx.process.findUnique({
+          where: { id: processId },
+          select: { id: true, specialist_id: true },
+        });
+        if (!candidate) {
+          throw new NotFoundException('Processo não encontrado');
+        }
+        if (candidate.specialist_id !== userId) {
+          throw new ForbiddenException(
+            'Apenas o especialista pode iniciar a reunião',
+          );
+        }
+        await acquireSpecialistScheduleLock(tx, candidate.specialist_id);
+        const process = await tx.process.findUnique({
+          where: { id: processId },
+          include: {
+            appointment: true,
+            client: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                surname: true,
+                consultant_id: true,
+                consultant: {
+                  select: { id: true, email: true, name: true, surname: true },
+                },
+              },
+            },
+            specialist: {
+              select: { id: true, email: true, name: true, surname: true },
+            },
+            meeting_session: true,
+          },
+        });
+        if (!process) {
+          throw new NotFoundException('Processo não encontrado');
+        }
+        try {
+          this.assertMeetingCanStart(process, userId);
+        } catch (error) {
+          const invalidReady = this.parseReadyClaim(process.meeting_session);
+          if (invalidReady?.claimId === readyClaim.claimId) {
+            await tx.meetingSession.deleteMany({
+              where: {
+                id: process.meeting_session!.id,
+                calendar_event_id: process.meeting_session!.calendar_event_id,
+              },
+            });
+          }
+          return { failure: error };
+        }
+
+        const currentMeeting = process.meeting_session;
+        const currentReady = this.parseReadyClaim(currentMeeting);
+        if (!currentReady || currentReady.claimId !== readyClaim.claimId) {
+          if (
+            currentMeeting &&
+            !this.isInitializationClaim(currentMeeting) &&
+            !currentReady
+          ) {
+            return {
+              process,
+              meeting: currentMeeting,
+              created: false,
+              provider: 'EXISTING' as const,
+            };
+          }
+          throw new ConflictException(
+            'A reserva da reunião mudou durante a finalização. Tente novamente.',
+          );
+        }
+        if (!currentMeeting) {
+          throw new ConflictException(
+            'A reserva da reunião não existe mais. Tente novamente.',
+          );
+        }
+
+        const update = await tx.meetingSession.updateMany({
+          where: {
+            id: currentMeeting.id,
+            calendar_event_id: currentMeeting.calendar_event_id,
+          },
+          data: { calendar_event_id: readyClaim.calendarEventId },
+        });
+        if (update.count !== 1) {
+          const current = await tx.meetingSession.findUnique({
+            where: { process_id: processId },
+          });
+          if (current && !this.parseReadyClaim(current)) {
+            return {
+              process,
+              meeting: current,
+              created: false,
+              provider: 'EXISTING' as const,
+            };
+          }
+          throw new ConflictException(
+            'A reunião mudou durante a finalização. Tente novamente.',
+          );
+        }
+
+        return {
+          process,
+          meeting: {
+            ...currentMeeting,
+            calendar_event_id: readyClaim.calendarEventId,
+          },
+          created: true,
+          provider: readyClaim.provider,
+        };
+      },
+      { maxWait: 10_000, timeout: 30_000 },
+    );
+
+    if ('failure' in finalized) {
+      throw finalized.failure;
+    }
+
+    if (!finalized.created) {
+      return this.buildMeetingResponse(finalized.meeting);
+    }
+
+    const { process, meeting, provider } = finalized;
     if (provider === 'JITSI') {
       this.logger.log(
         `[meetings] Reunião criada com provedor JITSI para processId=${process.id}`,
@@ -569,6 +863,15 @@ export class MeetingsService {
 
     if (!process.meeting_session) {
       throw new NotFoundException('Reunião não encontrada para este processo');
+    }
+
+    if (
+      this.isInitializationClaim(process.meeting_session) ||
+      this.parseReadyClaim(process.meeting_session)
+    ) {
+      throw new ConflictException(
+        'A reunião ainda está sendo iniciada. Tente novamente em instantes.',
+      );
     }
 
     if (process.meeting_session.ended_at) {
