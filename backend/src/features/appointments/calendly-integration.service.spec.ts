@@ -160,6 +160,65 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
     return { service, prisma, connection };
   }
 
+  it.each([
+    'https://evil/scheduled_events/event-1',
+    'https://evil.test/scheduled_events/event-1',
+    'https://calendly.com.evil/scheduled_events/event-1',
+    'https://api.calendly.com.evil.test/scheduled_events/event-1',
+    'http://api.calendly.com/scheduled_events/event-1',
+    'https://user@api.calendly.com/scheduled_events/event-1',
+    'https://api.calendly.com:444/scheduled_events/event-1',
+    'https://127.0.0.1/scheduled_events/event-1',
+  ])(
+    'não envia o Bearer token para event_uri não confiável: %s',
+    async (uri) => {
+      const { service } = makeRefreshService();
+
+      await expect(
+        service.resolveScheduledStartTime('specialist-1', uri),
+      ).rejects.toThrow('event_uri do Calendly inválida');
+      expect(axios.get).not.toHaveBeenCalled();
+    },
+  );
+
+  it('não segue redirect ao buscar recurso autenticado do Calendly', async () => {
+    const { service } = makeRefreshService();
+    jest.mocked(axios.get).mockRejectedValueOnce({
+      response: {
+        status: 302,
+        headers: { location: 'http://127.0.0.1/internal' },
+      },
+    });
+
+    await expect(
+      service.resolveScheduledStartTime(
+        'specialist-1',
+        'https://api.calendly.com/scheduled_events/event-1',
+      ),
+    ).rejects.toBeDefined();
+    expect(axios.get).toHaveBeenCalledTimes(1);
+    expect(axios.get).toHaveBeenCalledWith(
+      'https://api.calendly.com/scheduled_events/event-1',
+      expect.objectContaining({ maxRedirects: 0 }),
+    );
+  });
+
+  it('rejeita URI de evento não confiável retornada pelo recurso de convidado', async () => {
+    const { service } = makeRefreshService();
+    jest.mocked(axios.get).mockResolvedValueOnce({
+      data: { resource: { event: 'http://127.0.0.1/internal' } },
+    });
+
+    await expect(
+      service.resolveScheduledStartTime(
+        'specialist-1',
+        null,
+        'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+      ),
+    ).rejects.toThrow('event_uri do Calendly inválida');
+    expect(axios.get).toHaveBeenCalledTimes(1);
+  });
+
   it('mantém conexão ativa quando token expirado é renovado com sucesso', async () => {
     const { service, prisma } = makeRefreshService();
     jest
@@ -180,7 +239,7 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
     expect(
       await service.resolveScheduledStartTime(
         'specialist-1',
-        '/scheduled_events/1',
+        'https://api.calendly.com/scheduled_events/1',
       ),
     ).toEqual(new Date('2099-01-01T10:00:00.000Z'));
     expect(
@@ -204,7 +263,10 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
     jest.mocked(axios.get).mockRejectedValue({ response: { status: 401 } });
     jest.mocked(axios.post).mockRejectedValue(error);
     await expect(
-      service.resolveScheduledStartTime('specialist-1', '/scheduled_events/1'),
+      service.resolveScheduledStartTime(
+        'specialist-1',
+        'https://api.calendly.com/scheduled_events/1',
+      ),
     ).rejects.toBe(error);
     expect(prisma.calendlyConnection.updateMany).toHaveBeenCalledWith({
       where: {
@@ -267,7 +329,10 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
       response: { status: 400, data: { error: 'invalid_grant' } },
     };
     const refreshResult = expect(
-      service.resolveScheduledStartTime('specialist-1', '/scheduled_events/1'),
+      service.resolveScheduledStartTime(
+        'specialist-1',
+        'https://api.calendly.com/scheduled_events/1',
+      ),
     ).rejects.toBe(error);
     await refreshStarted;
     await service.handleOAuthCallback('new-code', 'new-state');
@@ -298,7 +363,10 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
     jest.mocked(axios.get).mockRejectedValue({ response: { status: 401 } });
     jest.mocked(axios.post).mockRejectedValue({ response: { status: 503 } });
     await expect(
-      service.resolveScheduledStartTime('specialist-1', '/scheduled_events/1'),
+      service.resolveScheduledStartTime(
+        'specialist-1',
+        'https://api.calendly.com/scheduled_events/1',
+      ),
     ).rejects.toBeDefined();
     expect(prisma.calendlyConnection.update).not.toHaveBeenCalled();
     expect(prisma.calendlyConnection.updateMany).not.toHaveBeenCalled();

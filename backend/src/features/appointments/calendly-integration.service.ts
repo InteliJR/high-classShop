@@ -27,6 +27,10 @@ import {
   acquireSpecialistScheduleLock,
   assertSpecialistScheduleAvailable,
 } from './appointment-schedule-lock';
+import {
+  CalendlyResourceKind,
+  isCalendlyResourceUri,
+} from './dto/calendly-scheduled.dto';
 
 interface CalendlyTokenResponse {
   access_token: string;
@@ -287,6 +291,9 @@ export class CalendlyIntegrationService {
       return null;
     }
 
+    if (eventUri) this.assertCalendlyResourceUri(eventUri, 'event');
+    if (inviteeUri) this.assertCalendlyResourceUri(inviteeUri, 'invitee');
+
     const connection = await this.prisma.calendlyConnection.findUnique({
       where: { user_id: specialistId },
     });
@@ -299,6 +306,7 @@ export class CalendlyIntegrationService {
       ? await this.getCalendlyResourceWithRefresh(
           connection.user_id,
           inviteeUri,
+          'invitee',
         )
       : null;
 
@@ -330,6 +338,7 @@ export class CalendlyIntegrationService {
     const eventData = await this.getCalendlyResourceWithRefresh(
       connection.user_id,
       resolvedEventUri,
+      'event',
     );
     const eventResource = eventData?.resource || eventData;
     const eventStartTime =
@@ -505,6 +514,7 @@ export class CalendlyIntegrationService {
   private async getCalendlyResourceWithRefresh(
     userId: string,
     uri: string,
+    kind: CalendlyResourceKind,
   ): Promise<any> {
     const connection = await this.prisma.calendlyConnection.findUnique({
       where: { user_id: userId },
@@ -519,7 +529,7 @@ export class CalendlyIntegrationService {
     let accessToken = this.decryptToken(connection.access_token_encrypted);
 
     try {
-      return await this.fetchCalendlyResource(accessToken, uri);
+      return await this.fetchCalendlyResource(accessToken, uri, kind);
     } catch (error: any) {
       const status = error?.response?.status;
       if (status !== 401) {
@@ -529,7 +539,7 @@ export class CalendlyIntegrationService {
       const refreshed = await this.refreshConnectionToken(connection);
       accessToken = this.decryptToken(refreshed.access_token_encrypted);
 
-      return this.fetchCalendlyResource(accessToken, uri);
+      return this.fetchCalendlyResource(accessToken, uri, kind);
     }
   }
 
@@ -615,13 +625,15 @@ export class CalendlyIntegrationService {
   private async fetchCalendlyResource(
     accessToken: string,
     uri: string,
+    kind: CalendlyResourceKind,
   ): Promise<any> {
-    const normalizedUri = this.normalizeCalendlyUri(uri);
-    const { data } = await axios.get(normalizedUri, {
+    const trustedUri = this.assertCalendlyResourceUri(uri, kind);
+    const { data } = await axios.get(trustedUri, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
       timeout: 20000,
+      maxRedirects: 0,
     });
 
     return data;
@@ -831,16 +843,15 @@ export class CalendlyIntegrationService {
     );
   }
 
-  private normalizeCalendlyUri(uri: string): string {
-    if (uri.startsWith('http://') || uri.startsWith('https://')) {
-      return uri;
+  private assertCalendlyResourceUri(
+    uri: string,
+    kind: CalendlyResourceKind,
+  ): string {
+    if (!isCalendlyResourceUri(uri, kind)) {
+      const field = kind === 'event' ? 'event_uri' : 'invitee_uri';
+      throw new BadRequestException(`${field} do Calendly inválida`);
     }
-
-    if (uri.startsWith('/')) {
-      return `https://api.calendly.com${uri}`;
-    }
-
-    return `https://api.calendly.com/${uri}`;
+    return uri;
   }
 
   private getRequiredEnv(name: string): string {

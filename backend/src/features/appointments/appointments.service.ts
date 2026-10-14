@@ -41,6 +41,7 @@ import { isCalendlySchedulingAvailable } from 'src/shared/utils/calendly-schedul
 import { parseDate, isFutureDate } from 'src/shared/utils/date.utils';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { CalendlyIntegrationService } from './calendly-integration.service';
+import { isCalendlyResourceUri } from './dto/calendly-scheduled.dto';
 import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
 import { lockNegotiationProductMoney } from 'src/features/products/product-monetary-lock';
 import { validateSpecialistProductAssociation } from 'src/features/products/product-association-validator';
@@ -1742,6 +1743,13 @@ export class AppointmentsService {
     calendly_sync_status: CalendlySyncStatus;
     appointment_datetime: Date | null;
   }> {
+    if (
+      !isCalendlyResourceUri(dto.event_uri, 'event') ||
+      !isCalendlyResourceUri(dto.invitee_uri, 'invitee')
+    ) {
+      throw new BadRequestException('URIs do Calendly inválidas');
+    }
+
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
     });

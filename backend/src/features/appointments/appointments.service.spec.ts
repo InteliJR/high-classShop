@@ -1559,6 +1559,42 @@ describe('AppointmentsService.confirmPending — snapshot da negociação', () =
 });
 
 describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () => {
+  it('rejeita e não persiste URIs Calendly não confiáveis mesmo com horário informado', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.PENDING,
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      specialist_rescheduled_at: null,
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      $transaction: jest.fn(),
+    } as any;
+    const calendlyIntegrationService = {
+      resolveScheduledStartTime: jest.fn(),
+    } as any;
+    const service = new AppointmentsService(
+      prisma,
+      {} as any,
+      calendlyIntegrationService,
+    );
+
+    await expect(
+      service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
+        event_uri: 'https://evil.test/scheduled_events/event-1',
+        invitee_uri:
+          'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+        scheduled_start_time: '2099-01-01T10:00:00.000Z',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(
+      calendlyIntegrationService.resolveScheduledStartTime,
+    ).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it.each([
     AppointmentSchedulingMethod.EMAIL,
     AppointmentSchedulingMethod.PLATFORM,
@@ -1604,8 +1640,9 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
 
     await expect(
       service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
-        event_uri: 'https://calendly.test/events/2',
-        invitee_uri: 'https://calendly.test/invitees/2',
+        event_uri: 'https://api.calendly.com/scheduled_events/event-2',
+        invitee_uri:
+          'https://api.calendly.com/scheduled_events/event-2/invitees/invitee-2',
         scheduled_start_time: '2099-01-02T10:00:00.000Z',
       } as any),
     ).rejects.toThrow(ConflictException);
@@ -1647,8 +1684,9 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       appointment.id,
       appointment.client_id,
       {
-        event_uri: 'https://calendly.test/events/1',
-        invitee_uri: 'https://calendly.test/invitees/1',
+        event_uri: 'https://api.calendly.com/scheduled_events/event-1',
+        invitee_uri:
+          'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
         scheduled_start_time: '2099-01-01T10:00:00.000Z',
       } as any,
     );
@@ -1691,8 +1729,9 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
 
     await expect(
       service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
-        event_uri: 'https://calendly.test/events/1',
-        invitee_uri: 'https://calendly.test/invitees/1',
+        event_uri: 'https://api.calendly.com/scheduled_events/event-1',
+        invitee_uri:
+          'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
         scheduled_start_time: '2099-01-01T10:00:00.000Z',
       } as any),
     ).rejects.toThrow(ConflictException);
