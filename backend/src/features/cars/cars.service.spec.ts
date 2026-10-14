@@ -1,5 +1,6 @@
 import { CarsService } from './cars.service';
 import { Prisma, ProductCurrency } from '@prisma/client';
+import { publicCarSelect } from 'src/shared/selects/public-catalog.select';
 
 describe('CarsService — UUID do produto', () => {
   it('consulta o carro pelo UUID recebido', async () => {
@@ -18,7 +19,7 @@ describe('CarsService — UUID do produto', () => {
 
     expect(findUnique).toHaveBeenCalledWith({
       where: { id: carId },
-      include: { images: true },
+      select: publicCarSelect,
     });
   });
 

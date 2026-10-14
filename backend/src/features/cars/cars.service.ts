@@ -11,10 +11,9 @@ import {
   FiltersCarMeta,
   RangeCarFilters,
 } from 'src/shared/dto/filters.dto';
-import { Car } from './entity/car.entity';
-import { UserEntity } from 'src/auth/entities/user.entity';
 import { CAR_COLUMNS } from 'src/shared/constants/product-columns';
 import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
+import { publicCarSelect } from 'src/shared/selects/public-catalog.select';
 
 @Injectable()
 export class CarsService {
@@ -152,16 +151,13 @@ export class CarsService {
         skip: skip,
         take: take,
         where: where,
-        include: {
-          images: true,
-          specialist: true,
-        },
+        select: publicCarSelect,
       }),
       this.prismaService.car.count({ where }),
     ]);
 
     // Converter as keys do S3 em URLs assinadas para cada carro
-    const carEntities: Car[] = await Promise.all(
+    const carEntities = await Promise.all(
       cars.map(async (car) => {
         let imagesWithUrls: any[] = [];
         if (car.images && car.images.length > 0) {
@@ -177,9 +173,7 @@ export class CarsService {
           ...car,
           valor: car.valor.toNumber(),
           images: imagesWithUrls,
-          specialist: car.specialist
-            ? UserEntity.fromPrisma(car.specialist)
-            : null,
+          specialist: car.specialist,
         };
       }),
     );
@@ -195,7 +189,7 @@ export class CarsService {
     this.logger.log(`[findOne] Buscando carro - ID: ${id}`);
     const car = await this.prismaService.car.findUnique({
       where: { id },
-      include: { images: true },
+      select: publicCarSelect,
     });
     if (!car) {
       this.logger.warn(`[findOne] Carro não encontrado - ID: ${id}`);

@@ -11,10 +11,9 @@ import {
   RangeAircraftFilters,
 } from 'src/shared/dto/filters.dto';
 import { Prisma, ProductType } from '@prisma/client';
-import { Aircraft } from './entity/aircraft.entity';
-import { UserEntity } from 'src/auth/entities/user.entity';
 import { AIRCRAFT_COLUMNS } from 'src/shared/constants/product-columns';
 import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
+import { publicAircraftSelect } from 'src/shared/selects/public-catalog.select';
 
 @Injectable()
 export class AircraftsService {
@@ -195,16 +194,13 @@ export class AircraftsService {
         skip: skip,
         take: take,
         where: where,
-        include: {
-          images: true,
-          specialist: true,
-        },
+        select: publicAircraftSelect,
       }),
       this.prismaService.aircraft.count({ where }),
     ]);
 
     // Converter as keys do S3 em URLs assinadas para cada aeronave
-    const aircraftsEntities: Aircraft[] = await Promise.all(
+    const aircraftsEntities = await Promise.all(
       aircrafts.map(async (aircraft) => {
         let imagesWithUrls: any[] = [];
         if (aircraft.images && aircraft.images.length > 0) {
@@ -220,9 +216,7 @@ export class AircraftsService {
           ...aircraft,
           valor: aircraft.valor.toNumber(),
           images: imagesWithUrls,
-          specialist: aircraft.specialist
-            ? UserEntity.fromPrisma(aircraft.specialist)
-            : null,
+          specialist: aircraft.specialist,
         };
       }),
     );
@@ -238,7 +232,7 @@ export class AircraftsService {
     this.logger.log(`[findOne] Buscando aeronave - ID: ${id}`);
     const aircraft = await this.prismaService.aircraft.findUnique({
       where: { id },
-      include: { images: true },
+      select: publicAircraftSelect,
     });
     if (!aircraft) {
       this.logger.warn(`[findOne] Aeronave não encontrada - ID: ${id}`);
