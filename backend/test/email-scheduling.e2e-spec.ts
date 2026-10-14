@@ -24,6 +24,7 @@ const checkKeys = [
   'appointment_status',
   'scheduling_method',
   'appointment_datetime',
+  'specialist_contact_email',
 ];
 
 // A dedicated URL opts in to the real PostgreSQL gate. Ordinary e2e discovery
@@ -380,6 +381,16 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
     }
   }
 
+  function assertOwnerScopedSpecialistEmail(value: unknown) {
+    assertNoPrivateFields(value);
+    const serialized = JSON.stringify(value);
+    expect(serialized.includes(config.credentials.specialist.email)).toBe(true);
+    expect(serialized.includes(config.credentials.outsider.email)).toBe(false);
+    for (const user of fixture.users) {
+      expect(serialized.includes(user.phone)).toBe(false);
+    }
+  }
+
   async function assertStoredState(
     productId: string,
     processId: string,
@@ -433,7 +444,6 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
         'id',
         'name',
         'surname',
-        'email',
         'speciality',
         'calendly_url',
         'calendly_scheduling_available',
@@ -441,10 +451,10 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
     );
     expect(profile.body).toMatchObject({
       id: fixture.users[1].id,
-      email: config.credentials.specialist.email,
       calendly_url: null,
       calendly_scheduling_available: false,
     });
+    expect(profile.body).not.toHaveProperty('email');
     assertNoPrivateFields(profile.body);
     expect(profile.body).not.toHaveProperty('phone');
     await request(app!.getHttpServer())
@@ -517,6 +527,23 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
     }
   });
 
+  it('does not expose specialist contact through an unavailable CALENDLY path', async () => {
+    const { appointment_datetime: _date, ...withoutDate } = pendingBody(
+      fixture.cars[0].id,
+    );
+    const calendly = await request(app!.getHttpServer())
+      .post('/api/appointments/pending')
+      .auth(customerToken, { type: 'bearer' })
+      .send({ ...withoutDate, scheduling_method: 'CALENDLY' })
+      .expect(409);
+
+    expect(calendly.body.error.code).toBe('CALENDLY_UNAVAILABLE');
+    expect(JSON.stringify(calendly.body)).not.toContain(
+      'specialist_contact_email',
+    );
+    assertNoContacts(calendly.body);
+  });
+
   it('rejects invalid creation, identity substitution and PLATFORM bypass without writes', async () => {
     const body = pendingBody(fixture.cars[0].id);
     const { appointment_datetime: _date, ...withoutDate } = body;
@@ -548,13 +575,6 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
       .auth(customerToken, { type: 'bearer' })
       .send(directBody)
       .expect(403);
-    const calendly = await request(app!.getHttpServer())
-      .post('/api/appointments/pending')
-      .auth(customerToken, { type: 'bearer' })
-      .send({ ...withoutDate, scheduling_method: 'CALENDLY' })
-      .expect(409);
-    expect(calendly.body.error.code).toBe('CALENDLY_UNAVAILABLE');
-    assertNoContacts(calendly.body);
     expect(
       await prisma!.appointment.count({
         where: { client_id: fixture.users[0].id },
@@ -588,8 +608,9 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
         client: { id: fixture.users[0].id },
         specialist: { id: fixture.users[1].id },
         product: { id: car.id },
+        specialist_contact_email: config.credentials.specialist.email,
       });
-      assertNoPrivateFields(response.body);
+      assertOwnerScopedSpecialistEmail(response.body);
       created.push({
         appointmentId: response.body.data.id,
         processId: response.body.data.process_id,
@@ -615,8 +636,9 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
         appointment_status: 'PENDING',
         scheduling_method: 'EMAIL',
         appointment_datetime: proposedIso,
+        specialist_contact_email: config.credentials.specialist.email,
       });
-      assertNoContacts(own.body);
+      assertOwnerScopedSpecialistEmail(own.body);
       const duplicate = await request(app!.getHttpServer())
         .post('/api/appointments/pending')
         .auth(customerToken, { type: 'bearer' })
@@ -627,7 +649,7 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
       expect(duplicate.body.error.details).toEqual({
         existing_request: snapshot,
       });
-      assertNoContacts(duplicate.body);
+      assertOwnerScopedSpecialistEmail(duplicate.body);
       await assertStoredState(
         car.id,
         response.body.data.process_id,
@@ -793,7 +815,10 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
         .expect(200);
       expect(Object.keys(own.body.data).sort()).toEqual([...checkKeys].sort());
       expect(own.body.data.appointment_status).toBe('SCHEDULED');
-      assertNoContacts(own.body);
+      expect(own.body.data.specialist_contact_email).toBe(
+        config.credentials.specialist.email,
+      );
+      assertOwnerScopedSpecialistEmail(own.body);
     }
     expect(
       await prisma!.appointment.count({
