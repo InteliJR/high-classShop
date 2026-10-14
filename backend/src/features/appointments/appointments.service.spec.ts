@@ -1799,11 +1799,15 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       specialist_rescheduled_at: null,
       calendly_event_uri:
         'https://calendly.com/api/v2/scheduled_events/event-1',
+      calendly_invitee_uri: null,
       calendly_sync_status: 'SYNCED',
       appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
     };
     const prisma = {
-      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(appointment),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       $transaction: jest.fn(),
     } as any;
     const calendlyIntegrationService = {
@@ -1829,6 +1833,19 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
     expect(
       calendlyIntegrationService.resolveScheduledStartTime,
     ).not.toHaveBeenCalled();
+    expect(prisma.appointment.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: appointment.id,
+        calendly_event_uri: appointment.calendly_event_uri,
+        calendly_invitee_uri: null,
+      },
+      data: {
+        calendly_event_uri:
+          'https://api.calendly.com/scheduled_events/event-1',
+        calendly_invitee_uri:
+          'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+      },
+    });
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 

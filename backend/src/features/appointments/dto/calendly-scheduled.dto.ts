@@ -55,6 +55,23 @@ export function parseCalendlyResourceUri(
   };
 }
 
+export function getCalendlyResourceUriVariants(
+  reference: CalendlyResourceReference,
+): string[] {
+  const resourcePath = reference.inviteeId
+    ? `scheduled_events/${reference.eventId}/invitees/${reference.inviteeId}`
+    : `scheduled_events/${reference.eventId}`;
+
+  return [
+    `https://api.calendly.com/${resourcePath}`,
+    `https://api.calendly.com:443/${resourcePath}`,
+    `https://api.calendly.com/api/v2/${resourcePath}`,
+    `https://api.calendly.com:443/api/v2/${resourcePath}`,
+    `https://calendly.com/api/v2/${resourcePath}`,
+    `https://calendly.com:443/api/v2/${resourcePath}`,
+  ];
+}
+
 export function isCalendlyResourceUri(
   value: unknown,
   kind: CalendlyResourceKind,

@@ -30,6 +30,7 @@ import {
 import {
   CalendlyResourceKind,
   CalendlyResourceReference,
+  getCalendlyResourceUriVariants,
   parseCalendlyResourceUri,
 } from './dto/calendly-scheduled.dto';
 
@@ -415,14 +416,34 @@ export class CalendlyIntegrationService {
       ? this.parseCalendlyResourceUri(rawInviteeUri, 'invitee')
       : null;
     this.assertSameCalendlyEvent(eventReference, inviteeReference);
-    const eventUri = eventReference?.canonicalUri;
+    const lookupEventReference =
+      eventReference ||
+      (inviteeReference
+        ? this.parseCalendlyResourceUri(
+            inviteeReference.canonicalEventUri,
+            'event',
+          )
+        : null);
+    const eventUri = lookupEventReference?.canonicalUri;
     const inviteeUri = inviteeReference?.canonicalUri;
 
     const appointment = await this.prisma.appointment.findFirst({
       where: {
         OR: [
-          eventUri ? { calendly_event_uri: eventUri } : undefined,
-          inviteeUri ? { calendly_invitee_uri: inviteeUri } : undefined,
+          lookupEventReference
+            ? {
+                calendly_event_uri: {
+                  in: getCalendlyResourceUriVariants(lookupEventReference),
+                },
+              }
+            : undefined,
+          inviteeReference
+            ? {
+                calendly_invitee_uri: {
+                  in: getCalendlyResourceUriVariants(inviteeReference),
+                },
+              }
+            : undefined,
         ].filter(Boolean) as Prisma.AppointmentWhereInput[],
       },
     });
@@ -520,6 +541,9 @@ export class CalendlyIntegrationService {
       await this.prisma.appointment.update({
         where: { id: appointment.id },
         data: {
+          calendly_event_uri: eventUri || appointment.calendly_event_uri,
+          calendly_invitee_uri:
+            inviteeUri || appointment.calendly_invitee_uri,
           calendly_last_sync_at: new Date(),
           calendly_sync_status: CalendlySyncStatus.FAILED,
         },

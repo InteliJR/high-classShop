@@ -1951,11 +1951,31 @@ export class AppointmentsService {
       parseCalendlyResourceUri(appointment.calendly_event_uri, 'event')
         ?.canonicalUri === eventUri
     ) {
-      return {
-        appointment_id: appointment.id,
-        calendly_sync_status: appointment.calendly_sync_status,
-        appointment_datetime: appointment.appointment_datetime,
-      };
+      let canonicalized = true;
+      if (
+        appointment.calendly_event_uri !== eventUri ||
+        appointment.calendly_invitee_uri !== inviteeUri
+      ) {
+        const repair = await this.prisma.appointment.updateMany({
+          where: {
+            id: appointment.id,
+            calendly_event_uri: appointment.calendly_event_uri,
+            calendly_invitee_uri: appointment.calendly_invitee_uri,
+          },
+          data: {
+            calendly_event_uri: eventUri,
+            calendly_invitee_uri: inviteeUri,
+          },
+        });
+        canonicalized = repair.count === 1;
+      }
+      if (canonicalized) {
+        return {
+          appointment_id: appointment.id,
+          calendly_sync_status: appointment.calendly_sync_status,
+          appointment_datetime: appointment.appointment_datetime,
+        };
+      }
     }
 
     let scheduledStartTime = dto.scheduled_start_time
@@ -2043,6 +2063,18 @@ export class AppointmentsService {
           'event',
         )?.canonicalUri === eventUri
       ) {
+        if (
+          lockedAppointment.calendly_event_uri !== eventUri ||
+          lockedAppointment.calendly_invitee_uri !== inviteeUri
+        ) {
+          return tx.appointment.update({
+            where: { id: lockedAppointment.id },
+            data: {
+              calendly_event_uri: eventUri,
+              calendly_invitee_uri: inviteeUri,
+            },
+          });
+        }
         return lockedAppointment;
       }
 

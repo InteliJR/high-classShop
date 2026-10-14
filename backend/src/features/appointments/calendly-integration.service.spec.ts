@@ -519,8 +519,9 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
       client_id: 'client-1',
       specialist_id: 'specialist-1',
       calendly_event_uri:
-        'https://api.calendly.com/scheduled_events/event-1',
-      calendly_invitee_uri: null,
+        'https://calendly.com/api/v2/scheduled_events/event-1',
+      calendly_invitee_uri:
+        'https://calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
       calendly_sync_status: 'PENDING',
       appointment_datetime: null,
     };
@@ -568,12 +569,23 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
       where: {
         OR: [
           {
-            calendly_event_uri:
-              'https://api.calendly.com/scheduled_events/event-1',
+            calendly_event_uri: {
+              in: expect.arrayContaining([
+                'https://api.calendly.com/scheduled_events/event-1',
+                'https://api.calendly.com/api/v2/scheduled_events/event-1',
+                'https://calendly.com/api/v2/scheduled_events/event-1',
+                'https://api.calendly.com:443/scheduled_events/event-1',
+              ]),
+            },
           },
           {
-            calendly_invitee_uri:
-              'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+            calendly_invitee_uri: {
+              in: expect.arrayContaining([
+                'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+                'https://api.calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
+                'https://calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
+              ]),
+            },
           },
         ],
       },
@@ -601,5 +613,80 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
       }),
     );
     expect(prisma.appointment.update).not.toHaveBeenCalled();
+  });
+
+  it('encontra e canonicaliza registro legado ao cancelar pelo webhook', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      specialist_id: 'specialist-1',
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      specialist_rescheduled_at: null,
+      calendly_event_uri:
+        'https://calendly.com/api/v2/scheduled_events/event-1',
+      calendly_invitee_uri:
+        'https://api.calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
+    };
+    const prisma = {
+      appointment: {
+        findFirst: jest.fn().mockResolvedValue(appointment),
+        update: jest.fn().mockResolvedValue(appointment),
+      },
+    };
+    const service = new CalendlyIntegrationService(prisma as any);
+    jest
+      .spyOn(service as any, 'validateWebhookSignature')
+      .mockReturnValue(undefined);
+
+    await expect(
+      service.processWebhook(
+        {
+          event: 'invitee.canceled',
+          payload: {
+            event:
+              'https://api.calendly.com/scheduled_events/event-1',
+            invitee:
+              'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+          },
+        },
+        undefined,
+        undefined,
+      ),
+    ).resolves.toEqual({
+      processed: true,
+      message: 'Webhook de cancelamento processado',
+    });
+    expect(prisma.appointment.findFirst).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          {
+            calendly_event_uri: {
+              in: expect.arrayContaining([
+                appointment.calendly_event_uri,
+                'https://api.calendly.com/scheduled_events/event-1',
+              ]),
+            },
+          },
+          {
+            calendly_invitee_uri: {
+              in: expect.arrayContaining([
+                appointment.calendly_invitee_uri,
+                'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+              ]),
+            },
+          },
+        ],
+      },
+    });
+    expect(prisma.appointment.update).toHaveBeenCalledWith({
+      where: { id: appointment.id },
+      data: {
+        calendly_event_uri:
+          'https://api.calendly.com/scheduled_events/event-1',
+        calendly_invitee_uri:
+          'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+        calendly_last_sync_at: expect.any(Date),
+        calendly_sync_status: 'FAILED',
+      },
+    });
   });
 });
