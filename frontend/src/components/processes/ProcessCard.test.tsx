@@ -617,6 +617,39 @@ describe("ProcessCard appointment time actions", () => {
     expect(onStatusUpdated).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      error: Object.assign(new Error("Request failed with status code 500"), {
+        friendlyMessage: "Serviço temporariamente indisponível. Tente novamente em instantes.",
+        response: { data: { message: "internal database detail" } },
+      }),
+      expected: "Serviço temporariamente indisponível. Tente novamente em instantes.",
+    },
+    {
+      error: Object.assign(new Error("Request failed with status code 409"), {
+        response: { data: { message: "Este processo já foi rejeitado." } },
+      }),
+      expected: "Este processo já foi rejeitado.",
+    },
+  ])("shows the safe rejection API message instead of the Axios transport message", async ({ error, expected }) => {
+    vi.mocked(rejectProcess).mockRejectedValue(error);
+    renderCard({
+      ...baseProcess,
+      status: "DOCUMENTATION",
+      appointment_status: "CANCELLED",
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Recusar processo" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirmar Rejeição" }),
+    );
+
+    expect(await screen.findByText(expected)).toBeTruthy();
+    expect(screen.queryByText(error.message)).toBeNull();
+  });
+
   it.each(["(11) 98765-4321", "+55 11 98765-4321"])("renders safe WhatsApp and preserves the original phone %s", (phone) => {
     renderCard({ ...baseProcess, client: { ...baseProcess.client!, email: "cliente@example.com", phone } });
     const link = screen.getByRole("link", { name: /WhatsApp/i });

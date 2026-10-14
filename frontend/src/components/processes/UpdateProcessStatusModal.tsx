@@ -23,6 +23,26 @@ interface UpdateProcessFormData {
   notes?: string;
 }
 
+function getProcessActionErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error !== "object" || error === null) return fallback;
+
+  const candidate = error as {
+    friendlyMessage?: unknown;
+    response?: { data?: { message?: unknown } };
+    message?: unknown;
+  };
+
+  for (const message of [
+    candidate.friendlyMessage,
+    candidate.response?.data?.message,
+    candidate.message,
+  ]) {
+    if (typeof message === "string" && message.trim()) return message;
+  }
+
+  return fallback;
+}
+
 /**
  * Keeps the sole manual status transition separate from process rejection.
  */
@@ -69,9 +89,7 @@ export default function UpdateProcessStatusModal({
       onClose();
       onSuccess?.();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Erro ao atualizar processo"
-      );
+      setError(getProcessActionErrorMessage(err, "Erro ao atualizar processo"));
     } finally {
       setIsSubmitting(false);
     }
@@ -92,9 +110,7 @@ export default function UpdateProcessStatusModal({
       onClose();
       onSuccess?.();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Erro ao rejeitar processo"
-      );
+      setError(getProcessActionErrorMessage(err, "Erro ao rejeitar processo"));
     } finally {
       rejectionInFlight.current = false;
       setIsSubmitting(false);
