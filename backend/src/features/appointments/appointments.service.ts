@@ -1981,11 +1981,13 @@ export class AppointmentsService {
         canonicalized = repair.count === 1;
       }
       if (canonicalized) {
-        return {
-          appointment_id: appointment.id,
-          calendly_sync_status: appointment.calendly_sync_status,
-          appointment_datetime: appointment.appointment_datetime,
-        };
+        if (this.hasTrustedCalendlySchedule(appointment)) {
+          return {
+            appointment_id: appointment.id,
+            calendly_sync_status: appointment.calendly_sync_status,
+            appointment_datetime: appointment.appointment_datetime,
+          };
+        }
       }
     }
 
@@ -2070,18 +2072,12 @@ export class AppointmentsService {
             'O evento do Calendly já está associado a outro convidado',
           );
         }
-        if (
-          lockedAppointment.calendly_event_uri !== eventUri ||
-          lockedAppointment.calendly_invitee_uri !== inviteeUri
-        ) {
-          return tx.appointment.update({
-            where: { id: lockedAppointment.id },
-            data: {
-              calendly_event_uri: eventUri,
-              calendly_invitee_uri: inviteeUri,
-            },
-          });
-        }
+      }
+
+      if (
+        !scheduledStartTime &&
+        this.hasTrustedCalendlySchedule(lockedAppointment)
+      ) {
         return lockedAppointment;
       }
 
@@ -2120,6 +2116,18 @@ export class AppointmentsService {
       calendly_sync_status: updated.calendly_sync_status,
       appointment_datetime: updated.appointment_datetime,
     };
+  }
+
+  private hasTrustedCalendlySchedule(appointment: {
+    status: StatusAgendamento;
+    calendly_sync_status?: CalendlySyncStatus | null;
+    appointment_datetime?: Date | null;
+  }): boolean {
+    return (
+      appointment.status === StatusAgendamento.SCHEDULED ||
+      (appointment.calendly_sync_status === CalendlySyncStatus.SYNCED &&
+        Boolean(appointment.appointment_datetime))
+    );
   }
 
   async getCalendlySyncStatus(

@@ -68,7 +68,6 @@ interface CalendlyWebhookPayload {
 @Injectable()
 export class CalendlyIntegrationService {
   private readonly logger = new Logger(CalendlyIntegrationService.name);
-  private readonly processedWebhookSignatures = new Map<string, number>();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -811,7 +810,7 @@ export class CalendlyIntegrationService {
       return;
     }
 
-    const signingKey = this.getRequiredEnv('CALENDLY_WEBHOOK_SIGNING_KEY');
+    this.getRequiredEnv('CALENDLY_WEBHOOK_SIGNING_KEY');
 
     const connection = await this.prisma.calendlyConnection.findUnique({
       where: { user_id: userId },
@@ -836,8 +835,6 @@ export class CalendlyIntegrationService {
       user: connection.calendly_user_uri,
       scope: 'user',
     };
-
-    payload.signing_key = signingKey;
 
     const response = await axios.post(
       'https://api.calendly.com/webhook_subscriptions',
@@ -906,17 +903,6 @@ export class CalendlyIntegrationService {
     ) {
       throw new ForbiddenException('Assinatura do webhook inválida');
     }
-
-    for (const [signature, expiresAt] of this.processedWebhookSignatures) {
-      if (expiresAt <= nowSeconds) {
-        this.processedWebhookSignatures.delete(signature);
-      }
-    }
-    const replayKey = `${parsedSignature.t}.${parsedSignature.v1}`;
-    if (this.processedWebhookSignatures.has(replayKey)) {
-      throw new ForbiddenException('Webhook repetido');
-    }
-    this.processedWebhookSignatures.set(replayKey, nowSeconds + 5 * 60);
   }
 
   private now(): number {

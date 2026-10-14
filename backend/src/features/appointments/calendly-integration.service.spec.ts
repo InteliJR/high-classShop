@@ -108,6 +108,47 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
     expect(prisma.calendlyOauthState.update).not.toHaveBeenCalled();
   });
 
+  it('mantém a conexão OAuth explícita sem gravar subscription quando sua criação falha', async () => {
+    process.env.CALENDLY_WEBHOOK_CALLBACK_URL =
+      'https://api.example.test/appointments/calendly/webhook';
+    process.env.CALENDLY_WEBHOOK_SIGNING_KEY = 'local-oauth-signing-key';
+    const { prisma, service } = makeCallbackService(
+      'https://calendly.com/ana/reuniao',
+    );
+    const connection = {
+      id: 'connection-1',
+      user_id: 'specialist-1',
+      access_token_encrypted: (service as any).encryptToken('access'),
+      calendly_user_uri: 'https://api.calendly.com/users/1',
+      calendly_organization_uri:
+        'https://api.calendly.com/organizations/1',
+    };
+    prisma.calendlyConnection.upsert.mockResolvedValue(connection);
+    Object.assign(prisma.calendlyConnection, {
+      findUnique: jest.fn().mockResolvedValue(connection),
+      update: jest.fn(),
+    });
+    jest
+      .mocked(axios.post)
+      .mockResolvedValueOnce({
+        data: {
+          access_token: 'access',
+          refresh_token: 'refresh',
+          expires_in: 3600,
+        },
+      })
+      .mockRejectedValueOnce(new Error('subscription unavailable'));
+
+    await expect(
+      service.handleOAuthCallback('code', 'state'),
+    ).resolves.toBe('specialist-1');
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+    expect(prisma.calendlyOauthState.update).toHaveBeenCalledTimes(1);
+    expect(
+      (prisma.calendlyConnection as any).update,
+    ).not.toHaveBeenCalled();
+  });
+
   it('desativa e limpa URL e URIs em uma transação', async () => {
     const tx = {
       calendlyConnection: {
@@ -510,7 +551,7 @@ describe('CalendlyIntegrationService webhook authentication', () => {
     ).toThrow(ForbiddenException);
   });
 
-  it('rejeita replay da mesma assinatura dentro da janela válida', () => {
+  it('aceita retry idêntico dentro da janela válida para permitir retentativa do Calendly', () => {
     const { service } = makeService();
     const header = signature(String(nowSeconds));
 
@@ -519,7 +560,7 @@ describe('CalendlyIntegrationService webhook authentication', () => {
     ).not.toThrow();
     expect(() =>
       (service as any).validateWebhookSignature(rawBody, header),
-    ).toThrow('Webhook repetido');
+    ).not.toThrow();
   });
 
   it('não cria assinatura de webhook sem signing key', async () => {
@@ -533,7 +574,7 @@ describe('CalendlyIntegrationService webhook authentication', () => {
     expect(axios.post).not.toHaveBeenCalled();
   });
 
-  it('não refaz criação do webhook sem signing_key após rejeição do Calendly', async () => {
+  it('não envia a chave local na criação de subscription OAuth nem mascara falhas', async () => {
     const { prisma, service } = makeService();
     const connection = {
       id: 'connection-1',
@@ -552,9 +593,10 @@ describe('CalendlyIntegrationService webhook authentication', () => {
     expect(axios.post).toHaveBeenCalledTimes(1);
     expect(axios.post).toHaveBeenCalledWith(
       'https://api.calendly.com/webhook_subscriptions',
-      expect.objectContaining({ signing_key: signingKey }),
+      expect.not.objectContaining({ signing_key: expect.anything() }),
       expect.any(Object),
     );
+    expect(prisma.calendlyConnection.update).not.toHaveBeenCalled();
   });
 });
 
