@@ -1473,6 +1473,20 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para continua
     const previousStatusLabel = data.previousStatus
       ? (statusLabelMap[data.previousStatus] ?? data.previousStatus)
       : undefined;
+    const recipientName = escapeHtml(data.recipientName);
+    const safeProcessId = escapeHtml(data.processId);
+    const safePreviousStatusLabel = previousStatusLabel
+      ? escapeHtml(previousStatusLabel)
+      : undefined;
+    const safeCurrentStatusLabel = escapeHtml(currentStatusLabel);
+    const changedByName = data.changedByName
+      ? escapeHtml(data.changedByName)
+      : undefined;
+    const productDetails = data.productDetails
+      ? escapeHtml(data.productDetails)
+      : undefined;
+    const reason = data.reason ? escapeHtml(data.reason) : undefined;
+    const processPath = encodeURIComponent(data.processId);
 
     const subject = `Atualização no Processo #${data.processId.slice(0, 8)} | BMF Lux Brokerage`;
 
@@ -1486,18 +1500,18 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para continua
         </div>
         <div style="padding: 40px 30px; background-color: #ffffff;">
           <h2 style="color: #1e293b; margin-top: 0;">Atualização de Processo</h2>
-          <p style="font-size: 16px; color: #334155;">Olá <strong>${data.recipientName}</strong>,</p>
+          <p style="font-size: 16px; color: #334155;">Olá <strong>${recipientName}</strong>,</p>
           <p style="font-size: 16px; color: #334155;">Houve uma atualização importante no seu processo.</p>
           <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #334155;"><strong>Processo:</strong> ${data.processId}</p>
-            ${previousStatusLabel ? `<p style="margin: 8px 0; color: #334155;"><strong>Status anterior:</strong> ${previousStatusLabel}</p>` : ''}
-            <p style="margin: 8px 0; color: #334155;"><strong>Novo status:</strong> ${currentStatusLabel}</p>
-            ${data.changedByName ? `<p style="margin: 8px 0; color: #334155;"><strong>Atualizado por:</strong> ${data.changedByName}</p>` : ''}
-            ${data.productDetails ? `<p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${data.productDetails}</p>` : ''}
-            ${data.reason ? `<p style="margin: 8px 0; color: #334155;"><strong>Detalhes:</strong> ${data.reason}</p>` : ''}
+            <p style="margin: 8px 0; color: #334155;"><strong>Processo:</strong> ${safeProcessId}</p>
+            ${safePreviousStatusLabel ? `<p style="margin: 8px 0; color: #334155;"><strong>Status anterior:</strong> ${safePreviousStatusLabel}</p>` : ''}
+            <p style="margin: 8px 0; color: #334155;"><strong>Novo status:</strong> ${safeCurrentStatusLabel}</p>
+            ${changedByName ? `<p style="margin: 8px 0; color: #334155;"><strong>Atualizado por:</strong> ${changedByName}</p>` : ''}
+            ${productDetails ? `<p style="margin: 8px 0; color: #334155;"><strong>Produto:</strong> ${productDetails}</p>` : ''}
+            ${reason ? `<p style="margin: 8px 0; color: #334155;"><strong>Detalhes:</strong> ${reason}</p>` : ''}
           </div>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${this.frontendUrl}/processes/${data.processId}"
+            <a href="${this.frontendUrl}/processes/${processPath}"
                style="display: inline-block; background-color: #1e293b; color: #fff;
                       padding: 14px 32px; text-decoration: none; border-radius: 6px;
                       font-weight: 600; font-size: 16px;">

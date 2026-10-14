@@ -6,6 +6,7 @@ import {
   IsDateString,
   IsUUID,
   IsIn,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ProductType } from '@prisma/client';
@@ -45,7 +46,7 @@ export class GetAppointmentsQueryDto {
   @Type(() => Number)
   @IsInt({ message: 'limit deve ser um número inteiro' })
   @Min(1, { message: 'limit deve ser no mínimo 1' })
-  @Type(() => Number)
+  @Max(100, { message: 'limit deve ser no máximo 100' })
   limit?: number = 20;
 
   // ═══════════════════════════════════════════════════════════════════════════

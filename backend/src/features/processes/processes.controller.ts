@@ -143,12 +143,13 @@ export class ProcessesController {
   @Get(':id')
   async getById(
     @Param('id', new ParseUUIDPipe()) processId: string,
-    @Req() req: { user?: { id: string; role?: string } },
+    @Req() req: { user?: UserEntity },
   ): Promise<ApiResponseDto<ProcessResponse>> {
     const process = await this.processesService.getById(
       processId,
       req.user?.id,
       req.user?.role,
+      req.user?.company_id,
     );
 
     return {
@@ -253,6 +254,7 @@ export class ProcessesController {
       updateProcessDto,
       userId,
       userRole,
+      req.user?.company_id,
     );
 
     return {
@@ -314,9 +316,20 @@ export class ProcessesController {
   @Get(':id/completion-reason')
   async getCompletionReason(
     @Param('id', new ParseUUIDPipe()) processId: string,
+    @Req() req: { user?: UserEntity },
   ): Promise<ApiResponseDto<{ reason: string | null }>> {
-    const reason =
-      await this.processesService.getProcessCompletionReason(processId);
+    const user = req.user;
+    if (!user) {
+      throw new UnauthorizedException('Usuário autenticado não identificado');
+    }
+    const reason = await this.processesService.getProcessCompletionReason(
+      processId,
+      {
+        id: user.id,
+        role: user.role,
+        companyId: user.company_id,
+      },
+    );
 
     return {
       success: true,
@@ -336,9 +349,18 @@ export class ProcessesController {
   @Get(':id/with-contract')
   async getWithContract(
     @Param('id', new ParseUUIDPipe()) processId: string,
+    @Req() req: { user?: UserEntity },
   ): Promise<ApiResponseDto<any>> {
+    const user = req.user;
+    if (!user) {
+      throw new UnauthorizedException('Usuário autenticado não identificado');
+    }
     const processWithContract =
-      await this.processesService.getByIdWithActiveContract(processId);
+      await this.processesService.getByIdWithActiveContract(processId, {
+        id: user.id,
+        role: user.role,
+        companyId: user.company_id,
+      });
 
     return {
       success: true,
@@ -412,11 +434,18 @@ export class ProcessesController {
     @Req() req: any,
   ): Promise<ApiResponseDto<ProcessWithHistory>> {
     const userId = req.user?.sub || req.user?.id;
+    const userRole = req.user?.role;
+
+    if (!userId || !userRole) {
+      throw new UnauthorizedException('Usuário autenticado não identificado');
+    }
 
     const result = await this.processesService.rejectProcess(
       processId,
       userId,
       rejectProcessDto.rejection_reason,
+      userRole,
+      req.user?.company_id,
     );
 
     return {
@@ -446,6 +475,12 @@ export class ProcessesController {
     @Req() req: any,
   ): Promise<ApiResponseDto<any>> {
     const userId = req.user?.sub || req.user?.id;
+
+    if (!userId || req.user?.role !== UserRole.SPECIALIST) {
+      throw new ForbiddenException(
+        'Apenas o especialista pode confirmar o agendamento',
+      );
+    }
 
     const result = await this.processesService.confirmAppointment(
       processId,

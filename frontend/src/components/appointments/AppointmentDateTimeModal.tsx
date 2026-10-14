@@ -1,7 +1,9 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import {
   browserTimeZone,
+  isoToLocalDateTimeInput,
   localDateTimeToIso,
+  parseAppointmentIso,
 } from "../../lib/appointment-datetime";
 import { Alert } from "../ui/alert";
 import Button from "../ui/button";
@@ -13,6 +15,8 @@ interface AppointmentDateTimeModalProps {
   description: string;
   submitLabel: string;
   definitiveWarning?: string;
+  initialValue?: string;
+  returnFocusRef?: RefObject<HTMLElement | null>;
   busy?: boolean;
   serverError?: string | null;
   onClearServerError?(): void;
@@ -39,35 +43,69 @@ export default function AppointmentDateTimeModal({
   description,
   submitLabel,
   definitiveWarning,
+  initialValue,
+  returnFocusRef,
   busy = false,
   serverError,
   onClearServerError,
   onOpenChange,
   onSubmit,
 }: AppointmentDateTimeModalProps) {
-  const [localDateTime, setLocalDateTime] = useState("");
+  let initialLocalValue = "";
+  try {
+    if (initialValue) initialLocalValue = isoToLocalDateTimeInput(initialValue);
+  } catch {
+    // A legacy malformed proposal must still allow the specialist to choose a time.
+  }
+  const [localDateTime, setLocalDateTime] = useState(initialLocalValue);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const focusTarget = useRef<HTMLElement | null>(null);
+  const focusCaptured = useRef(false);
+  const latestOpen = useRef(open);
+  const fieldId = useId();
+  const errorId = `${fieldId}-error`;
+  const timeZoneId = `${fieldId}-timezone`;
+  const isBusy = busy || submitting;
+  const errorMessage = validationError || serverError;
 
-  useEffect(() => {
-    if (!open) {
-      setLocalDateTime("");
-      setValidationError(null);
-    }
+  useLayoutEffect(() => {
+    latestOpen.current = open;
   }, [open]);
 
+  useEffect(() => {
+    setLocalDateTime(open ? initialLocalValue : "");
+    setValidationError(null);
+  }, [open, initialValue, initialLocalValue]);
+
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!busy) onOpenChange(nextOpen);
+    if (!isBusy) onOpenChange(nextOpen);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (busy || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
 
     try {
-      const appointmentDatetime = localDateTimeToIso(localDateTime);
+      let appointmentDatetime: string;
+      if (initialValue && initialLocalValue && localDateTime === initialLocalValue) {
+        if (parseAppointmentIso(initialValue).getTime() <= Date.now()) {
+          throw new Error("Selecione uma data e hora futuras");
+        }
+        appointmentDatetime = initialValue;
+      } else {
+        appointmentDatetime = localDateTimeToIso(localDateTime);
+      }
       setValidationError(null);
       await onSubmit(appointmentDatetime);
     } catch (error) {
       setValidationError(submissionErrorMessage(error));
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -76,7 +114,22 @@ export default function AppointmentDateTimeModal({
       <DialogContent
         open={open}
         title={title}
-        dismissible={!busy}
+        dismissible={!isBusy}
+        onOpenAutoFocus={() => {
+          if (!focusCaptured.current) {
+            focusTarget.current = returnFocusRef?.current ||
+              (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+            focusCaptured.current = true;
+          }
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (latestOpen.current) return;
+          const target = returnFocusRef?.current || focusTarget.current;
+          if (target?.isConnected) target.focus();
+          focusCaptured.current = false;
+          focusTarget.current = null;
+        }}
         className="max-w-md"
       >
         <form className="space-y-4" onSubmit={handleSubmit}>
@@ -86,22 +139,24 @@ export default function AppointmentDateTimeModal({
             <Alert variant="warning">{definitiveWarning}</Alert>
           )}
 
-          {(validationError || serverError) && (
-            <Alert variant="danger">{validationError || serverError}</Alert>
+          {errorMessage && (
+            <Alert variant="danger" id={errorId}>{errorMessage}</Alert>
           )}
 
           <div>
             <label
-              htmlFor="appointment-datetime"
+              htmlFor={fieldId}
               className="mb-2 block text-sm font-medium text-ink"
             >
               Data e hora
             </label>
             <input
-              id="appointment-datetime"
+              id={fieldId}
               type="datetime-local"
               value={localDateTime}
-              disabled={busy}
+              disabled={isBusy}
+              aria-invalid={errorMessage ? true : undefined}
+              aria-describedby={`${timeZoneId}${errorMessage ? ` ${errorId}` : ""}`}
               onChange={(event) => {
                 setLocalDateTime(event.target.value);
                 setValidationError(null);
@@ -109,7 +164,7 @@ export default function AppointmentDateTimeModal({
               }}
               className="w-full rounded-lg border border-border px-3 py-2 text-ink focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
             />
-            <p className="mt-2 text-xs text-ink-soft">
+            <p id={timeZoneId} className="mt-2 text-xs text-ink-soft">
               Fuso horário: <span>{browserTimeZone()}</span>
             </p>
           </div>
@@ -118,12 +173,12 @@ export default function AppointmentDateTimeModal({
             <Button
               type="button"
               variant="light"
-              disabled={busy}
+              disabled={isBusy}
               onClick={() => handleOpenChange(false)}
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={busy || !localDateTime}>
+            <Button type="submit" disabled={isBusy || !localDateTime} aria-busy={isBusy}>
               {submitLabel}
             </Button>
           </div>

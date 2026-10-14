@@ -7,7 +7,7 @@ import { StatusAgendamento } from '@prisma/client';
  * Fluxo de status:
  * 1. SCHEDULED (padrão ao criar)
  * 2. COMPLETED (quando reunião ocorre) → Move Process para NEGOTIATION (se estava em SCHEDULING)
- * 3. CANCELLED (se cancelado)
+ * 3. CANCELLED (somente enquanto o Process ainda está em SCHEDULING)
  *
  * Frontend:
  * - Botão "Confirmar realização" (especialista) → status = COMPLETED
@@ -21,14 +21,14 @@ export class UpdateAppointmentStatusDto {
    *
    * Transições permitidas:
    * - SCHEDULED → COMPLETED: move Process para NEGOTIATION
-   * - SCHEDULED → CANCELLED: cancela agendamento
-   * - COMPLETED → CANCELLED: undo (reverter)
-   * - CANCELLED → SCHEDULED: reativar (raramente usado)
+   * - PENDING/SCHEDULED → CANCELLED: cancela enquanto o Process está em SCHEDULING
+   * - COMPLETED ou Process em NEGOTIATION+: cancelamento rejeitado
+   * - CANCELLED → SCHEDULED: não permitido por esta rota
    *
    * Backend validará:
    * - Transições lógicas (ex: não voltar de COMPLETED para SCHEDULED sem razão)
-   * - Se status=COMPLETED, Process está em SCHEDULING ou NEGOTIATION
-   * - Evitar conflito: se Process já está em NEGOTIATION, manter sem retroceder
+   * - Se status=COMPLETED, o appointment ainda está SCHEDULED
+   * - Se status=CANCELLED, o Process vinculado ainda está em SCHEDULING
    */
   @IsEnum(StatusAgendamento, {
     message: 'status deve ser SCHEDULED, COMPLETED ou CANCELLED',

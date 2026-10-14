@@ -1,13 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { PopupModal, useCalendlyEventListener } from "react-calendly";
 import { getClients, createConsultantProcess, type Client } from "../../services/consultant.service";
 import { officeService } from "../../services/office";
-import { getUserById } from "../../services/users.service";
-import {
-  registerCalendlyScheduledEvent,
-  getCalendlySyncStatus,
-} from "../../services/appointments.service";
 import Button from "../../components/ui/button";
 import { Loader2, Search } from "lucide-react";
 
@@ -40,15 +34,23 @@ interface Props {
   productLabel?: string;
   mode?: keyof typeof MODES;
   onClose: () => void;
+  onBusyChange?(busy: boolean): void;
 }
 
-export default function StartProcessForClientModal({
+export default function StartProcessForClientModal(props: Props) {
+  const mode = props.mode ?? "CONSULTANT";
+  const scope = JSON.stringify([mode, props.specialistId, props.productType, props.productId]);
+  return <StartProcessForClientModalInner key={scope} {...props} mode={mode} />;
+}
+
+function StartProcessForClientModalInner({
   productType,
   productId,
   specialistId,
   productLabel,
   mode = "CONSULTANT",
   onClose,
+  onBusyChange,
 }: Props) {
   const config = MODES[mode];
   const navigate = useNavigate();
@@ -60,34 +62,47 @@ export default function StartProcessForClientModal({
   const [error, setError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Calendly
-  const [specialistCalendlyUrl, setSpecialistCalendlyUrl] = useState<
-    string | null
-  >(null);
-  const [pendingAppointmentId, setPendingAppointmentId] = useState<
-    string | null
-  >(null);
-  const [calendlyUrl, setCalendlyUrl] = useState<string | null>(null);
-  const [isCalendlyOpen, setIsCalendlyOpen] = useState(false);
-  const [calendlyMessage, setCalendlyMessage] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+  const mountedRef = useRef(false);
+  const operationGeneration = useRef(0);
+  const busyCallbackRef = useRef(onBusyChange);
+
+  useLayoutEffect(() => {
+    busyCallbackRef.current = onBusyChange;
+  }, [onBusyChange]);
+
+  useLayoutEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      operationGeneration.current += 1;
+      busyCallbackRef.current?.(false);
+    };
+  }, []);
+
+  const isCurrentOperation = (generation: number) =>
+    mountedRef.current && operationGeneration.current === generation;
+
+  const setBusy = (busy: boolean) => {
+    setIsSubmitting(busy);
+    busyCallbackRef.current?.(busy);
+  };
 
   useEffect(() => {
+    let active = true;
+    setClients([]);
+    setSelectedClient(null);
+    setIsLoadingClients(true);
     config
       .listClients()
-      .then((list) => setClients(list as Client[]))
-      .catch(() => setClients([]))
-      .finally(() => setIsLoadingClients(false));
+      .then((list) => { if (active) setClients(list as Client[]); })
+      .catch(() => { if (active) setClients([]); })
+      .finally(() => { if (active) setIsLoadingClients(false); });
     searchRef.current?.focus();
     // MODES é constante de módulo, então `config` só muda se `mode` mudar —
     // não recarrega a lista a cada render.
+    return () => { active = false; };
   }, [config]);
-
-  // Carrega o link do Calendly do especialista para permitir agendar a reunião
-  useEffect(() => {
-    getUserById(specialistId)
-      .then((u) => setSpecialistCalendlyUrl(u.calendly_url))
-      .catch(() => setSpecialistCalendlyUrl(null));
-  }, [specialistId]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -97,69 +112,37 @@ export default function StartProcessForClientModal({
     );
   }, [clients, search]);
 
-  // Sincroniza o horário escolhido no Calendly com o agendamento criado
-  useCalendlyEventListener({
-    onEventScheduled: async (event) => {
-      if (!pendingAppointmentId) return;
-
-      const payload = (event as any)?.data?.payload;
-      const eventUri = payload?.event?.uri;
-      const inviteeUri = payload?.invitee?.uri;
-
-      try {
-        if (eventUri && inviteeUri) {
-          await registerCalendlyScheduledEvent(pendingAppointmentId, {
-            event_uri: eventUri,
-            invitee_uri: inviteeUri,
-            client_event: "calendly.event_scheduled",
-            client_observed_at: new Date().toISOString(),
-          });
-          // Best-effort: garante que o status foi consultado antes de seguir
-          await getCalendlySyncStatus(pendingAppointmentId).catch(() => null);
-        }
-      } catch (err) {
-        console.error("Erro ao sincronizar evento do Calendly:", err);
-      } finally {
-        setIsCalendlyOpen(false);
-        navigate(config.redirectTo);
-      }
-    },
-  });
-
   const handleSubmit = async () => {
+    if (submittingRef.current) return;
     if (!selectedClient) {
       setError("Selecione um cliente.");
       return;
     }
     setError(null);
-    setIsSubmitting(true);
+    submittingRef.current = true;
+    const generation = ++operationGeneration.current;
+    const submittedClient = selectedClient;
+    setBusy(true);
     try {
-      const process = await config.createProcess({
-        client_id: selectedClient.id,
+      await config.createProcess({
+        client_id: submittedClient.id,
         specialist_id: specialistId,
         product_type: productType,
         product_id: productId,
       });
-
-      // Se o especialista tem Calendly, abre o popup para marcar o horário.
-      // Sem Calendly, segue o fluxo antigo (agendamento definido depois).
-      if (specialistCalendlyUrl && process.appointment_id) {
-        let url = specialistCalendlyUrl.trim();
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-          url = `https://${url}`;
-        }
-        setPendingAppointmentId(process.appointment_id);
-        setCalendlyUrl(url);
-        setIsCalendlyOpen(true);
-        setCalendlyMessage(
-          "Conclua o agendamento no Calendly para marcar o horário da reunião.",
-        );
-      } else {
-        navigate(config.redirectTo);
-      }
+      if (!isCurrentOperation(generation)) return;
+      // Criação delegada é sempre EMAIL; somente o próprio cliente pode abrir
+      // e sincronizar um popup Calendly em uma sessão autenticada dele.
+      navigate(config.redirectTo);
     } catch (err) {
-      setError((err as Error).message || "Erro ao criar processo. Tente novamente.");
-      setIsSubmitting(false);
+      if (isCurrentOperation(generation)) {
+        setError((err as Error).message || "Erro ao criar processo. Tente novamente.");
+      }
+    } finally {
+      if (isCurrentOperation(generation)) {
+        submittingRef.current = false;
+        setBusy(false);
+      }
     }
   };
 
@@ -208,6 +191,7 @@ export default function StartProcessForClientModal({
                 <button
                   key={c.id}
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => setSelectedClient(c)}
                   className={`w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors ${
                     selectedClient?.id === c.id ? "bg-blue-50" : ""
@@ -224,13 +208,14 @@ export default function StartProcessForClientModal({
         )}
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
-      {calendlyMessage && (
-        <p className="text-sm text-blue-600">{calendlyMessage}</p>
-      )}
+      {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
 
       <div className="flex justify-end gap-3 pt-2">
-        <Button type="button" onClick={onClose} disabled={isSubmitting}>
+        <Button type="button" onClick={() => {
+          if (submittingRef.current) return;
+          operationGeneration.current += 1;
+          onClose();
+        }} disabled={isSubmitting}>
           Cancelar
         </Button>
         <Button
@@ -241,24 +226,6 @@ export default function StartProcessForClientModal({
           {isSubmitting ? "Criando..." : "Criar processo"}
         </Button>
       </div>
-
-      {calendlyUrl && isCalendlyOpen && (
-        <PopupModal
-          url={calendlyUrl}
-          open={isCalendlyOpen}
-          onModalClose={() => {
-            setIsCalendlyOpen(false);
-            navigate(config.redirectTo);
-          }}
-          rootElement={document.getElementById("root") ?? document.body}
-          prefill={{
-            name: selectedClient
-              ? `${selectedClient.name} ${selectedClient.surname}`.trim()
-              : undefined,
-            email: selectedClient?.email,
-          }}
-        />
-      )}
     </div>
   );
 }

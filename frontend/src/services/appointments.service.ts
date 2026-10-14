@@ -1,5 +1,6 @@
 import api from "./api";
 import type { ProductCurrency } from "../types/types";
+import { parseAppointmentIso } from "../lib/appointment-datetime";
 
 export type AppointmentSchedulingMethod = "CALENDLY" | "EMAIL" | "PLATFORM";
 
@@ -24,6 +25,8 @@ export interface Appointment {
   calendly_last_sync_at?: string | null;
   calendly_sync_status?: "PENDING" | "SYNCED" | "FAILED";
   scheduling_method?: AppointmentSchedulingMethod | null;
+  /** Released only by authenticated, owner-scoped EMAIL request responses. */
+  specialist_contact_email?: string;
   specialist_rescheduled_at?: string | null;
   specialist_rescheduled_from?: string | null;
   client?: {
@@ -54,12 +57,82 @@ export interface ApiResponse<T> {
   data: T;
 }
 
+export type ExistingAppointmentCheck =
+  | { exists: false }
+  | {
+      exists: true;
+      appointment_id: string;
+      process_id: string;
+      appointment_status: Appointment["status"];
+      scheduling_method: AppointmentSchedulingMethod | null;
+      appointment_datetime: string | null;
+      specialist_contact_email?: string;
+    };
+
+export interface ActiveProcessSnapshot {
+  process_id: string;
+  appointment_id: string | null;
+  appointment_status: Appointment["status"] | null;
+  scheduling_method: AppointmentSchedulingMethod | null;
+  appointment_datetime: string | null;
+  specialist_contact_email?: string;
+}
+
+interface BaseProductRequest {
+  client_id: string;
+  specialist_id: string;
+  product_type: "CAR" | "BOAT" | "AIRCRAFT";
+  product_id: string;
+  notes?: string;
+}
+
+export type ProductPendingAppointmentInput =
+  | (BaseProductRequest & { scheduling_method: "EMAIL"; appointment_datetime: string })
+  | (BaseProductRequest & { scheduling_method: "CALENDLY"; appointment_datetime?: never });
+
+export type PendingAppointmentCreated = Appointment & { process_id: string };
+
+/** Only the backend's dedicated owned-duplicate response can recover an active request. */
+export function getActiveProcessSnapshot(error: unknown): ActiveProcessSnapshot | null {
+  const record = (value: unknown): Record<string, unknown> | null =>
+    typeof value === "object" && value !== null ? value as Record<string, unknown> : null;
+  const response = record(record(error)?.response);
+  const payload = record(record(response?.data)?.error);
+  if (response?.status !== 409 || payload?.code !== "ACTIVE_PROCESS_EXISTS") return null;
+  const snapshot = record(record(payload.details)?.existing_request);
+  if (!snapshot || typeof snapshot.process_id !== "string" || !snapshot.process_id
+    || !(snapshot.appointment_id === null || typeof snapshot.appointment_id === "string")
+    || !(snapshot.appointment_datetime === null || typeof snapshot.appointment_datetime === "string")
+    || !(snapshot.appointment_status === null || ["PENDING", "SCHEDULED", "COMPLETED", "CANCELLED"].includes(snapshot.appointment_status as string))
+    || !(snapshot.scheduling_method === null || ["EMAIL", "CALENDLY", "PLATFORM"].includes(snapshot.scheduling_method as string))) return null;
+  const specialistContactEmail = snapshot.specialist_contact_email;
+  const hasValidSpecialistContact =
+    snapshot.scheduling_method === "EMAIL" &&
+    typeof specialistContactEmail === "string" &&
+    specialistContactEmail.trim().length > 0;
+  return {
+    process_id: snapshot.process_id,
+    appointment_id: snapshot.appointment_id as string | null,
+    appointment_status: snapshot.appointment_status as ActiveProcessSnapshot["appointment_status"],
+    scheduling_method: snapshot.scheduling_method as ActiveProcessSnapshot["scheduling_method"],
+    appointment_datetime: snapshot.appointment_datetime as string | null,
+    ...(hasValidSpecialistContact
+      ? { specialist_contact_email: specialistContactEmail.trim() }
+      : {}),
+  };
+}
+
 export interface RegisterCalendlyScheduledPayload {
   event_uri: string;
   invitee_uri: string;
   client_event?: "calendly.event_scheduled";
   client_observed_at?: string;
-  scheduled_start_time?: string;
+}
+
+export interface CalendlyRegistrationStatus {
+  appointment_id: string;
+  calendly_sync_status: "PENDING" | "SYNCED" | "FAILED";
+  appointment_datetime: string | null;
 }
 
 export interface CalendlySyncStatus {
@@ -75,56 +148,45 @@ export interface CalendlyOAuthStatus {
   calendly_user_uri: string | null;
   expires_at: string | null;
   is_active: boolean;
+  last_error?: string | null;
 }
 
 /**
- * Verifica se existe um agendamento entre cliente e especialista para um produto específico
- * @param clientId - ID do cliente
- * @param specialistId - ID do especialista
- * @param productType - Tipo do produto (CAR, BOAT, AIRCRAFT)
- * @param productId - ID do produto
- * @returns true se existe agendamento ativo, false caso contrário
+ * Consulta o próprio pedido; a identidade do cliente vem exclusivamente do JWT.
  */
 export async function checkExistingAppointment(
-  clientId: string,
   specialistId: string,
   productType: "CAR" | "BOAT" | "AIRCRAFT",
   productId: string,
-): Promise<Appointment | null> {
-  try {
-    const response = await api.get<ApiResponse<Appointment | null>>(
-      `/appointments/check`,
-      {
-        withCredentials: true,
-        params: {
-          client_id: clientId,
-          specialist_id: specialistId,
-          product_type: productType,
-          product_id: productId,
-        },
+): Promise<ExistingAppointmentCheck> {
+  const response = await api.get<ApiResponse<ExistingAppointmentCheck>>(
+    "/appointments/check",
+    {
+      withCredentials: true,
+      params: {
+        specialist_id: specialistId,
+        product_type: productType,
+        product_id: productId,
       },
-    );
-    return response.data.data;
-  } catch (error) {
-    console.error("Erro ao verificar agendamento:", error);
-    return null;
-  }
+    },
+  );
+  return response.data.data;
 }
 
 /**
- * Cria um agendamento PENDING (cliente clicou no link do Calendly)
+ * Cria um pedido PENDING por e-mail com data proposta ou pelo Calendly sem data do cliente.
  * @param data - Dados do agendamento
  * @returns O agendamento criado em status PENDING
  */
-export async function createPendingAppointment(data: {
-  client_id: string;
-  specialist_id: string;
-  product_type: "CAR" | "BOAT" | "AIRCRAFT";
-  product_id: string;
-  scheduling_method: "CALENDLY" | "EMAIL";
-  notes?: string;
-}): Promise<Appointment> {
-  const response = await api.post<ApiResponse<Appointment>>(
+export async function createPendingAppointment(data: ProductPendingAppointmentInput): Promise<PendingAppointmentCreated> {
+  if (data.scheduling_method === "CALENDLY" && data.appointment_datetime !== undefined) {
+    throw new Error("O horário Calendly é definido pela integração");
+  }
+  if (data.scheduling_method === "EMAIL") {
+    const parsed = parseAppointmentIso(data.appointment_datetime);
+    if (parsed.getTime() <= Date.now()) throw new Error("Selecione uma data e hora futuras");
+  }
+  const response = await api.post<ApiResponse<PendingAppointmentCreated>>(
     "/appointments/pending",
     data,
     { withCredentials: true },
@@ -244,11 +306,7 @@ export async function cancelPendingAppointment(
 export async function registerCalendlyScheduledEvent(
   appointmentId: string,
   payload: RegisterCalendlyScheduledPayload,
-): Promise<{
-  appointment_id: string;
-  calendly_sync_status: "PENDING" | "SYNCED" | "FAILED";
-  appointment_datetime: string | null;
-}> {
+): Promise<CalendlyRegistrationStatus> {
   const response = await api.post<
     ApiResponse<{
       appointment_id: string;

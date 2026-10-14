@@ -140,4 +140,3 @@ git commit -m "fix(frontend): remove Calendly modal from product flow"
 git push -u origin codex/fix-calendly-product-modal
 gh pr create --base develop --head codex/fix-calendly-product-modal
 ```
-

@@ -30,10 +30,9 @@ export interface RawCar {
   descricao?: string;
   specialist_id?: string;
   specialist?: {
-    id: number;
+    id: string;
     name: string;
-    email: string;
-    especialidade: string;
+    surname: string;
   };
   images?: {
     id: number;

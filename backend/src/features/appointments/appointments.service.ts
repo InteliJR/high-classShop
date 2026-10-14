@@ -13,6 +13,7 @@ import {
   CreatePendingAppointmentDto,
   CreatePlatformAppointmentDto,
   GetAppointmentsQueryDto,
+  PENDING_APPOINTMENT_DATETIME_PATTERN,
   UpdateAppointmentStatusDto,
 } from './dto';
 import {
@@ -20,6 +21,7 @@ import {
   ClientResponseDto,
   SpecialistResponseDto,
   ProductResponseDto,
+  ExistingAppointmentCheck,
 } from './entities/appointment.response';
 import {
   AppointmentSchedulingMethod,
@@ -34,19 +36,25 @@ import {
   ProcessStatus,
 } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
+import { isISO8601 } from 'class-validator';
+import { isCalendlySchedulingAvailable } from 'src/shared/utils/calendly-scheduling-capability';
 import { parseDate, isFutureDate } from 'src/shared/utils/date.utils';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { CalendlyIntegrationService } from './calendly-integration.service';
+import { parseCalendlyResourceUri } from './dto/calendly-scheduled.dto';
 import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
 import { lockNegotiationProductMoney } from 'src/features/products/product-monetary-lock';
 import { validateSpecialistProductAssociation } from 'src/features/products/product-association-validator';
 import {
+  ACTIVE_PROCESS_STATUSES,
   acquireActiveProcessDedupLock,
+  assertNoActiveProcess,
   lockAndAssertNoActiveProcess,
 } from 'src/features/processes/process-dedup-lock';
 import {
   acquireSpecialistScheduleLock,
   assertSpecialistScheduleAvailable,
+  buildOccupiedScheduleWhere,
   lockAndAssertSpecialistScheduleAvailable,
 } from './appointment-schedule-lock';
 
@@ -81,243 +89,20 @@ export class AppointmentsService {
     private calendlyIntegrationService: CalendlyIntegrationService,
   ) {}
 
-  /**
-   * Cria novo agendamento
-   *
-   * Fluxo:
-   * 1. Validar que cliente e especialista existem
-   * 2. Validar que appointment_datetime é futuro
-   * 3. Verificar conflitos de horário
-   * 4. Validar que produto existe e pertence ao especialista
-   * 5. Criar Appointment
-   * 6. Auto-criar Process em status SCHEDULING
-   * 7. Retornar AppointmentResponseEntity
-   *
-   * @param dto Dados do agendamento
-   * @param userId ID do usuário autenticado (JWT)
-   * @returns Appointment criado com dados completos
-   * @throws BadRequestException Se dados inválidos
-   * @throws ConflictException Se conflito de horário
-   * @throws NotFoundException Se usuário ou produto não encontrado
-   */
+  /** Bloqueia a criação direta sem confirmação do especialista. */
   async create(
-    dto: CreatePlatformAppointmentDto,
-    userId: string,
-    userRole: UserRole,
+    _dto: CreatePlatformAppointmentDto,
+    _userId: string,
+    _userRole: UserRole,
   ): Promise<AppointmentResponseEntity> {
-    if (userRole !== UserRole.CUSTOMER || dto.client_id !== userId) {
-      throw new ForbiddenException({
-        success: false,
-        error: {
-          code: 403,
-          message: 'Apenas o próprio cliente pode criar este agendamento',
-        },
-      });
-    }
-
-    this.logger.log(
-      `[create] Criando agendamento para cliente ${dto.client_id} com especialista ${dto.specialist_id}`,
-    );
-
-    const appointmentDateTime = parseDate(dto.appointment_datetime);
-    if (!appointmentDateTime || !isFutureDate(appointmentDateTime)) {
-      this.logger.warn('[create] Data/hora do agendamento é inválida');
-      throw new BadRequestException({
-        success: false,
-        error: {
-          code: 400,
-          message: 'Data/hora do agendamento deve ser futura',
-          details: {
-            appointment_datetime: [
-              'appointment_datetime deve ser uma data ISO 8601 futura',
-            ],
-          },
-        },
-      });
-    }
-
-    // Validação 2: Verificar que cliente existe
-    this.logger.debug(
-      `[create] Validando existência do cliente ${dto.client_id}`,
-    );
-    const client = await this.prisma.user.findUnique({
-      where: { id: dto.client_id },
-    });
-    if (!client) {
-      this.logger.error(`[create] Cliente ${dto.client_id} não encontrado`);
-      throw new NotFoundException({
-        success: false,
-        error: {
-          code: 404,
-          message: 'Cliente não encontrado',
-          details: {
-            client_id: dto.client_id,
-          },
-        },
-      });
-    }
-
-    // Validação 3: Verificar que especialista existe e tem role SPECIALIST
-    const specialist = await this.prisma.user.findUnique({
-      where: { id: dto.specialist_id },
-    });
-    if (!specialist) {
-      throw new NotFoundException({
-        success: false,
-        error: {
-          code: 404,
-          message: 'Especialista não encontrado',
-          details: {
-            specialist_id: dto.specialist_id,
-          },
-        },
-      });
-    }
-
-    if (
-      specialist.role !== UserRole.SPECIALIST &&
-      specialist.role !== UserRole.CONSULTANT
-    ) {
-      throw new BadRequestException({
-        success: false,
-        error: {
-          code: 400,
-          message: 'Usuário não é especialista',
-          details: {
-            specialist_id: dto.specialist_id,
-            role: specialist.role,
-          },
-        },
-      });
-    }
-
-    // Validação 4: Validar que especialidade do especialista corresponde ao product_type
-    if (specialist.speciality && specialist.speciality !== dto.product_type) {
-      throw new BadRequestException({
-        success: false,
-        error: {
-          code: 400,
-          message: 'Especialista não trabalha com este tipo de produto',
-          details: {
-            specialist_speciality: specialist.speciality,
-            requested_product_type: dto.product_type,
-          },
-        },
-      });
-    }
-
-    // Validação 5: Verificar que cliente e especialista são diferentes
-    if (dto.client_id === dto.specialist_id) {
-      throw new BadRequestException({
-        success: false,
-        error: {
-          code: 400,
-          message: 'Cliente e especialista não podem ser a mesma pessoa',
-          details: {
-            client_id: dto.client_id,
-            specialist_id: dto.specialist_id,
-          },
-        },
-      });
-    }
-
-    const { appointment, process, product } = await this.prisma.$transaction(
-      async (tx) => {
-        // Validação 6: produto ativo, do tipo correto e pertencente ao especialista.
-        const product = (await validateSpecialistProductAssociation(tx, {
-          specialistId: dto.specialist_id,
-          productType: dto.product_type,
-          productId: dto.product_id,
-        })) as Car | Boat | Aircraft;
-
-        await lockAndAssertNoActiveProcess(tx, {
-          clientId: dto.client_id,
-          specialistId: dto.specialist_id,
-          productType: dto.product_type,
-          productId: dto.product_id,
-        });
-        await lockAndAssertSpecialistScheduleAvailable(
-          tx,
-          dto.specialist_id,
-          appointmentDateTime,
-        );
-
-        // Criar Appointment
-        const appointment = await tx.appointment.create({
-          data: {
-            client_id: dto.client_id,
-            specialist_id: dto.specialist_id,
-            product_type: dto.product_type,
-            product_id: dto.product_id,
-            appointment_datetime: appointmentDateTime,
-            status: StatusAgendamento.SCHEDULED,
-            scheduling_method: AppointmentSchedulingMethod.PLATFORM,
-            notes: dto.notes,
-          },
-          include: {
-            client: true,
-            specialist: true,
-          },
-        });
-
-        // Auto-criar Process vinculado a este Appointment
-        // Process começa em status SCHEDULING (agendamento confirmado)
-        const process = await tx.process.create({
-          data: {
-            client_id: dto.client_id,
-            specialist_id: dto.specialist_id,
-            product_type: dto.product_type,
-            appointment_id: appointment.id,
-            [dto.product_type === ProductType.CAR
-              ? 'car_id'
-              : dto.product_type === ProductType.BOAT
-                ? 'boat_id'
-                : 'aircraft_id']: dto.product_id,
-            status: 'SCHEDULING', // ProcessStatus enum
-            notes: `Criado via agendamento interno. Cliente agendou em ${appointment.appointment_datetime?.toISOString()}`,
-          },
-        });
-
-        await tx.processStatusHistory.create({
-          data: {
-            processId: process.id,
-            status: ProcessStatus.SCHEDULING,
-            changed_by: userId,
-            changed_at: new Date(),
-          },
-        });
-
-        return { appointment, process, product };
+    throw new ForbiddenException({
+      success: false,
+      error: {
+        code: 403,
+        message:
+          'Use o pedido pendente por e-mail ou Calendly para solicitar a reunião',
       },
-    );
-
-    // Fire-and-forget: Notificar especialista sobre novo agendamento
-    const productDetails = product
-      ? `${(product as any).marca || ''} ${(product as any).modelo || ''}`.trim()
-      : `Produto ${dto.product_type}`;
-
-    setImmediate(() => {
-      this.notificationService
-        .sendAppointmentCreatedEmail({
-          specialistEmail: specialist.email,
-          specialistName:
-            `${specialist.name} ${specialist.surname || ''}`.trim(),
-          clientName: `${client.name} ${client.surname || ''}`.trim(),
-          appointmentDate: appointment.appointment_datetime || new Date(),
-          productDetails,
-          processId: process.id,
-        })
-        .catch((err) => {
-          this.logger.error('Notification failed (non-critical)', {
-            method: 'create',
-            appointmentId: appointment.id,
-            error: err.message,
-          });
-        });
     });
-
-    // Montar resposta com dados completos
-    return this.mapToResponseEntity(appointment, client, specialist, product);
   }
 
   async reschedule(
@@ -477,6 +262,7 @@ export class AppointmentsService {
    * Respeita permissões por role:
    * - CUSTOMER: vê apenas seus próprios agendamentos
    * - SPECIALIST/CONSULTANT: vê como especialista + seus clientes
+   * - OFFICE: vê clientes vinculados à própria empresa
    * - ADMIN: vê todos
    *
    * @param query Query parameters (paginação, filtros, ordenação)
@@ -512,20 +298,72 @@ export class AppointmentsService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    // Construir filtro WHERE conforme permissões
+    // Construir filtro WHERE conforme permissões. ADMIN é o único papel com
+    // visão global; qualquer papel sem regra explícita deve falhar fechado.
     const where: any = {};
 
-    // Aplicar filtros de role
-    if (userRole === UserRole.CUSTOMER) {
-      where.client_id = userId; // Customer vê apenas seus agendamentos como cliente
-    } else if (
-      userRole === UserRole.SPECIALIST ||
-      userRole === UserRole.CONSULTANT
-    ) {
-      // Specialist vê como especialista OU como cliente
-      where.OR = [{ specialist_id: userId }, { client_id: userId }];
+    switch (userRole) {
+      case UserRole.ADMIN:
+        break;
+
+      case UserRole.CUSTOMER:
+        where.client_id = userId;
+        break;
+
+      case UserRole.SPECIALIST:
+      case UserRole.CONSULTANT:
+        where.OR = [{ specialist_id: userId }, { client_id: userId }];
+        break;
+
+      case UserRole.OFFICE: {
+        const office = await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { company_id: true },
+        });
+        if (!office?.company_id) {
+          this.logger.error(
+            `[getAppointments] OFFICE user=${userId} sem company_id — config inválida`,
+          );
+          throw new ForbiddenException({
+            success: false,
+            error: {
+              code: 403,
+              message: 'Escritório sem empresa vinculada',
+              details: { user_id: userId },
+            },
+          });
+        }
+
+        // Mantém a mesma definição de cliente do escritório aplicada por
+        // OfficeService.listClients e ProcessesService: vínculo direto com a
+        // empresa ou indireto por um consultor pertencente a ela.
+        where.AND = [
+          {
+            client: {
+              role: UserRole.CUSTOMER,
+              OR: [
+                { consultant: { company_id: office.company_id } },
+                { company_id: office.company_id },
+              ],
+            },
+          },
+        ];
+        break;
+      }
+
+      default:
+        this.logger.warn(
+          `[getAppointments] acesso negado role=${userRole} user=${userId}`,
+        );
+        throw new ForbiddenException({
+          success: false,
+          error: {
+            code: 403,
+            message: 'Acesso negado',
+            details: { user_id: userId },
+          },
+        });
     }
-    // ADMIN vê todos (sem filtro de user_id)
 
     // Aplicar filtros de query
     if (query.status) {
@@ -783,6 +621,15 @@ export class AppointmentsService {
           'Apenas agendamentos pendentes ou agendados podem ser cancelados',
         );
       }
+      if (
+        dto.status === StatusAgendamento.CANCELLED &&
+        current.process &&
+        current.process.status !== ProcessStatus.SCHEDULING
+      ) {
+        throw new BadRequestException(
+          'Não é possível cancelar uma reunião cujo processo já avançou',
+        );
+      }
     };
 
     const appointment = await this.prisma.appointment.findUnique({
@@ -851,6 +698,35 @@ export class AppointmentsService {
             details: { appointment_id: id },
           },
         });
+      }
+
+      // Cancellation must release the active scheduling process atomically.
+      // Keeping a SCHEDULING process linked to a CANCELLED appointment makes
+      // the product deduplication gate reject every subsequent request.
+      if (
+        dto.status === StatusAgendamento.CANCELLED &&
+        lockedAppointment.process
+      ) {
+        await tx.processStatusHistory.deleteMany({
+          where: { processId: lockedAppointment.process.id },
+        });
+        const processClaim = await tx.process.deleteMany({
+          where: {
+            id: lockedAppointment.process.id,
+            status: ProcessStatus.SCHEDULING,
+          },
+        });
+        if (processClaim.count !== 1) {
+          throw new ConflictException({
+            success: false,
+            error: {
+              code: 'APPOINTMENT_CANCELLATION_CONFLICT',
+              message:
+                'O processo foi alterado enquanto o agendamento era cancelado',
+              details: { appointment_id: id },
+            },
+          });
+        }
       }
 
       const updatedAppointment = await tx.appointment.findUniqueOrThrow({
@@ -990,19 +866,9 @@ export class AppointmentsService {
       // Avançar 1 hora
       checkTime = new Date(checkTime.getTime() + 60 * 60 * 1000);
 
-      // Verificar se este horário está livre
-      const conflictStart = new Date(checkTime.getTime() - 60 * 60 * 1000);
-      const conflictEnd = new Date(checkTime.getTime() + 60 * 60 * 1000);
-
       const conflict = await this.prisma.appointment.findFirst({
-        where: {
-          specialist_id: specialistId,
-          appointment_datetime: {
-            gte: conflictStart,
-            lte: conflictEnd,
-          },
-          status: StatusAgendamento.SCHEDULED,
-        },
+        where: buildOccupiedScheduleWhere(specialistId, checkTime),
+        select: { id: true },
       });
 
       if (!conflict) {
@@ -1203,8 +1069,7 @@ export class AppointmentsService {
   }
 
   /**
-   * Cria um agendamento PENDING
-   * Usado quando cliente clica no link do Calendly e retorna à plataforma
+   * Cria um agendamento PENDING por EMAIL ou CALENDLY e seu processo associado.
    *
    * Dois fluxos suportados:
    * 1. Com produto: product_type e product_id fornecidos - fluxo padrão
@@ -1212,37 +1077,14 @@ export class AppointmentsService {
    *
    * @param dto Dados do agendamento (product_type e product_id opcionais)
    * @param userId ID do cliente autenticado
-   * @returns Appointment em status PENDING
+   * @returns Appointment em status PENDING e o process_id criado atomicamente
    */
   async createPending(
     dto: CreatePendingAppointmentDto,
     userId: string,
     userRole: UserRole,
-  ): Promise<AppointmentResponseEntity> {
-    this.logger.log(
-      `[createPending] Criando agendamento PENDING para cliente ${dto.client_id}`,
-    );
-
-    const schedulingMethod =
-      dto.scheduling_method ?? AppointmentSchedulingMethod.CALENDLY;
-
-    if (
-      schedulingMethod === AppointmentSchedulingMethod.EMAIL &&
-      dto.appointment_datetime
-    ) {
-      throw new BadRequestException(
-        'Solicitações por e-mail devem ter o horário definido pelo especialista',
-      );
-    }
-
-    // Validar que quem está criando é o próprio cliente
-    this.logger.log(
-      `[createPending] Validando permissão: userId=${userId} vs client_id=${dto.client_id}`,
-    );
+  ): Promise<AppointmentResponseEntity & { process_id: string }> {
     if (userRole !== UserRole.CUSTOMER || dto.client_id !== userId) {
-      this.logger.error(
-        `[createPending] ERRO: Cliente tentando criar agendamento para outro usuário`,
-      );
       throw new ForbiddenException({
         success: false,
         error: {
@@ -1251,88 +1093,124 @@ export class AppointmentsService {
         },
       });
     }
-    this.logger.log(`[createPending] ✓ Permissão validada`);
 
-    // Validar cliente existe
-    this.logger.log(`[createPending] Buscando cliente ${dto.client_id}...`);
-    const client = await this.prisma.user.findUnique({
-      where: { id: dto.client_id },
-    });
-    if (!client) {
-      this.logger.error(
-        `[createPending] ERRO: Cliente ${dto.client_id} não encontrado`,
+    const schedulingMethod =
+      dto.scheduling_method ?? AppointmentSchedulingMethod.CALENDLY;
+    if (
+      schedulingMethod !== AppointmentSchedulingMethod.EMAIL &&
+      schedulingMethod !== AppointmentSchedulingMethod.CALENDLY
+    ) {
+      throw new BadRequestException(
+        'scheduling_method deve ser EMAIL ou CALENDLY',
       );
-      throw new NotFoundException({
-        success: false,
-        error: { code: 404, message: 'Cliente não encontrado' },
-      });
     }
-    this.logger.log(`[createPending] ✓ Cliente encontrado: ${client.name}`);
+    if ((dto.product_type != null) !== (dto.product_id != null)) {
+      throw new BadRequestException(
+        'product_type e product_id devem ser informados juntos.',
+      );
+    }
+    const isConsultancy = dto.product_id == null;
+    const hasDate =
+      dto.appointment_datetime !== undefined &&
+      dto.appointment_datetime !== null;
+    if (
+      schedulingMethod === AppointmentSchedulingMethod.CALENDLY &&
+      dto.appointment_datetime !== undefined
+    ) {
+      throw new BadRequestException(
+        'A data do Calendly deve ser definida pela sincronização, não pelo cliente',
+      );
+    }
+    const pendingDateTime = hasDate
+      ? parseDate(dto.appointment_datetime)
+      : null;
+    if (
+      hasDate &&
+      (typeof dto.appointment_datetime !== 'string' ||
+        !PENDING_APPOINTMENT_DATETIME_PATTERN.test(dto.appointment_datetime) ||
+        !isISO8601(dto.appointment_datetime, { strict: true }) ||
+        !pendingDateTime ||
+        !isFutureDate(pendingDateTime))
+    ) {
+      throw new BadRequestException(
+        'Data/hora do agendamento deve ser ISO 8601 futura válida com Z ou offset explícito',
+      );
+    }
+    if (
+      !isConsultancy &&
+      schedulingMethod === AppointmentSchedulingMethod.EMAIL &&
+      !pendingDateTime
+    ) {
+      throw new BadRequestException(
+        'Data/hora proposta é obrigatória para solicitações por e-mail com produto',
+      );
+    }
 
-    // Validar especialista existe
-    this.logger.log(
-      `[createPending] Buscando especialista ${dto.specialist_id}...`,
-    );
+    const client = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!client) throw new NotFoundException('Cliente não encontrado');
     const specialist = await this.prisma.user.findUnique({
       where: { id: dto.specialist_id },
+      include: { calendly_connection: { select: { is_active: true } } },
     });
-    if (!specialist) {
-      this.logger.error(
-        `[createPending] ERRO: Especialista ${dto.specialist_id} não encontrado`,
-      );
-      throw new NotFoundException({
-        success: false,
-        error: { code: 404, message: 'Especialista não encontrado' },
-      });
+    if (!specialist) throw new NotFoundException('Especialista não encontrado');
+    if (specialist.role !== UserRole.SPECIALIST) {
+      throw new BadRequestException('Usuário informado não é especialista');
     }
     this.logger.log(
       `[createPending] ✓ Especialista encontrado: ${specialist.name}`,
     );
 
-    // Determinar se é consultoria (sem produto) ou fluxo padrão (com produto)
-    const isConsultancy = !dto.product_type || !dto.product_id;
-    this.logger.log(
-      `[createPending] Modo: ${isConsultancy ? 'CONSULTORIA' : 'COM PRODUTO'}`,
-    );
+    const calendlyAvailable = isCalendlySchedulingAvailable({
+      calendlyUrl: specialist.calendly_url,
+      connectionActive: specialist.calendly_connection?.is_active ?? false,
+    });
+    if (
+      schedulingMethod === AppointmentSchedulingMethod.CALENDLY &&
+      !calendlyAvailable
+    ) {
+      throw new ConflictException({
+        success: false,
+        error: {
+          code: 'CALENDLY_UNAVAILABLE',
+          message: 'Calendly indisponível. Solicite a reunião por e-mail.',
+        },
+      });
+    }
+    if (
+      !isConsultancy &&
+      schedulingMethod === AppointmentSchedulingMethod.EMAIL &&
+      calendlyAvailable
+    ) {
+      throw new ConflictException({
+        success: false,
+        error: {
+          code: 'EMAIL_FLOW_UNAVAILABLE',
+          message:
+            'Este especialista utiliza Calendly. Solicite a reunião pelo calendário.',
+        },
+      });
+    }
 
-    // Verificar se já existe agendamento PENDING ou SCHEDULED
-    this.logger.log(`[createPending] Verificando agendamento duplicado...`);
-    const existingWhere: any = {
-      client_id: dto.client_id,
+    const consultancyAppointmentWhere = {
+      client_id: userId,
       specialist_id: dto.specialist_id,
+      product_type: null,
+      product_id: null,
       status: {
         in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
       },
     };
+    const assertNoDuplicateAppointment = (
+      existing: { id: string; status: StatusAgendamento } | null,
+    ): void => {
+      if (!existing) return;
 
-    if (isConsultancy) {
-      // Para consultoria, verificar se já existe agendamento sem produto
-      existingWhere.product_type = null;
-      existingWhere.product_id = null;
-    } else {
-      // Para fluxo normal, verificar por produto específico
-      existingWhere.product_type = dto.product_type;
-      existingWhere.product_id = dto.product_id;
-    }
-
-    const assertNoDuplicateAppointment = (existing: any): void => {
-      if (!existing) {
-        this.logger.log(
-          `[createPending] ✓ Nenhum agendamento duplicado encontrado`,
-        );
-        return;
-      }
-
-      this.logger.error(
-        `[createPending] ERRO: Agendamento duplicado encontrado: ${existing.id}`,
-      );
       throw new ConflictException({
         success: false,
         error: {
           code: 409,
-          message: isConsultancy
-            ? 'Já existe um agendamento de consultoria pendente com este especialista'
-            : 'Já existe um agendamento pendente ou confirmado para este produto',
+          message:
+            'Já existe um agendamento de consultoria pendente com este especialista',
           details: {
             existing_id: existing.id,
             existing_status: existing.status,
@@ -1341,80 +1219,15 @@ export class AppointmentsService {
       });
     };
 
-    const existing = await this.prisma.appointment.findFirst({
-      where: existingWhere,
-    });
-    assertNoDuplicateAppointment(existing);
-
-    // Validar produto apenas se fornecido (não é consultoria)
-    let product: any = null;
-    if (!isConsultancy) {
-      this.logger.log(
-        `[createPending] Buscando produto ${dto.product_type}/${dto.product_id}...`,
-      );
-      product = await this.getProductByType(dto.product_type!, dto.product_id!);
-      if (!product) {
-        this.logger.error(
-          `[createPending] ERRO: Produto ${dto.product_type}/${dto.product_id} não encontrado`,
-        );
-        throw new NotFoundException({
-          success: false,
-          error: { code: 404, message: 'Produto não encontrado' },
-        });
-      }
-      this.logger.log(`[createPending] ✓ Produto encontrado`);
-    } else {
-      this.logger.log(
-        `[createPending] Consultoria - pulando validação de produto`,
-      );
-    }
-
-    // Criar appointment em status PENDING e Process em transação
+    // Metadata only: automatic expiration is not implemented.
     const pendingExpiresAt = new Date();
-    pendingExpiresAt.setDate(pendingExpiresAt.getDate() + 7); // Expira em 7 dias
+    pendingExpiresAt.setDate(pendingExpiresAt.getDate() + 7);
 
-    this.logger.log(
-      `[createPending] Iniciando transação para criar appointment e process`,
-    );
-
-    let appointment: any;
-    let process: any;
-
-    try {
-      this.logger.log(`[createPending] Entrando na transação do Prisma...`);
-      [appointment, process] = await this.prisma.$transaction(async (tx) => {
-        this.logger.log(`[createPending] Dentro da transação - iniciando`);
-
-        await validateSpecialistProductAssociation(tx, {
-          specialistId: dto.specialist_id,
-          productType: dto.product_type,
-          productId: dto.product_id,
-        });
-
-        const processScope = {
-          clientId: dto.client_id,
-          specialistId: dto.specialist_id,
-          productType: isConsultancy ? null : dto.product_type,
-          productId: isConsultancy ? null : dto.product_id,
-        };
-
-        if (isConsultancy) {
-          await acquireActiveProcessDedupLock(tx, processScope);
-          const existingAfterLock = await tx.appointment.findFirst({
-            where: existingWhere,
-          });
-          assertNoDuplicateAppointment(existingAfterLock);
-        } else {
-          await lockAndAssertNoActiveProcess(tx, processScope);
-        }
-
-        const pendingDateTime = dto.appointment_datetime
-          ? parseDate(String(dto.appointment_datetime))
-          : null;
-        if (dto.appointment_datetime && !pendingDateTime) {
-          throw new BadRequestException('Data/hora do agendamento é inválida');
-        }
-        if (pendingDateTime) {
+    const { appointment, process, product } = await this.prisma.$transaction(
+      async (tx) => {
+        // Ordem global dos advisory locks: agenda → produto → deduplicação.
+        // Consultoria datada não tem lock de produto, portanto agenda → dedup.
+        if (isConsultancy && pendingDateTime) {
           await lockAndAssertSpecialistScheduleAvailable(
             tx,
             dto.specialist_id,
@@ -1422,109 +1235,88 @@ export class AppointmentsService {
           );
         }
 
-        // Criar appointment
-        const appointmentData: any = {
-          client_id: dto.client_id,
-          specialist_id: dto.specialist_id,
-          appointment_datetime: pendingDateTime,
-          status: StatusAgendamento.PENDING,
-          scheduling_method: schedulingMethod,
-          notes:
-            dto.notes ||
-            (isConsultancy
-              ? 'Consultoria: cliente acessou link do Calendly'
-              : 'Cliente acessou link do Calendly'),
-          user_clicked_at: new Date(),
-          pending_expires_at: pendingExpiresAt,
-        };
+        const product = await validateSpecialistProductAssociation(tx, {
+          specialistId: dto.specialist_id,
+          productType: dto.product_type,
+          productId: dto.product_id,
+        });
 
-        // Adicionar produto se não for consultoria
-        if (!isConsultancy) {
-          appointmentData.product_type = dto.product_type;
-          appointmentData.product_id = dto.product_id;
+        const processScope = {
+          clientId: userId,
+          specialistId: dto.specialist_id,
+          productType: dto.product_type,
+          productId: dto.product_id,
+        };
+        if (isConsultancy) {
+          await acquireActiveProcessDedupLock(tx, processScope);
+          await assertNoActiveProcess(tx, processScope, undefined, {
+            authenticatedClientId: userId,
+          });
+          const existingAfterLock = await tx.appointment.findFirst({
+            where: consultancyAppointmentWhere,
+          });
+          assertNoDuplicateAppointment(existingAfterLock);
+        } else {
+          await lockAndAssertNoActiveProcess(tx, processScope, undefined, {
+            authenticatedClientId: userId,
+          });
         }
 
-        this.logger.log(
-          `[createPending] Criando appointment ${isConsultancy ? '(consultoria)' : `para produto ${dto.product_type}/${dto.product_id}`}`,
-        );
-        const createdAppointment = await tx.appointment.create({
-          data: appointmentData,
-          include: {
-            client: true,
-            specialist: true,
+        const appointment = await tx.appointment.create({
+          data: {
+            client_id: userId,
+            specialist_id: dto.specialist_id,
+            product_type: dto.product_type ?? null,
+            product_id: dto.product_id ?? null,
+            appointment_datetime: pendingDateTime,
+            status: StatusAgendamento.PENDING,
+            scheduling_method: schedulingMethod,
+            notes:
+              dto.notes ||
+              (schedulingMethod === AppointmentSchedulingMethod.EMAIL
+                ? 'Cliente solicitou reunião por e-mail'
+                : 'Cliente acessou link do Calendly'),
+            user_clicked_at: new Date(),
+            pending_expires_at: pendingExpiresAt,
           },
         });
-        this.logger.log(
-          `[createPending] Appointment criado: ${createdAppointment.id}`,
-        );
-
-        // Criar Process em status SCHEDULING
-        const processData: any = {
-          client_id: dto.client_id,
-          specialist_id: dto.specialist_id,
-          appointment_id: createdAppointment.id,
-          status: 'SCHEDULING',
-          notes: isConsultancy
-            ? `Consultoria criada via agendamento PENDING (${new Date().toISOString()})`
-            : `Criado via agendamento PENDING (${new Date().toISOString()})`,
-        };
-
-        // Adicionar produto apenas se não for consultoria
-        if (!isConsultancy) {
-          const productField =
-            dto.product_type === ProductType.CAR
-              ? 'car_id'
-              : dto.product_type === ProductType.BOAT
-                ? 'boat_id'
-                : 'aircraft_id';
-
-          this.logger.log(
-            `[createPending] Criando process com campo ${productField}=${dto.product_id}`,
-          );
-          processData.product_type = dto.product_type;
-          processData[productField] = dto.product_id;
-        } else {
-          this.logger.log(
-            `[createPending] Criando process de consultoria (sem produto)`,
-          );
-        }
-
-        const createdProcess = await tx.process.create({
-          data: processData,
+        const productField =
+          dto.product_type === ProductType.CAR
+            ? 'car_id'
+            : dto.product_type === ProductType.BOAT
+              ? 'boat_id'
+              : 'aircraft_id';
+        const process = await tx.process.create({
+          data: {
+            client_id: userId,
+            specialist_id: dto.specialist_id,
+            appointment_id: appointment.id,
+            status: ProcessStatus.SCHEDULING,
+            product_type: dto.product_type ?? null,
+            ...(isConsultancy ? {} : { [productField]: dto.product_id }),
+            notes: `Criado via agendamento PENDING (${new Date().toISOString()})`,
+          },
         });
-        this.logger.log(
-          `[createPending] Process criado: ${createdProcess.id} com status ${createdProcess.status}`,
-        );
-
-        // Criar histórico
         await tx.processStatusHistory.create({
           data: {
-            processId: createdProcess.id,
-            status: 'SCHEDULING',
-            changed_by: dto.client_id,
+            processId: process.id,
+            status: ProcessStatus.SCHEDULING,
+            changed_by: userId,
             changed_at: new Date(),
           },
         });
-        this.logger.log(
-          `[createPending] Histórico de status criado para process ${createdProcess.id}`,
-        );
-
-        return [createdAppointment, createdProcess];
-      });
-
-      this.logger.log(
-        `[createPending] Transação concluída com sucesso! Appointment: ${appointment.id}, Process: ${process.id}`,
-      );
-
-      return this.mapToResponseEntity(appointment, client, specialist, product);
-    } catch (error) {
-      this.logger.error(`[createPending] ERRO CRÍTICO na transação:`);
-      this.logger.error(
-        `[createPending] Tipo do erro: ${error?.constructor?.name}`,
-      );
-      this.logger.error(`[createPending] Mensagem: ${error?.message}`);
-      throw error;
-    }
+        return { appointment, process, product };
+      },
+    );
+    return Object.assign(
+      this.mapToResponseEntity(appointment, client, specialist, product),
+      {
+        process_id: process.id,
+        ...(schedulingMethod === AppointmentSchedulingMethod.EMAIL
+          ? { specialist_contact_email: specialist.email }
+          : {}),
+      },
+    );
   }
 
   /**
@@ -1667,6 +1459,11 @@ export class AppointmentsService {
 
     // Atualizar para SCHEDULED e atualizar Process para NEGOTIATION em transação
     const [updated, process] = await this.prisma.$transaction(async (tx) => {
+      // Ordem global dos advisory locks: agenda → produto → deduplicação.
+      // updateStatus já usa agenda → produto; manter a mesma ordem elimina o
+      // ciclo em que cada transação aguardava o lock retido pela outra.
+      await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
+
       await validateSpecialistProductAssociation(tx, {
         specialistId: appointment.specialist_id,
         productType: appointment.product_type,
@@ -1684,6 +1481,7 @@ export class AppointmentsService {
 
       if (isConsultancy) {
         await acquireActiveProcessDedupLock(tx, processScope);
+        await assertNoActiveProcess(tx, processScope, appointment.process?.id);
         const existingAppointment = await tx.appointment.findFirst({
           where: {
             id: { not: appointmentId },
@@ -1717,8 +1515,6 @@ export class AppointmentsService {
           appointment.process?.id,
         );
       }
-      await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
-
       const lockedAppointment = await tx.appointment.findUnique({
         where: { id: appointmentId },
         include: { client: true, specialist: true, process: true },
@@ -1946,12 +1742,12 @@ export class AppointmentsService {
       `[cancelPending] Cancelando agendamento ${appointmentId} por ${userId}`,
     );
 
-    const appointment = await this.prisma.appointment.findUnique({
+    const candidate = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
-      include: { client: true, specialist: true, process: true },
+      select: { id: true, client_id: true, specialist_id: true },
     });
 
-    if (!appointment) {
+    if (!candidate) {
       throw new NotFoundException({
         success: false,
         error: { code: 404, message: 'Agendamento não encontrado' },
@@ -1959,8 +1755,8 @@ export class AppointmentsService {
     }
 
     // Apenas cliente ou especialista podem cancelar
-    const isClient = appointment.client_id === userId;
-    const isSpecialist = appointment.specialist_id === userId;
+    const isClient = candidate.client_id === userId;
+    const isSpecialist = candidate.specialist_id === userId;
     if (!isClient && !isSpecialist) {
       throw new ForbiddenException({
         success: false,
@@ -1971,33 +1767,73 @@ export class AppointmentsService {
       });
     }
 
-    // Só pode cancelar PENDING
-    if (appointment.status !== StatusAgendamento.PENDING) {
-      throw new BadRequestException({
-        success: false,
-        error: {
-          code: 400,
-          message:
-            'Apenas agendamentos PENDING podem ser cancelados por esta rota',
-          details: { current_status: appointment.status },
-        },
+    // Serializar com confirmação/reagendamento e revalidar o estado sob lock.
+    const appointment = await this.prisma.$transaction(async (tx) => {
+      await acquireSpecialistScheduleLock(tx, candidate.specialist_id);
+      const lockedAppointment = await tx.appointment.findUnique({
+        where: { id: appointmentId },
+        include: { client: true, specialist: true, process: true },
       });
-    }
+      if (!lockedAppointment) {
+        throw new NotFoundException({
+          success: false,
+          error: { code: 404, message: 'Agendamento não encontrado' },
+        });
+      }
+      if (
+        lockedAppointment.client_id !== userId &&
+        lockedAppointment.specialist_id !== userId
+      ) {
+        throw new ForbiddenException({
+          success: false,
+          error: {
+            code: 403,
+            message: 'Sem permissão para cancelar este agendamento',
+          },
+        });
+      }
+      if (lockedAppointment.status !== StatusAgendamento.PENDING) {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message:
+              'Apenas agendamentos PENDING podem ser cancelados por esta rota',
+            details: { current_status: lockedAppointment.status },
+          },
+        });
+      }
 
-    // Deletar appointment e process em transação
-    await this.prisma.$transaction(async (tx) => {
       // Se existe process, deletar histórico e process primeiro
-      if (appointment.process) {
+      if (lockedAppointment.process) {
+        if (lockedAppointment.process.status !== ProcessStatus.SCHEDULING) {
+          throw new BadRequestException(
+            'Não é possível cancelar uma reunião cujo processo já avançou',
+          );
+        }
+        const processClaim = await tx.process.updateMany({
+          where: {
+            id: lockedAppointment.process.id,
+            status: ProcessStatus.SCHEDULING,
+            updated_at: lockedAppointment.process.updated_at,
+          },
+          data: { updated_at: new Date() },
+        });
+        if (processClaim.count !== 1) {
+          throw new ConflictException(
+            'O processo foi alterado enquanto o agendamento era cancelado',
+          );
+        }
         await tx.processStatusHistory.deleteMany({
-          where: { processId: appointment.process.id },
+          where: { processId: lockedAppointment.process.id },
         });
 
         await tx.process.delete({
-          where: { id: appointment.process.id },
+          where: { id: lockedAppointment.process.id },
         });
 
         this.logger.log(
-          `[cancelPending] Process ${appointment.process.id} deletado`,
+          `[cancelPending] Process ${lockedAppointment.process.id} deletado`,
         );
       }
 
@@ -2007,6 +1843,8 @@ export class AppointmentsService {
       });
 
       this.logger.log(`[cancelPending] Appointment ${appointmentId} deletado`);
+
+      return lockedAppointment;
     });
 
     // Fire-and-forget: notificar a outra parte sobre o cancelamento
@@ -2053,14 +1891,20 @@ export class AppointmentsService {
    * @param specialistId ID do especialista (UUID)
    * @param productType Tipo de produto (CAR, BOAT, AIRCRAFT)
    * @param productId UUID do produto
-   * @returns Appointment se encontrado, caso contrário null
+   * @returns Discriminante e snapshot mínimo do pedido pertencente ao cliente
    */
   async findExistingAppointment(
     clientId: string,
     specialistId: string,
     productType: ProductType,
     productId: string,
-  ): Promise<AppointmentResponseEntity | null> {
+  ): Promise<ExistingAppointmentCheck> {
+    const productField =
+      productType === ProductType.CAR
+        ? 'car_id'
+        : productType === ProductType.BOAT
+          ? 'boat_id'
+          : 'aircraft_id';
     const appointment = await this.prisma.appointment.findFirst({
       where: {
         client_id: clientId,
@@ -2070,24 +1914,48 @@ export class AppointmentsService {
         status: {
           in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
         },
+        process: {
+          is: {
+            client_id: clientId,
+            specialist_id: specialistId,
+            product_type: productType,
+            [productField]: productId,
+            status: { in: ACTIVE_PROCESS_STATUSES },
+          },
+        },
       },
-      include: { client: true, specialist: true },
+      select: {
+        id: true,
+        client_id: true,
+        status: true,
+        scheduling_method: true,
+        appointment_datetime: true,
+        process: { select: { id: true, client_id: true } },
+        specialist: { select: { email: true } },
+      },
     });
 
-    if (!appointment) {
-      return null;
+    if (
+      !appointment ||
+      appointment.client_id !== clientId ||
+      !appointment.process ||
+      appointment.process.client_id !== clientId
+    ) {
+      return { exists: false };
     }
-
-    const product = await this.getProductByType(
-      appointment.product_type,
-      appointment.product_id,
-    );
-    return this.mapToResponseEntity(
-      appointment,
-      appointment.client,
-      appointment.specialist,
-      product,
-    );
+    const specialistContactEmail = appointment.specialist?.email;
+    return {
+      exists: true,
+      appointment_id: appointment.id,
+      process_id: appointment.process.id,
+      appointment_status: appointment.status,
+      scheduling_method: appointment.scheduling_method,
+      appointment_datetime: appointment.appointment_datetime,
+      ...(appointment.scheduling_method === AppointmentSchedulingMethod.EMAIL &&
+      specialistContactEmail
+        ? { specialist_contact_email: specialistContactEmail }
+        : {}),
+    };
   }
 
   async registerCalendlyScheduled(
@@ -2099,6 +1967,22 @@ export class AppointmentsService {
     calendly_sync_status: CalendlySyncStatus;
     appointment_datetime: Date | null;
   }> {
+    const eventReference = parseCalendlyResourceUri(dto.event_uri, 'event');
+    const inviteeReference = parseCalendlyResourceUri(
+      dto.invitee_uri,
+      'invitee',
+    );
+    if (!eventReference || !inviteeReference) {
+      throw new BadRequestException('URIs do Calendly inválidas');
+    }
+    if (eventReference.eventId !== inviteeReference.eventId) {
+      throw new BadRequestException(
+        'URIs do Calendly pertencem a eventos diferentes',
+      );
+    }
+    const eventUri = eventReference.canonicalUri;
+    const inviteeUri = inviteeReference.canonicalUri;
+
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
     });
@@ -2153,10 +2037,7 @@ export class AppointmentsService {
       throw this.buildRescheduleAlreadyUsedError(appointmentId);
     }
 
-    if (
-      appointment.calendly_event_uri &&
-      appointment.calendly_event_uri === dto.event_uri
-    ) {
+    if (appointment.calendly_sync_status === CalendlySyncStatus.FAILED) {
       return {
         appointment_id: appointment.id,
         calendly_sync_status: appointment.calendly_sync_status,
@@ -2164,33 +2045,67 @@ export class AppointmentsService {
       };
     }
 
-    let scheduledStartTime = dto.scheduled_start_time
-      ? parseDate(dto.scheduled_start_time)
-      : null;
-
-    if (dto.scheduled_start_time && !scheduledStartTime) {
-      throw new BadRequestException({
-        success: false,
-        error: {
-          code: 400,
-          message: 'scheduled_start_time inválido',
-        },
-      });
-    }
-
-    if (!scheduledStartTime) {
-      try {
-        scheduledStartTime =
-          await this.calendlyIntegrationService.resolveScheduledStartTime(
-            appointment.specialist_id,
-            dto.event_uri,
-            dto.invitee_uri,
-          );
-      } catch (error: any) {
-        this.logger.warn(
-          `[registerCalendlyScheduled] Falha ao buscar horário no Calendly API: ${error?.message}`,
+    if (
+      appointment.calendly_event_uri &&
+      parseCalendlyResourceUri(appointment.calendly_event_uri, 'event')
+        ?.canonicalUri === eventUri
+    ) {
+      const storedInviteeReference = appointment.calendly_invitee_uri
+        ? parseCalendlyResourceUri(appointment.calendly_invitee_uri, 'invitee')
+        : null;
+      if (
+        appointment.calendly_invitee_uri &&
+        storedInviteeReference?.canonicalUri !== inviteeUri
+      ) {
+        throw new ConflictException(
+          'O evento do Calendly já está associado a outro convidado',
         );
       }
+      if (storedInviteeReference?.canonicalUri === inviteeUri) {
+        let canonicalized = true;
+        if (
+          appointment.calendly_event_uri !== eventUri ||
+          appointment.calendly_invitee_uri !== inviteeUri
+        ) {
+          const repair = await this.prisma.appointment.updateMany({
+            where: {
+              id: appointment.id,
+              calendly_event_uri: appointment.calendly_event_uri,
+              calendly_invitee_uri: appointment.calendly_invitee_uri,
+            },
+            data: {
+              calendly_event_uri: eventUri,
+              calendly_invitee_uri: inviteeUri,
+            },
+          });
+          canonicalized = repair.count === 1;
+        }
+        if (canonicalized && this.hasTrustedCalendlySchedule(appointment)) {
+          return {
+            appointment_id: appointment.id,
+            calendly_sync_status: appointment.calendly_sync_status,
+            appointment_datetime: appointment.appointment_datetime,
+          };
+        }
+      }
+    }
+
+    let scheduledStartTime: Date | null = null;
+    try {
+      scheduledStartTime =
+        await this.calendlyIntegrationService.resolveScheduledStartTime(
+          appointment.specialist_id,
+          eventUri,
+          inviteeUri,
+          appointment.client_id,
+        );
+    } catch (error: any) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      this.logger.warn(
+        `[registerCalendlyScheduled] Falha ao buscar horário no Calendly API: ${error?.message}`,
+      );
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -2239,12 +2154,34 @@ export class AppointmentsService {
       if (lockedAppointment.specialist_rescheduled_at) {
         throw this.buildRescheduleAlreadyUsedError(appointmentId);
       }
-      if (lockedAppointment.calendly_event_uri === dto.event_uri) {
+      if (
+        lockedAppointment.calendly_sync_status === CalendlySyncStatus.FAILED
+      ) {
+        return lockedAppointment;
+      }
+      if (
+        lockedAppointment.calendly_event_uri &&
+        parseCalendlyResourceUri(lockedAppointment.calendly_event_uri, 'event')
+          ?.canonicalUri === eventUri
+      ) {
+        if (
+          lockedAppointment.calendly_invitee_uri &&
+          parseCalendlyResourceUri(
+            lockedAppointment.calendly_invitee_uri,
+            'invitee',
+          )?.canonicalUri !== inviteeUri
+        ) {
+          throw new ConflictException(
+            'O evento do Calendly já está associado a outro convidado',
+          );
+        }
+      }
+
+      if (!scheduledStartTime) {
         return lockedAppointment;
       }
 
-      const targetDateTime =
-        scheduledStartTime || lockedAppointment.appointment_datetime;
+      const targetDateTime = scheduledStartTime;
       if (targetDateTime && !isFutureDate(targetDateTime)) {
         throw new BadRequestException(
           'O horário sincronizado do Calendly deve ser futuro',
@@ -2262,8 +2199,8 @@ export class AppointmentsService {
       return tx.appointment.update({
         where: { id: lockedAppointment.id },
         data: {
-          calendly_event_uri: dto.event_uri,
-          calendly_invitee_uri: dto.invitee_uri,
+          calendly_event_uri: eventUri,
+          calendly_invitee_uri: inviteeUri,
           calendly_scheduled_at: dto.client_observed_at
             ? new Date(dto.client_observed_at)
             : new Date(),
@@ -2279,6 +2216,18 @@ export class AppointmentsService {
       calendly_sync_status: updated.calendly_sync_status,
       appointment_datetime: updated.appointment_datetime,
     };
+  }
+
+  private hasTrustedCalendlySchedule(appointment: {
+    status: StatusAgendamento;
+    calendly_sync_status?: CalendlySyncStatus | null;
+    appointment_datetime?: Date | null;
+  }): boolean {
+    return (
+      appointment.status === StatusAgendamento.SCHEDULED ||
+      (appointment.calendly_sync_status === CalendlySyncStatus.SYNCED &&
+        Boolean(appointment.appointment_datetime))
+    );
   }
 
   async getCalendlySyncStatus(

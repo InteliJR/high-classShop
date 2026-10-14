@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { PrismaClient, ProductCurrency, ProductType, UserRole } from '@prisma/client';
+import {
+  AppointmentSchedulingMethod,
+  PrismaClient,
+  ProductCurrency,
+  ProductType,
+  UserRole,
+} from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
 import { ConflictException } from '@nestjs/common';
 import { CarsService } from '../cars/cars.service';
@@ -85,6 +91,93 @@ function signalProductLockAttempt(client: PrismaClient, attempted: Deferred) {
   });
 }
 
+async function deleteFixtureProcesses(
+  client: PrismaClient,
+  clientId: string,
+  specialistId: string,
+): Promise<void> {
+  const processes = await client.process.findMany({
+    where: { client_id: clientId, specialist_id: specialistId },
+    select: { id: true },
+  });
+  const processIds = processes.map(({ id }) => id);
+  await client.processStatusHistory.deleteMany({
+    where: { processId: { in: processIds } },
+  });
+  await client.process.deleteMany({
+    where: { id: { in: processIds } },
+  });
+}
+
+describe('product association fixture cleanup', () => {
+  it('removes restricted history before its own processes and preserves other fixtures', async () => {
+    const clientId = 'fixture-client';
+    const specialistId = 'fixture-specialist';
+    let processes = [
+      { id: 'own-process', client_id: clientId, specialist_id: specialistId },
+      {
+        id: 'other-client-process',
+        client_id: 'other-client',
+        specialist_id: specialistId,
+      },
+      {
+        id: 'other-specialist-process',
+        client_id: clientId,
+        specialist_id: 'other-specialist',
+      },
+    ];
+    let history = processes.map(({ id }) => ({ processId: id }));
+    const deletionOrder: string[] = [];
+    const client = {
+      process: {
+        findMany: async ({ where }: any) =>
+          processes
+            .filter(
+              (row) =>
+                row.client_id === where.client_id &&
+                row.specialist_id === where.specialist_id,
+            )
+            .map(({ id }) => ({ id })),
+        deleteMany: async ({ where }: any) => {
+          const targets = processes
+            .filter((row) =>
+              where.id
+                ? where.id.in.includes(row.id)
+                : row.client_id === where.client_id &&
+                  row.specialist_id === where.specialist_id,
+            )
+            .map(({ id }) => id);
+          if (history.some(({ processId }) => targets.includes(processId))) {
+            throw new Error('ProcessStatusHistory FK RESTRICT');
+          }
+          processes = processes.filter(({ id }) => !targets.includes(id));
+          deletionOrder.push('process');
+        },
+      },
+      processStatusHistory: {
+        deleteMany: async ({ where }: any) => {
+          history = history.filter(
+            ({ processId }) => !where.processId.in.includes(processId),
+          );
+          deletionOrder.push('history');
+        },
+      },
+    } as unknown as PrismaClient;
+
+    await deleteFixtureProcesses(client, clientId, specialistId);
+
+    expect(deletionOrder).toEqual(['history', 'process']);
+    expect(processes.map(({ id }) => id)).toEqual([
+      'other-client-process',
+      'other-specialist-process',
+    ]);
+    expect(history.map(({ processId }) => processId)).toEqual([
+      'other-client-process',
+      'other-specialist-process',
+    ]);
+  });
+});
+
 const databaseUrl = process.env.POSTGRES_CONCURRENCY_TEST_URL;
 const describeWithPostgres = databaseUrl ? describe : describe.skip;
 
@@ -93,27 +186,9 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
   const clientId = randomUUID();
   const specialistId = randomUUID();
   const carId = randomUUID();
-  const updater = new PrismaClient({
-    datasources: {
-      db: {
-        url: withApplicationName(databaseUrl!, `product_mutation_${suffix}`),
-      },
-    },
-  });
-  const creator = new PrismaClient({
-    datasources: {
-      db: {
-        url: withApplicationName(databaseUrl!, `product_consumer_${suffix}`),
-      },
-    },
-  });
-  const competitor = new PrismaClient({
-    datasources: {
-      db: {
-        url: withApplicationName(databaseUrl!, `product_competitor_${suffix}`),
-      },
-    },
-  });
+  let updater: PrismaClient;
+  let creator: PrismaClient;
+  let competitor: PrismaClient;
 
   beforeEach(async () => {
     const processes = await updater.process.findMany({
@@ -140,6 +215,27 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
   });
 
   beforeAll(async () => {
+    updater = new PrismaClient({
+      datasources: {
+        db: {
+          url: withApplicationName(databaseUrl!, `product_mutation_${suffix}`),
+        },
+      },
+    });
+    creator = new PrismaClient({
+      datasources: {
+        db: {
+          url: withApplicationName(databaseUrl!, `product_consumer_${suffix}`),
+        },
+      },
+    });
+    competitor = new PrismaClient({
+      datasources: {
+        db: {
+          url: withApplicationName(databaseUrl!, `product_competitor_${suffix}`),
+        },
+      },
+    });
     await updater.user.createMany({
       data: [
         {
@@ -179,17 +275,24 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
   });
 
   afterAll(async () => {
-    await updater.process.deleteMany({
-      where: { client_id: clientId, specialist_id: specialistId },
-    });
-    await updater.appointment.deleteMany({
-      where: { client_id: clientId, specialist_id: specialistId },
-    });
-    await updater.car.deleteMany({ where: { id: carId } });
-    await updater.user.deleteMany({
-      where: { id: { in: [clientId, specialistId] } },
-    });
-    await Promise.all([updater.$disconnect(), creator.$disconnect(), competitor.$disconnect()]);
+    try {
+      if (updater) {
+        await deleteFixtureProcesses(updater, clientId, specialistId);
+        await updater.appointment.deleteMany({
+          where: { client_id: clientId, specialist_id: specialistId },
+        });
+        await updater.car.deleteMany({ where: { id: carId } });
+        await updater.user.deleteMany({
+          where: { id: { in: [clientId, specialistId] } },
+        });
+      }
+    } finally {
+      await Promise.all([
+        updater?.$disconnect(),
+        creator?.$disconnect(),
+        competitor?.$disconnect(),
+      ]);
+    }
   });
 
   it('serializes deactivation against creation and rejects the now-inactive product', async () => {
@@ -208,14 +311,15 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
 
     const deactivate = cars.remove(carId);
     await mutationReached.promise;
-    const create = appointments.create(
+    const create = appointments.createPending(
       {
         client_id: clientId,
         specialist_id: specialistId,
         product_type: ProductType.CAR,
         product_id: carId,
         appointment_datetime: '2099-01-01T10:00:00.000Z',
-      } as any,
+        scheduling_method: AppointmentSchedulingMethod.EMAIL,
+      },
       clientId,
       UserRole.CUSTOMER,
     );
@@ -225,6 +329,7 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
     await expect(deactivate).resolves.toEqual({ ok: true });
     await expect(create).rejects.toBeInstanceOf(BadRequestException);
     await expect(updater.appointment.count({ where: { product_id: carId } })).resolves.toBe(0);
+    await expect(updater.process.count({ where: { car_id: carId } })).resolves.toBe(0);
   }, 15_000);
 
   it('serializes late assignment against creation on the target product identity', async () => {
@@ -273,14 +378,15 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
         sendAppointmentCreatedEmail: jest.fn().mockResolvedValue(undefined),
       } as any,
       {} as any,
-    ).create(
+    ).createPending(
       {
         client_id: clientId,
         specialist_id: specialistId,
         product_type: ProductType.CAR,
         product_id: carId,
         appointment_datetime: '2099-01-01T10:00:00.000Z',
-      } as any,
+        scheduling_method: AppointmentSchedulingMethod.EMAIL,
+      },
       clientId,
       UserRole.CUSTOMER,
     );
@@ -293,6 +399,14 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
     expect(outcomes.find(({ status }) => status === 'rejected')).toMatchObject({
       reason: expect.any(ConflictException),
     });
+    if (outcomes[1].status === 'fulfilled') {
+      expect(outcomes[1].value).toMatchObject({
+        status: 'PENDING',
+        scheduling_method: AppointmentSchedulingMethod.EMAIL,
+        appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+        process_id: expect.any(String),
+      });
+    }
     await expect(
       updater.process.count({
         where: {

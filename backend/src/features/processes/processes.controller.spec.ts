@@ -65,7 +65,7 @@ describe('ProcessesController.confirmAppointment', () => {
     await (controller.confirmAppointment as any)(
       processId,
       { appointment_datetime: appointmentDatetime },
-      { user: { id: specialistId } },
+      { user: { id: specialistId, role: UserRole.SPECIALIST } },
     );
 
     expect(service.confirmAppointment).toHaveBeenCalledWith(
@@ -73,5 +73,36 @@ describe('ProcessesController.confirmAppointment', () => {
       specialistId,
       appointmentDatetime,
     );
+  });
+
+  it.each([
+    UserRole.ADMIN,
+    UserRole.CUSTOMER,
+    UserRole.OFFICE,
+    UserRole.CONSULTANT,
+    undefined,
+  ])(
+    'rejects role %s before calling the confirmation service',
+    async (role) => {
+      const service = { confirmAppointment: jest.fn() } as any;
+      const controller = new ProcessesController(service);
+      await expect(
+        controller.confirmAppointment(
+          'process-1',
+          {},
+          { user: { id: 'actor', role } },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(service.confirmAppointment).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a missing actor before calling the confirmation service', async () => {
+    const service = { confirmAppointment: jest.fn() } as any;
+    const controller = new ProcessesController(service);
+    await expect(
+      controller.confirmAppointment('process-1', {}, {}),
+    ).rejects.toThrow(ForbiddenException);
+    expect(service.confirmAppointment).not.toHaveBeenCalled();
   });
 });

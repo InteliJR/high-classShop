@@ -11,10 +11,9 @@ import {
   FiltersBoatMeta,
   RangeBoatFilters,
 } from 'src/shared/dto/filters.dto';
-import { Boat } from './entity/boat.entity';
-import { UserEntity } from 'src/auth/entities/user.entity';
 import { BOAT_COLUMNS } from 'src/shared/constants/product-columns';
 import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
+import { publicBoatSelect } from 'src/shared/selects/public-catalog.select';
 
 @Injectable()
 export class BoatsService {
@@ -171,16 +170,13 @@ export class BoatsService {
         skip: skip,
         take: take,
         where: where,
-        include: {
-          images: true,
-          specialist: true,
-        },
+        select: publicBoatSelect,
       }),
       this.prismaService.boat.count({ where }),
     ]);
 
     // Converter as keys do S3 em URLs assinadas para cada barco
-    const boatEntities: Boat[] = await Promise.all(
+    const boatEntities = await Promise.all(
       boats.map(async (boat) => {
         let imagesWithUrls: any[] = [];
         if (boat.images && boat.images.length > 0) {
@@ -197,9 +193,7 @@ export class BoatsService {
           descricao: boat.descricao_completa,
           valor: boat.valor.toNumber(),
           images: imagesWithUrls,
-          specialist: boat.specialist
-            ? UserEntity.fromPrisma(boat.specialist)
-            : null,
+          specialist: boat.specialist,
         };
       }),
     );
@@ -215,7 +209,7 @@ export class BoatsService {
     this.logger.log(`[findOne] Buscando barco - ID: ${id}`);
     const boat = await this.prismaService.boat.findUnique({
       where: { id },
-      include: { images: true },
+      select: publicBoatSelect,
     });
     if (!boat) {
       this.logger.warn(`[findOne] Barco não encontrado - ID: ${id}`);

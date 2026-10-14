@@ -1,0 +1,606 @@
+// @vitest-environment jsdom
+
+import { act, cleanup, renderHook } from "@testing-library/react";
+import { StrictMode, type ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  useCalendlyEventListener,
+  type EventScheduledEvent,
+} from "react-calendly";
+import {
+  cancelPendingAppointment,
+  getCalendlySyncStatus,
+  registerCalendlyScheduledEvent,
+} from "../services/appointments.service";
+import { useCalendlyScheduling } from "./useCalendlyScheduling";
+
+const { navigate } = vi.hoisted(() => ({ navigate: vi.fn() }));
+
+vi.mock("react-router-dom", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router-dom")>()),
+  useNavigate: () => navigate,
+}));
+vi.mock("react-calendly", () => ({ useCalendlyEventListener: vi.fn() }));
+vi.mock("../services/appointments.service", () => ({
+  cancelPendingAppointment: vi.fn(),
+  getCalendlySyncStatus: vi.fn(),
+  registerCalendlyScheduledEvent: vi.fn(),
+}));
+
+const payload = {
+  event_uri: "https://api.calendly.com/scheduled_events/event-1",
+  invitee_uri:
+    "https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1",
+};
+const pendingStatus = {
+  appointment_id: "appointment-1",
+  status: "PENDING" as const,
+  calendly_sync_status: "PENDING" as const,
+  appointment_datetime: null,
+  calendly_last_sync_at: null,
+};
+const syncedStatus = {
+  ...pendingStatus,
+  status: "SCHEDULED" as const,
+  calendly_sync_status: "SYNCED" as const,
+  appointment_datetime: "2099-01-01T10:00:00.000Z",
+};
+
+function scheduledEvent(
+  options: {
+    origin?: string;
+    source?: MessageEventSource | null;
+    eventUri?: string;
+    inviteeUri?: string;
+  } = {},
+): EventScheduledEvent {
+  const frame = document.querySelector<HTMLIFrameElement>(
+    ".calendly-popup-content iframe",
+  );
+  return new MessageEvent("message", {
+    origin: options.origin ?? "https://calendly.com",
+    source: options.source ?? frame?.contentWindow,
+    data: {
+      event: "calendly.event_scheduled",
+      payload: {
+        event: { uri: options.eventUri ?? payload.event_uri },
+        invitee: { uri: options.inviteeUri ?? payload.invitee_uri },
+      },
+    },
+  }) as EventScheduledEvent;
+}
+
+async function flushPromises() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+describe("useCalendlyScheduling active registration retry", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    const popup = document.createElement("div");
+    popup.className = "calendly-popup-content";
+    popup.appendChild(document.createElement("iframe"));
+    document.body.appendChild(popup);
+    vi.mocked(cancelPendingAppointment).mockResolvedValue({} as never);
+  });
+
+  afterEach(() => {
+    cleanup();
+    document.body.innerHTML = "";
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  it("reenvia as mesmas URIs após PENDING e conclui quando o POST posterior sincroniza", async () => {
+    vi.mocked(registerCalendlyScheduledEvent)
+      .mockResolvedValueOnce({
+        appointment_id: "appointment-1",
+        calendly_sync_status: "PENDING",
+        appointment_datetime: null,
+      })
+      .mockResolvedValueOnce({
+        appointment_id: "appointment-1",
+        calendly_sync_status: "SYNCED",
+        appointment_datetime: syncedStatus.appointment_datetime,
+      });
+    vi.mocked(getCalendlySyncStatus)
+      .mockResolvedValueOnce(pendingStatus)
+      .mockResolvedValueOnce(syncedStatus);
+    const onSynced = vi.fn();
+    const { result } = renderHook(() =>
+      useCalendlyScheduling({
+        successRedirectMessage: "ok",
+        onSynced,
+      }),
+    );
+    act(() => result.current.openPopup("appointment-1", "https://calendly.com/a"));
+    const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
+      .onEventScheduled!;
+    act(() => {
+      void listener(scheduledEvent());
+    });
+    await flushPromises();
+    expect(registerCalendlyScheduledEvent).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+      await Promise.resolve();
+    });
+
+    expect(registerCalendlyScheduledEvent).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(registerCalendlyScheduledEvent).mock.calls[0][1]).toEqual(
+      vi.mocked(registerCalendlyScheduledEvent).mock.calls[1][1],
+    );
+    expect(onSynced).toHaveBeenCalledWith(syncedStatus);
+  });
+
+  it("interrompe backoff e chamadas HTTP ao desmontar", async () => {
+    vi.mocked(registerCalendlyScheduledEvent).mockResolvedValue({
+      appointment_id: "appointment-1",
+      calendly_sync_status: "PENDING",
+      appointment_datetime: null,
+    });
+    vi.mocked(getCalendlySyncStatus).mockResolvedValue(pendingStatus);
+    const { result, unmount } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() => result.current.openPopup("appointment-1", "https://calendly.com/a"));
+    const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
+      .onEventScheduled!;
+    act(() => {
+      void listener(scheduledEvent());
+    });
+    await flushPromises();
+    expect(registerCalendlyScheduledEvent).toHaveBeenCalledTimes(1);
+    expect(getCalendlySyncStatus).toHaveBeenCalledTimes(1);
+
+    unmount();
+    await vi.runAllTimersAsync();
+
+    expect(registerCalendlyScheduledEvent).toHaveBeenCalledTimes(1);
+    expect(getCalendlySyncStatus).toHaveBeenCalledTimes(1);
+    expect(cancelPendingAppointment).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("cancela exatamente uma vez o PENDING ao desmontar antes do evento", async () => {
+    const { result, unmount } = renderHook(
+      () => useCalendlyScheduling({ successRedirectMessage: "ok" }),
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <StrictMode>{children}</StrictMode>
+        ),
+      },
+    );
+
+    act(() =>
+      result.current.openPopup("appointment-abandoned", "https://calendly.com/a"),
+    );
+    unmount();
+    expect(cancelPendingAppointment).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(750);
+    });
+    await flushPromises();
+
+    expect(cancelPendingAppointment).toHaveBeenCalledTimes(1);
+    expect(cancelPendingAppointment).toHaveBeenCalledWith("appointment-abandoned");
+  });
+
+  it("não cancela quando o fechamento disputa com um evento confiável", async () => {
+    vi.mocked(registerCalendlyScheduledEvent).mockResolvedValue({
+      appointment_id: "appointment-race",
+      calendly_sync_status: "SYNCED",
+      appointment_datetime: syncedStatus.appointment_datetime,
+    });
+    vi.mocked(getCalendlySyncStatus).mockResolvedValue({
+      ...syncedStatus,
+      appointment_id: "appointment-race",
+    });
+    const { result } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() =>
+      result.current.openPopup("appointment-race", "https://calendly.com/a"),
+    );
+    const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
+      .onEventScheduled!;
+
+    await act(async () => {
+      const sync = listener(scheduledEvent());
+      await result.current.closePopup();
+      await sync;
+    });
+
+    expect(cancelPendingAppointment).not.toHaveBeenCalled();
+  });
+
+  it("aceita evento confiável que chega depois do close e antes do cancelamento", async () => {
+    vi.mocked(registerCalendlyScheduledEvent).mockResolvedValue({
+      appointment_id: "appointment-close-race",
+      calendly_sync_status: "SYNCED",
+      appointment_datetime: syncedStatus.appointment_datetime,
+    });
+    vi.mocked(getCalendlySyncStatus).mockResolvedValue({
+      ...syncedStatus,
+      appointment_id: "appointment-close-race",
+    });
+    const { result } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() =>
+      result.current.openPopup(
+        "appointment-close-race",
+        "https://calendly.com/a",
+      ),
+    );
+    const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
+      .onEventScheduled!;
+
+    let close!: Promise<void>;
+    act(() => {
+      close = result.current.closePopup();
+    });
+    expect(cancelPendingAppointment).not.toHaveBeenCalled();
+    await act(async () => {
+      await listener(scheduledEvent());
+      await vi.runAllTimersAsync();
+      await close;
+    });
+
+    expect(registerCalendlyScheduledEvent).toHaveBeenCalledOnce();
+    expect(cancelPendingAppointment).not.toHaveBeenCalled();
+  });
+
+  it("mantém listener seguro na grace após unmount e deixa o webhook concluir", async () => {
+    const { result, unmount } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() =>
+      result.current.openPopup(
+        "appointment-unmount-race",
+        "https://calendly.com/a",
+      ),
+    );
+
+    unmount();
+    act(() => {
+      window.dispatchEvent(scheduledEvent());
+    });
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(cancelPendingAppointment).not.toHaveBeenCalled();
+    expect(registerCalendlyScheduledEvent).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("não deixa origem ou source incorretos suprimirem cancelamento na grace", async () => {
+    const foreignFrame = document.createElement("iframe");
+    document.body.appendChild(foreignFrame);
+    const { result, unmount } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() =>
+      result.current.openPopup(
+        "appointment-forged-close",
+        "https://calendly.com/a",
+      ),
+    );
+
+    unmount();
+    act(() => {
+      window.dispatchEvent(
+        scheduledEvent({
+          source: foreignFrame.contentWindow,
+          origin: "https://calendly.com",
+        }),
+      );
+      window.dispatchEvent(
+        scheduledEvent({ origin: "https://calendly.com.evil.test" }),
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(750);
+    });
+
+    expect(cancelPendingAppointment).toHaveBeenCalledTimes(1);
+    expect(cancelPendingAppointment).toHaveBeenCalledWith(
+      "appointment-forged-close",
+    );
+  });
+
+  it("não cancela no unmount depois que um evento confiável foi recebido", async () => {
+    let resolveRegistration!: (value: {
+      appointment_id: string;
+      calendly_sync_status: "SYNCED";
+      appointment_datetime: string;
+    }) => void;
+    vi.mocked(registerCalendlyScheduledEvent).mockReturnValue(
+      new Promise((resolve) => {
+        resolveRegistration = resolve;
+      }),
+    );
+    const { result, unmount } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() =>
+      result.current.openPopup("appointment-confirmed", "https://calendly.com/a"),
+    );
+    const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
+      .onEventScheduled!;
+
+    act(() => {
+      void listener(scheduledEvent());
+    });
+    unmount();
+    await flushPromises();
+
+    expect(cancelPendingAppointment).not.toHaveBeenCalled();
+    resolveRegistration({
+      appointment_id: "appointment-confirmed",
+      calendly_sync_status: "SYNCED",
+      appointment_datetime: syncedStatus.appointment_datetime,
+    });
+    await flushPromises();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("deduplica fechamento e cleanup mesmo quando o cancelamento falha", async () => {
+    vi.mocked(cancelPendingAppointment).mockRejectedValue(new Error("offline"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { result, unmount } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() =>
+      result.current.openPopup("appointment-once", "https://calendly.com/a"),
+    );
+
+    let close!: Promise<void>;
+    act(() => {
+      close = result.current.closePopup();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(750);
+      await close;
+    });
+    unmount();
+    await flushPromises();
+
+    expect(cancelPendingAppointment).toHaveBeenCalledTimes(1);
+    expect(consoleError).toHaveBeenCalledTimes(1);
+  });
+
+  it("encerra após oito tentativas sem criar loop de retry", async () => {
+    vi.mocked(registerCalendlyScheduledEvent).mockResolvedValue({
+      appointment_id: "appointment-1",
+      calendly_sync_status: "PENDING",
+      appointment_datetime: null,
+    });
+    vi.mocked(getCalendlySyncStatus).mockResolvedValue(pendingStatus);
+    const { result } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() => result.current.openPopup("appointment-1", "https://calendly.com/a"));
+    const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
+      .onEventScheduled!;
+    let synchronization!: Promise<void>;
+    act(() => {
+      synchronization = Promise.resolve(listener(scheduledEvent()));
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+      await synchronization;
+    });
+
+    expect(registerCalendlyScheduledEvent).toHaveBeenCalledTimes(8);
+    expect(getCalendlySyncStatus).toHaveBeenCalledTimes(8);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(registerCalendlyScheduledEvent).toHaveBeenCalledTimes(8);
+    expect(result.current.syncState).toBe("pending");
+    expect(result.current.syncMessage).toContain("finalizando a sincronização");
+  });
+
+  it.each([
+    {
+      label: "FAILED",
+      terminalStatus: {
+        ...pendingStatus,
+        calendly_sync_status: "FAILED" as const,
+      },
+      expectedMessage: "confirmar",
+    },
+    {
+      label: "CANCELLED",
+      terminalStatus: {
+        ...syncedStatus,
+        status: "CANCELLED" as const,
+      },
+      expectedMessage: "cancelado",
+    },
+  ])(
+    "não considera $label com datetime/status incoerente como sincronização concluída",
+    async ({ terminalStatus, expectedMessage }) => {
+      vi.mocked(registerCalendlyScheduledEvent).mockResolvedValue({
+        appointment_id: "appointment-1",
+        calendly_sync_status: "PENDING",
+        appointment_datetime: null,
+      });
+      vi.mocked(getCalendlySyncStatus).mockResolvedValue(terminalStatus);
+      const onSynced = vi.fn();
+      const { result } = renderHook(() =>
+        useCalendlyScheduling({ successRedirectMessage: "ok", onSynced }),
+      );
+      act(() =>
+        result.current.openPopup(
+          "appointment-1",
+          "https://calendly.com/a",
+        ),
+      );
+      const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
+        .onEventScheduled!;
+
+      await act(async () => {
+        await listener(scheduledEvent());
+      });
+
+      expect(registerCalendlyScheduledEvent).toHaveBeenCalledTimes(1);
+      expect(getCalendlySyncStatus).toHaveBeenCalledTimes(1);
+      expect(onSynced).not.toHaveBeenCalled();
+      expect(navigate).not.toHaveBeenCalled();
+      expect(result.current.syncState).toBe("error");
+      expect(result.current.syncMessage).toContain(expectedMessage);
+    },
+  );
+
+  it("aceita redirect oficial de www.calendly.com para calendly.com no mesmo iframe", async () => {
+    vi.mocked(registerCalendlyScheduledEvent).mockResolvedValue({
+      appointment_id: "appointment-1",
+      calendly_sync_status: "SYNCED",
+      appointment_datetime: syncedStatus.appointment_datetime,
+    });
+    vi.mocked(getCalendlySyncStatus).mockResolvedValue(syncedStatus);
+    const onSynced = vi.fn();
+    const { result } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok", onSynced }),
+    );
+    act(() =>
+      result.current.openPopup("appointment-1", "https://www.calendly.com/a"),
+    );
+    const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
+      .onEventScheduled!;
+
+    await act(async () => {
+      await listener(scheduledEvent({ origin: "https://calendly.com" }));
+    });
+
+    expect(registerCalendlyScheduledEvent).toHaveBeenCalledTimes(1);
+    expect(onSynced).toHaveBeenCalledWith(syncedStatus);
+    expect(result.current.syncState).toBe("done");
+  });
+
+  it("ignora evento tardio enviado pelo iframe de uma sessão anterior A após abrir B", async () => {
+    const { result } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() => result.current.openPopup("appointment-a", "https://calendly.com/a"));
+    const oldFrame = document.querySelector<HTMLIFrameElement>(
+      ".calendly-popup-content iframe",
+    )!;
+    const oldSource = oldFrame.contentWindow;
+    const replacement = document.createElement("iframe");
+    oldFrame.replaceWith(replacement);
+
+    act(() => result.current.openPopup("appointment-b", "https://calendly.com/b"));
+    const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
+      .onEventScheduled!;
+    const staleEvent = scheduledEvent({
+      source: oldSource,
+      eventUri: "https://api.calendly.com/scheduled_events/event-a",
+      inviteeUri:
+        "https://api.calendly.com/scheduled_events/event-a/invitees/invitee-a",
+    });
+
+    await act(async () => {
+      await listener(staleEvent);
+    });
+
+    expect(registerCalendlyScheduledEvent).not.toHaveBeenCalled();
+    expect(getCalendlySyncStatus).not.toHaveBeenCalled();
+  });
+
+  it("não deixa B adotar o iframe de A antes de capturar seu próprio source", async () => {
+    const { result } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() => result.current.openPopup("appointment-a", "https://calendly.com/a"));
+    const listenerBeforeOpeningB = vi.mocked(useCalendlyEventListener).mock.calls.at(
+      -1,
+    )![0].onEventScheduled!;
+    const sourceA = document.querySelector<HTMLIFrameElement>(
+      ".calendly-popup-content iframe",
+    )!.contentWindow;
+
+    act(() => {
+      result.current.openPopup("appointment-b", "https://calendly.com/b");
+      void listenerBeforeOpeningB(
+        scheduledEvent({
+          source: sourceA,
+          eventUri: "https://api.calendly.com/scheduled_events/event-a",
+          inviteeUri:
+            "https://api.calendly.com/scheduled_events/event-a/invitees/invitee-a",
+        }),
+      );
+    });
+    await flushPromises();
+
+    expect(registerCalendlyScheduledEvent).not.toHaveBeenCalled();
+    expect(getCalendlySyncStatus).not.toHaveBeenCalled();
+  });
+
+  it("captura o novo iframe de B quando a URL do Calendly não muda", async () => {
+    vi.mocked(registerCalendlyScheduledEvent).mockResolvedValue({
+      appointment_id: "appointment-b",
+      calendly_sync_status: "SYNCED",
+      appointment_datetime: syncedStatus.appointment_datetime,
+    });
+    vi.mocked(getCalendlySyncStatus).mockResolvedValue({
+      ...syncedStatus,
+      appointment_id: "appointment-b",
+    });
+    const { result } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() =>
+      result.current.openPopup("appointment-a", "https://calendly.com/same"),
+    );
+    const oldFrame = document.querySelector<HTMLIFrameElement>(
+      ".calendly-popup-content iframe",
+    )!;
+    const replacement = document.createElement("iframe");
+    oldFrame.replaceWith(replacement);
+
+    act(() =>
+      result.current.openPopup("appointment-b", "https://calendly.com/same"),
+    );
+    const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
+      .onEventScheduled!;
+    await act(async () => {
+      await listener(scheduledEvent({ source: replacement.contentWindow }));
+    });
+
+    expect(registerCalendlyScheduledEvent).toHaveBeenCalledOnce();
+    expect(registerCalendlyScheduledEvent).toHaveBeenCalledWith(
+      "appointment-b",
+      expect.objectContaining({ event_uri: payload.event_uri }),
+    );
+  });
+
+  it.each([
+    "https://evilcalendly.com",
+    "https://calendly.com.evil.test",
+    "http://calendly.com",
+    "https://calendly.com:444",
+  ])("ignora mensagem de origem Calendly maliciosa ou insegura: %s", async (origin) => {
+    const { result } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() => result.current.openPopup("appointment-1", "https://calendly.com/a"));
+    const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
+      .onEventScheduled!;
+    const forgedEvent = scheduledEvent({ origin });
+
+    await act(async () => {
+      await listener(forgedEvent);
+    });
+
+    expect(registerCalendlyScheduledEvent).not.toHaveBeenCalled();
+    expect(getCalendlySyncStatus).not.toHaveBeenCalled();
+  });
+});
