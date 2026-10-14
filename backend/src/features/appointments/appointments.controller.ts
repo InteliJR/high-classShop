@@ -11,10 +11,12 @@ import {
   UseGuards,
   Request,
   HttpStatus,
+  ForbiddenException,
 } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
 import {
   CreatePendingAppointmentDto,
+  CheckExistingAppointmentDto,
   CreatePlatformAppointmentDto,
   CalendlyScheduledDto,
   GetAppointmentsQueryDto,
@@ -25,6 +27,7 @@ import { AuthGuard } from 'src/auth/auth.guard';
 import { AppointmentResponseEntity } from './entities/appointment.response';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { ConfirmProcessAppointmentDto } from 'src/features/processes/dto/confirm-process-appointment.dto';
+import { UserRole } from '@prisma/client';
 
 /**
  * AppointmentsController
@@ -115,50 +118,24 @@ export class AppointmentsController {
   /**
    * GET /api/appointments/check
    *
-   * Verifica se existe agendamento SCHEDULED entre cliente e especialista para um produto específico
-   * Usado para impedir agendamentos duplicados e condicionalmente exibir botão de confirmação
-   *
-   * Query Parameters (todos obrigatórios):
-   * - client_id: UUID do cliente
-   * - specialist_id: UUID do especialista
-   * - product_type: CAR | BOAT | AIRCRAFT
-   * - product_id: ID numérico do produto
-   *
-   * Respostas esperadas:
-   * - 200 OK: Retorna null se não encontrado, ou Appointment se existe
-   * - 400 Bad Request: Parâmetros inválidos ou ausentes
-   * - 401 Unauthorized: Token JWT inválido
-   *
-   * Exemplo de resposta 200 (sem agendamento):
-   * {
-   *   "success": true,
-   *   "message": "Agendamento não encontrado",
-   *   "data": null
-   * }
-   *
-   * Exemplo de resposta 200 (com agendamento):
-   * {
-   *   "success": true,
-   *   "message": "Agendamento encontrado",
-   *   "data": {
-   *     "id": "uuid",
-   *     "appointment_datetime": "2024-10-10T14:00:00Z",
-   *     "status": "SCHEDULED",
-   *     "created_at": "2024-10-08T14:30:00Z"
-   *   }
-   * }
-   *
-   * Frontend:
-   * - Usar este endpoint ao carregar ProductPage
-   * - Se retorna dados: Mostrar "Você já possui um agendamento marcado"
-   * - Se retorna null: Mostrar botão de confirmação normalmente
+   * Consulta o próprio pedido do cliente autenticado para especialista/produto.
+   * Aceita specialist_id, product_type e product_id; o cliente vem do JWT.
+   * Retorna somente o discriminante e o snapshot mínimo, sem contatos pessoais.
    */
   @Get('check')
-  async checkExisting(@Query() query: any, @Request() req: any) {
-    const { client_id, specialist_id, product_type, product_id } = query;
+  async checkExisting(
+    @Query() query: CheckExistingAppointmentDto,
+    @Request() req: any,
+  ) {
+    if (req.user.role !== UserRole.CUSTOMER) {
+      throw new ForbiddenException(
+        'Apenas clientes podem consultar seus pedidos',
+      );
+    }
+    const { specialist_id, product_type, product_id } = query;
 
     const appointment = await this.appointmentsService.findExistingAppointment(
-      client_id,
+      req.user.id,
       specialist_id,
       product_type,
       product_id,
@@ -166,9 +143,7 @@ export class AppointmentsController {
 
     return {
       success: true,
-      message: appointment
-        ? 'Agendamento encontrado'
-        : 'Agendamento não encontrado',
+      message: 'Consulta realizada com sucesso',
       data: appointment,
     };
   }
@@ -185,68 +160,8 @@ export class AppointmentsController {
   /**
    * POST /api/appointments
    *
-   * Cria novo agendamento e auto-cria Process vinculado
-   *
-   * Request Body:
-   * {
-   *   "client_id": "uuid-cliente",
-   *   "specialist_id": "uuid-especialista",
-   *   "product_type": "CAR",
-   *   "product_id": 1,
-   *   "appointment_datetime": "2024-10-10T14:00:00Z",
-   *   "notes": "Test drive"
-   * }
-   *
-   * Respostas esperadas:
-   * - 201 Created: Agendamento criado com sucesso
-   * - 400 Bad Request: Dados inválidos, appointment_datetime no passado, etc
-   * - 409 Conflict: Conflito de horário (especialista já agendado)
-   * - 404 Not Found: Cliente, especialista ou produto não encontrado
-   * - 401 Unauthorized: Token JWT inválido
-   *
-   * Exemplo de resposta 201:
-   * {
-   *   "success": true,
-   *   "message": "Agendamento criado com sucesso",
-   *   "data": {
-   *     "id": "uuid",
-   *     "appointment_datetime": "2024-10-10T14:00:00Z",
-   *     "status": "SCHEDULED",
-   *     "notes": "Test drive",
-   *     "client": { "id", "name" },
-   *     "specialist": { "id", "name" },
-   *     "product": { "id": 1, "marca": "Ferrari", "modelo": "F8" },
-   *     "created_at": "2024-10-08T14:30:00Z"
-   *   }
-   * }
-   *
-   * Exemplo de resposta 409 (conflito):
-   * {
-   *   "success": false,
-   *   "error": {
-   *     "code": 409,
-   *     "message": "Especialista já possui agendamento neste horário",
-   *     "details": {
-   *       "conflicting_appointment": {
-   *         "id": "uuid",
-   *         "appointment_datetime": "2024-10-10T14:00:00Z",
-   *         "client_id": "uuid"
-   *       },
-   *       "suggested_times": [
-   *         "2024-10-10T15:00:00Z",
-   *         "2024-10-10T16:00:00Z",
-   *         "2024-10-10T17:00:00Z"
-   *       ]
-   *     }
-   *   }
-   * }
-   *
-   * Frontend:
-   * - Capturar 409 e exibir suggested_times ao usuário
-   * - Converter suggested_times de UTC para horário local para exibição
-   * - appointment_datetime enviado deve estar em UTC (converter do input local)
-   * - Após sucesso (201), redirecionare para página de confirmação
-   * - Auto-criação de Process é transparente (não precisa de ação adicional)
+   * A criação direta PLATFORM está desativada. Solicitações de reunião devem
+   * usar POST /appointments/pending e aguardar a confirmação do especialista.
    */
   @Post()
   async create(
@@ -422,23 +337,9 @@ export class AppointmentsController {
   /**
    * POST /api/appointments/pending
    *
-   * Cria um agendamento em status PENDING
-   * Usado quando cliente clica no link do Calendly e retorna à plataforma
-   * NÃO cria Process ainda - apenas registra intenção do cliente
-   *
-   * Request Body:
-   * {
-   *   "client_id": "uuid-cliente",
-   *   "specialist_id": "uuid-especialista",
-   *   "product_type": "CAR",
-   *   "product_id": 1,
-   *   "notes": "Acessei o calendário do especialista"
-   * }
-   *
-   * Respostas:
-   * - 201 Created: Agendamento PENDING criado
-   * - 409 Conflict: Já existe agendamento PENDING ou SCHEDULED
-   * - 403 Forbidden: Apenas o próprio cliente pode criar
+   * Cria Appointment PENDING e Process SCHEDULING na mesma transação.
+   * EMAIL com produto exige uma proposta futura; CALENDLY não aceita horário
+   * do cliente. Retorna o appointment e seu process_id.
    */
   @Post('pending')
   async createPending(

@@ -100,9 +100,24 @@ describe('ProcessesService — produto UUID', () => {
     );
 
     expect(rootFindFirst).not.toHaveBeenCalled();
-    expect(transactionalFindFirst).toHaveBeenCalledWith({
-      where: expect.objectContaining({ car_id: productId }),
-    });
+    expect(transactionalFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ car_id: productId }),
+        select: {
+          id: true,
+          client_id: true,
+          appointment: {
+            select: {
+              id: true,
+              client_id: true,
+              status: true,
+              scheduling_method: true,
+              appointment_datetime: true,
+            },
+          },
+        },
+      }),
+    );
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ car_id: productId }),
@@ -1290,9 +1305,11 @@ describe('ProcessesService — telefone da contraparte após confirmação', () 
   ])(
     'detalhe não expõe telefones para %s mesmo após confirmação',
     async (role, requesterId) => {
-      const result = await detailService(
-        StatusAgendamento.SCHEDULED,
-      ).getById('process-1', requesterId, role);
+      const result = await detailService(StatusAgendamento.SCHEDULED).getById(
+        'process-1',
+        requesterId,
+        role,
+      );
 
       expect(result.client.phone).toBeNull();
       expect(result.specialist.phone).toBeNull();

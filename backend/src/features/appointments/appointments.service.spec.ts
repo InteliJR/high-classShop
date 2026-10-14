@@ -60,9 +60,21 @@ describe('CreateAppointmentDto — seleção de produto', () => {
       true,
     );
   });
+
+  it('validates an optional pending datetime as ISO 8601', async () => {
+    const dto = Object.assign(new CreatePendingAppointmentDto(), base, {
+      scheduling_method: AppointmentSchedulingMethod.EMAIL,
+      appointment_datetime: 'not-a-date',
+    });
+    expect(
+      (await validate(dto)).some(
+        (error) => error.property === 'appointment_datetime',
+      ),
+    ).toBe(true);
+  });
 });
 
-describe('AppointmentsService.create — associação e atomicidade', () => {
+describe('AppointmentsService.createPending — associação e atomicidade', () => {
   const client = {
     id: 'client-1',
     name: 'Cliente',
@@ -91,13 +103,19 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
     product_type: ProductType.CAR,
     product_id: activeProduct.id,
     appointment_datetime: '2099-01-01T10:00:00.000Z',
-  } as CreateAppointmentDto;
+    scheduling_method: AppointmentSchedulingMethod.EMAIL,
+  } as CreatePendingAppointmentDto;
 
   function harness(options: {
     transactionalProduct?: typeof activeProduct;
     processFailure?: Error;
+    historyFailure?: Error;
+    calendlyUrl?: string | null;
+    connectionActive?: boolean;
+    existingProcess?: any;
   }) {
     const storedAppointments: any[] = [];
+    const storedProcesses: any[] = [];
     const appointmentCreate = jest.fn(async ({ data }) => {
       const appointment = {
         id: 'appointment-1',
@@ -110,11 +128,24 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
     });
     const processCreate = jest.fn(async () => {
       if (options.processFailure) throw options.processFailure;
-      return { id: 'process-1' };
+      const process = { id: 'process-1' };
+      storedProcesses.push(process);
+      return process;
     });
-    const historyCreate = jest.fn().mockResolvedValue({});
+    const historyCreate = jest.fn(async () => {
+      if (options.historyFailure) throw options.historyFailure;
+      return {};
+    });
+    const selectedSpecialist = {
+      ...specialist,
+      calendly_url: options.calendlyUrl ?? null,
+      calendly_connection:
+        options.connectionActive === undefined
+          ? null
+          : { is_active: options.connectionActive },
+    };
     const userFindUnique = jest.fn(async ({ where }) =>
-      where.id === client.id ? client : specialist,
+      where.id === client.id ? client : selectedSpecialist,
     );
     const rootProductFindUnique = jest.fn().mockResolvedValue(activeProduct);
     const rootAppointmentCreate = jest.fn();
@@ -134,7 +165,7 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
         create: appointmentCreate,
       },
       process: {
-        findFirst: jest.fn().mockResolvedValue(null),
+        findFirst: jest.fn().mockResolvedValue(options.existingProcess ?? null),
         create: processCreate,
       },
       processStatusHistory: { create: historyCreate },
@@ -151,10 +182,12 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
       process: { create: rootProcessCreate },
       $transaction: jest.fn(async (callback) => {
         const before = storedAppointments.length;
+        const beforeProcesses = storedProcesses.length;
         try {
           return await callback(tx);
         } catch (error) {
           storedAppointments.splice(before);
+          storedProcesses.splice(beforeProcesses);
           throw error;
         }
       }),
@@ -175,6 +208,7 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
       rootAppointmentCreate,
       rootProcessCreate,
       storedAppointments,
+      storedProcesses,
     };
   }
 
@@ -196,7 +230,7 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
       );
 
       await expect(
-        service.create(dto as any, client.id, UserRole.CUSTOMER),
+        service.createPending(dto, client.id, UserRole.CUSTOMER),
       ).rejects.toThrow(expectedError);
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(tx.car.findUnique).toHaveBeenCalled();
@@ -218,7 +252,7 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
     });
 
     await expect(
-      service.create(dto as any, client.id, UserRole.CUSTOMER),
+      service.createPending(dto, client.id, UserRole.CUSTOMER),
     ).rejects.toBe(processFailure);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(storedAppointments).toHaveLength(0);
@@ -227,13 +261,13 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
   });
 
   it.each([UserRole.SPECIALIST, UserRole.CONSULTANT, UserRole.ADMIN])(
-    'rejects direct scheduling by %s',
+    'rejects pending requests by %s',
     async (role) => {
       const { service, appointmentCreate } = harness({});
 
-      await expect(
-        (service.create as any)(dto, client.id, role),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.createPending(dto, client.id, role)).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(appointmentCreate).not.toHaveBeenCalled();
     },
   );
@@ -242,24 +276,33 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
     const { service, appointmentCreate } = harness({});
 
     await expect(
-      (service.create as any)(dto, 'another-client', UserRole.CUSTOMER),
+      service.createPending(dto, 'another-client', UserRole.CUSTOMER),
     ).rejects.toThrow(ForbiddenException);
     expect(appointmentCreate).not.toHaveBeenCalled();
   });
 
-  it('stores direct scheduling as SCHEDULED and PLATFORM', async () => {
+  it('stores the proposed date as PENDING/EMAIL and returns the process ID', async () => {
     const { service, appointmentCreate, historyCreate } = harness({});
 
-    await (service.create as any)(dto, client.id, UserRole.CUSTOMER);
+    const result = await service.createPending(
+      dto,
+      client.id,
+      UserRole.CUSTOMER,
+    );
 
     expect(appointmentCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          status: StatusAgendamento.SCHEDULED,
-          scheduling_method: AppointmentSchedulingMethod.PLATFORM,
+          status: StatusAgendamento.PENDING,
+          scheduling_method: AppointmentSchedulingMethod.EMAIL,
+          appointment_datetime: new Date(dto.appointment_datetime!),
         }),
       }),
     );
+    expect(result).toMatchObject({
+      id: 'appointment-1',
+      process_id: 'process-1',
+    });
     expect(historyCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         processId: 'process-1',
@@ -269,30 +312,23 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
     });
   });
 
-  it('serializa a verificação e a inserção do horário por especialista', async () => {
+  it('does not lock or check schedule availability for an EMAIL proposal', async () => {
     const { service, tx } = harness({});
 
-    await service.create(dto as any, client.id, UserRole.CUSTOMER);
+    await service.createPending(dto, client.id, UserRole.CUSTOMER);
 
-    expect(tx.$queryRaw).toHaveBeenCalledWith(
-      expect.anything(),
+    expect(tx.$queryRaw.mock.calls.map((call) => call[1])).not.toContain(
       'appointment-schedule:specialist-1',
     );
-    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
-      tx.appointment.findFirst.mock.invocationCallOrder[0],
-    );
+    expect(tx.appointment.findFirst).not.toHaveBeenCalled();
   });
 
-  it('rejects platform scheduling when no datetime is supplied', async () => {
+  it('requires a date for an EMAIL product request', async () => {
     const { service, tx, appointmentCreate } = harness({});
     const withoutDate = { ...dto, appointment_datetime: undefined };
 
     await expect(
-      (service.create as any)(
-        withoutDate as CreateAppointmentDto,
-        client.id,
-        UserRole.CUSTOMER,
-      ),
+      service.createPending(withoutDate, client.id, UserRole.CUSTOMER),
     ).rejects.toThrow(BadRequestException);
 
     expect(tx.appointment.findFirst).not.toHaveBeenCalled();
@@ -302,19 +338,348 @@ describe('AppointmentsService.create — associação e atomicidade', () => {
   it('serializa e repete a deduplicação do processo antes de criá-lo', async () => {
     const { service, tx } = harness({});
 
-    await service.create(dto as any, client.id, UserRole.CUSTOMER);
+    await service.createPending(dto, client.id, UserRole.CUSTOMER);
 
     expect(tx.$queryRaw).toHaveBeenCalledWith(
       expect.anything(),
       'process-dedup:client-1:specialist-1:CAR:product-1',
     );
-    expect(tx.process.findFirst).toHaveBeenCalledWith({
-      where: expect.objectContaining({ car_id: 'product-1' }),
-    });
+    expect(tx.process.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ car_id: 'product-1' }),
+      }),
+    );
     expect(tx.process.findFirst.mock.invocationCallOrder[0]).toBeLessThan(
       tx.process.create.mock.invocationCallOrder[0],
     );
   });
+
+  it.each(['not-a-date', '2000-01-01T00:00:00.000Z'])(
+    'rejects an invalid or past product EMAIL date %s',
+    async (datetime) => {
+      const { service, appointmentCreate } = harness({});
+      await expect(
+        service.createPending(
+          { ...dto, appointment_datetime: datetime },
+          client.id,
+          UserRole.CUSTOMER,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(appointmentCreate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rolls back appointment and process when history insertion fails', async () => {
+    const historyFailure = new Error('history insert failed');
+    const { service, storedAppointments, storedProcesses } = harness({
+      historyFailure,
+    });
+    await expect(
+      service.createPending(dto, client.id, UserRole.CUSTOMER),
+    ).rejects.toBe(historyFailure);
+    expect(storedAppointments).toHaveLength(0);
+    expect(storedProcesses).toHaveLength(0);
+  });
+
+  it.each([
+    [null, false, false],
+    ['https://calendly.com/specialist/meeting', false, false],
+    [null, true, false],
+    ['http://calendly.com/specialist/meeting', true, false],
+    ['https://calendly.com.evil.test/meeting', true, false],
+    ['https://calendly.com/specialist/meeting', true, true],
+  ])(
+    'enforces reciprocal method capability for URL %s and connection %s',
+    async (calendlyUrl, connectionActive, available) => {
+      for (const method of [
+        AppointmentSchedulingMethod.EMAIL,
+        AppointmentSchedulingMethod.CALENDLY,
+      ]) {
+        const { service, appointmentCreate } = harness({
+          calendlyUrl,
+          connectionActive,
+        });
+        const input = {
+          ...dto,
+          scheduling_method: method,
+          appointment_datetime:
+            method === AppointmentSchedulingMethod.EMAIL
+              ? dto.appointment_datetime
+              : undefined,
+        };
+        const creation = service.createPending(
+          input,
+          client.id,
+          UserRole.CUSTOMER,
+        );
+        if ((method === AppointmentSchedulingMethod.CALENDLY) === available) {
+          await expect(creation).resolves.toMatchObject({
+            status: StatusAgendamento.PENDING,
+            scheduling_method: method,
+            process_id: 'process-1',
+          });
+        } else {
+          const error = await creation.catch((caught) => caught);
+          expect(error).toBeInstanceOf(ConflictException);
+          expect(error.getResponse()).toEqual({
+            success: false,
+            error: {
+              code:
+                method === AppointmentSchedulingMethod.CALENDLY
+                  ? 'CALENDLY_UNAVAILABLE'
+                  : 'EMAIL_FLOW_UNAVAILABLE',
+              message: expect.any(String),
+            },
+          });
+          expect(appointmentCreate).not.toHaveBeenCalled();
+        }
+      }
+    },
+  );
+
+  it('preserves optional date EMAIL consultancy even with Calendly available', async () => {
+    const { service, appointmentCreate } = harness({
+      calendlyUrl: 'https://calendly.com/specialist/meeting',
+      connectionActive: true,
+    });
+    await expect(
+      service.createPending(
+        {
+          client_id: client.id,
+          specialist_id: specialist.id,
+          scheduling_method: AppointmentSchedulingMethod.EMAIL,
+        },
+        client.id,
+        UserRole.CUSTOMER,
+      ),
+    ).resolves.toMatchObject({
+      process_id: 'process-1',
+      appointment_datetime: null,
+    });
+    expect(appointmentCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: StatusAgendamento.PENDING,
+          scheduling_method: AppointmentSchedulingMethod.EMAIL,
+          appointment_datetime: null,
+        }),
+      }),
+    );
+  });
+
+  it('persists an optional future consultancy EMAIL date exactly under the schedule lock', async () => {
+    const { service, tx } = harness({});
+    const datetime = '2099-01-01T07:00:00-03:00';
+    await expect(
+      service.createPending(
+        {
+          client_id: client.id,
+          specialist_id: specialist.id,
+          scheduling_method: AppointmentSchedulingMethod.EMAIL,
+          appointment_datetime: datetime,
+        },
+        client.id,
+        UserRole.CUSTOMER,
+      ),
+    ).resolves.toMatchObject({
+      appointment_datetime: new Date(datetime),
+      status: StatusAgendamento.PENDING,
+      process_id: 'process-1',
+    });
+    expect(tx.$queryRaw).toHaveBeenCalledWith(
+      expect.anything(),
+      'appointment-schedule:specialist-1',
+    );
+    expect(tx.appointment.findFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'not-a-date',
+    '01/01/2099',
+    '2000-01-01T00:00:00.000Z',
+    '2026-10-14T12:00:00.000Z',
+  ])(
+    'rejects invalid, non-ISO, past or current optional consultancy date %s before writes',
+    async (datetime) => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-10-14T12:00:00.000Z'));
+      try {
+        const { service, appointmentCreate, processCreate } = harness({});
+        await expect(
+          service.createPending(
+            {
+              client_id: client.id,
+              specialist_id: specialist.id,
+              scheduling_method: AppointmentSchedulingMethod.EMAIL,
+              appointment_datetime: datetime,
+            },
+            client.id,
+            UserRole.CUSTOMER,
+          ),
+        ).rejects.toThrow(BadRequestException);
+        expect(appointmentCreate).not.toHaveBeenCalled();
+        expect(processCreate).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    },
+  );
+
+  it('returns ACTIVE_PROCESS_EXISTS with the owned proposal after acquiring the dedup lock', async () => {
+    const proposedDate = new Date(dto.appointment_datetime!);
+    const { service, prisma, tx, appointmentCreate } = harness({
+      existingProcess: {
+        id: 'process-existing',
+        client_id: client.id,
+        appointment: {
+          id: 'appointment-existing',
+          client_id: client.id,
+          status: StatusAgendamento.PENDING,
+          scheduling_method: AppointmentSchedulingMethod.EMAIL,
+          appointment_datetime: proposedDate,
+        },
+      },
+    });
+    const error = await service
+      .createPending(dto, client.id, UserRole.CUSTOMER)
+      .catch((caught) => caught);
+    expect(error).toBeInstanceOf(ConflictException);
+    expect(error.getResponse().error.details.existing_request).toEqual({
+      process_id: 'process-existing',
+      appointment_id: 'appointment-existing',
+      appointment_status: StatusAgendamento.PENDING,
+      scheduling_method: AppointmentSchedulingMethod.EMAIL,
+      appointment_datetime: proposedDate,
+    });
+    expect(prisma.appointment.findFirst).not.toHaveBeenCalled();
+    expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
+      tx.process.findFirst.mock.invocationCallOrder[0],
+    );
+    expect(appointmentCreate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    UserRole.CUSTOMER,
+    UserRole.SPECIALIST,
+    UserRole.ADMIN,
+    UserRole.CONSULTANT,
+  ])(
+    'rejects the direct PLATFORM bypass for %s before any database access',
+    async (role) => {
+      const { service, prisma, tx, appointmentCreate } = harness({});
+      const error = await service
+        .create(dto as any, client.id, role)
+        .catch((caught) => caught);
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect(error.getResponse()).toEqual({
+        success: false,
+        error: { code: 403, message: expect.any(String) },
+      });
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(tx.$queryRaw).not.toHaveBeenCalled();
+      expect(appointmentCreate).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe('AppointmentsService.findExistingAppointment — own minimal projection', () => {
+  const ownedAppointment = {
+    id: 'appointment-1',
+    client_id: 'client-1',
+    specialist_id: 'specialist-1',
+    product_type: ProductType.CAR,
+    product_id: 'car-1',
+    status: StatusAgendamento.PENDING,
+    scheduling_method: AppointmentSchedulingMethod.EMAIL,
+    appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+    process: { id: 'process-1', client_id: 'client-1' },
+    client: {
+      id: 'client-1',
+      name: 'Private Client',
+      email: 'private@example.com',
+    },
+    specialist: { id: 'specialist-1', name: 'Specialist' },
+    notes: 'private-notes',
+    created_at: new Date(),
+    updated_at: new Date(),
+  };
+  function harness(appointment: any) {
+    const prisma = {
+      appointment: { findFirst: jest.fn().mockResolvedValue(appointment) },
+      car: { findUnique: jest.fn().mockResolvedValue({ id: 'car-1' }) },
+    } as any;
+    return {
+      prisma,
+      service: new AppointmentsService(prisma, {} as any, {} as any),
+    };
+  }
+  it.each([
+    ownedAppointment,
+    {
+      ...ownedAppointment,
+      scheduling_method: null,
+      appointment_datetime: null,
+    },
+  ])(
+    'returns only the owned discriminator and supports legacy date/method nulls',
+    async (appointment) => {
+      const { prisma, service } = harness(appointment);
+      expect(
+        await service.findExistingAppointment(
+          'client-1',
+          'specialist-1',
+          ProductType.CAR,
+          'car-1',
+        ),
+      ).toEqual({
+        exists: true,
+        appointment_id: appointment.id,
+        process_id: 'process-1',
+        appointment_status: appointment.status,
+        scheduling_method: appointment.scheduling_method,
+        appointment_datetime: appointment.appointment_datetime,
+      });
+      expect(prisma.appointment.findFirst).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          client_id: 'client-1',
+          specialist_id: 'specialist-1',
+          product_type: ProductType.CAR,
+          product_id: 'car-1',
+        }),
+        select: {
+          id: true,
+          client_id: true,
+          status: true,
+          scheduling_method: true,
+          appointment_datetime: true,
+          process: { select: { id: true, client_id: true } },
+        },
+      });
+      expect(prisma.car.findUnique).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    null,
+    { ...ownedAppointment, client_id: 'another-client' },
+    { ...ownedAppointment, process: null },
+    {
+      ...ownedAppointment,
+      process: { id: 'private-process', client_id: 'another-client' },
+    },
+  ])(
+    'fails closed for missing or unowned appointment/process %o',
+    async (appointment) => {
+      const { service } = harness(appointment);
+      expect(
+        await service.findExistingAppointment(
+          'client-1',
+          'specialist-1',
+          ProductType.CAR,
+          'car-1',
+        ),
+      ).toEqual({ exists: false });
+    },
+  );
 });
 
 describe('AppointmentsService.createPending — integridade das partes', () => {
@@ -338,7 +703,7 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 
-  it('rejeita horário pré-preenchido em uma solicitação por e-mail', async () => {
+  it('rejeita horário enviado pelo cliente para Calendly', async () => {
     const prisma = {
       user: { findUnique: jest.fn() },
     } as any;
@@ -349,7 +714,7 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
         {
           client_id: 'client-1',
           specialist_id: 'specialist-1',
-          scheduling_method: AppointmentSchedulingMethod.EMAIL,
+          scheduling_method: AppointmentSchedulingMethod.CALENDLY,
           appointment_datetime: '2099-01-01T10:00:00.000Z',
         } as CreatePendingAppointmentDto,
         'client-1',
@@ -408,6 +773,8 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
         name: 'Specialist',
         role: UserRole.SPECIALIST,
         speciality: ProductType.CAR,
+        calendly_url: 'https://calendly.com/specialist/meeting',
+        calendly_connection: { is_active: true },
       };
       const tx = {
         $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
