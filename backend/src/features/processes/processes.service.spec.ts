@@ -671,7 +671,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
     };
   }
 
-  it('grava snapshot USD na transição manual para negociação', async () => {
+  it('bloqueia a transição manual para negociação, reservada ao fluxo canônico', async () => {
     const processUpdate = jest.fn().mockImplementation(({ data }) =>
       Promise.resolve({
         ...baseProcess(),
@@ -697,30 +697,21 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
     } as any;
     const service = new ProcessesService(prisma, {} as any);
 
-    await service.update(
-      'process-1',
-      { status: ProcessStatus.NEGOTIATION, notes: 'Negociando' },
-      'admin-1',
-      UserRole.ADMIN,
-    );
+    await expect(
+      service.update(
+        'process-1',
+        { status: ProcessStatus.NEGOTIATION, notes: 'Negociando' },
+        'admin-1',
+        UserRole.ADMIN,
+      ),
+    ).rejects.toThrow(BadRequestException);
 
-    expect(processUpdateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          id: 'process-1',
-          status: ProcessStatus.SCHEDULING,
-          updated_at: new Date('2026-01-01T00:00:00.000Z'),
-        },
-        data: expect.objectContaining({
-          status: ProcessStatus.NEGOTIATION,
-          negotiation_currency: ProductCurrency.USD,
-          negotiation_product_value: new Prisma.Decimal('120000.00'),
-        }),
-      }),
-    );
+    expect(processUpdateMany).not.toHaveBeenCalled();
     expect(processUpdate).not.toHaveBeenCalled();
     expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
-    expect(tx.$queryRaw.mock.calls[0][1]).toBe('product-money:CAR:product-1');
+    expect(tx.$queryRaw.mock.calls[0][1]).toBe(
+      'appointment-schedule:specialist-1',
+    );
   });
 
   it('returns conflict and creates no history when the manual transition loses its CAS claim', async () => {
@@ -731,10 +722,15 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       updated_at: new Date('2026-01-02T00:00:00.000Z'),
     });
     const processUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const negotiatedProcess = baseProcess({
+      status: ProcessStatus.NEGOTIATION,
+      negotiation_currency: ProductCurrency.USD,
+      negotiation_product_value: new Prisma.Decimal('120000.00'),
+    });
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
       process: {
-        findUniqueOrThrow: jest.fn().mockResolvedValue(baseProcess()),
+        findUniqueOrThrow: jest.fn().mockResolvedValue(negotiatedProcess),
         update: processUpdate,
         updateMany: processUpdateMany,
       },
@@ -751,7 +747,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
     await expect(
       service.update(
         'process-1',
-        { status: ProcessStatus.NEGOTIATION, notes: 'Negociando' },
+        { status: ProcessStatus.DOCUMENTATION, notes: 'Documentação' },
         'admin-1',
         UserRole.ADMIN,
       ),
@@ -761,7 +757,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       expect.objectContaining({
         where: {
           id: 'process-1',
-          status: ProcessStatus.SCHEDULING,
+          status: ProcessStatus.NEGOTIATION,
           updated_at: new Date('2026-01-01T00:00:00.000Z'),
         },
       }),
@@ -2012,25 +2008,39 @@ describe('ProcessesService — autorização centralizada de processos', () => {
         sendProcessStatusChangedEmail: jest.fn().mockResolvedValue(undefined),
       } as any),
       processUpdateMany,
+      tx,
     };
   }
 
-  function rejectionService(process = protectedProcess()) {
-    const processUpdate = jest.fn().mockResolvedValue({
+  function rejectionService(process = protectedProcess(), claimCount = 1) {
+    const rejectedProcess = {
       ...process,
       status: ProcessStatus.REJECTED,
       updated_at: new Date('2026-01-02T00:00:00.000Z'),
-    });
+    };
+    const processUpdate = jest.fn();
+    const processUpdateMany = jest
+      .fn()
+      .mockResolvedValue({ count: claimCount });
+    const processFindUniqueOrThrow = jest
+      .fn()
+      .mockResolvedValueOnce(process)
+      .mockResolvedValueOnce(process)
+      .mockResolvedValueOnce(rejectedProcess);
+    const historyCreate = jest.fn().mockResolvedValue({});
+    const rejectionCreate = jest.fn().mockResolvedValue({});
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
       process: {
-        findUniqueOrThrow: jest.fn().mockResolvedValue(process),
+        findUniqueOrThrow: processFindUniqueOrThrow,
         update: processUpdate,
+        updateMany: processUpdateMany,
       },
       processStatusHistory: {
-        create: jest.fn().mockResolvedValue({}),
+        create: historyCreate,
         findMany: jest.fn().mockResolvedValue([]),
       },
-      processRejection: { create: jest.fn().mockResolvedValue({}) },
+      processRejection: { create: rejectionCreate },
     };
     const prisma = {
       $transaction: jest.fn(async (callback) => callback(tx)),
@@ -2040,6 +2050,11 @@ describe('ProcessesService — autorização centralizada de processos', () => {
         sendProcessStatusChangedEmail: jest.fn().mockResolvedValue(undefined),
       } as any),
       processUpdate,
+      processUpdateMany,
+      processFindUniqueOrThrow,
+      historyCreate,
+      rejectionCreate,
+      tx,
     };
   }
 
@@ -2093,7 +2108,7 @@ describe('ProcessesService — autorização centralizada de processos', () => {
     expect(processUpdateMany).not.toHaveBeenCalled();
   });
 
-  it('especialista atribuído pode fazer a transição adjacente SCHEDULING para NEGOTIATION', async () => {
+  it('especialista atribuído não pode burlar a confirmação canônica para entrar em NEGOTIATION', async () => {
     const { service, processUpdateMany } = updateService();
 
     await expect(
@@ -2103,12 +2118,12 @@ describe('ProcessesService — autorização centralizada de processos', () => {
         assignedSpecialistId,
         UserRole.SPECIALIST,
       ),
-    ).resolves.toBeDefined();
+    ).rejects.toThrow(BadRequestException);
 
-    expect(processUpdateMany).toHaveBeenCalledTimes(1);
+    expect(processUpdateMany).not.toHaveBeenCalled();
   });
 
-  it('OFFICE da empresa do cliente pode fazer transição adjacente', async () => {
+  it('OFFICE da empresa do cliente não pode burlar a confirmação canônica', async () => {
     const { service, processUpdateMany } = updateService();
 
     await expect(
@@ -2119,13 +2134,130 @@ describe('ProcessesService — autorização centralizada de processos', () => {
         UserRole.OFFICE,
         clientCompanyId,
       ),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(processUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('não promove consultoria sem produto/snapshot de NEGOTIATION para DOCUMENTATION', async () => {
+    const { service, processUpdateMany } = updateService(
+      protectedProcess({ status: ProcessStatus.NEGOTIATION }),
+    );
+
+    await expect(
+      service.update(
+        '99999999-9999-4999-8999-999999999999',
+        { status: ProcessStatus.DOCUMENTATION },
+        assignedSpecialistId,
+        UserRole.SPECIALIST,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(processUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('permite apenas NEGOTIATION para DOCUMENTATION com produto e snapshot', async () => {
+    const process = protectedProcess({
+      status: ProcessStatus.NEGOTIATION,
+      product_type: ProductType.CAR,
+      car_id: productId,
+      negotiation_currency: ProductCurrency.USD,
+      negotiation_product_value: new Prisma.Decimal('120000.00'),
+      car: { id: productId, marca: 'Porsche', modelo: '911' },
+    });
+    const { service, processUpdateMany } = updateService(process);
+
+    await expect(
+      service.update(
+        '99999999-9999-4999-8999-999999999999',
+        { status: ProcessStatus.DOCUMENTATION },
+        assignedSpecialistId,
+        UserRole.SPECIALIST,
+      ),
     ).resolves.toBeDefined();
 
     expect(processUpdateMany).toHaveBeenCalledTimes(1);
   });
 
+  it('revalida a transição após adquirir o lock e reler o processo', async () => {
+    const negotiableProcess = protectedProcess({
+      status: ProcessStatus.NEGOTIATION,
+      product_type: ProductType.CAR,
+      car_id: productId,
+      negotiation_currency: ProductCurrency.USD,
+      negotiation_product_value: new Prisma.Decimal('120000.00'),
+      car: { id: productId, marca: 'Porsche', modelo: '911' },
+    });
+    const rejectedProcess = {
+      ...negotiableProcess,
+      status: ProcessStatus.REJECTED,
+    };
+    const { service, processUpdateMany, tx } = updateService();
+    tx.process.findUniqueOrThrow
+      .mockResolvedValueOnce(negotiableProcess)
+      .mockResolvedValueOnce(rejectedProcess);
+
+    await expect(
+      service.update(
+        '99999999-9999-4999-8999-999999999999',
+        { status: ProcessStatus.DOCUMENTATION },
+        assignedSpecialistId,
+        UserRole.SPECIALIST,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(processUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('revalida a autorização após adquirir o lock e reler o processo', async () => {
+    const initiallyAuthorized = protectedProcess({
+      status: ProcessStatus.NEGOTIATION,
+    });
+    const movedToOtherCompany = protectedProcess({
+      status: ProcessStatus.NEGOTIATION,
+      client: {
+        ...protectedProcess().client,
+        company_id: otherCompanyId,
+        consultant: { company_id: otherCompanyId },
+      },
+    });
+    const { service, processUpdateMany, tx } = updateService();
+    tx.process.findUniqueOrThrow
+      .mockResolvedValueOnce(initiallyAuthorized)
+      .mockResolvedValueOnce(movedToOtherCompany);
+
+    await expect(
+      service.update(
+        '99999999-9999-4999-8999-999999999999',
+        { status: ProcessStatus.DOCUMENTATION },
+        'office-1',
+        UserRole.OFFICE,
+        clientCompanyId,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(processUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('não conclui DOCUMENTATION manualmente sem o webhook de contrato', async () => {
+    const { service, processUpdateMany } = updateService(
+      protectedProcess({ status: ProcessStatus.DOCUMENTATION }),
+    );
+
+    await expect(
+      service.update(
+        '99999999-9999-4999-8999-999999999999',
+        { status: ProcessStatus.COMPLETED },
+        assignedSpecialistId,
+        UserRole.SPECIALIST,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(processUpdateMany).not.toHaveBeenCalled();
+  });
+
   it('outsider não pode rejeitar processo alheio', async () => {
-    const { service, processUpdate } = rejectionService();
+    const { service, processUpdate, tx } = rejectionService();
 
     await expect(
       (service.rejectProcess as any)(
@@ -2138,10 +2270,12 @@ describe('ProcessesService — autorização centralizada de processos', () => {
     ).rejects.toThrow(ForbiddenException);
 
     expect(processUpdate).not.toHaveBeenCalled();
+    expect(tx.$queryRaw).not.toHaveBeenCalled();
   });
 
   it('cliente pode rejeitar o próprio processo ativo', async () => {
-    const { service, processUpdate } = rejectionService();
+    const { service, processUpdate, processUpdateMany, tx } =
+      rejectionService();
 
     await expect(
       service.rejectProcess(
@@ -2154,7 +2288,37 @@ describe('ProcessesService — autorização centralizada de processos', () => {
       expect.objectContaining({ status: ProcessStatus.REJECTED }),
     );
 
-    expect(processUpdate).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw).toHaveBeenCalledWith(
+      expect.anything(),
+      `appointment-schedule:${assignedSpecialistId}`,
+    );
+    expect(processUpdateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        id: '99999999-9999-4999-8999-999999999999',
+        status: ProcessStatus.SCHEDULING,
+        updated_at: new Date('2026-01-01T00:00:00.000Z'),
+      }),
+      data: expect.objectContaining({ status: ProcessStatus.REJECTED }),
+    });
+    expect(processUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejeição perde a CAS sem criar histórico nem motivo', async () => {
+    const { service, historyCreate, rejectionCreate, processUpdateMany } =
+      rejectionService(protectedProcess(), 0);
+
+    await expect(
+      service.rejectProcess(
+        '99999999-9999-4999-8999-999999999999',
+        assignedSpecialistId,
+        undefined,
+        UserRole.SPECIALIST,
+      ),
+    ).rejects.toThrow(ConflictException);
+
+    expect(processUpdateMany).toHaveBeenCalledTimes(1);
+    expect(historyCreate).not.toHaveBeenCalled();
+    expect(rejectionCreate).not.toHaveBeenCalled();
   });
 
   it('não permite rejeitar processo já concluído', async () => {

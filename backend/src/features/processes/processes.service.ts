@@ -18,7 +18,9 @@ import {
 import { QueryDto } from 'src/shared/dto/query.dto';
 import {
   AppointmentSchedulingMethod,
+  Prisma,
   ProcessStatus,
+  ProductCurrency,
   ProductType,
   StatusAgendamento,
   UserRole,
@@ -28,10 +30,7 @@ import { UpdateProcessDto } from './dto/update-process.dto';
 import { ProcessWithHistory } from './entity/process-history.response';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { buildNegotiationSnapshotUpdate } from './negotiation-snapshot';
-import {
-  acquireProductMonetaryLock,
-  lockNegotiationProductMoney,
-} from '../products/product-monetary-lock';
+import { acquireProductMonetaryLock } from '../products/product-monetary-lock';
 import { validateSpecialistProductAssociation } from '../products/product-association-validator';
 import { lockAndAssertNoActiveProcess } from './process-dedup-lock';
 import { parseDate, isFutureDate } from 'src/shared/utils/date.utils';
@@ -67,10 +66,10 @@ const PROCESS_STATUS_TRANSITIONS: Record<
   ProcessStatus,
   readonly ProcessStatus[]
 > = {
-  [ProcessStatus.SCHEDULING]: [ProcessStatus.NEGOTIATION],
+  [ProcessStatus.SCHEDULING]: [],
   [ProcessStatus.NEGOTIATION]: [ProcessStatus.DOCUMENTATION],
-  [ProcessStatus.PROCESSING_CONTRACT]: [ProcessStatus.DOCUMENTATION],
-  [ProcessStatus.DOCUMENTATION]: [ProcessStatus.COMPLETED],
+  [ProcessStatus.PROCESSING_CONTRACT]: [],
+  [ProcessStatus.DOCUMENTATION]: [],
   [ProcessStatus.COMPLETED]: [],
   [ProcessStatus.REJECTED]: [],
 };
@@ -152,6 +151,30 @@ export class ProcessesService {
     if (!PROCESS_STATUS_TRANSITIONS[currentStatus]?.includes(nextStatus)) {
       throw new BadRequestException(
         `Transição de ${currentStatus} para ${nextStatus} não permitida`,
+      );
+    }
+  }
+
+  private assertManualStatusPreconditions(
+    process: ProcessWithProducts & {
+      negotiation_currency?: ProductCurrency | null;
+      negotiation_product_value?: Prisma.Decimal | null;
+    },
+    nextStatus: ProcessStatus,
+  ): void {
+    if (nextStatus !== ProcessStatus.DOCUMENTATION) return;
+
+    const hasNegotiationProduct =
+      !!process.product_type &&
+      !!this.getProductId(process) &&
+      !!this.buildProduct(process);
+    const hasNegotiationSnapshot =
+      process.negotiation_currency != null &&
+      process.negotiation_product_value != null;
+
+    if (!hasNegotiationProduct || !hasNegotiationSnapshot) {
+      throw new BadRequestException(
+        'O processo precisa de produto e snapshot de negociação antes da documentação',
       );
     }
   }
@@ -1256,46 +1279,17 @@ export class ProcessesService {
             existingProcess.status,
             updateProcessDto.status,
           );
+          this.assertManualStatusPreconditions(
+            existingProcess,
+            updateProcessDto.status,
+          );
 
-          if (updateProcessDto.status === ProcessStatus.NEGOTIATION) {
-            await lockNegotiationProductMoney(tx, existingProcess);
-            existingProcess = await tx.process.findUniqueOrThrow({
-              where: { id: processId },
-              include: {
-                client: {
-                  select: {
-                    email: true,
-                    name: true,
-                    surname: true,
-                    consultant_id: true,
-                    company_id: true,
-                    consultant: { select: { company_id: true } },
-                  },
-                },
-                specialist: {
-                  select: { email: true, name: true, surname: true },
-                },
-                car: true,
-                boat: true,
-                aircraft: true,
-              },
-            });
-            if (existingProcess.status === updateProcessDto.status) {
-              throw new BadRequestException();
-            }
-          }
-
-          const snapshotData =
-            updateProcessDto.status === ProcessStatus.NEGOTIATION
-              ? buildNegotiationSnapshotUpdate(existingProcess)
-              : {};
           const nextUpdatedAt = new Date();
           const claim = await tx.process.updateMany({
             data: {
               status: updateProcessDto.status,
               notes: updateProcessDto.notes,
               updated_at: nextUpdatedAt,
-              ...snapshotData,
             },
             where: {
               id: processId,
@@ -1991,7 +1985,35 @@ export class ProcessesService {
     try {
       const [updatedProcess, updatedStatusHistory] =
         await this.prismaService.$transaction(async (tx) => {
-          // Verificar se o processo existe
+          const candidate = await tx.process.findUniqueOrThrow({
+            where: { id: processId },
+            select: {
+              id: true,
+              client_id: true,
+              specialist_id: true,
+              client: {
+                select: {
+                  consultant_id: true,
+                  company_id: true,
+                  consultant: { select: { company_id: true } },
+                },
+              },
+            },
+          });
+          this.assertProcessAccess(
+            candidate,
+            {
+              id: rejectedById ?? '',
+              role: requesterRole as UserRole,
+              companyId: requesterCompanyId,
+            },
+            'reject',
+          );
+
+          // Mesma ordem de cancelamento/avanço: agenda do especialista,
+          // releitura do processo e só então a reivindicação CAS.
+          await acquireSpecialistScheduleLock(tx, candidate.specialist_id);
+
           const existingProcess = await tx.process.findUniqueOrThrow({
             where: { id: processId },
             include: {
@@ -2035,23 +2057,43 @@ export class ProcessesService {
             );
           }
 
-          // Atualizar status para REJECTED
-          const process = await tx.process.update({
+          const rejectedAt = new Date();
+          const claim = await tx.process.updateMany({
             data: {
-              status: 'REJECTED',
-              updated_at: new Date(),
+              status: ProcessStatus.REJECTED,
+              updated_at: rejectedAt,
             },
             where: {
               id: processId,
+              client_id: existingProcess.client_id,
+              specialist_id: existingProcess.specialist_id,
+              status: existingProcess.status,
+              updated_at: existingProcess.updated_at,
             },
+          });
+          if (claim.count !== 1) {
+            throw new ConflictException({
+              success: false,
+              error: {
+                code: 'PROCESS_REJECTION_CONFLICT',
+                message:
+                  'O processo foi alterado por outra operação. Recarregue e tente novamente.',
+                details: { process_id: processId },
+              },
+            });
+          }
+
+          const process = await tx.process.findUniqueOrThrow({
+            where: { id: processId },
           });
 
           // Criar registro de histórico
           await tx.processStatusHistory.create({
             data: {
               processId,
-              status: 'REJECTED',
-              changed_at: process.updated_at,
+              status: ProcessStatus.REJECTED,
+              changed_by: rejectedById,
+              changed_at: rejectedAt,
             },
           });
 
