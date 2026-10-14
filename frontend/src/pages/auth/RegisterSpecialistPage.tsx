@@ -162,7 +162,8 @@ export default function RegisterSpecialistPage() {
           <p className="text-muted mb-6">
             Sua conta de especialista em{" "}
             <strong>{speciality ? SPECIALITY_LABEL[speciality] : ""}</strong> foi criada.
-            Conecte seu Calendly para poder anunciar produtos na plataforma.
+            O Calendly é opcional. Conecte sua conta se quiser automatizar o
+            agendamento de reuniões com clientes.
           </p>
           {calendlyError && (
             <p className="text-sm text-status-bad mb-4">{calendlyError}</p>
