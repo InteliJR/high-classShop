@@ -1,4 +1,4 @@
-import { useState, type RefObject } from "react";
+import { useRef, useState, type RefObject } from "react";
 import { X, AlertTriangle } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import type { Process } from "../../services/processes.service";
@@ -37,6 +37,7 @@ export default function UpdateProcessStatusModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
+  const rejectionInFlight = useRef(false);
 
   const {
     control,
@@ -77,6 +78,9 @@ export default function UpdateProcessStatusModal({
   };
 
   const handleRejectConfirm = async () => {
+    if (rejectionInFlight.current) return;
+    rejectionInFlight.current = true;
+
     try {
       setIsSubmitting(true);
       setError(null);
@@ -92,6 +96,7 @@ export default function UpdateProcessStatusModal({
         err instanceof Error ? err.message : "Erro ao rejeitar processo"
       );
     } finally {
+      rejectionInFlight.current = false;
       setIsSubmitting(false);
     }
   };

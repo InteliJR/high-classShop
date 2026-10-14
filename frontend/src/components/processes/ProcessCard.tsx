@@ -108,7 +108,11 @@ export default function ProcessCard({
   );
   const [isStartingMeeting, setIsStartingMeeting] = useState(false);
   const [isLoadingMeeting, setIsLoadingMeeting] = useState(false);
-  const [meetingLookupComplete, setMeetingLookupComplete] = useState(false);
+  const [meetingLookupState, setMeetingLookupState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [meetingVerifiedProcess, setMeetingVerifiedProcess] =
+    useState<Process | null>(null);
   const [isConversationDoneLoading, setIsConversationDoneLoading] =
     useState(false);
   const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false);
@@ -157,13 +161,16 @@ export default function ProcessCard({
   const hasActiveMeeting = Boolean(
     meetingSession && !meetingSession.ended_at && meetingSession.is_active !== false,
   );
-  const isMeetingStatePending = canStartOrJoinMeeting && !meetingLookupComplete;
+  const isNonTerminalProcess =
+    process.status !== "COMPLETED" && process.status !== "REJECTED";
+  const shouldLookupMeeting =
+    canStartOrJoinMeeting || (isNonTerminalProcess && !hasActiveAppointment);
   const canRejectProcess =
-    process.status !== "COMPLETED" &&
-    process.status !== "REJECTED" &&
+    isNonTerminalProcess &&
     !hasActiveAppointment &&
     !hasActiveMeeting &&
-    !isMeetingStatePending;
+    meetingLookupState === "ready" &&
+    meetingVerifiedProcess === process;
   const canSpecialistReschedule =
     !isClientView &&
     process.status === "SCHEDULING" &&
@@ -188,38 +195,68 @@ export default function ProcessCard({
       })
     : null;
 
-  // Load completion reason and active contract on mount and when process changes
+  // These projections are independent: a failure in one must not suppress the
+  // others (especially the meeting gate used by rejection).
   useEffect(() => {
-    const loadDetails = async () => {
-      try {
-        setIsLoadingMeeting(true);
-        setMeetingLookupComplete(false);
-        const [reason, processData] = await Promise.all([
-          getProcessCompletionReason(process.id),
-          getProcessWithActiveContract(process.id),
-        ]);
-        setCompletionReason(reason);
-        setActiveContract(processData.activeContract);
-        console.log(processData);
+    let current = true;
 
-        const shouldCheckMeeting = canStartOrJoinMeeting;
+    void getProcessCompletionReason(process.id)
+      .then((reason) => {
+        if (current) setCompletionReason(reason);
+      })
+      .catch((error) => console.error("Error loading completion reason:", error));
 
-        if (shouldCheckMeeting) {
-          const meeting = await getMeetingByProcess(process.id);
-          setMeetingSession(meeting);
-        } else {
-          setMeetingSession(null);
-        }
-      } catch (error) {
-        console.error("Error loading process details:", error);
-      } finally {
-        setIsLoadingMeeting(false);
-        setMeetingLookupComplete(true);
-      }
+    void getProcessWithActiveContract(process.id)
+      .then((processData) => {
+        if (current) setActiveContract(processData.activeContract);
+      })
+      .catch((error) => console.error("Error loading active contract:", error));
+
+    return () => {
+      current = false;
     };
+  }, [process]);
 
-    loadDetails();
-  }, [process, canStartOrJoinMeeting]);
+  useEffect(() => {
+    let current = true;
+
+    if (!shouldLookupMeeting) {
+      setMeetingSession(null);
+      setMeetingLookupState("idle");
+      setMeetingVerifiedProcess(null);
+      setIsLoadingMeeting(false);
+      return () => {
+        current = false;
+      };
+    }
+
+    setMeetingSession(null);
+    setMeetingLookupState("loading");
+    setMeetingVerifiedProcess(null);
+    setIsLoadingMeeting(true);
+
+    void getMeetingByProcess(process.id)
+      .then((meeting) => {
+        if (!current) return;
+        setMeetingSession(meeting);
+        setMeetingLookupState("ready");
+        setMeetingVerifiedProcess(process);
+      })
+      .catch((error) => {
+        if (!current) return;
+        setMeetingSession(null);
+        setMeetingLookupState("error");
+        setMeetingVerifiedProcess(null);
+        console.error("Error loading meeting:", error);
+      })
+      .finally(() => {
+        if (current) setIsLoadingMeeting(false);
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [process, shouldLookupMeeting]);
 
   const handleStartMeeting = async () => {
     if (isStartingMeeting) return;

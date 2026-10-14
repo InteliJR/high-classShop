@@ -65,6 +65,16 @@ function renderCard(
   );
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve;
+    reject = onReject;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("ProcessCard appointment time actions", () => {
   beforeEach(() => {
     vi.mocked(getProcessCompletionReason).mockResolvedValue(null);
@@ -354,7 +364,7 @@ describe("ProcessCard appointment time actions", () => {
     },
   );
 
-  it("keeps rejection separate from the status selector", () => {
+  it("keeps rejection separate from the status selector", async () => {
     renderCard(
       {
         ...baseProcess,
@@ -368,7 +378,7 @@ describe("ProcessCard appointment time actions", () => {
       screen.queryByRole("button", { name: "Alterar Status" }),
     ).toBeNull();
     fireEvent.click(
-      screen.getByRole("button", { name: "Recusar processo" }),
+      await screen.findByRole("button", { name: "Recusar processo" }),
     );
     expect(screen.getByText("Rejeitar Processo")).toBeTruthy();
     expect(screen.queryByLabelText(/Novo Status/i)).toBeNull();
@@ -424,7 +434,7 @@ describe("ProcessCard appointment time actions", () => {
   it.each([
     { actor: "specialist", isClientView: false },
     { actor: "customer", isClientView: true },
-  ])("lets the $actor reject a safe process without expanding the card", ({ isClientView }) => {
+  ])("lets the $actor reject a safe process without expanding the card", async ({ isClientView }) => {
     renderCard(
       {
         ...baseProcess,
@@ -435,7 +445,66 @@ describe("ProcessCard appointment time actions", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Recusar processo" }),
+      await screen.findByRole("button", { name: "Recusar processo" }),
+    ).toBeTruthy();
+  });
+
+  it.each([null, "CANCELLED", "COMPLETED"] as const)(
+    "keeps rejection fail-closed until meeting lookup completes for appointment %s",
+    async (appointment_status) => {
+      const lookup = deferred<null>();
+      vi.mocked(getMeetingByProcess).mockReturnValue(lookup.promise);
+      renderCard({
+        ...baseProcess,
+        status: "DOCUMENTATION",
+        appointment_status,
+      });
+
+      expect(getMeetingByProcess).toHaveBeenCalledWith(baseProcess.id);
+      expect(
+        screen.queryByRole("button", { name: "Recusar processo" }),
+      ).toBeNull();
+
+      lookup.resolve(null);
+      expect(
+        await screen.findByRole("button", { name: "Recusar processo" }),
+      ).toBeTruthy();
+    },
+  );
+
+  it("keeps rejection fail-closed when meeting lookup fails", async () => {
+    vi.mocked(getMeetingByProcess).mockRejectedValue(
+      new Error("meeting lookup unavailable"),
+    );
+    renderCard({
+      ...baseProcess,
+      status: "DOCUMENTATION",
+      appointment_status: "COMPLETED",
+    });
+
+    await waitFor(() => expect(getMeetingByProcess).toHaveBeenCalledOnce());
+    expect(
+      screen.queryByRole("button", { name: "Recusar processo" }),
+    ).toBeNull();
+  });
+
+  it("allows rejection after the meeting is known to be ended", async () => {
+    vi.mocked(getMeetingByProcess).mockResolvedValue({
+      id: "meeting-ended",
+      process_id: baseProcess.id,
+      meet_link: "https://meet.example/ended",
+      started_at: "2026-09-16T20:00:00.000Z",
+      ended_at: "2026-09-16T21:00:00.000Z",
+      is_active: false,
+    });
+    renderCard({
+      ...baseProcess,
+      status: "DOCUMENTATION",
+      appointment_status: "COMPLETED",
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "Recusar processo" }),
     ).toBeTruthy();
   });
 
@@ -464,7 +533,9 @@ describe("ProcessCard appointment time actions", () => {
       status: "DOCUMENTATION",
       appointment_status: "COMPLETED",
     });
-    const trigger = screen.getByRole("button", { name: "Recusar processo" });
+    const trigger = await screen.findByRole("button", {
+      name: "Recusar processo",
+    });
     trigger.focus();
     fireEvent.click(trigger);
 
@@ -476,6 +547,74 @@ describe("ProcessCard appointment time actions", () => {
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it("submits the rejection reason once while busy and reports success", async () => {
+    const request = deferred<Awaited<ReturnType<typeof rejectProcess>>>();
+    const onStatusUpdated = vi.fn();
+    vi.mocked(rejectProcess).mockReturnValue(request.promise);
+    renderCard(
+      {
+        ...baseProcess,
+        status: "DOCUMENTATION",
+        appointment_status: "COMPLETED",
+      },
+      { onStatusUpdated },
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Recusar processo" }),
+    );
+    fireEvent.change(screen.getByLabelText(/Motivo da Rejeição/i), {
+      target: { value: "Cliente desistiu" },
+    });
+    const submit = screen.getByRole("button", {
+      name: "Confirmar Rejeição",
+    });
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+
+    expect(rejectProcess).toHaveBeenCalledOnce();
+    expect(rejectProcess).toHaveBeenCalledWith(
+      baseProcess.id,
+      "Cliente desistiu",
+    );
+    expect((screen.getByLabelText(/Motivo da Rejeição/i) as HTMLTextAreaElement).disabled).toBe(true);
+    expect(onStatusUpdated).not.toHaveBeenCalled();
+
+    await act(async () => request.resolve({} as Process));
+    await waitFor(() => expect(onStatusUpdated).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("keeps a rejection error inline without reporting success", async () => {
+    const onStatusUpdated = vi.fn();
+    vi.mocked(rejectProcess).mockRejectedValue(
+      new Error("Não foi possível recusar agora."),
+    );
+    renderCard(
+      {
+        ...baseProcess,
+        status: "DOCUMENTATION",
+        appointment_status: "CANCELLED",
+      },
+      { onStatusUpdated },
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Recusar processo" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirmar Rejeição" }),
+    );
+
+    expect(
+      await screen.findByText("Não foi possível recusar agora."),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByRole("dialog")).getAllByRole("alert"),
+    ).toHaveLength(2);
+    expect(onStatusUpdated).not.toHaveBeenCalled();
   });
 
   it.each(["(11) 98765-4321", "+55 11 98765-4321"])("renders safe WhatsApp and preserves the original phone %s", (phone) => {
