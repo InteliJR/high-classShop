@@ -77,9 +77,8 @@ describe('DashboardService — produtos ativos e totais', () => {
       Promise.resolve(where.is_active ? 2 : 5),
     );
 
-    const result = await mkSvcWithPrisma(prisma).getSpecialistStats(
-      'specialist-1',
-    );
+    const result =
+      await mkSvcWithPrisma(prisma).getSpecialistStats('specialist-1');
 
     expect(result.productsListed).toBe(5);
     expect(result.activeProducts).toBe(2);
