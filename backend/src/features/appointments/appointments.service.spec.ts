@@ -996,6 +996,109 @@ describe('AppointmentsService.confirmPending — snapshot da negociação', () =
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('confirma consultoria mesmo quando existe processo ativo anterior', async () => {
+    const client = {
+      id: 'client-1',
+      name: 'Cliente',
+      surname: 'Teste',
+      email: 'cliente@example.com',
+    };
+    const specialist = {
+      id: 'specialist-1',
+      name: 'Especialista',
+      surname: 'Teste',
+      email: 'especialista@example.com',
+      role: UserRole.SPECIALIST,
+      speciality: ProductType.CAR,
+    };
+    const currentProcess = {
+      id: 'current-process-1',
+      client_id: client.id,
+      specialist_id: specialist.id,
+      status: ProcessStatus.SCHEDULING,
+      notes: 'Consultoria atual',
+      product_type: null,
+      car_id: null,
+      boat_id: null,
+      aircraft_id: null,
+      negotiation_currency: null,
+      negotiation_product_value: null,
+      updated_at: new Date('2026-01-01T00:00:00.000Z'),
+      car: null,
+      boat: null,
+      aircraft: null,
+    };
+    const appointment = {
+      id: 'appointment-1',
+      client_id: client.id,
+      specialist_id: specialist.id,
+      product_type: null,
+      product_id: null,
+      status: StatusAgendamento.PENDING,
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      notes: null,
+      appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+      created_at: new Date('2026-01-01T00:00:00.000Z'),
+      updated_at: new Date('2026-01-01T00:00:00.000Z'),
+      client,
+      specialist,
+      process: currentProcess,
+    };
+    const processFindFirst = jest.fn().mockResolvedValue({
+      id: 'older-active-process',
+      status: ProcessStatus.NEGOTIATION,
+    });
+    const appointmentFindFirst = jest.fn().mockResolvedValue(null);
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      user: { findUnique: jest.fn().mockResolvedValue(specialist) },
+      car: { findUnique: jest.fn() },
+      boat: { findUnique: jest.fn() },
+      aircraft: { findUnique: jest.fn() },
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(appointment),
+        findFirst: appointmentFindFirst,
+        update: jest.fn().mockResolvedValue({
+          ...appointment,
+          status: StatusAgendamento.SCHEDULED,
+        }),
+      },
+      process: {
+        findFirst: processFindFirst,
+        create: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue(currentProcess),
+      },
+      processStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    } as any;
+    const notifications = {
+      sendAppointmentConfirmedEmail: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const service = new AppointmentsService(prisma, notifications, {} as any);
+
+    await expect(
+      service.confirmPending(appointment.id, specialist.id),
+    ).resolves.toMatchObject({ id: appointment.id });
+
+    expect(processFindFirst).not.toHaveBeenCalled();
+    expect(appointmentFindFirst).toHaveBeenCalledWith({
+      where: {
+        id: { not: appointment.id },
+        client_id: client.id,
+        specialist_id: specialist.id,
+        product_type: null,
+        product_id: null,
+        status: {
+          in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
+        },
+      },
+    });
+  });
+
   it.each([
     [false, ProductCurrency.BRL],
     [false, ProductCurrency.USD],

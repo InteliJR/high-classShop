@@ -1673,16 +1673,50 @@ export class AppointmentsService {
         productId: appointment.product_id,
       });
 
-      await lockAndAssertNoActiveProcess(
-        tx,
-        {
-          clientId: appointment.client_id,
-          specialistId: appointment.specialist_id,
-          productType: appointment.product_type,
-          productId: appointment.product_id,
-        },
-        appointment.process?.id,
-      );
+      const processScope = {
+        clientId: appointment.client_id,
+        specialistId: appointment.specialist_id,
+        productType: appointment.product_type,
+        productId: appointment.product_id,
+      };
+      const isConsultancy =
+        !appointment.product_type || !appointment.product_id;
+
+      if (isConsultancy) {
+        await acquireActiveProcessDedupLock(tx, processScope);
+        const existingAppointment = await tx.appointment.findFirst({
+          where: {
+            id: { not: appointmentId },
+            client_id: appointment.client_id,
+            specialist_id: appointment.specialist_id,
+            product_type: null,
+            product_id: null,
+            status: {
+              in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
+            },
+          },
+        });
+        if (existingAppointment) {
+          throw new ConflictException({
+            success: false,
+            error: {
+              code: 409,
+              message:
+                'Já existe um agendamento de consultoria pendente com este especialista',
+              details: {
+                existing_id: existingAppointment.id,
+                existing_status: existingAppointment.status,
+              },
+            },
+          });
+        }
+      } else {
+        await lockAndAssertNoActiveProcess(
+          tx,
+          processScope,
+          appointment.process?.id,
+        );
+      }
       await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
 
       const lockedAppointment = await tx.appointment.findUnique({

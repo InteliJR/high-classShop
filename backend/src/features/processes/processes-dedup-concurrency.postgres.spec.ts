@@ -226,7 +226,7 @@ describeWithPostgres('process active dedup lock — PostgreSQL concurrency', () 
     });
   }, 15_000);
 
-  it('shares the dedup lock between public create and create-on-behalf', async () => {
+  it('serializes public create with create-on-behalf without blocking consultancy', async () => {
     const lockKey = `process-dedup:${clientId}:${specialistId}:CONSULTANCY:none`;
     const holderReady = deferred();
     const releaseHolder = deferred();
@@ -275,9 +275,16 @@ describeWithPostgres('process active dedup lock — PostgreSQL concurrency', () 
     const outcomes = await Promise.allSettled([publicCreate, behalfCreate]);
 
     expect(bothAttemptedBeforeCompletion).toBe(true);
-    expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
-    expect(outcomes.find(({ status }) => status === 'rejected')).toMatchObject({
-      reason: expect.any(ConflictException),
-    });
+    expect(outcomes[1]).toMatchObject({ status: 'fulfilled' });
+    await expect(
+      holder.appointment.count({
+        where: {
+          client_id: clientId,
+          specialist_id: specialistId,
+          product_type: null,
+          product_id: null,
+        },
+      }),
+    ).resolves.toBe(1);
   }, 15_000);
 });
