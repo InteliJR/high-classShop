@@ -21,6 +21,7 @@ interface Props {
   productLabel: string;
   currency: ProductCurrency;
   vehiclePrice: number;
+  totalCommissionValue: number;
   specialistValue: number;
   showEarningsPreview: boolean;
   onContinue: () => void;
@@ -33,6 +34,7 @@ export default function ContractCommissionStep({
   productLabel,
   currency,
   vehiclePrice,
+  totalCommissionValue,
   specialistValue,
   showEarningsPreview,
   onContinue,
@@ -101,10 +103,22 @@ export default function ContractCommissionStep({
 
         {showEarningsPreview && (
           <div className="mt-6 pt-5 border-t">
-            <p className="text-xs text-subtle">Seu ganho estimado</p>
-            <p className="text-sm font-medium text-ink mt-0.5">
-              {formatCurrency(specialistValue, currency)}
-            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-subtle">
+                  Valor total da comissão
+                </p>
+                <p className="text-sm font-medium text-ink mt-0.5">
+                  {formatCurrency(totalCommissionValue, currency)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-subtle">Seu ganho estimado</p>
+                <p className="text-sm font-medium text-ink mt-0.5">
+                  {formatCurrency(specialistValue, currency)}
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </section>

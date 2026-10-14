@@ -3,9 +3,13 @@ import { DashboardService } from './dashboard.service';
 function mkPrisma() {
   return {
     company: { count: jest.fn().mockResolvedValue(0) },
-    process: { count: jest.fn().mockResolvedValue(0) },
+    process: {
+      count: jest.fn().mockResolvedValue(0),
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
     user: {
       count: jest.fn().mockResolvedValue(0),
+      findUnique: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
     },
     car: { count: jest.fn().mockResolvedValue(0) },
@@ -23,12 +27,66 @@ function mkAdminDatabaseService(counts: any[] = []) {
 }
 
 function mkSvc(sales: any[] = [], counts: any[] = []) {
+  return mkSvcWithPrisma(mkPrisma(), sales, counts);
+}
+
+function mkSvcWithPrisma(
+  prisma: ReturnType<typeof mkPrisma>,
+  sales: any[] = [],
+  counts: any[] = [],
+) {
   return new DashboardService(
-    mkPrisma(),
+    prisma,
     mkCommissionsService(sales),
     mkAdminDatabaseService(counts),
   );
 }
+
+describe('DashboardService — produtos ativos e totais', () => {
+  it('retorna ativos separados do total no dashboard administrativo', async () => {
+    const prisma = mkPrisma();
+    prisma.car.count.mockImplementation(({ where }: any = {}) =>
+      Promise.resolve(where?.is_active ? 2 : 3),
+    );
+    prisma.boat.count.mockImplementation(({ where }: any = {}) =>
+      Promise.resolve(where?.is_active ? 1 : 4),
+    );
+    prisma.aircraft.count.mockImplementation(({ where }: any = {}) =>
+      Promise.resolve(where?.is_active ? 5 : 6),
+    );
+
+    const result = await mkSvcWithPrisma(prisma).getAdminStats();
+
+    expect(result.totalProducts).toBe(13);
+    expect(result.activeProducts).toBe(8);
+    expect(prisma.car.count).toHaveBeenCalledWith({
+      where: { is_active: true },
+    });
+    expect(prisma.boat.count).toHaveBeenCalledWith({
+      where: { is_active: true },
+    });
+    expect(prisma.aircraft.count).toHaveBeenCalledWith({
+      where: { is_active: true },
+    });
+  });
+
+  it('retorna ativos separados do total para o especialista', async () => {
+    const prisma = mkPrisma();
+    prisma.user.findUnique.mockResolvedValue({ speciality: 'CAR' });
+    prisma.car.count.mockImplementation(({ where }: any) =>
+      Promise.resolve(where.is_active ? 2 : 5),
+    );
+
+    const result =
+      await mkSvcWithPrisma(prisma).getSpecialistStats('specialist-1');
+
+    expect(result.productsListed).toBe(5);
+    expect(result.activeProducts).toBe(2);
+    expect(prisma.car.count).toHaveBeenCalledWith({
+      where: { specialist_id: 'specialist-1', is_active: true },
+    });
+  });
+});
 
 describe('DashboardService — getAdminStats sem conversionRate', () => {
   it('não retorna mais o campo conversionRate', async () => {
