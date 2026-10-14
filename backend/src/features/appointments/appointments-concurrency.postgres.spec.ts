@@ -104,7 +104,7 @@ describeWithPostgres(
           name: 'Schedule',
           surname: `Fixture ${index}`,
           email: `schedule-${index}-${suffix}@example.test`,
-          rg: `${suffix.slice(0, 12)}${index}`,
+          rg: `${suffix.slice(0, 10)}${index}`,
           role: index < 2 ? UserRole.CUSTOMER : UserRole.SPECIALIST,
           speciality: index < 2 ? null : ProductType.CAR,
           password_hash: 'not-used',
@@ -522,6 +522,97 @@ describeWithPostgres(
         },
       });
     }
+
+    it.each([AppointmentSchedulingMethod.CALENDLY, null])(
+      'serializes legacy confirmPending requests for the same specialist/time (%s)',
+      async (schedulingMethod) => {
+        const pending = await Promise.all(
+          clientIds.map(async (clientId, index) => {
+            const appointment = await holder.appointment.create({
+              data: {
+                client_id: clientId,
+                specialist_id: specialistId,
+                product_type: ProductType.CAR,
+                product_id: carIds[index],
+                status: StatusAgendamento.PENDING,
+                scheduling_method: schedulingMethod,
+                appointment_datetime: null,
+              },
+            });
+            await holder.process.create({
+              data: {
+                client_id: clientId,
+                specialist_id: specialistId,
+                product_type: ProductType.CAR,
+                car_id: carIds[index],
+                appointment_id: appointment.id,
+                status: ProcessStatus.SCHEDULING,
+              },
+            });
+            return appointment;
+          }),
+        );
+        const before = await holder.process.findMany({
+          where: { appointment_id: { in: pending.map(({ id }) => id) } },
+          include: { appointment: true },
+        });
+        const outcomes = await race((a, b) => [
+          appointments(first, a).confirmPending(
+            pending[0].id,
+            specialistId,
+            proposedDate,
+          ),
+          appointments(second, b).confirmPending(
+            pending[1].id,
+            specialistId,
+            proposedDate,
+          ),
+        ]);
+        expect(
+          outcomes.filter(({ status }) => status === 'fulfilled'),
+        ).toHaveLength(1);
+        expect(
+          outcomes.find(({ status }) => status === 'rejected'),
+        ).toMatchObject({ reason: expect.any(ConflictException) });
+        const loserId =
+          pending[outcomes.findIndex(({ status }) => status === 'rejected')].id;
+        expect(
+          await holder.process.findUniqueOrThrow({
+            where: { appointment_id: loserId },
+            include: { appointment: true },
+          }),
+        ).toEqual(
+          before.find(({ appointment_id }) => appointment_id === loserId),
+        );
+        expect(
+          await holder.appointment.count({
+            where: {
+              specialist_id: specialistId,
+              status: StatusAgendamento.SCHEDULED,
+              appointment_datetime: proposedDate,
+            },
+          }),
+        ).toBe(1);
+        expect(
+          await holder.process.count({
+            where: {
+              specialist_id: specialistId,
+              status: ProcessStatus.NEGOTIATION,
+            },
+          }),
+        ).toBe(1);
+        expect(
+          await holder.processStatusHistory.count({
+            where: { process: { specialist_id: specialistId } },
+          }),
+        ).toBe(1);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(
+          notifications.sendAppointmentConfirmedEmail,
+        ).toHaveBeenCalledTimes(1);
+      },
+      15_000,
+    );
 
     function callback(
       client: PrismaClient,
