@@ -11,32 +11,55 @@ import {
 
 export type CalendlyResourceKind = 'event' | 'invitee';
 
-const CALENDLY_RESOURCE_PATHS: Record<CalendlyResourceKind, RegExp> = {
-  event: /^\/scheduled_events\/[A-Za-z0-9_-]+$/,
-  invitee: /^\/scheduled_events\/[A-Za-z0-9_-]+\/invitees\/[A-Za-z0-9_-]+$/,
-};
+export interface CalendlyResourceReference {
+  canonicalUri: string;
+  canonicalEventUri: string;
+  eventId: string;
+  inviteeId?: string;
+}
+
+const CALENDLY_RESOURCE_PATTERNS = [
+  /^https:\/\/api\.calendly\.com(?::443)?\/(?:api\/v2\/)?scheduled_events\/([A-Za-z0-9_-]+)(?:\/invitees\/([A-Za-z0-9_-]+))?$/i,
+  /^https:\/\/calendly\.com(?::443)?\/api\/v2\/scheduled_events\/([A-Za-z0-9_-]+)(?:\/invitees\/([A-Za-z0-9_-]+))?$/i,
+];
+
+export function parseCalendlyResourceUri(
+  value: unknown,
+  kind: CalendlyResourceKind,
+): CalendlyResourceReference | null {
+  if (typeof value !== 'string') return null;
+
+  const match = CALENDLY_RESOURCE_PATTERNS.map((pattern) =>
+    pattern.exec(value),
+  ).find((candidate) => candidate?.[0] === value);
+  if (!match) return null;
+
+  const [, eventId, inviteeId] = match;
+  if (
+    (kind === 'event' && inviteeId !== undefined) ||
+    (kind === 'invitee' && inviteeId === undefined)
+  ) {
+    return null;
+  }
+
+  const canonicalEventUri =
+    `https://api.calendly.com/scheduled_events/${eventId}`;
+  return {
+    eventId,
+    inviteeId,
+    canonicalEventUri,
+    canonicalUri:
+      kind === 'invitee'
+        ? `${canonicalEventUri}/invitees/${inviteeId}`
+        : canonicalEventUri,
+  };
+}
 
 export function isCalendlyResourceUri(
   value: unknown,
   kind: CalendlyResourceKind,
 ): value is string {
-  if (typeof value !== 'string') return false;
-
-  try {
-    const uri = new URL(value);
-    return (
-      uri.protocol === 'https:' &&
-      uri.hostname === 'api.calendly.com' &&
-      uri.port === '' &&
-      uri.username === '' &&
-      uri.password === '' &&
-      uri.search === '' &&
-      uri.hash === '' &&
-      CALENDLY_RESOURCE_PATHS[kind].test(uri.pathname)
-    );
-  } catch {
-    return false;
-  }
+  return parseCalendlyResourceUri(value, kind) !== null;
 }
 
 function IsCalendlyResourceUri(

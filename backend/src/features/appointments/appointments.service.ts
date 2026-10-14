@@ -41,7 +41,7 @@ import { isCalendlySchedulingAvailable } from 'src/shared/utils/calendly-schedul
 import { parseDate, isFutureDate } from 'src/shared/utils/date.utils';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { CalendlyIntegrationService } from './calendly-integration.service';
-import { isCalendlyResourceUri } from './dto/calendly-scheduled.dto';
+import { parseCalendlyResourceUri } from './dto/calendly-scheduled.dto';
 import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
 import { lockNegotiationProductMoney } from 'src/features/products/product-monetary-lock';
 import { validateSpecialistProductAssociation } from 'src/features/products/product-association-validator';
@@ -1876,12 +1876,21 @@ export class AppointmentsService {
     calendly_sync_status: CalendlySyncStatus;
     appointment_datetime: Date | null;
   }> {
-    if (
-      !isCalendlyResourceUri(dto.event_uri, 'event') ||
-      !isCalendlyResourceUri(dto.invitee_uri, 'invitee')
-    ) {
+    const eventReference = parseCalendlyResourceUri(dto.event_uri, 'event');
+    const inviteeReference = parseCalendlyResourceUri(
+      dto.invitee_uri,
+      'invitee',
+    );
+    if (!eventReference || !inviteeReference) {
       throw new BadRequestException('URIs do Calendly inválidas');
     }
+    if (eventReference.eventId !== inviteeReference.eventId) {
+      throw new BadRequestException(
+        'URIs do Calendly pertencem a eventos diferentes',
+      );
+    }
+    const eventUri = eventReference.canonicalUri;
+    const inviteeUri = inviteeReference.canonicalUri;
 
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
@@ -1939,7 +1948,8 @@ export class AppointmentsService {
 
     if (
       appointment.calendly_event_uri &&
-      appointment.calendly_event_uri === dto.event_uri
+      parseCalendlyResourceUri(appointment.calendly_event_uri, 'event')
+        ?.canonicalUri === eventUri
     ) {
       return {
         appointment_id: appointment.id,
@@ -1967,10 +1977,13 @@ export class AppointmentsService {
         scheduledStartTime =
           await this.calendlyIntegrationService.resolveScheduledStartTime(
             appointment.specialist_id,
-            dto.event_uri,
-            dto.invitee_uri,
+            eventUri,
+            inviteeUri,
           );
       } catch (error: any) {
+        if (error instanceof BadRequestException) {
+          throw error;
+        }
         this.logger.warn(
           `[registerCalendlyScheduled] Falha ao buscar horário no Calendly API: ${error?.message}`,
         );
@@ -2023,7 +2036,13 @@ export class AppointmentsService {
       if (lockedAppointment.specialist_rescheduled_at) {
         throw this.buildRescheduleAlreadyUsedError(appointmentId);
       }
-      if (lockedAppointment.calendly_event_uri === dto.event_uri) {
+      if (
+        lockedAppointment.calendly_event_uri &&
+        parseCalendlyResourceUri(
+          lockedAppointment.calendly_event_uri,
+          'event',
+        )?.canonicalUri === eventUri
+      ) {
         return lockedAppointment;
       }
 
@@ -2046,8 +2065,8 @@ export class AppointmentsService {
       return tx.appointment.update({
         where: { id: lockedAppointment.id },
         data: {
-          calendly_event_uri: dto.event_uri,
-          calendly_invitee_uri: dto.invitee_uri,
+          calendly_event_uri: eventUri,
+          calendly_invitee_uri: inviteeUri,
           calendly_scheduled_at: dto.client_observed_at
             ? new Date(dto.client_observed_at)
             : new Date(),

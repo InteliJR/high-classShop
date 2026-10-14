@@ -1740,6 +1740,25 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('rejeita evento e convidado que não pertencem ao mesmo agendamento', async () => {
+    const prisma = {
+      appointment: { findUnique: jest.fn() },
+      $transaction: jest.fn(),
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await expect(
+      service.registerCalendlyScheduled('appointment-1', 'client-1', {
+        event_uri: 'https://api.calendly.com/scheduled_events/event-1',
+        invitee_uri:
+          'https://api.calendly.com/scheduled_events/event-2/invitees/invitee-1',
+        scheduled_start_time: '2099-01-01T10:00:00.000Z',
+      }),
+    ).rejects.toThrow('URIs do Calendly pertencem a eventos diferentes');
+    expect(prisma.appointment.findUnique).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it.each([
     AppointmentSchedulingMethod.EMAIL,
     AppointmentSchedulingMethod.PLATFORM,
@@ -1760,11 +1779,92 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
 
     await expect(
       service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
-        event_uri: 'https://calendly.test/events/1',
-        invitee_uri: 'https://calendly.test/invitees/1',
+        event_uri: 'https://api.calendly.com/scheduled_events/event-1',
+        invitee_uri:
+          'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
         scheduled_start_time: '2099-01-01T10:00:00.000Z',
       } as any),
     ).rejects.toThrow(BadRequestException);
+    expect(prisma.appointment.findUnique).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('considera idempotente a mesma URI oficial após canonicalização', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.SCHEDULED,
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      specialist_rescheduled_at: null,
+      calendly_event_uri:
+        'https://calendly.com/api/v2/scheduled_events/event-1',
+      calendly_sync_status: 'SYNCED',
+      appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      $transaction: jest.fn(),
+    } as any;
+    const calendlyIntegrationService = {
+      resolveScheduledStartTime: jest.fn(),
+    } as any;
+    const service = new AppointmentsService(
+      prisma,
+      {} as any,
+      calendlyIntegrationService,
+    );
+
+    await expect(
+      service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
+        event_uri: 'https://api.calendly.com/scheduled_events/event-1',
+        invitee_uri:
+          'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+      }),
+    ).resolves.toEqual({
+      appointment_id: appointment.id,
+      calendly_sync_status: appointment.calendly_sync_status,
+      appointment_datetime: appointment.appointment_datetime,
+    });
+    expect(
+      calendlyIntegrationService.resolveScheduledStartTime,
+    ).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('não ignora falha de integridade detectada na resposta do Calendly', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.PENDING,
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      specialist_rescheduled_at: null,
+      calendly_event_uri: null,
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      $transaction: jest.fn(),
+    } as any;
+    const integrityError = new BadRequestException(
+      'URIs do Calendly pertencem a eventos diferentes',
+    );
+    const calendlyIntegrationService = {
+      resolveScheduledStartTime: jest.fn().mockRejectedValue(integrityError),
+    } as any;
+    const service = new AppointmentsService(
+      prisma,
+      {} as any,
+      calendlyIntegrationService,
+    );
+
+    await expect(
+      service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
+        event_uri: 'https://api.calendly.com/scheduled_events/event-1',
+        invitee_uri:
+          'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+      }),
+    ).rejects.toBe(integrityError);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
@@ -1794,7 +1894,7 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('serializes and rechecks the resolved time in the write transaction', async () => {
+  it('normalizes, serializes and rechecks the resolved time in the write transaction', async () => {
     const appointment = {
       id: 'appointment-1',
       client_id: 'client-1',
@@ -1829,9 +1929,10 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       appointment.id,
       appointment.client_id,
       {
-        event_uri: 'https://api.calendly.com/scheduled_events/event-1',
+        event_uri:
+          'https://calendly.com/api/v2/scheduled_events/event-1',
         invitee_uri:
-          'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+          'https://api.calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
         scheduled_start_time: '2099-01-01T10:00:00.000Z',
       } as any,
     );
@@ -1842,7 +1943,16 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
     );
     expect(tx.appointment.findFirst).toHaveBeenCalled();
     expect(prisma.appointment.update).not.toHaveBeenCalled();
-    expect(tx.appointment.update).toHaveBeenCalledTimes(1);
+    expect(tx.appointment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          calendly_event_uri:
+            'https://api.calendly.com/scheduled_events/event-1',
+          calendly_invitee_uri:
+            'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+        }),
+      }),
+    );
   });
 
   it('rejects a reschedule that overlaps an already SCHEDULED appointment', async () => {

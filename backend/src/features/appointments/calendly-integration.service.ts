@@ -29,7 +29,8 @@ import {
 } from './appointment-schedule-lock';
 import {
   CalendlyResourceKind,
-  isCalendlyResourceUri,
+  CalendlyResourceReference,
+  parseCalendlyResourceUri,
 } from './dto/calendly-scheduled.dto';
 
 interface CalendlyTokenResponse {
@@ -291,8 +292,13 @@ export class CalendlyIntegrationService {
       return null;
     }
 
-    if (eventUri) this.assertCalendlyResourceUri(eventUri, 'event');
-    if (inviteeUri) this.assertCalendlyResourceUri(inviteeUri, 'invitee');
+    const eventReference = eventUri
+      ? this.parseCalendlyResourceUri(eventUri, 'event')
+      : null;
+    const inviteeReference = inviteeUri
+      ? this.parseCalendlyResourceUri(inviteeUri, 'invitee')
+      : null;
+    this.assertSameCalendlyEvent(eventReference, inviteeReference);
 
     const connection = await this.prisma.calendlyConnection.findUnique({
       where: { user_id: specialistId },
@@ -302,15 +308,25 @@ export class CalendlyIntegrationService {
       return null;
     }
 
-    const inviteeData = inviteeUri
+    const inviteeData = inviteeReference
       ? await this.getCalendlyResourceWithRefresh(
           connection.user_id,
-          inviteeUri,
+          inviteeReference.canonicalUri,
           'invitee',
         )
       : null;
 
     const inviteeResource = inviteeData?.resource || inviteeData;
+    const inviteeEventUri =
+      inviteeResource?.event || inviteeResource?.scheduled_event?.uri;
+    const inviteeEventReference = inviteeEventUri
+      ? this.parseCalendlyResourceUri(inviteeEventUri, 'event')
+      : null;
+    this.assertSameCalendlyEvent(
+      eventReference,
+      inviteeReference,
+      inviteeEventReference,
+    );
     const inviteeStartTime =
       inviteeResource?.start_time ||
       inviteeResource?.event_start_time ||
@@ -328,9 +344,9 @@ export class CalendlyIntegrationService {
     }
 
     const resolvedEventUri =
-      eventUri ||
-      inviteeResource?.event ||
-      inviteeResource?.scheduled_event?.uri;
+      eventReference?.canonicalUri ||
+      inviteeEventReference?.canonicalUri ||
+      inviteeReference?.canonicalEventUri;
     if (!resolvedEventUri) {
       return null;
     }
@@ -379,18 +395,28 @@ export class CalendlyIntegrationService {
       };
     }
 
-    const eventUri = payload.event || payload.scheduled_event?.uri;
-    const inviteeUri =
+    const rawEventUri = payload.event || payload.scheduled_event?.uri;
+    const rawInviteeUri =
       typeof payload.invitee === 'string'
         ? payload.invitee
         : payload.invitee?.uri;
 
-    if (!eventUri && !inviteeUri) {
+    if (!rawEventUri && !rawInviteeUri) {
       return {
         processed: false,
         message: 'Webhook sem event/invitee uri',
       };
     }
+
+    const eventReference = rawEventUri
+      ? this.parseCalendlyResourceUri(rawEventUri, 'event')
+      : null;
+    const inviteeReference = rawInviteeUri
+      ? this.parseCalendlyResourceUri(rawInviteeUri, 'invitee')
+      : null;
+    this.assertSameCalendlyEvent(eventReference, inviteeReference);
+    const eventUri = eventReference?.canonicalUri;
+    const inviteeUri = inviteeReference?.canonicalUri;
 
     const appointment = await this.prisma.appointment.findFirst({
       where: {
@@ -627,7 +653,7 @@ export class CalendlyIntegrationService {
     uri: string,
     kind: CalendlyResourceKind,
   ): Promise<any> {
-    const trustedUri = this.assertCalendlyResourceUri(uri, kind);
+    const trustedUri = this.parseCalendlyResourceUri(uri, kind).canonicalUri;
     const { data } = await axios.get(trustedUri, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -843,15 +869,31 @@ export class CalendlyIntegrationService {
     );
   }
 
-  private assertCalendlyResourceUri(
+  private parseCalendlyResourceUri(
     uri: string,
     kind: CalendlyResourceKind,
-  ): string {
-    if (!isCalendlyResourceUri(uri, kind)) {
+  ): CalendlyResourceReference {
+    const reference = parseCalendlyResourceUri(uri, kind);
+    if (!reference) {
       const field = kind === 'event' ? 'event_uri' : 'invitee_uri';
       throw new BadRequestException(`${field} do Calendly inválida`);
     }
-    return uri;
+    return reference;
+  }
+
+  private assertSameCalendlyEvent(
+    ...references: Array<CalendlyResourceReference | null>
+  ): void {
+    const eventIds = references
+      .filter((reference): reference is CalendlyResourceReference =>
+        Boolean(reference),
+      )
+      .map((reference) => reference.eventId);
+    if (new Set(eventIds).size > 1) {
+      throw new BadRequestException(
+        'URIs do Calendly pertencem a eventos diferentes',
+      );
+    }
   }
 
   private getRequiredEnv(name: string): string {
