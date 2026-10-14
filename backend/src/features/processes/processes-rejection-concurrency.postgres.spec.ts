@@ -7,6 +7,7 @@ import {
   UserRole,
 } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import { MeetingsService } from '../meetings/meetings.service';
 import { ProcessesService } from './processes.service';
 
 type Deferred = { promise: Promise<void>; resolve: () => void };
@@ -91,6 +92,61 @@ function observeScheduleLockAttempt(client: PrismaClient, attempted: Deferred) {
       return bindMember(target, property);
     },
   });
+}
+
+function pauseMeetingCreate(
+  client: PrismaClient,
+  attempted: Deferred,
+  release: Deferred,
+) {
+  const wrapTransaction = (tx: any) =>
+    new Proxy(tx, {
+      get(target, property) {
+        if (property === 'meetingSession') {
+          return new Proxy(target.meetingSession, {
+            get(meetingTarget, meetingProperty) {
+              if (meetingProperty === 'create') {
+                return async (args: any) => {
+                  attempted.resolve();
+                  await release.promise;
+                  return meetingTarget.create(args);
+                };
+              }
+              return bindMember(meetingTarget, meetingProperty);
+            },
+          });
+        }
+        return bindMember(target, property);
+      },
+    });
+
+  return new Proxy(client, {
+    get(target, property) {
+      if (property === '$transaction') {
+        return (callback: (tx: any) => Promise<unknown>, options?: any) =>
+          target.$transaction((tx) => callback(wrapTransaction(tx)), options);
+      }
+      return bindMember(target, property);
+    },
+  });
+}
+
+function meetingConfig() {
+  return {
+    get: jest.fn((key: string, fallback?: string) => {
+      if (key === 'MEETING_PROVIDER') return 'JITSI';
+      if (key === 'MEETING_DEMO_FALLBACK_ENABLED') return 'false';
+      return fallback;
+    }),
+  } as any;
+}
+
+function meetingNotifications() {
+  return {
+    sendMeetingStartedEmail: jest.fn().mockResolvedValue({}),
+    sendMeetingAdvancedEmail: jest.fn().mockResolvedValue({}),
+    sendProcessStatusChangedEmail: jest.fn().mockResolvedValue({}),
+  } as any;
 }
 
 const databaseUrl = process.env.POSTGRES_CONCURRENCY_TEST_URL;
@@ -303,5 +359,129 @@ describeWithPostgres('process rejection CAS — PostgreSQL concurrency', () => {
         where: { processId, status: ProcessStatus.DOCUMENTATION },
       }),
     ).resolves.toBe(0);
+  }, 15_000);
+
+  it('não cria reunião nem envia e-mail quando a rejeição ganha o lock', async () => {
+    await completionClient.process.create({
+      data: {
+        id: processId,
+        client_id: clientId,
+        specialist_id: specialistId,
+        status: ProcessStatus.SCHEDULING,
+      },
+    });
+
+    const rejectionClaimAttempted = deferred();
+    const releaseRejection = deferred();
+    const meetingLockAttempted = deferred();
+    const notifications = meetingNotifications();
+    const rejectionService = new ProcessesService(
+      pauseRejectionClaim(
+        rejectClient,
+        rejectionClaimAttempted,
+        releaseRejection,
+      ) as any,
+      notifications,
+    );
+    const meetingsService = new MeetingsService(
+      observeScheduleLockAttempt(completionClient, meetingLockAttempted) as any,
+      meetingConfig(),
+      notifications,
+      {} as any,
+    );
+
+    const rejection = rejectionService.rejectProcess(
+      processId,
+      specialistId,
+      'concorrente',
+      UserRole.SPECIALIST,
+    );
+    await rejectionClaimAttempted.promise;
+
+    const meeting = meetingsService.startMeetingForProcess(
+      processId,
+      specialistId,
+    );
+    await meetingLockAttempted.promise;
+
+    releaseRejection.resolve();
+    await expect(rejection).resolves.toMatchObject({
+      status: ProcessStatus.REJECTED,
+    });
+    await expect(meeting).rejects.toBeInstanceOf(BadRequestException);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    await expect(
+      completionClient.meetingSession.count({
+        where: { process_id: processId },
+      }),
+    ).resolves.toBe(0);
+    expect(notifications.sendMeetingStartedEmail).not.toHaveBeenCalled();
+    expect(notifications.sendMeetingAdvancedEmail).not.toHaveBeenCalled();
+  }, 15_000);
+
+  it('mantém reunião e recusa rejeição quando o início ganha o lock', async () => {
+    await completionClient.process.create({
+      data: {
+        id: processId,
+        client_id: clientId,
+        specialist_id: specialistId,
+        status: ProcessStatus.SCHEDULING,
+      },
+    });
+
+    const meetingCreateAttempted = deferred();
+    const releaseMeeting = deferred();
+    const rejectionLockAttempted = deferred();
+    const notifications = meetingNotifications();
+    const meetingsService = new MeetingsService(
+      pauseMeetingCreate(
+        completionClient,
+        meetingCreateAttempted,
+        releaseMeeting,
+      ) as any,
+      meetingConfig(),
+      notifications,
+      {} as any,
+    );
+    const rejectionService = new ProcessesService(
+      observeScheduleLockAttempt(rejectClient, rejectionLockAttempted) as any,
+      notifications,
+    );
+
+    const meeting = meetingsService.startMeetingForProcess(
+      processId,
+      specialistId,
+    );
+    await meetingCreateAttempted.promise;
+
+    const rejection = rejectionService.rejectProcess(
+      processId,
+      specialistId,
+      'concorrente',
+      UserRole.SPECIALIST,
+    );
+    await rejectionLockAttempted.promise;
+
+    releaseMeeting.resolve();
+    await expect(meeting).resolves.toMatchObject({ is_active: true });
+    await expect(rejection).rejects.toBeInstanceOf(BadRequestException);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    await expect(
+      completionClient.process.findUniqueOrThrow({ where: { id: processId } }),
+    ).resolves.toMatchObject({ status: ProcessStatus.SCHEDULING });
+    await expect(
+      completionClient.meetingSession.count({
+        where: { process_id: processId },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      completionClient.processRejection.count({
+        where: { process_id: processId },
+      }),
+    ).resolves.toBe(0);
+    expect(notifications.sendMeetingStartedEmail).toHaveBeenCalledTimes(1);
+    expect(notifications.sendMeetingAdvancedEmail).not.toHaveBeenCalled();
   }, 15_000);
 });

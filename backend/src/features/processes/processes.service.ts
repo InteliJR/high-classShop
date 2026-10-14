@@ -2034,7 +2034,14 @@ export class ProcessesService {
               car: true,
               boat: true,
               aircraft: true,
-              appointment: { select: { status: true } },
+              appointment: {
+                select: {
+                  id: true,
+                  client_id: true,
+                  specialist_id: true,
+                  status: true,
+                },
+              },
               meeting_session: { select: { ended_at: true } },
             },
           });
@@ -2059,18 +2066,28 @@ export class ProcessesService {
             );
           }
           if (
-            existingProcess.appointment &&
-            existingProcess.appointment.status !== StatusAgendamento.CANCELLED
+            Boolean(existingProcess.appointment) !==
+              Boolean(existingProcess.appointment_id) ||
+            (existingProcess.appointment &&
+              (existingProcess.appointment.id !==
+                existingProcess.appointment_id ||
+                existingProcess.appointment.client_id !==
+                  existingProcess.client_id ||
+                existingProcess.appointment.specialist_id !==
+                  existingProcess.specialist_id))
           ) {
-            const appointmentCanBeCancelled =
-              existingProcess.appointment.status ===
-                StatusAgendamento.PENDING ||
-              existingProcess.appointment.status ===
-                StatusAgendamento.SCHEDULED;
             throw new BadRequestException(
-              appointmentCanBeCancelled
-                ? 'Cancele o agendamento pelo fluxo próprio antes de rejeitar o processo'
-                : 'Processo com agendamento concluído não pode ser rejeitado por esta rota',
+              'Agendamento não corresponde aos participantes do processo',
+            );
+          }
+          if (
+            existingProcess.appointment &&
+            (existingProcess.appointment.status === StatusAgendamento.PENDING ||
+              existingProcess.appointment.status ===
+                StatusAgendamento.SCHEDULED)
+          ) {
+            throw new BadRequestException(
+              'Cancele o agendamento pelo fluxo próprio antes de rejeitar o processo',
             );
           }
           if (

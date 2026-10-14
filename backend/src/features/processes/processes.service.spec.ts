@@ -1960,6 +1960,7 @@ describe('ProcessesService — autorização centralizada de processos', () => {
       client_id: ownerClientId,
       specialist_id: assignedSpecialistId,
       status: ProcessStatus.SCHEDULING,
+      appointment_id: null,
       updated_at: new Date('2026-01-01T00:00:00.000Z'),
       notes: null,
       product_type: null,
@@ -2304,27 +2305,19 @@ describe('ProcessesService — autorização centralizada de processos', () => {
       UserRole.SPECIALIST,
       'Cancele o agendamento pelo fluxo próprio',
     ],
-    [
-      'cliente',
-      StatusAgendamento.COMPLETED,
-      ownerClientId,
-      UserRole.CUSTOMER,
-      'Processo com agendamento concluído',
-    ],
-    [
-      'especialista',
-      StatusAgendamento.COMPLETED,
-      assignedSpecialistId,
-      UserRole.SPECIALIST,
-      'Processo com agendamento concluído',
-    ],
   ])(
     '%s não rejeita processo com appointment %s',
     async (_label, appointmentStatus, actorId, actorRole, expectedMessage) => {
       const { service, processUpdateMany, historyCreate, rejectionCreate, tx } =
         rejectionService(
           protectedProcess({
-            appointment: { status: appointmentStatus },
+            appointment_id: 'abababab-abab-4bab-8bab-abababababab',
+            appointment: {
+              id: 'abababab-abab-4bab-8bab-abababababab',
+              client_id: ownerClientId,
+              specialist_id: assignedSpecialistId,
+              status: appointmentStatus,
+            },
           }),
         );
 
@@ -2403,9 +2396,16 @@ describe('ProcessesService — autorização centralizada de processos', () => {
   });
 
   it('especialista pode rejeitar processo com appointment cancelado e reunião encerrada', async () => {
+    const appointmentId = 'abababab-abab-4bab-8bab-abababababab';
     const { service, processUpdateMany } = rejectionService(
       protectedProcess({
-        appointment: { status: StatusAgendamento.CANCELLED },
+        appointment_id: appointmentId,
+        appointment: {
+          id: appointmentId,
+          client_id: ownerClientId,
+          specialist_id: assignedSpecialistId,
+          status: StatusAgendamento.CANCELLED,
+        },
         meeting_session: { ended_at: new Date('2026-01-01T12:00:00.000Z') },
       }),
     );
@@ -2423,6 +2423,105 @@ describe('ProcessesService — autorização centralizada de processos', () => {
 
     expect(processUpdateMany).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ['cliente', ownerClientId, UserRole.CUSTOMER, null],
+    [
+      'especialista',
+      assignedSpecialistId,
+      UserRole.SPECIALIST,
+      { ended_at: new Date('2026-01-01T12:00:00.000Z') },
+    ],
+  ])(
+    '%s pode rejeitar processo pós-reunião com appointment concluído',
+    async (_label, actorId, actorRole, meetingSession) => {
+      const appointmentId = 'abababab-abab-4bab-8bab-abababababab';
+      const { service, processUpdateMany } = rejectionService(
+        protectedProcess({
+          status: ProcessStatus.NEGOTIATION,
+          appointment_id: appointmentId,
+          appointment: {
+            id: appointmentId,
+            client_id: ownerClientId,
+            specialist_id: assignedSpecialistId,
+            status: StatusAgendamento.COMPLETED,
+          },
+          meeting_session: meetingSession,
+        }),
+      );
+
+      await expect(
+        service.rejectProcess(
+          '99999999-9999-4999-8999-999999999999',
+          actorId,
+          undefined,
+          actorRole,
+        ),
+      ).resolves.toEqual(
+        expect.objectContaining({ status: ProcessStatus.REJECTED }),
+      );
+
+      expect(processUpdateMany).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    [
+      'id',
+      {
+        appointment_id: 'abababab-abab-4bab-8bab-abababababab',
+        appointment: {
+          id: 'cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd',
+          client_id: ownerClientId,
+          specialist_id: assignedSpecialistId,
+          status: StatusAgendamento.CANCELLED,
+        },
+      },
+    ],
+    [
+      'cliente',
+      {
+        appointment_id: 'abababab-abab-4bab-8bab-abababababab',
+        appointment: {
+          id: 'abababab-abab-4bab-8bab-abababababab',
+          client_id: outsiderId,
+          specialist_id: assignedSpecialistId,
+          status: StatusAgendamento.CANCELLED,
+        },
+      },
+    ],
+    [
+      'especialista',
+      {
+        appointment_id: 'abababab-abab-4bab-8bab-abababababab',
+        appointment: {
+          id: 'abababab-abab-4bab-8bab-abababababab',
+          client_id: ownerClientId,
+          specialist_id: outsiderId,
+          status: StatusAgendamento.CANCELLED,
+        },
+      },
+    ],
+  ])(
+    'não rejeita quando o %s do appointment diverge do processo',
+    async (_field, overrides) => {
+      const { service, processUpdateMany, historyCreate, rejectionCreate } =
+        rejectionService(protectedProcess(overrides));
+
+      await expect(
+        service.rejectProcess(
+          '99999999-9999-4999-8999-999999999999',
+          assignedSpecialistId,
+          undefined,
+          UserRole.SPECIALIST,
+        ),
+      ).rejects.toThrow('Agendamento não corresponde aos participantes');
+
+      expect(processUpdateMany).not.toHaveBeenCalled();
+      expect(historyCreate).not.toHaveBeenCalled();
+      expect(rejectionCreate).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejeição perde a CAS sem criar histórico nem motivo', async () => {
     const { service, historyCreate, rejectionCreate, processUpdateMany } =

@@ -14,6 +14,7 @@ import { ProcessStatus, StatusAgendamento } from '@prisma/client';
 import { GoogleMeetOAuthService } from './google-meet-oauth.service';
 import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
 import { lockNegotiationProductMoney } from 'src/features/products/product-monetary-lock';
+import { acquireSpecialistScheduleLock } from 'src/features/appointments/appointment-schedule-lock';
 
 @Injectable()
 export class MeetingsService {
@@ -374,14 +375,148 @@ export class MeetingsService {
     userId: string,
     isAdvanced?: boolean,
   ) {
-    const { process, isSpecialist } = await this.getAuthorizedProcess(
-      processId,
-      userId,
-    );
+    const { isSpecialist } = await this.getAuthorizedProcess(processId, userId);
 
     if (!isSpecialist) {
       throw new ForbiddenException(
         'Apenas o especialista pode iniciar a reunião',
+      );
+    }
+
+    const result = await this.prismaService.$transaction(
+      async (tx) => {
+        const candidate = await tx.process.findUnique({
+          where: { id: processId },
+          select: { id: true, specialist_id: true },
+        });
+        if (!candidate) {
+          throw new NotFoundException('Processo não encontrado');
+        }
+        if (candidate.specialist_id !== userId) {
+          throw new ForbiddenException(
+            'Apenas o especialista pode iniciar a reunião',
+          );
+        }
+
+        await acquireSpecialistScheduleLock(tx, candidate.specialist_id);
+
+        const process = await tx.process.findUnique({
+          where: { id: processId },
+          include: {
+            appointment: true,
+            client: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                surname: true,
+                consultant_id: true,
+                consultant: {
+                  select: { id: true, email: true, name: true, surname: true },
+                },
+              },
+            },
+            specialist: {
+              select: { id: true, email: true, name: true, surname: true },
+            },
+            meeting_session: true,
+          },
+        });
+        if (!process) {
+          throw new NotFoundException('Processo não encontrado');
+        }
+        if (process.specialist_id !== userId) {
+          throw new ForbiddenException(
+            'Apenas o especialista pode iniciar a reunião',
+          );
+        }
+        if (
+          Boolean(process.appointment) !== Boolean(process.appointment_id) ||
+          (process.appointment &&
+            (process.appointment.id !== process.appointment_id ||
+              process.appointment.client_id !== process.client_id ||
+              process.appointment.specialist_id !== process.specialist_id))
+        ) {
+          throw new BadRequestException(
+            'Agendamento não corresponde aos participantes do processo',
+          );
+        }
+        if (
+          process.status !== ProcessStatus.SCHEDULING &&
+          process.status !== ProcessStatus.NEGOTIATION &&
+          process.status !== ProcessStatus.PROCESSING_CONTRACT
+        ) {
+          throw new BadRequestException(
+            'Processo não está em etapa válida para iniciar reunião',
+          );
+        }
+        if (process.meeting_session) {
+          return {
+            process,
+            meeting: process.meeting_session,
+            created: false,
+            provider: 'EXISTING' as const,
+          };
+        }
+
+        let meetLink: string;
+        let calendarEventId: string;
+        let provider: 'JITSI' | 'GOOGLE' | 'DEMO';
+        if (this.meetingProvider === 'JITSI') {
+          meetLink = this.buildDemoMeetingLink(process.id);
+          calendarEventId = `jitsi-${randomUUID()}`;
+          provider = 'JITSI';
+        } else {
+          try {
+            const space = await this.createMeetSpace();
+            meetLink = space.meetingUri;
+            calendarEventId = space.spaceName;
+            provider = 'GOOGLE';
+          } catch (error) {
+            if (!this.demoMeetingFallbackEnabled) {
+              this.logger.error('Falha ao criar sala no Google Meet', {
+                processId: process.id,
+                error:
+                  error instanceof Error ? error.message : 'erro desconhecido',
+              });
+              throw new ServiceUnavailableException(
+                'Não foi possível criar a reunião no Google Meet. Verifique a conta conectada nas configurações.',
+              );
+            }
+
+            meetLink = this.buildDemoMeetingLink(process.id);
+            calendarEventId = `demo-${randomUUID()}`;
+            provider = 'DEMO';
+          }
+        }
+
+        const meeting = await tx.meetingSession.create({
+          data: {
+            process_id: process.id,
+            started_by_id: userId,
+            calendar_event_id: calendarEventId,
+            meet_link: meetLink,
+            started_at: new Date(),
+          },
+        });
+
+        return { process, meeting, created: true, provider };
+      },
+      { maxWait: 10_000, timeout: 30_000 },
+    );
+
+    if (!result.created) {
+      return this.buildMeetingResponse(result.meeting);
+    }
+
+    const { process, meeting, provider } = result;
+    if (provider === 'JITSI') {
+      this.logger.log(
+        `[meetings] Reunião criada com provedor JITSI para processId=${process.id}`,
+      );
+    } else if (provider === 'DEMO') {
+      this.logger.warn(
+        `[meetings] Fallback DEMO ativado após falha no Google Meet. processId=${process.id}`,
       );
     }
 
@@ -390,139 +525,10 @@ export class MeetingsService {
     const consultantName = consultant
       ? `${consultant.name} ${consultant.surname || ''}`.trim()
       : undefined;
-
-    if (
-      process.status !== 'SCHEDULING' &&
-      process.status !== 'NEGOTIATION' &&
-      process.status !== 'PROCESSING_CONTRACT'
-    ) {
-      throw new BadRequestException(
-        'Processo não está em etapa válida para iniciar reunião',
-      );
-    }
-
-    if (process.meeting_session) {
-      return this.buildMeetingResponse(process.meeting_session);
-    }
-
-    if (this.meetingProvider === 'JITSI') {
-      const jitsiLink = this.buildDemoMeetingLink(process.id);
-      const meeting = await this.prismaService.meetingSession.create({
-        data: {
-          process_id: process.id,
-          started_by_id: userId,
-          calendar_event_id: `jitsi-${randomUUID()}`,
-          meet_link: jitsiLink,
-          started_at: new Date(),
-        },
-      });
-
-      this.logger.log(
-        `[meetings] Reunião criada com provedor JITSI para processId=${process.id}`,
-      );
-
-      setImmediate(() => {
-        const emailData = {
-          clientEmail: process.client.email,
-          clientName:
-            `${process.client.name} ${process.client.surname || ''}`.trim(),
-          specialistName:
-            `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
-          processId: process.id,
-          platformMeetingUrl: `${this.frontendUrl}/processes/${process.id}/meeting`,
-          meetingLink: jitsiLink,
-          consultantEmail,
-          consultantName,
-        };
-        const emailMethod = isAdvanced
-          ? this.notificationService.sendMeetingAdvancedEmail(emailData)
-          : this.notificationService.sendMeetingStartedEmail(emailData);
-        emailMethod.catch((err) => {
-          this.logger.error('Falha ao enviar e-mail de reunião iniciada', {
-            processId: process.id,
-            error: err.message,
-          });
-        });
-      });
-
-      return {
-        ...this.buildMeetingResponse(meeting),
-      };
-    }
-
     const specialistName =
       `${process.specialist.name} ${process.specialist.surname || ''}`.trim();
     const clientName =
       `${process.client.name} ${process.client.surname || ''}`.trim();
-
-    let meetLink: string;
-    let spaceName: string;
-    try {
-      const space = await this.createMeetSpace();
-      meetLink = space.meetingUri;
-      spaceName = space.spaceName;
-    } catch (error) {
-      if (this.demoMeetingFallbackEnabled) {
-        const demoLink = this.buildDemoMeetingLink(process.id);
-        const meeting = await this.prismaService.meetingSession.create({
-          data: {
-            process_id: process.id,
-            started_by_id: userId,
-            calendar_event_id: `demo-${randomUUID()}`,
-            meet_link: demoLink,
-            started_at: new Date(),
-          },
-        });
-
-        this.logger.warn(
-          `[meetings] Fallback DEMO ativado após falha no Google Meet. processId=${process.id}`,
-        );
-
-        setImmediate(() => {
-          const emailData = {
-            clientEmail: process.client.email,
-            clientName,
-            specialistName,
-            processId: process.id,
-            platformMeetingUrl: `${this.frontendUrl}/processes/${process.id}/meeting`,
-            meetingLink: demoLink,
-            consultantEmail,
-            consultantName,
-          };
-          const emailMethod = isAdvanced
-            ? this.notificationService.sendMeetingAdvancedEmail(emailData)
-            : this.notificationService.sendMeetingStartedEmail(emailData);
-          emailMethod.catch((err) => {
-            this.logger.error('Falha ao enviar e-mail de reunião iniciada', {
-              processId: process.id,
-              error: err.message,
-            });
-          });
-        });
-
-        return {
-          ...this.buildMeetingResponse(meeting),
-        };
-      }
-
-      this.logger.error('Falha ao criar sala no Google Meet', {
-        processId: process.id,
-        error: error instanceof Error ? error.message : 'erro desconhecido',
-      });
-      throw new ServiceUnavailableException(
-        'Não foi possível criar a reunião no Google Meet. Verifique a conta conectada nas configurações.',
-      );
-    }
-
-    const meeting = await this.prismaService.meetingSession.create({
-      data: {
-        process_id: process.id,
-        started_by_id: userId,
-        calendar_event_id: spaceName,
-        meet_link: meetLink,
-        started_at: new Date(),
-      },
-    });
 
     setImmediate(() => {
       const emailData = {
@@ -531,7 +537,7 @@ export class MeetingsService {
         specialistName,
         processId: process.id,
         platformMeetingUrl: `${this.frontendUrl}/processes/${process.id}/meeting`,
-        meetingLink: meetLink,
+        meetingLink: meeting.meet_link,
         consultantEmail,
         consultantName,
       };

@@ -1,9 +1,13 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import {
   Prisma,
   ProcessStatus,
   ProductCurrency,
   ProductType,
+  StatusAgendamento,
 } from '@prisma/client';
 import { MeetingsService } from './meetings.service';
 
@@ -33,27 +37,42 @@ function mkProcess(overrides: any = {}) {
 }
 
 function mkPrisma(process: any) {
+  const meetingSessionCreate = jest.fn().mockImplementation(({ data }: any) =>
+    Promise.resolve({
+      id: 'meet-1',
+      process_id: data.process_id,
+      meet_link: data.meet_link,
+      started_at: data.started_at,
+      ended_at: null,
+    }),
+  );
+  const tx = {
+    $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+    process: {
+      findUnique: jest
+        .fn()
+        .mockImplementation(({ select }: any) =>
+          Promise.resolve(
+            select
+              ? { id: process.id, specialist_id: process.specialist_id }
+              : process,
+          ),
+        ),
+    },
+    meetingSession: { create: meetingSessionCreate },
+  };
   return {
     process: { findUnique: jest.fn().mockResolvedValue(process) },
-    meetingSession: {
-      create: jest.fn().mockImplementation(({ data }: any) =>
-        Promise.resolve({
-          id: 'meet-1',
-          process_id: data.process_id,
-          meet_link: data.meet_link,
-          started_at: data.started_at,
-          ended_at: null,
-        }),
-      ),
-    },
+    meetingSession: { create: meetingSessionCreate },
+    $transaction: jest.fn(async (callback) => callback(tx)),
   } as any;
 }
 
-function mkConfig(accessType = 'OPEN') {
+function mkConfig(accessType = 'OPEN', provider = 'GOOGLE') {
   return {
     get: jest.fn((key: string, def?: string) => {
       if (key === 'GOOGLE_MEET_ACCESS_TYPE') return accessType;
-      if (key === 'MEETING_PROVIDER') return 'GOOGLE';
+      if (key === 'MEETING_PROVIDER') return provider;
       if (key === 'MEETING_DEMO_FALLBACK_ENABLED') return 'false';
       return def;
     }),
@@ -146,6 +165,98 @@ describe('MeetingsService — criação via Meet REST API', () => {
     await expect(
       svc.startMeetingForProcess('proc-1', 'client-1'),
     ).rejects.toThrow(/especialista/i);
+  });
+});
+
+describe('MeetingsService.startMeetingForProcess — serialização canônica', () => {
+  it('adquire o lock, relê e não cria reunião para processo rejeitado', async () => {
+    const initialProcess = mkProcess();
+    const rejectedProcess = mkProcess({ status: ProcessStatus.REJECTED });
+    const rootMeetingCreate = jest.fn().mockResolvedValue({});
+    const txMeetingCreate = jest.fn().mockResolvedValue({});
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValueOnce({
+            id: initialProcess.id,
+            specialist_id: initialProcess.specialist_id,
+          })
+          .mockResolvedValueOnce(rejectedProcess),
+      },
+      meetingSession: { create: txMeetingCreate },
+    };
+    const prisma = {
+      process: { findUnique: jest.fn().mockResolvedValue(initialProcess) },
+      meetingSession: { create: rootMeetingCreate },
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    } as any;
+    const localNotification = {
+      sendMeetingStartedEmail: jest.fn().mockResolvedValue({}),
+      sendMeetingAdvancedEmail: jest.fn().mockResolvedValue({}),
+    } as any;
+    const service = new MeetingsService(
+      prisma,
+      mkConfig('OPEN', 'JITSI'),
+      localNotification,
+      {} as any,
+    );
+
+    await expect(
+      service.startMeetingForProcess(initialProcess.id, 'spec-1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(tx.$queryRaw).toHaveBeenCalledWith(
+      expect.anything(),
+      'appointment-schedule:spec-1',
+    );
+    expect(rootMeetingCreate).not.toHaveBeenCalled();
+    expect(txMeetingCreate).not.toHaveBeenCalled();
+    expect(localNotification.sendMeetingStartedEmail).not.toHaveBeenCalled();
+  });
+
+  it('falha fechado quando o appointment relido diverge do processo', async () => {
+    const process = mkProcess({
+      appointment_id: 'appointment-1',
+      appointment: {
+        id: 'appointment-1',
+        client_id: 'other-client',
+        specialist_id: 'spec-1',
+        status: StatusAgendamento.COMPLETED,
+      },
+    });
+    const txMeetingCreate = jest.fn();
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValueOnce({
+            id: process.id,
+            specialist_id: process.specialist_id,
+          })
+          .mockResolvedValueOnce(process),
+      },
+      meetingSession: { create: txMeetingCreate },
+    };
+    const prisma = {
+      process: { findUnique: jest.fn().mockResolvedValue(process) },
+      meetingSession: { create: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    } as any;
+    const service = new MeetingsService(
+      prisma,
+      mkConfig('OPEN', 'JITSI'),
+      notification,
+      {} as any,
+    );
+
+    await expect(
+      service.startMeetingForProcess(process.id, 'spec-1'),
+    ).rejects.toThrow('Agendamento não corresponde aos participantes');
+
+    expect(txMeetingCreate).not.toHaveBeenCalled();
   });
 });
 
