@@ -2364,4 +2364,56 @@ describe('ProcessesService.cancelAppointment — serialização canônica', () =
       where: { id: process.appointment.id },
     });
   });
+
+  it('não apaga processo SCHEDULING quando o appointment já está COMPLETED', async () => {
+    const process = {
+      id: 'process-1',
+      client_id: clientId,
+      specialist_id: specialistId,
+      status: ProcessStatus.SCHEDULING,
+      updated_at: new Date('2026-01-01T00:00:00.000Z'),
+      appointment_id: 'appointment-1',
+      appointment: {
+        id: 'appointment-1',
+        client_id: clientId,
+        specialist_id: specialistId,
+        status: StatusAgendamento.COMPLETED,
+      },
+      client: { id: clientId },
+      specialist: { id: specialistId },
+      car: null,
+      boat: null,
+      aircraft: null,
+    };
+    const processClaim = jest.fn();
+    const processDelete = jest.fn();
+    const appointmentDelete = jest.fn();
+    const historyDelete = jest.fn();
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: {
+        findUnique: jest.fn().mockResolvedValue(process),
+        updateMany: processClaim,
+        delete: processDelete,
+      },
+      appointment: { delete: appointmentDelete },
+      processStatusHistory: { deleteMany: historyDelete },
+    };
+    const prisma = {
+      process: { findUnique: jest.fn().mockResolvedValue(process) },
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    } as any;
+    const service = new ProcessesService(prisma, {} as any);
+
+    await expect(
+      service.cancelAppointment(process.id, clientId),
+    ).rejects.toThrow(
+      'Apenas agendamentos pendentes ou agendados podem ser cancelados',
+    );
+
+    expect(processClaim).not.toHaveBeenCalled();
+    expect(historyDelete).not.toHaveBeenCalled();
+    expect(processDelete).not.toHaveBeenCalled();
+    expect(appointmentDelete).not.toHaveBeenCalled();
+  });
 });

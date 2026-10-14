@@ -2414,6 +2414,14 @@ export class ProcessesService {
           'Agendamento não corresponde aos participantes do processo',
         );
       }
+      if (
+        lockedProcess.appointment.status !== StatusAgendamento.PENDING &&
+        lockedProcess.appointment.status !== StatusAgendamento.SCHEDULED
+      ) {
+        throw new BadRequestException(
+          'Apenas agendamentos pendentes ou agendados podem ser cancelados',
+        );
+      }
 
       const processClaim = await tx.process.updateMany({
         where: {
