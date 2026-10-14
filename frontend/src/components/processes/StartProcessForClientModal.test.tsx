@@ -30,13 +30,13 @@ const client: Client = { id: "customer-1", name: "Cliente", surname: "Teste", em
 const specialist: PublicSpecialistProfile = { id: "specialist-1", name: "Ana", surname: "Silva", email: "ana@example.com", speciality: "CAR", calendly_url: "https://calendly.com/ana/reuniao", calendly_scheduling_available: false };
 const secondClient: Client = { ...client, id: "customer-2", name: "Outro", email: "outro@example.com" };
 function Location() { return <p data-testid="location">{useLocation().pathname}</p>; }
-function scopeContent(props: { specialistId?: string; productType?: "CAR" | "BOAT" | "AIRCRAFT"; productId?: string; mode?: "CONSULTANT" | "OFFICE" } = {}, visible = true) {
-  return <MemoryRouter initialEntries={["/start"]}><Location />{visible && <StartProcessForClientModal productType="CAR" productId="car-1" specialistId={specialist.id} onClose={vi.fn()} {...props} />}</MemoryRouter>;
+function scopeContent(props: { specialistId?: string; productType?: "CAR" | "BOAT" | "AIRCRAFT"; productId?: string; mode?: "CONSULTANT" | "OFFICE"; onCalendlyOpenChange?(open: boolean): void } = {}, visible = true) {
+  return <MemoryRouter initialEntries={["/start"]}><Location />{visible && <StartProcessForClientModal calendlyRootElement={document.body} productType="CAR" productId="car-1" specialistId={specialist.id} onClose={vi.fn()} {...props} />}</MemoryRouter>;
 }
 
 function renderModal(mode: "CONSULTANT" | "OFFICE" = "CONSULTANT") {
   return render(<MemoryRouter initialEntries={["/start"]}><Routes>
-    <Route path="/start" element={<StartProcessForClientModal productType="CAR" productId="car-1" specialistId={specialist.id} mode={mode} onClose={vi.fn()} />} />
+    <Route path="/start" element={<StartProcessForClientModal calendlyRootElement={document.body} productType="CAR" productId="car-1" specialistId={specialist.id} mode={mode} onClose={vi.fn()} />} />
     <Route path="/consultant/processes" element={<p>Processos do consultor</p>} />
     <Route path="/office/processes" element={<p>Processos do escritório</p>} />
   </Routes></MemoryRouter>);
@@ -120,9 +120,9 @@ describe("StartProcessForClientModal capability", () => {
   it("resets capability and ignores an old specialist response after switching specialistId", async () => {
     let resolveOld!: (value: PublicSpecialistProfile) => void;
     vi.mocked(getPublicSpecialistById).mockImplementationOnce(() => new Promise((done) => { resolveOld = done; })).mockResolvedValueOnce({ ...specialist, id: "specialist-2", calendly_url: null });
-    const view = render(<MemoryRouter><StartProcessForClientModal productType="CAR" productId="car-1" specialistId={specialist.id} onClose={vi.fn()} /></MemoryRouter>);
+    const view = render(<MemoryRouter><StartProcessForClientModal calendlyRootElement={document.body} productType="CAR" productId="car-1" specialistId={specialist.id} onClose={vi.fn()} /></MemoryRouter>);
     fireEvent.click(await screen.findByRole("button", { name: /Cliente Teste/i }));
-    view.rerender(<MemoryRouter><StartProcessForClientModal productType="CAR" productId="car-1" specialistId="specialist-2" onClose={vi.fn()} /></MemoryRouter>);
+    view.rerender(<MemoryRouter><StartProcessForClientModal calendlyRootElement={document.body} productType="CAR" productId="car-1" specialistId="specialist-2" onClose={vi.fn()} /></MemoryRouter>);
     fireEvent.click(await screen.findByRole("button", { name: /Cliente Teste/i }));
     await waitFor(() => expect((screen.getByRole("button", { name: "Criar processo" }) as HTMLButtonElement).disabled).toBe(false));
     await act(async () => resolveOld({ ...specialist, calendly_scheduling_available: true }));
@@ -138,7 +138,7 @@ describe("StartProcessForClientModal capability", () => {
     vi.mocked(getPublicSpecialistById).mockResolvedValueOnce({ ...specialist, calendly_scheduling_available: true }).mockResolvedValueOnce({ ...specialist, id: "specialist-2", calendly_url: null });
     const content = (specialistId: string) => <MemoryRouter initialEntries={["/start"]}>
       <Location />
-      <StartProcessForClientModal productType="CAR" productId="car-1" specialistId={specialistId} onClose={vi.fn()} />
+      <StartProcessForClientModal calendlyRootElement={document.body} productType="CAR" productId="car-1" specialistId={specialistId} onClose={vi.fn()} />
     </MemoryRouter>;
     const view = render(content(specialist.id));
     await selectAndCreate();
@@ -254,7 +254,7 @@ describe("StartProcessForClientModal capability", () => {
     const view = render(scopeContent());
     fireEvent.click(await screen.findByRole("button", { name: /Cliente Teste/i }));
     fireEvent.change(screen.getByPlaceholderText("Buscar por nome ou e-mail..."), { target: { value: "Cliente" } });
-    view.rerender(<MemoryRouter initialEntries={["/start"]}><Location /><StartProcessForClientModal productType="CAR" productId="car-1" specialistId={specialist.id} productLabel="Novo texto" onClose={() => {}} /></MemoryRouter>);
+    view.rerender(<MemoryRouter initialEntries={["/start"]}><Location /><StartProcessForClientModal calendlyRootElement={document.body} productType="CAR" productId="car-1" specialistId={specialist.id} productLabel="Novo texto" onClose={() => {}} /></MemoryRouter>);
     expect((screen.getByRole("button", { name: "Criar processo" }) as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getByPlaceholderText("Buscar por nome ou e-mail...") as HTMLInputElement).value).toBe("Cliente");
     expect(getClients).toHaveBeenCalledOnce();
@@ -263,12 +263,16 @@ describe("StartProcessForClientModal capability", () => {
 
   it("ignores callbacks belonging to an obsolete Calendly popup before any HTTP write", async () => {
     vi.mocked(getPublicSpecialistById).mockImplementation(async (id) => ({ ...specialist, id, calendly_scheduling_available: true }));
-    const view = render(scopeContent());
+    const onCalendlyOpenChange = vi.fn();
+    const view = render(scopeContent({ onCalendlyOpenChange }));
     await selectAndCreate();
     await screen.findByRole("link", { name: "Agendar no Calendly" });
     const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0].onEventScheduled!;
     const close = popupClosers.at(-1)!;
-    view.rerender(scopeContent({ specialistId: "specialist-2" }));
+    expect(onCalendlyOpenChange).toHaveBeenLastCalledWith(true);
+    view.rerender(scopeContent({ specialistId: "specialist-2", onCalendlyOpenChange }));
+    expect(onCalendlyOpenChange).toHaveBeenLastCalledWith(false);
+    onCalendlyOpenChange.mockClear();
     await act(async () => {
       close();
       await listener({ data: { event: "calendly.event_scheduled", payload: { event: { uri: "event-uri" }, invitee: { uri: "invitee-uri" } } } } as Parameters<typeof listener>[0]);
@@ -276,17 +280,21 @@ describe("StartProcessForClientModal capability", () => {
     expect(registerCalendlyScheduledEvent).not.toHaveBeenCalled();
     expect(getCalendlySyncStatus).not.toHaveBeenCalled();
     expect(screen.getByTestId("location").textContent).toBe("/start");
+    expect(onCalendlyOpenChange).not.toHaveBeenCalled();
   });
 
   it("keeps the current popup close flow and releases its busy state", async () => {
     vi.mocked(getPublicSpecialistById).mockResolvedValue({ ...specialist, calendly_scheduling_available: true });
     const onBusyChange = vi.fn();
-    render(<MemoryRouter initialEntries={["/start"]}><Location /><StartProcessForClientModal productType="CAR" productId="car-1" specialistId={specialist.id} onClose={vi.fn()} onBusyChange={onBusyChange} /></MemoryRouter>);
+    const onCalendlyOpenChange = vi.fn();
+    render(<MemoryRouter initialEntries={["/start"]}><Location /><StartProcessForClientModal calendlyRootElement={document.body} productType="CAR" productId="car-1" specialistId={specialist.id} onClose={vi.fn()} onBusyChange={onBusyChange} onCalendlyOpenChange={onCalendlyOpenChange} /></MemoryRouter>);
     await selectAndCreate();
     expect(await screen.findByRole("link", { name: "Agendar no Calendly" })).toBeTruthy();
     expect(onBusyChange).toHaveBeenLastCalledWith(true);
+    expect(onCalendlyOpenChange).toHaveBeenLastCalledWith(true);
     fireEvent.click(screen.getByRole("button", { name: "Fechar Calendly" }));
     expect(onBusyChange).toHaveBeenLastCalledWith(false);
+    expect(onCalendlyOpenChange).toHaveBeenLastCalledWith(false);
     expect(screen.getByTestId("location").textContent).toBe("/consultant/processes");
   });
 });

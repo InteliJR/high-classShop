@@ -107,6 +107,8 @@ export default function ProductPage() {
   } | null>(null);
   const [isStartProcessModalOpen, setIsStartProcessModalOpen] = useState(false);
   const [isStartProcessBusy, setIsStartProcessBusy] = useState(false);
+  const [startProcessPortalElement, setStartProcessPortalElement] = useState<HTMLDivElement | null>(null);
+  const [isStartProcessCalendlyOpen, setIsStartProcessCalendlyOpen] = useState(false);
   const startProcessBusyRef = useRef(false);
   const handleStartProcessBusyChange = useCallback((busy: boolean) => {
     startProcessBusyRef.current = busy;
@@ -682,6 +684,9 @@ export default function ProductPage() {
             title="Iniciar processo para cliente"
             hideTitle
             dismissible={!isStartProcessBusy}
+            onPortalContainerChange={setStartProcessPortalElement}
+            portalActive={isStartProcessCalendlyOpen}
+            portalLabel="Agendar reunião no Calendly"
           >
             <StartProcessForClientModal
               productType={requestProductType ?? "CAR"}
@@ -691,6 +696,8 @@ export default function ProductPage() {
               mode={user?.role === "OFFICE" ? "OFFICE" : "CONSULTANT"}
               onClose={() => handleStartProcessOpenChange(false)}
               onBusyChange={handleStartProcessBusyChange}
+              calendlyRootElement={startProcessPortalElement}
+              onCalendlyOpenChange={setIsStartProcessCalendlyOpen}
             />
           </DialogContent>
         </Dialog>

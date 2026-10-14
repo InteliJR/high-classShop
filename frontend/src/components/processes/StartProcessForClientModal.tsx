@@ -41,6 +41,8 @@ interface Props {
   mode?: keyof typeof MODES;
   onClose: () => void;
   onBusyChange?(busy: boolean): void;
+  calendlyRootElement: HTMLElement | null;
+  onCalendlyOpenChange?(open: boolean): void;
 }
 
 export default function StartProcessForClientModal(props: Props) {
@@ -57,6 +59,8 @@ function StartProcessForClientModalInner({
   mode = "CONSULTANT",
   onClose,
   onBusyChange,
+  calendlyRootElement,
+  onCalendlyOpenChange,
 }: Props) {
   const config = MODES[mode];
   const navigate = useNavigate();
@@ -76,6 +80,7 @@ function StartProcessForClientModalInner({
   const mountedRef = useRef(false);
   const operationGeneration = useRef(0);
   const busyCallbackRef = useRef(onBusyChange);
+  const calendlyOpenCallbackRef = useRef(onCalendlyOpenChange);
   const [pendingOperation, setPendingOperation] = useState<{
     appointmentId: string;
     generation: number;
@@ -87,13 +92,15 @@ function StartProcessForClientModalInner({
 
   useLayoutEffect(() => {
     busyCallbackRef.current = onBusyChange;
-  }, [onBusyChange]);
+    calendlyOpenCallbackRef.current = onCalendlyOpenChange;
+  }, [onBusyChange, onCalendlyOpenChange]);
 
   useLayoutEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       operationGeneration.current += 1;
+      calendlyOpenCallbackRef.current?.(false);
       busyCallbackRef.current?.(false);
     };
   }, []);
@@ -104,6 +111,11 @@ function StartProcessForClientModalInner({
   const setBusy = (busy: boolean) => {
     setIsSubmitting(busy);
     busyCallbackRef.current?.(busy);
+  };
+
+  const setCalendlyOpen = (open: boolean) => {
+    setIsCalendlyOpen(open);
+    calendlyOpenCallbackRef.current?.(open);
   };
 
   useEffect(() => {
@@ -173,7 +185,7 @@ function StartProcessForClientModalInner({
       } finally {
         if (isCurrentOperation(pending.generation)) {
           operationGeneration.current += 1;
-          setIsCalendlyOpen(false);
+          setCalendlyOpen(false);
           setPendingOperation(null);
           submittingRef.current = false;
           setBusy(false);
@@ -220,7 +232,7 @@ function StartProcessForClientModalInner({
         awaitingCalendly = true;
         setPendingOperation({ appointmentId: process.appointment_id, generation, client: submittedClient });
         setCalendlyUrl(url);
-        setIsCalendlyOpen(true);
+        setCalendlyOpen(true);
         setCalendlyMessage(
           "Conclua o agendamento no Calendly para marcar o horário da reunião.",
         );
@@ -324,20 +336,20 @@ function StartProcessForClientModalInner({
         </Button>
       </div>
 
-      {calendlyUrl && isCalendlyOpen && (
+      {calendlyRootElement && calendlyUrl && isCalendlyOpen && (
         <PopupModal
           url={calendlyUrl}
           open={isCalendlyOpen}
           onModalClose={() => {
             if (!pendingOperation || !isCurrentOperation(pendingOperation.generation)) return;
             operationGeneration.current += 1;
-            setIsCalendlyOpen(false);
+            setCalendlyOpen(false);
             setPendingOperation(null);
             submittingRef.current = false;
             setBusy(false);
             navigate(config.redirectTo);
           }}
-          rootElement={document.getElementById("root") ?? document.body}
+          rootElement={calendlyRootElement}
           prefill={{
             name: pendingOperation
               ? `${pendingOperation.client.name} ${pendingOperation.client.surname}`.trim()
