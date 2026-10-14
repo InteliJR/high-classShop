@@ -108,6 +108,7 @@ export default function ProcessCard({
   );
   const [isStartingMeeting, setIsStartingMeeting] = useState(false);
   const [isLoadingMeeting, setIsLoadingMeeting] = useState(false);
+  const [meetingLookupComplete, setMeetingLookupComplete] = useState(false);
   const [isConversationDoneLoading, setIsConversationDoneLoading] =
     useState(false);
   const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false);
@@ -122,19 +123,12 @@ export default function ProcessCard({
   const [isRescheduling, setIsRescheduling] = useState(false);
   const confirmationInFlight = useRef(false);
   const dateTimeTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const rejectionTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   // Verifica se é um processo de consultoria (sem produto atribuído)
   const isConsultancy = !process.product_type || !process.product_id;
   const canManuallyAdvanceProcess =
     !isClientView && process.status === "NEGOTIATION" && !isConsultancy;
-  const hasPendingAppointmentRejection =
-    process.status === "SCHEDULING" &&
-    process.appointment_status === "PENDING" &&
-    !!process.appointment_id;
-  const canRejectProcess =
-    process.status !== "COMPLETED" &&
-    process.status !== "REJECTED" &&
-    !hasPendingAppointmentRejection;
 
   // Contraparte do processo: quem esta olhando quer o contato do outro lado.
   // Nao ha fallback entre os dois — se o dado da contraparte nao veio, a
@@ -157,6 +151,19 @@ export default function ProcessCard({
   // Cliente só vê botão se reunião já foi iniciada pelo especialista
   const canStartOrJoinMeeting =
     isAppointmentConfirmed && process.status === "SCHEDULING";
+  const hasActiveAppointment =
+    process.appointment_status === "PENDING" ||
+    process.appointment_status === "SCHEDULED";
+  const hasActiveMeeting = Boolean(
+    meetingSession && !meetingSession.ended_at && meetingSession.is_active !== false,
+  );
+  const isMeetingStatePending = canStartOrJoinMeeting && !meetingLookupComplete;
+  const canRejectProcess =
+    process.status !== "COMPLETED" &&
+    process.status !== "REJECTED" &&
+    !hasActiveAppointment &&
+    !hasActiveMeeting &&
+    !isMeetingStatePending;
   const canSpecialistReschedule =
     !isClientView &&
     process.status === "SCHEDULING" &&
@@ -186,6 +193,7 @@ export default function ProcessCard({
     const loadDetails = async () => {
       try {
         setIsLoadingMeeting(true);
+        setMeetingLookupComplete(false);
         const [reason, processData] = await Promise.all([
           getProcessCompletionReason(process.id),
           getProcessWithActiveContract(process.id),
@@ -206,6 +214,7 @@ export default function ProcessCard({
         console.error("Error loading process details:", error);
       } finally {
         setIsLoadingMeeting(false);
+        setMeetingLookupComplete(true);
       }
     };
 
@@ -471,6 +480,17 @@ export default function ProcessCard({
             aria-label="Alterar status"
           >
             <Edit2 size={18} />
+          </button>
+        )}
+        {canRejectProcess && (
+          <button
+            ref={rejectionTriggerRef}
+            type="button"
+            onClick={() => setShowRejectModal(true)}
+            className="inline-flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs font-medium text-red-700 transition hover:bg-red-50"
+          >
+            <XCircle size={16} />
+            Recusar processo
           </button>
         )}
         {onToggleExpand && (
@@ -988,16 +1008,6 @@ export default function ProcessCard({
               </button>
             )}
 
-            {canRejectProcess && (
-              <button
-                onClick={() => setShowRejectModal(true)}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 border border-red-300 text-red-700 text-xs md:text-sm font-medium rounded-lg hover:bg-red-50 transition-colors"
-              >
-                <XCircle size={16} />
-                Recusar processo
-              </button>
-            )}
-
             {/* Negotiation Button: Only show if status is NEGOTIATION and process has product */}
             {process.status === "NEGOTIATION" && !isConsultancy && (
               <button
@@ -1021,7 +1031,7 @@ export default function ProcessCard({
           </div>
 
           {/* Advance process — specialist only, NEGOTIATION, low prominence */}
-          {process.status === "NEGOTIATION" && !isClientView && (
+          {canManuallyAdvanceProcess && (
             <div className="flex items-center justify-end gap-2 mt-2">
               {!showAdvanceConfirm ? (
                 <button
@@ -1072,6 +1082,7 @@ export default function ProcessCard({
       <UpdateProcessStatusModal
         isOpen={showUpdateModal || showRejectModal}
         action={showRejectModal ? "reject" : "status"}
+        returnFocusRef={rejectionTriggerRef}
         onClose={() => {
           setShowUpdateModal(false);
           setShowRejectModal(false);

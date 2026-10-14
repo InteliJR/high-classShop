@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 import { X, AlertTriangle } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import type { Process } from "../../services/processes.service";
@@ -6,6 +6,8 @@ import {
   updateProcessStatus,
   rejectProcess,
 } from "../../services/processes.service";
+import { Alert } from "../ui/alert";
+import { Dialog, DialogContent } from "../ui/dialog";
 
 interface UpdateProcessStatusModalProps {
   isOpen: boolean;
@@ -13,6 +15,7 @@ interface UpdateProcessStatusModalProps {
   onSuccess?: () => void;
   process: Process;
   action?: "status" | "reject";
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
 interface UpdateProcessFormData {
@@ -29,6 +32,7 @@ export default function UpdateProcessStatusModal({
   onSuccess,
   process,
   action = "status",
+  returnFocusRef,
 }: UpdateProcessStatusModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,26 +113,30 @@ export default function UpdateProcessStatusModal({
 
   if (action === "reject") {
     return (
-      <div
-        className="fixed inset-0 bg-black/70 flex items-center justify-center z-60 p-4"
-        onClick={!isSubmitting ? handleRejectCancel : undefined}
+      <Dialog
+        open={isOpen}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !isSubmitting) handleRejectCancel();
+        }}
       >
-        <div
-          className="bg-white rounded-lg shadow-xl w-full max-w-md"
-          onClick={(event) => event.stopPropagation()}
+        <DialogContent
+          open={isOpen}
+          title="Rejeitar Processo"
+          dismissible={!isSubmitting}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocusRef?.current?.focus();
+          }}
+          className="max-w-md"
         >
-          <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-200 bg-red-50">
-            <AlertTriangle size={24} className="text-red-600" />
-            <h3 className="text-lg font-semibold text-red-900">
-              Rejeitar Processo
-            </h3>
-          </div>
-
-          <div className="p-6 space-y-4">
-            <p className="text-gray-700">
-              Tem certeza que deseja rejeitar este processo? Esta ação não pode
-              ser desfeita.
-            </p>
+          <div className="space-y-4">
+            <Alert variant="warning">
+              <AlertTriangle size={20} aria-hidden="true" />
+              <span>
+                Tem certeza que deseja rejeitar este processo? Esta ação não
+                pode ser desfeita.
+              </span>
+            </Alert>
             <div>
               <label
                 htmlFor="process-rejection-reason"
@@ -152,33 +160,29 @@ export default function UpdateProcessStatusModal({
               </p>
             </div>
 
-            {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            )}
-          </div>
+            {error && <Alert variant="danger">{error}</Alert>}
 
-          <div className="flex gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
-            <button
-              type="button"
-              onClick={handleRejectCancel}
-              disabled={isSubmitting}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-100 transition disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={handleRejectConfirm}
-              disabled={isSubmitting}
-              className="flex-1 px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition disabled:opacity-50"
-            >
-              {isSubmitting ? "Rejeitando..." : "Confirmar Rejeição"}
-            </button>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleRejectCancel}
+                disabled={isSubmitting}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-100 transition disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleRejectConfirm}
+                disabled={isSubmitting}
+                className="flex-1 px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition disabled:opacity-50"
+              >
+                {isSubmitting ? "Rejeitando..." : "Confirmar Rejeição"}
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
     );
   }
 
