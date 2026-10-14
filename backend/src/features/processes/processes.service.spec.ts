@@ -1994,6 +1994,7 @@ describe('ProcessesService — autorização centralizada de processos', () => {
   function updateService(process = protectedProcess()) {
     const processUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
       process: {
         findUniqueOrThrow: jest.fn().mockResolvedValue(process),
         updateMany: processUpdateMany,
@@ -2282,6 +2283,7 @@ describe('ProcessesService.cancelAppointment — serialização canônica', () =
       client_id: clientId,
       specialist_id: specialistId,
       status: ProcessStatus.SCHEDULING,
+      updated_at: new Date('2026-01-01T00:00:00.000Z'),
       product_type: ProductType.CAR,
       appointment_id: 'appointment-1',
       appointment: {
@@ -2308,12 +2310,14 @@ describe('ProcessesService.cancelAppointment — serialização canônica', () =
       aircraft: null,
     };
     const historyDelete = jest.fn().mockResolvedValue({ count: 1 });
+    const processClaim = jest.fn().mockResolvedValue({ count: 1 });
     const processDelete = jest.fn().mockResolvedValue(process);
     const appointmentDelete = jest.fn().mockResolvedValue(process.appointment);
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
       process: {
         findUnique: jest.fn().mockResolvedValue(process),
+        updateMany: processClaim,
         delete: processDelete,
       },
       appointment: { delete: appointmentDelete },
@@ -2342,6 +2346,17 @@ describe('ProcessesService.cancelAppointment — serialização canônica', () =
     expect(historyDelete).toHaveBeenCalledWith({
       where: { processId: process.id },
     });
+    expect(processClaim).toHaveBeenCalledWith({
+      where: {
+        id: process.id,
+        status: ProcessStatus.SCHEDULING,
+        updated_at: process.updated_at,
+      },
+      data: { updated_at: expect.any(Date) },
+    });
+    expect(processClaim.mock.invocationCallOrder[0]).toBeLessThan(
+      historyDelete.mock.invocationCallOrder[0],
+    );
     expect(processDelete).toHaveBeenCalledWith({
       where: { id: process.id },
     });

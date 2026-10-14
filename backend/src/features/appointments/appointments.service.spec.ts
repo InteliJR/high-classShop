@@ -11,6 +11,7 @@ import { validate } from 'class-validator';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { CreatePendingAppointmentDto } from './dto/create-pending-appointment.dto';
 import { CreatePlatformAppointmentDto } from './dto/create-platform-appointment.dto';
+import { GetAppointmentsQueryDto } from './dto/get-appointments-query.dto';
 import { AppointmentsService } from './appointments.service';
 import {
   BadRequestException,
@@ -105,6 +106,23 @@ describe('CreateAppointmentDto — seleção de produto', () => {
       appointment_datetime: datetime,
     });
     expect(await validate(dto)).toEqual([]);
+  });
+});
+
+describe('GetAppointmentsQueryDto — limite de paginação', () => {
+  it('rejeita limit maior que 100', async () => {
+    const dto = Object.assign(new GetAppointmentsQueryDto(), { limit: 101 });
+
+    const errors = await validate(dto);
+
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          property: 'limit',
+          constraints: expect.objectContaining({ max: expect.any(String) }),
+        }),
+      ]),
+    );
   });
 });
 
@@ -1000,6 +1018,37 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
 });
 
 describe('AppointmentsService.updateStatus — snapshot da negociação', () => {
+  it.each([ProcessStatus.NEGOTIATION, ProcessStatus.DOCUMENTATION])(
+    'rejeita cancelamento quando o Process já avançou para %s antes de iniciar a transação',
+    async (processStatus) => {
+      const appointment = {
+        id: 'appointment-1',
+        client_id: 'client-1',
+        specialist_id: 'specialist-1',
+        status: StatusAgendamento.SCHEDULED,
+        appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+        process: { id: 'process-1', status: processStatus },
+      };
+      const prisma = {
+        appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+        $transaction: jest.fn(),
+      } as any;
+      const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+      await expect(
+        service.updateStatus(
+          appointment.id,
+          { status: StatusAgendamento.CANCELLED },
+          appointment.client_id,
+          UserRole.CUSTOMER,
+        ),
+      ).rejects.toThrow(
+        'Não é possível cancelar uma reunião cujo processo já avançou',
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED])(
     'cancela %s e remove o Process SCHEDULING na mesma transação',
     async (currentStatus) => {
@@ -2095,9 +2144,14 @@ describe('AppointmentsService.cancelPending — serialização canônica', () =>
         surname: 'Teste',
         email: 'especialista@example.com',
       },
-      process: { id: 'process-1', status: ProcessStatus.SCHEDULING },
+      process: {
+        id: 'process-1',
+        status: ProcessStatus.SCHEDULING,
+        updated_at: new Date('2026-01-01T00:00:00.000Z'),
+      },
     };
     const historyDelete = jest.fn().mockResolvedValue({ count: 1 });
+    const processClaim = jest.fn().mockResolvedValue({ count: 1 });
     const processDelete = jest.fn().mockResolvedValue(appointment.process);
     const appointmentDelete = jest.fn().mockResolvedValue(appointment);
     const tx = {
@@ -2106,7 +2160,7 @@ describe('AppointmentsService.cancelPending — serialização canônica', () =>
         findUnique: jest.fn().mockResolvedValue(appointment),
         delete: appointmentDelete,
       },
-      process: { delete: processDelete },
+      process: { updateMany: processClaim, delete: processDelete },
       processStatusHistory: { deleteMany: historyDelete },
     };
     const prisma = {
@@ -2136,6 +2190,17 @@ describe('AppointmentsService.cancelPending — serialização canônica', () =>
     expect(historyDelete).toHaveBeenCalledWith({
       where: { processId: appointment.process.id },
     });
+    expect(processClaim).toHaveBeenCalledWith({
+      where: {
+        id: appointment.process.id,
+        status: ProcessStatus.SCHEDULING,
+        updated_at: appointment.process.updated_at,
+      },
+      data: { updated_at: expect.any(Date) },
+    });
+    expect(processClaim.mock.invocationCallOrder[0]).toBeLessThan(
+      historyDelete.mock.invocationCallOrder[0],
+    );
     expect(processDelete).toHaveBeenCalledWith({
       where: { id: appointment.process.id },
     });

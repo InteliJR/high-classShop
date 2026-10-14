@@ -619,6 +619,15 @@ export class AppointmentsService {
           'Apenas agendamentos pendentes ou agendados podem ser cancelados',
         );
       }
+      if (
+        dto.status === StatusAgendamento.CANCELLED &&
+        current.process &&
+        current.process.status !== ProcessStatus.SCHEDULING
+      ) {
+        throw new BadRequestException(
+          'Não é possível cancelar uma reunião cujo processo já avançou',
+        );
+      }
     };
 
     const appointment = await this.prisma.appointment.findUnique({
@@ -1712,6 +1721,24 @@ export class AppointmentsService {
 
       // Se existe process, deletar histórico e process primeiro
       if (lockedAppointment.process) {
+        if (lockedAppointment.process.status !== ProcessStatus.SCHEDULING) {
+          throw new BadRequestException(
+            'Não é possível cancelar uma reunião cujo processo já avançou',
+          );
+        }
+        const processClaim = await tx.process.updateMany({
+          where: {
+            id: lockedAppointment.process.id,
+            status: ProcessStatus.SCHEDULING,
+            updated_at: lockedAppointment.process.updated_at,
+          },
+          data: { updated_at: new Date() },
+        });
+        if (processClaim.count !== 1) {
+          throw new ConflictException(
+            'O processo foi alterado enquanto o agendamento era cancelado',
+          );
+        }
         await tx.processStatusHistory.deleteMany({
           where: { processId: lockedAppointment.process.id },
         });

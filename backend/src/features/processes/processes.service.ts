@@ -1212,6 +1212,41 @@ export class ProcessesService {
             'update-status',
           );
 
+          await acquireSpecialistScheduleLock(
+            tx,
+            existingProcess.specialist_id,
+          );
+          existingProcess = await tx.process.findUniqueOrThrow({
+            where: { id: processId },
+            include: {
+              client: {
+                select: {
+                  email: true,
+                  name: true,
+                  surname: true,
+                  consultant_id: true,
+                  company_id: true,
+                  consultant: { select: { company_id: true } },
+                },
+              },
+              specialist: {
+                select: { email: true, name: true, surname: true },
+              },
+              car: true,
+              boat: true,
+              aircraft: true,
+            },
+          });
+          this.assertProcessAccess(
+            existingProcess,
+            {
+              id: callerId ?? '',
+              role: callerRole as UserRole,
+              companyId: callerCompanyId,
+            },
+            'update-status',
+          );
+
           //Verificar se ele já está com o status atualizado
           if (existingProcess.status === updateProcessDto.status) {
             throw new BadRequestException();
@@ -2377,6 +2412,20 @@ export class ProcessesService {
       ) {
         throw new BadRequestException(
           'Agendamento não corresponde aos participantes do processo',
+        );
+      }
+
+      const processClaim = await tx.process.updateMany({
+        where: {
+          id: processId,
+          status: ProcessStatus.SCHEDULING,
+          updated_at: lockedProcess.updated_at,
+        },
+        data: { updated_at: new Date() },
+      });
+      if (processClaim.count !== 1) {
+        throw new ConflictException(
+          'O processo foi alterado enquanto o agendamento era cancelado',
         );
       }
 

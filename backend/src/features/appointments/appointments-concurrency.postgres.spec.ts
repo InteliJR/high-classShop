@@ -87,6 +87,7 @@ describeWithPostgres(
       sendAppointmentConfirmedEmail: jest.fn().mockResolvedValue(undefined),
       sendAppointmentRescheduledEmail: jest.fn().mockResolvedValue(undefined),
       sendAppointmentCancelledEmail: jest.fn().mockResolvedValue(undefined),
+      sendProcessStatusChangedEmail: jest.fn().mockResolvedValue(undefined),
     };
 
     beforeAll(async () => {
@@ -685,6 +686,52 @@ describeWithPostgres(
       expect(replacement.id).not.toBe(request.id);
       expect(replacement.process_id).not.toBe(request.process_id);
     }, 15_000);
+
+    it.each(['appointment', 'process'] as const)(
+      'serializes %s cancellation against a process status advance',
+      async (route) => {
+        const request = await createRequest(holder, 0);
+        const outcomes = await race<any>((a, b) => [
+          route === 'appointment'
+            ? appointments(first, a).cancelPending(request.id, clientIds[0])
+            : processes(first, a).cancelAppointment(
+                request.process_id,
+                clientIds[0],
+              ),
+          processes(second, b).update(
+            request.process_id,
+            {
+              status: ProcessStatus.NEGOTIATION,
+              notes: 'advance concorrente',
+            },
+            specialistId,
+            UserRole.SPECIALIST,
+          ),
+        ]);
+
+        expect(
+          outcomes.filter(({ status }) => status === 'fulfilled'),
+        ).toHaveLength(1);
+        const storedProcess = await holder.process.findUnique({
+          where: { id: request.process_id },
+        });
+        const storedAppointment = await holder.appointment.findUnique({
+          where: { id: request.id },
+        });
+        if (outcomes[0].status === 'fulfilled') {
+          expect(storedProcess).toBeNull();
+          expect(storedAppointment).toBeNull();
+        } else {
+          expect(storedProcess).toMatchObject({
+            status: ProcessStatus.NEGOTIATION,
+          });
+          expect(storedAppointment).toMatchObject({
+            status: StatusAgendamento.PENDING,
+          });
+        }
+      },
+      15_000,
+    );
 
     function callback(
       client: PrismaClient,
