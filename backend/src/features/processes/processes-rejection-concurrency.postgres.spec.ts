@@ -4,6 +4,7 @@ import {
   ProcessStatus,
   ProductCurrency,
   ProductType,
+  StatusAgendamento,
   UserRole,
 } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -160,6 +161,7 @@ describeWithPostgres('process rejection CAS — PostgreSQL concurrency', () => {
   const specialistId = randomUUID();
   const carId = randomUUID();
   const processId = randomUUID();
+  const appointmentId = randomUUID();
   const rejectClient = new PrismaClient({
     datasources: {
       db: { url: withApplicationName(prismaDatabaseUrl, `reject_a_${suffix}`) },
@@ -218,6 +220,9 @@ describeWithPostgres('process rejection CAS — PostgreSQL concurrency', () => {
       where: { processId },
     });
     await completionClient.process.deleteMany({ where: { id: processId } });
+    await completionClient.appointment.deleteMany({
+      where: { id: appointmentId },
+    });
   });
 
   afterAll(async () => {
@@ -228,6 +233,9 @@ describeWithPostgres('process rejection CAS — PostgreSQL concurrency', () => {
       where: { processId },
     });
     await completionClient.process.deleteMany({ where: { id: processId } });
+    await completionClient.appointment.deleteMany({
+      where: { id: appointmentId },
+    });
     await completionClient.car.deleteMany({ where: { id: carId } });
     await completionClient.user.deleteMany({
       where: { id: { in: [clientId, specialistId] } },
@@ -237,6 +245,21 @@ describeWithPostgres('process rejection CAS — PostgreSQL concurrency', () => {
       completionClient.$disconnect(),
     ]);
   });
+
+  async function createConfirmedAppointment() {
+    await completionClient.appointment.create({
+      data: {
+        id: appointmentId,
+        client_id: clientId,
+        specialist_id: specialistId,
+        appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+        // Rejeição de processo bloqueia appointments ativos
+        // (PENDING/SCHEDULED); COMPLETED mantém esta fixture focada apenas
+        // na serialização entre rejeição e criação da reunião.
+        status: StatusAgendamento.COMPLETED,
+      },
+    });
+  }
 
   it('preserva conclusão concorrente e não grava rejeição parcial', async () => {
     const initialUpdatedAt = new Date('2026-01-01T00:00:00.000Z');
@@ -403,11 +426,13 @@ describeWithPostgres('process rejection CAS — PostgreSQL concurrency', () => {
   }, 15_000);
 
   it('não cria reunião nem envia e-mail quando a rejeição ganha o lock', async () => {
+    await createConfirmedAppointment();
     await completionClient.process.create({
       data: {
         id: processId,
         client_id: clientId,
         specialist_id: specialistId,
+        appointment_id: appointmentId,
         status: ProcessStatus.SCHEDULING,
       },
     });
@@ -462,11 +487,13 @@ describeWithPostgres('process rejection CAS — PostgreSQL concurrency', () => {
   }, 15_000);
 
   it('mantém reunião e recusa rejeição quando o início ganha o lock', async () => {
+    await createConfirmedAppointment();
     await completionClient.process.create({
       data: {
         id: processId,
         client_id: clientId,
         specialist_id: specialistId,
+        appointment_id: appointmentId,
         status: ProcessStatus.SCHEDULING,
       },
     });
@@ -527,11 +554,13 @@ describeWithPostgres('process rejection CAS — PostgreSQL concurrency', () => {
   }, 15_000);
 
   it('libera pool connection_limit=1 durante provider e impede start/e-mail duplicado', async () => {
+    await createConfirmedAppointment();
     await completionClient.process.create({
       data: {
         id: processId,
         client_id: clientId,
         specialist_id: specialistId,
+        appointment_id: appointmentId,
         status: ProcessStatus.SCHEDULING,
       },
     });

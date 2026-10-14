@@ -146,14 +146,22 @@ export class MeetingsService {
       );
     }
     if (
-      Boolean(process.appointment) !== Boolean(process.appointment_id) ||
-      (process.appointment &&
-        (process.appointment.id !== process.appointment_id ||
-          process.appointment.client_id !== process.client_id ||
-          process.appointment.specialist_id !== process.specialist_id))
+      !process.appointment_id ||
+      !process.appointment ||
+      process.appointment.id !== process.appointment_id ||
+      process.appointment.client_id !== process.client_id ||
+      process.appointment.specialist_id !== process.specialist_id
     ) {
       throw new BadRequestException(
         'Agendamento não corresponde aos participantes do processo',
+      );
+    }
+    if (
+      process.appointment.status !== StatusAgendamento.SCHEDULED &&
+      process.appointment.status !== StatusAgendamento.COMPLETED
+    ) {
+      throw new BadRequestException(
+        'Agendamento não está confirmado para iniciar reunião',
       );
     }
     if (

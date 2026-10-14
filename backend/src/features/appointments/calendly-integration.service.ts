@@ -10,6 +10,7 @@ import {
 import {
   AppointmentSchedulingMethod,
   CalendlySyncStatus,
+  StatusAgendamento,
   UserRole,
 } from '@prisma/client';
 import axios from 'axios';
@@ -268,8 +269,7 @@ export class CalendlyIntegrationService {
         await this.prisma.calendlyConnection.updateMany({
           where: {
             id: upsertedConnection.id,
-            access_token_encrypted:
-              upsertedConnection.access_token_encrypted,
+            access_token_encrypted: upsertedConnection.access_token_encrypted,
             is_active: true,
           },
           data: { last_error: 'webhook_subscription_failed' },
@@ -329,6 +329,14 @@ export class CalendlyIntegrationService {
     if (!connection || !connection.is_active) {
       return null;
     }
+    if (
+      typeof connection.calendly_user_uri !== 'string' ||
+      !connection.calendly_user_uri.trim()
+    ) {
+      throw new BadRequestException(
+        'Conexão Calendly sem identidade de usuário válida',
+      );
+    }
 
     const inviteeData = inviteeReference
       ? await this.getCalendlyResourceWithRefresh(
@@ -338,7 +346,9 @@ export class CalendlyIntegrationService {
         )
       : null;
 
-    const inviteeResource = inviteeData?.resource || inviteeData;
+    const inviteeResource = inviteeReference
+      ? this.requireCalendlyResource(inviteeData, 'convidado')
+      : null;
     if (expectedClientId) {
       const client = await this.prisma.user.findUnique({
         where: { id: expectedClientId },
@@ -366,22 +376,6 @@ export class CalendlyIntegrationService {
       inviteeReference,
       inviteeEventReference,
     );
-    const inviteeStartTime =
-      inviteeResource?.start_time ||
-      inviteeResource?.event_start_time ||
-      inviteeData?.payload?.scheduled_event?.start_time;
-
-    if (inviteeStartTime) {
-      const parsed = parseDate(inviteeStartTime);
-      if (parsed) {
-        await this.prisma.calendlyConnection.update({
-          where: { id: connection.id },
-          data: { last_sync_at: new Date(), last_error: null },
-        });
-        return parsed;
-      }
-    }
-
     const resolvedEventUri =
       eventReference?.canonicalUri ||
       inviteeEventReference?.canonicalUri ||
@@ -395,10 +389,33 @@ export class CalendlyIntegrationService {
       resolvedEventUri,
       'event',
     );
-    const eventResource = eventData?.resource || eventData;
-    const eventStartTime =
-      eventResource?.start_time ||
-      eventData?.payload?.scheduled_event?.start_time;
+    const eventResource = this.requireCalendlyResource(eventData, 'evento');
+    if (
+      !Array.isArray(eventResource.event_memberships) ||
+      eventResource.event_memberships.some(
+        (membership: unknown) =>
+          !membership ||
+          typeof membership !== 'object' ||
+          typeof (membership as { user?: unknown }).user !== 'string',
+      )
+    ) {
+      throw new BadRequestException(
+        'Calendly retornou memberships de evento inválidas',
+      );
+    }
+    const connectedUserUri = connection.calendly_user_uri.trim();
+    if (
+      !eventResource.event_memberships.some(
+        (membership: { user: string }) =>
+          membership.user.trim() === connectedUserUri,
+      )
+    ) {
+      throw new BadRequestException(
+        'Evento do Calendly não pertence ao especialista conectado',
+      );
+    }
+
+    const eventStartTime = eventResource.start_time;
 
     if (!eventStartTime) {
       return null;
@@ -415,6 +432,26 @@ export class CalendlyIntegrationService {
     });
 
     return parsed;
+  }
+
+  private requireCalendlyResource(
+    data: unknown,
+    kind: 'evento' | 'convidado',
+  ): Record<string, any> {
+    if (
+      !data ||
+      typeof data !== 'object' ||
+      !('resource' in data) ||
+      !(data as { resource?: unknown }).resource ||
+      typeof (data as { resource?: unknown }).resource !== 'object' ||
+      Array.isArray((data as { resource?: unknown }).resource)
+    ) {
+      throw new BadRequestException(
+        `Calendly retornou ${kind} com formato inválido`,
+      );
+    }
+
+    return (data as { resource: Record<string, any> }).resource;
   }
 
   async processWebhook(
@@ -468,8 +505,7 @@ export class CalendlyIntegrationService {
         'URIs de convidado do Calendly são inconsistentes',
       );
     }
-    const inviteeReference =
-      officialInviteeReference || legacyInviteeReference;
+    const inviteeReference = officialInviteeReference || legacyInviteeReference;
     this.assertSameCalendlyEvent(eventReference, inviteeReference);
     const lookupEventReference =
       eventReference ||
@@ -547,7 +583,11 @@ export class CalendlyIntegrationService {
           (lockedAppointment.scheduling_method &&
             lockedAppointment.scheduling_method !==
               AppointmentSchedulingMethod.CALENDLY) ||
-          lockedAppointment.specialist_rescheduled_at
+          lockedAppointment.specialist_rescheduled_at ||
+          lockedAppointment.calendly_sync_status ===
+            CalendlySyncStatus.FAILED ||
+          lockedAppointment.status === StatusAgendamento.COMPLETED ||
+          lockedAppointment.status === StatusAgendamento.CANCELLED
         ) {
           return false;
         }
@@ -613,6 +653,8 @@ export class CalendlyIntegrationService {
             lockedAppointment.scheduling_method !==
               AppointmentSchedulingMethod.CALENDLY) ||
           lockedAppointment.specialist_rescheduled_at ||
+          lockedAppointment.status === StatusAgendamento.COMPLETED ||
+          lockedAppointment.status === StatusAgendamento.CANCELLED ||
           !this.appointmentStillMatchesWebhook(
             lockedAppointment,
             lookupEventReference,
@@ -1003,10 +1045,7 @@ export class CalendlyIntegrationService {
   ): boolean {
     if (inviteeReference) {
       const currentInvitee = appointment.calendly_invitee_uri
-        ? parseCalendlyResourceUri(
-            appointment.calendly_invitee_uri,
-            'invitee',
-          )
+        ? parseCalendlyResourceUri(appointment.calendly_invitee_uri, 'invitee')
         : null;
       return currentInvitee?.canonicalUri === inviteeReference.canonicalUri;
     }

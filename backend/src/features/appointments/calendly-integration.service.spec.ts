@@ -1,9 +1,14 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { AppointmentSchedulingMethod } from '@prisma/client';
+import {
+  AppointmentSchedulingMethod,
+  CalendlySyncStatus,
+  StatusAgendamento,
+} from '@prisma/client';
 import { CalendlyIntegrationService } from './calendly-integration.service';
 import axios from 'axios';
 import { createHmac } from 'crypto';
@@ -13,7 +18,7 @@ jest.mock('axios');
 describe('CalendlyIntegrationService connection lifecycle', () => {
   const originalEnv = { ...process.env };
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     process.env.CALENDLY_OAUTH_CLIENT_ID = 'client-id';
     process.env.CALENDLY_OAUTH_CLIENT_SECRET = 'client-secret';
     process.env.CALENDLY_OAUTH_REDIRECT_URI = 'https://app.test/callback';
@@ -29,15 +34,13 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
   function makeCallbackService(scheduling_url: string | undefined) {
     const prisma = {
       calendlyOauthState: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({
-            id: 'state-1',
-            user_id: 'specialist-1',
-            used_at: null,
-            expires_at: new Date(Date.now() + 60000),
-            user: { id: 'specialist-1', role: 'SPECIALIST' },
-          }),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'state-1',
+          user_id: 'specialist-1',
+          used_at: null,
+          expires_at: new Date(Date.now() + 60000),
+          user: { id: 'specialist-1', role: 'SPECIALIST' },
+        }),
         update: jest.fn().mockResolvedValue({}),
       },
       calendlyConnection: {
@@ -45,26 +48,22 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
       },
       user: { update: jest.fn().mockResolvedValue({}) },
     };
-    jest
-      .mocked(axios.post)
-      .mockResolvedValue({
-        data: {
-          access_token: 'access',
-          refresh_token: 'refresh',
-          expires_in: 3600,
+    jest.mocked(axios.post).mockResolvedValue({
+      data: {
+        access_token: 'access',
+        refresh_token: 'refresh',
+        expires_in: 3600,
+      },
+    });
+    jest.mocked(axios.get).mockResolvedValue({
+      data: {
+        resource: {
+          uri: 'https://api.calendly.com/users/1',
+          current_organization: 'https://api.calendly.com/organizations/1',
+          scheduling_url,
         },
-      });
-    jest
-      .mocked(axios.get)
-      .mockResolvedValue({
-        data: {
-          resource: {
-            uri: 'https://api.calendly.com/users/1',
-            current_organization: 'https://api.calendly.com/organizations/1',
-            scheduling_url,
-          },
-        },
-      });
+      },
+    });
     return { prisma, service: new CalendlyIntegrationService(prisma as any) };
   }
 
@@ -145,8 +144,7 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
       user_id: 'specialist-1',
       access_token_encrypted: (service as any).encryptToken('access'),
       calendly_user_uri: 'https://api.calendly.com/users/1',
-      calendly_organization_uri:
-        'https://api.calendly.com/organizations/1',
+      calendly_organization_uri: 'https://api.calendly.com/organizations/1',
     };
     prisma.calendlyConnection.upsert.mockResolvedValue(connection);
     Object.assign(prisma.calendlyConnection, {
@@ -165,17 +163,13 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
       })
       .mockRejectedValueOnce(new Error('subscription unavailable'));
 
-    await expect(
-      service.handleOAuthCallback('code', 'state'),
-    ).resolves.toBe('specialist-1');
+    await expect(service.handleOAuthCallback('code', 'state')).resolves.toBe(
+      'specialist-1',
+    );
     expect(prisma.user.update).toHaveBeenCalledTimes(1);
     expect(prisma.calendlyOauthState.update).toHaveBeenCalledTimes(1);
-    expect(
-      (prisma.calendlyConnection as any).update,
-    ).not.toHaveBeenCalled();
-    expect(
-      (prisma.calendlyConnection as any).updateMany,
-    ).toHaveBeenCalledWith({
+    expect((prisma.calendlyConnection as any).update).not.toHaveBeenCalled();
+    expect((prisma.calendlyConnection as any).updateMany).toHaveBeenCalledWith({
       where: {
         id: connection.id,
         access_token_encrypted: connection.access_token_encrypted,
@@ -236,6 +230,7 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
       id: 'connection-1',
       user_id: 'specialist-1',
       is_active: true,
+      calendly_user_uri: 'https://api.calendly.com/users/1',
       expires_at: new Date(0),
       access_token_encrypted: (service as any).encryptToken('expired-access'),
       refresh_token_encrypted: (service as any).encryptToken('valid-refresh'),
@@ -293,20 +288,28 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
   it.each([
     'https://calendly.com/api/v2/scheduled_events/event-1',
     'https://api.calendly.com/api/v2/scheduled_events/event-1',
-  ])('normaliza URI oficial antes da requisição autenticada: %s', async (uri) => {
-    const { service } = makeRefreshService();
-    jest.mocked(axios.get).mockResolvedValueOnce({
-      data: { resource: { start_time: '2099-01-01T10:00:00.000Z' } },
-    });
+  ])(
+    'normaliza URI oficial antes da requisição autenticada: %s',
+    async (uri) => {
+      const { service } = makeRefreshService();
+      jest.mocked(axios.get).mockResolvedValueOnce({
+        data: {
+          resource: {
+            start_time: '2099-01-01T10:00:00.000Z',
+            event_memberships: [{ user: 'https://api.calendly.com/users/1' }],
+          },
+        },
+      });
 
-    await expect(
-      service.resolveScheduledStartTime('specialist-1', uri),
-    ).resolves.toEqual(new Date('2099-01-01T10:00:00.000Z'));
-    expect(axios.get).toHaveBeenCalledWith(
-      'https://api.calendly.com/scheduled_events/event-1',
-      expect.objectContaining({ maxRedirects: 0 }),
-    );
-  });
+      await expect(
+        service.resolveScheduledStartTime('specialist-1', uri),
+      ).resolves.toEqual(new Date('2099-01-01T10:00:00.000Z'));
+      expect(axios.get).toHaveBeenCalledWith(
+        'https://api.calendly.com/scheduled_events/event-1',
+        expect.objectContaining({ maxRedirects: 0 }),
+      );
+    },
+  );
 
   it('rejeita evento divergente retornado pelo convidado mesmo quando há horário', async () => {
     const { service } = makeRefreshService();
@@ -331,15 +334,24 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
 
   it('aceita evento equivalente retornado pelo convidado e mantém fetch canônico', async () => {
     const { service } = makeRefreshService();
-    jest.mocked(axios.get).mockResolvedValueOnce({
-      data: {
-        resource: {
-          event:
-            'https://api.calendly.com/api/v2/scheduled_events/event-1',
-          start_time: '2099-01-01T10:00:00.000Z',
+    jest
+      .mocked(axios.get)
+      .mockResolvedValueOnce({
+        data: {
+          resource: {
+            event: 'https://api.calendly.com/api/v2/scheduled_events/event-1',
+            start_time: '2099-01-01T10:00:00.000Z',
+          },
         },
-      },
-    });
+      })
+      .mockResolvedValueOnce({
+        data: {
+          resource: {
+            start_time: '2099-01-01T10:00:00.000Z',
+            event_memberships: [{ user: 'https://api.calendly.com/users/1' }],
+          },
+        },
+      });
 
     await expect(
       service.resolveScheduledStartTime(
@@ -383,15 +395,25 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
     prisma.user.findUnique.mockResolvedValue({
       email: '  Cliente@Example.com ',
     });
-    jest.mocked(axios.get).mockResolvedValueOnce({
-      data: {
-        resource: {
-          email: 'cliente@example.COM',
-          event: 'https://api.calendly.com/scheduled_events/event-1',
-          start_time: '2099-01-01T10:00:00.000Z',
+    jest
+      .mocked(axios.get)
+      .mockResolvedValueOnce({
+        data: {
+          resource: {
+            email: 'cliente@example.COM',
+            event: 'https://api.calendly.com/scheduled_events/event-1',
+            start_time: '2099-01-01T10:00:00.000Z',
+          },
         },
-      },
-    });
+      })
+      .mockResolvedValueOnce({
+        data: {
+          resource: {
+            start_time: '2099-01-01T10:00:00.000Z',
+            event_memberships: [{ user: 'https://api.calendly.com/users/1' }],
+          },
+        },
+      });
 
     await expect(
       service.resolveScheduledStartTime(
@@ -401,6 +423,102 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
         'client-1',
       ),
     ).resolves.toEqual(new Date('2099-01-01T10:00:00.000Z'));
+  });
+
+  it('rejeita horário do invitee quando o evento não pertence ao usuário Calendly conectado', async () => {
+    const { service, prisma } = makeRefreshService();
+    prisma.user.findUnique.mockResolvedValue({ email: 'cliente@example.com' });
+    jest
+      .mocked(axios.get)
+      .mockResolvedValueOnce({
+        data: {
+          resource: {
+            email: 'cliente@example.com',
+            event: 'https://api.calendly.com/scheduled_events/event-1',
+            start_time: '2099-01-01T10:00:00.000Z',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          resource: {
+            start_time: '2099-01-01T10:00:00.000Z',
+            event_memberships: [
+              { user: 'https://api.calendly.com/users/another-user' },
+            ],
+          },
+        },
+      });
+
+    await expect(
+      service.resolveScheduledStartTime(
+        'specialist-1',
+        'https://api.calendly.com/scheduled_events/event-1',
+        'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+        'client-1',
+      ),
+    ).rejects.toThrow('Evento do Calendly não pertence ao especialista');
+    expect(axios.get).toHaveBeenCalledTimes(2);
+    expect(prisma.calendlyConnection.update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    undefined,
+    null,
+    {},
+    { resource: null },
+    { resource: { start_time: '2099-01-01T10:00:00.000Z' } },
+    {
+      resource: {
+        start_time: '2099-01-01T10:00:00.000Z',
+        event_memberships: {},
+      },
+    },
+  ])(
+    'falha fechado para shape de evento Calendly inválido: %p',
+    async (data) => {
+      const { service, prisma } = makeRefreshService();
+      jest.mocked(axios.get).mockResolvedValueOnce({ data });
+
+      await expect(
+        service.resolveScheduledStartTime(
+          'specialist-1',
+          'https://api.calendly.com/scheduled_events/event-1',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.calendlyConnection.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('usa o horário autoritativo do evento após validar a membership', async () => {
+    const { service } = makeRefreshService();
+    jest
+      .mocked(axios.get)
+      .mockResolvedValueOnce({
+        data: {
+          resource: {
+            event: 'https://api.calendly.com/scheduled_events/event-1',
+            start_time: '2099-01-01T09:00:00.000Z',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          resource: {
+            start_time: '2099-01-01T10:00:00.000Z',
+            event_memberships: [{ user: 'https://api.calendly.com/users/1' }],
+          },
+        },
+      });
+
+    await expect(
+      service.resolveScheduledStartTime(
+        'specialist-1',
+        'https://api.calendly.com/scheduled_events/event-1',
+        'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+      ),
+    ).resolves.toEqual(new Date('2099-01-01T10:00:00.000Z'));
+    expect(axios.get).toHaveBeenCalledTimes(2);
   });
 
   it('rejeita URI de evento não confiável retornada pelo recurso de convidado', async () => {
@@ -425,17 +543,20 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
       .mocked(axios.get)
       .mockRejectedValueOnce({ response: { status: 401 } })
       .mockResolvedValueOnce({
-        data: { resource: { start_time: '2099-01-01T10:00:00.000Z' } },
-      });
-    jest
-      .mocked(axios.post)
-      .mockResolvedValue({
         data: {
-          access_token: 'renewed-access',
-          refresh_token: 'renewed-refresh',
-          expires_in: 3600,
+          resource: {
+            start_time: '2099-01-01T10:00:00.000Z',
+            event_memberships: [{ user: 'https://api.calendly.com/users/1' }],
+          },
         },
       });
+    jest.mocked(axios.post).mockResolvedValue({
+      data: {
+        access_token: 'renewed-access',
+        refresh_token: 'renewed-refresh',
+        expires_in: 3600,
+      },
+    });
     expect(
       await service.resolveScheduledStartTime(
         'specialist-1',
@@ -487,6 +608,7 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
       user_id: 'specialist-1',
       is_active: true,
       last_error: null as string | null,
+      calendly_user_uri: 'https://api.calendly.com/users/1',
       access_token_encrypted: (service as any).encryptToken('old-access'),
       refresh_token_encrypted: (service as any).encryptToken('old-refresh'),
     };
@@ -632,10 +754,7 @@ describe('CalendlyIntegrationService webhook authentication', () => {
     const { service } = makeService();
 
     expect(() =>
-      (service as any).validateWebhookSignature(
-        rawBody,
-        signature(timestamp),
-      ),
+      (service as any).validateWebhookSignature(rawBody, signature(timestamp)),
     ).toThrow(ForbiddenException);
   });
 
@@ -668,12 +787,13 @@ describe('CalendlyIntegrationService webhook authentication', () => {
       id: 'connection-1',
       user_id: 'specialist-1',
       calendly_user_uri: 'https://api.calendly.com/users/user-1',
-      calendly_organization_uri:
-        'https://api.calendly.com/organizations/org-1',
+      calendly_organization_uri: 'https://api.calendly.com/organizations/org-1',
       access_token_encrypted: (service as any).encryptToken('access-token'),
     };
     prisma.calendlyConnection.findUnique.mockResolvedValue(connection);
-    jest.mocked(axios.post).mockRejectedValueOnce({ response: { status: 422 } });
+    jest
+      .mocked(axios.post)
+      .mockRejectedValueOnce({ response: { status: 422 } });
 
     await expect(
       (service as any).ensureWebhookSubscription('specialist-1'),
@@ -704,10 +824,8 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
         {
           event: 'invitee.created',
           payload: {
-            event:
-              'https://api.calendly.com/scheduled_events/event-1',
-            uri:
-              'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-official',
+            event: 'https://api.calendly.com/scheduled_events/event-1',
+            uri: 'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-official',
             invitee:
               'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-legacy',
           },
@@ -727,8 +845,7 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
     const appointment = {
       id: 'appointment-1',
       specialist_id: 'specialist-1',
-      calendly_event_uri:
-        'https://api.calendly.com/scheduled_events/event-1',
+      calendly_event_uri: 'https://api.calendly.com/scheduled_events/event-1',
       scheduling_method: method,
       specialist_rescheduled_at: null,
     };
@@ -765,8 +882,7 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
     const appointment = {
       id: 'appointment-1',
       specialist_id: 'specialist-1',
-      calendly_event_uri:
-        'https://api.calendly.com/scheduled_events/event-1',
+      calendly_event_uri: 'https://api.calendly.com/scheduled_events/event-1',
       scheduling_method: AppointmentSchedulingMethod.CALENDLY,
       specialist_rescheduled_at: new Date('2026-01-01T00:00:00.000Z'),
     };
@@ -836,10 +952,8 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
       {
         event: 'invitee.created',
         payload: {
-          event:
-            'https://calendly.com/api/v2/scheduled_events/event-1',
-          uri:
-            'https://api.calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
+          event: 'https://calendly.com/api/v2/scheduled_events/event-1',
+          uri: 'https://api.calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
           scheduled_event: {
             start_time: '2099-01-01T10:00:00.000Z',
           },
@@ -888,6 +1002,136 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
     expect(prisma.appointment.update).not.toHaveBeenCalled();
   });
 
+  it('não ressuscita sync cancelado quando invitee.created chega depois ou é repetido', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.PENDING,
+      calendly_event_uri: 'https://api.calendly.com/scheduled_events/event-1',
+      calendly_invitee_uri:
+        'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+      calendly_sync_status: CalendlySyncStatus.PENDING,
+      appointment_datetime: null,
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      specialist_rescheduled_at: null,
+    };
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      appointment: {
+        findUnique: jest.fn(async () => ({ ...appointment })),
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn(async ({ data }) => Object.assign(appointment, data)),
+        updateMany: jest.fn(async ({ data }) => {
+          Object.assign(appointment, data);
+          return { count: 1 };
+        }),
+      },
+    };
+    const prisma = {
+      appointment: {
+        findMany: jest.fn(async () => [{ ...appointment }]),
+      },
+      $transaction: jest.fn(async (callback: (client: any) => unknown) =>
+        callback(tx),
+      ),
+    };
+    const service = new CalendlyIntegrationService(prisma as any);
+    jest
+      .spyOn(service as any, 'validateWebhookSignature')
+      .mockReturnValue(undefined);
+    const payload = {
+      event: appointment.calendly_event_uri,
+      uri: appointment.calendly_invitee_uri,
+      scheduled_event: { start_time: '2099-01-01T10:00:00.000Z' },
+    };
+
+    await expect(
+      service.processWebhook(
+        { event: 'invitee.canceled', payload },
+        undefined,
+        undefined,
+      ),
+    ).resolves.toMatchObject({ processed: true });
+    expect(appointment.calendly_sync_status).toBe(CalendlySyncStatus.FAILED);
+
+    for (let replay = 0; replay < 2; replay += 1) {
+      await expect(
+        service.processWebhook(
+          { event: 'invitee.created', payload },
+          undefined,
+          undefined,
+        ),
+      ).resolves.toEqual({
+        processed: false,
+        message: 'Webhook ignorado para preservar a associação atual',
+      });
+    }
+    expect(tx.appointment.update).not.toHaveBeenCalled();
+    expect(appointment.calendly_sync_status).toBe(CalendlySyncStatus.FAILED);
+  });
+
+  it.each([
+    [StatusAgendamento.COMPLETED, 'invitee.created'],
+    [StatusAgendamento.CANCELLED, 'invitee.created'],
+    [StatusAgendamento.COMPLETED, 'invitee.canceled'],
+    [StatusAgendamento.CANCELLED, 'invitee.canceled'],
+  ] as const)(
+    'não muta appointment terminal %s com %s',
+    async (status, eventType) => {
+      const appointment = {
+        id: 'appointment-1',
+        client_id: 'client-1',
+        specialist_id: 'specialist-1',
+        status,
+        calendly_event_uri: 'https://api.calendly.com/scheduled_events/event-1',
+        calendly_invitee_uri:
+          'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+        calendly_sync_status: CalendlySyncStatus.PENDING,
+        appointment_datetime: new Date('2099-01-01T09:00:00.000Z'),
+        scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+        specialist_rescheduled_at: null,
+      };
+      const tx = {
+        $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+        appointment: {
+          findUnique: jest.fn().mockResolvedValue(appointment),
+          findFirst: jest.fn(),
+          update: jest.fn(),
+          updateMany: jest.fn(),
+        },
+      };
+      const prisma = {
+        appointment: { findMany: jest.fn().mockResolvedValue([appointment]) },
+        $transaction: jest.fn(async (callback: (client: any) => unknown) =>
+          callback(tx),
+        ),
+      };
+      const service = new CalendlyIntegrationService(prisma as any);
+      jest
+        .spyOn(service as any, 'validateWebhookSignature')
+        .mockReturnValue(undefined);
+
+      await expect(
+        service.processWebhook(
+          {
+            event: eventType,
+            payload: {
+              event: appointment.calendly_event_uri,
+              uri: appointment.calendly_invitee_uri,
+              scheduled_event: { start_time: '2099-01-01T10:00:00.000Z' },
+            },
+          },
+          undefined,
+          undefined,
+        ),
+      ).resolves.toMatchObject({ processed: false });
+      expect(tx.appointment.findFirst).not.toHaveBeenCalled();
+      expect(tx.appointment.update).not.toHaveBeenCalled();
+      expect(tx.appointment.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
   it('encontra e canonicaliza registro legado ao cancelar pelo webhook', async () => {
     const appointment = {
       id: 'appointment-1',
@@ -924,10 +1168,8 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
         {
           event: 'invitee.canceled',
           payload: {
-            event:
-              'https://api.calendly.com/scheduled_events/event-1',
-            uri:
-              'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+            event: 'https://api.calendly.com/scheduled_events/event-1',
+            uri: 'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
           },
         } as any,
         undefined,
@@ -956,8 +1198,7 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
         calendly_invitee_uri: appointment.calendly_invitee_uri,
       },
       data: {
-        calendly_event_uri:
-          'https://api.calendly.com/scheduled_events/event-1',
+        calendly_event_uri: 'https://api.calendly.com/scheduled_events/event-1',
         calendly_invitee_uri:
           'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
         calendly_last_sync_at: expect.any(Date),
@@ -995,8 +1236,7 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
         {
           event: 'invitee.created',
           payload: {
-            event:
-              'https://api.calendly.com/scheduled_events/group-event',
+            event: 'https://api.calendly.com/scheduled_events/group-event',
           },
         },
         undefined,
@@ -1023,8 +1263,7 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
       specialist_id: 'specialist-1',
       scheduling_method: AppointmentSchedulingMethod.CALENDLY,
       specialist_rescheduled_at: null,
-      calendly_event_uri:
-        'https://api.calendly.com/scheduled_events/event-1',
+      calendly_event_uri: 'https://api.calendly.com/scheduled_events/event-1',
       calendly_invitee_uri:
         'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-old',
     };
@@ -1057,8 +1296,7 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
         {
           event: 'invitee.created',
           payload: {
-            event:
-              'https://api.calendly.com/scheduled_events/event-1',
+            event: 'https://api.calendly.com/scheduled_events/event-1',
             uri: snapshot.calendly_invitee_uri,
             scheduled_event: { start_time: '2099-01-01T10:00:00.000Z' },
           },
@@ -1081,8 +1319,7 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
       specialist_id: 'specialist-1',
       scheduling_method: AppointmentSchedulingMethod.CALENDLY,
       specialist_rescheduled_at: null,
-      calendly_event_uri:
-        'https://api.calendly.com/scheduled_events/event-1',
+      calendly_event_uri: 'https://api.calendly.com/scheduled_events/event-1',
       calendly_invitee_uri:
         'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
     };
@@ -1130,8 +1367,7 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
       specialist_id: 'specialist-1',
       scheduling_method: AppointmentSchedulingMethod.CALENDLY,
       specialist_rescheduled_at: null,
-      calendly_event_uri:
-        'https://api.calendly.com/scheduled_events/event-1',
+      calendly_event_uri: 'https://api.calendly.com/scheduled_events/event-1',
       calendly_invitee_uri:
         'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-old',
     };

@@ -76,7 +76,7 @@ export class CalendlyController {
       const isGoogleDomainBlocked =
         /google.*(domain|workspace)|domain.*denied/i.test(rawReason);
       const reason = encodeURIComponent(
-        isGoogleDomainBlocked ? 'google_domain_blocked' : rawReason,
+        isGoogleDomainBlocked ? 'google_domain_blocked' : 'oauth_denied',
       );
       return res.redirect(
         `${frontendUrl}/profile?calendly=error&reason=${reason}`,
@@ -101,7 +101,9 @@ export class CalendlyController {
       const isGoogleDomainBlocked =
         /google.*(domain|workspace)|domain.*denied/i.test(rawReason);
       const reason = encodeURIComponent(
-        isGoogleDomainBlocked ? 'google_domain_blocked' : rawReason,
+        isGoogleDomainBlocked
+          ? 'google_domain_blocked'
+          : 'oauth_callback_failed',
       );
 
       return res.redirect(

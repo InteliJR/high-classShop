@@ -18,6 +18,13 @@ function mkProcess(overrides: any = {}) {
     client_id: 'client-1',
     specialist_id: 'spec-1',
     status: 'SCHEDULING',
+    appointment_id: 'appointment-1',
+    appointment: {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'spec-1',
+      status: StatusAgendamento.SCHEDULED,
+    },
     meeting_session: null,
     client: {
       id: 'client-1',
@@ -489,6 +496,29 @@ describe('MeetingsService — criação via Meet REST API', () => {
 });
 
 describe('MeetingsService.startMeetingForProcess — serialização canônica', () => {
+  it('não cria claim enquanto o appointment ainda está PENDING', async () => {
+    const process = mkProcess({
+      appointment: {
+        id: 'appointment-1',
+        client_id: 'client-1',
+        specialist_id: 'spec-1',
+        status: StatusAgendamento.PENDING,
+      },
+    });
+    const prisma = mkPrisma(process);
+    const service = new MeetingsService(
+      prisma,
+      mkConfig('OPEN', 'JITSI'),
+      notification,
+      {} as any,
+    );
+
+    await expect(
+      service.startMeetingForProcess(process.id, 'spec-1'),
+    ).rejects.toThrow('Agendamento não está confirmado');
+    expect(prisma.meetingSession.create).not.toHaveBeenCalled();
+  });
+
   it('remove o claim se a revalidação final encontrar processo terminal', async () => {
     const process = mkProcess();
     const prisma = mkPrisma(process);
