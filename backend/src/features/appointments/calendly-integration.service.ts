@@ -68,6 +68,7 @@ interface CalendlyWebhookPayload {
 @Injectable()
 export class CalendlyIntegrationService {
   private readonly logger = new Logger(CalendlyIntegrationService.name);
+  private readonly processedWebhookSignatures = new Map<string, number>();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -810,7 +811,7 @@ export class CalendlyIntegrationService {
       return;
     }
 
-    const signingKey = process.env.CALENDLY_WEBHOOK_SIGNING_KEY;
+    const signingKey = this.getRequiredEnv('CALENDLY_WEBHOOK_SIGNING_KEY');
 
     const connection = await this.prisma.calendlyConnection.findUnique({
       where: { user_id: userId },
@@ -836,55 +837,20 @@ export class CalendlyIntegrationService {
       scope: 'user',
     };
 
-    if (signingKey) {
-      payload.signing_key = signingKey;
-    }
+    payload.signing_key = signingKey;
 
-    let data: any;
-
-    try {
-      const response = await axios.post(
-        'https://api.calendly.com/webhook_subscriptions',
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 20000,
+    const response = await axios.post(
+      'https://api.calendly.com/webhook_subscriptions',
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
         },
-      );
-      data = response.data;
-    } catch (error: any) {
-      const status = error?.response?.status;
-      const shouldRetryWithoutSigningKey =
-        Boolean(signingKey) && (status === 400 || status === 422);
-
-      if (!shouldRetryWithoutSigningKey) {
-        throw error;
-      }
-
-      this.logger.warn(
-        'Calendly rejeitou webhook com signing_key; tentando novamente sem signing_key',
-      );
-
-      const fallbackPayload = { ...payload };
-      delete fallbackPayload.signing_key;
-
-      const fallbackResponse = await axios.post(
-        'https://api.calendly.com/webhook_subscriptions',
-        fallbackPayload,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 20000,
-        },
-      );
-
-      data = fallbackResponse.data;
-    }
+        timeout: 20000,
+      },
+    );
+    const data = response.data;
 
     const webhookResource = data?.resource;
 
@@ -903,11 +869,7 @@ export class CalendlyIntegrationService {
     rawBody: string | undefined,
     signatureHeader: string | undefined,
   ): void {
-    const signingKey = process.env.CALENDLY_WEBHOOK_SIGNING_KEY;
-
-    if (!signingKey) {
-      return;
-    }
+    const signingKey = this.getRequiredEnv('CALENDLY_WEBHOOK_SIGNING_KEY');
 
     if (!rawBody || !signatureHeader) {
       throw new ForbiddenException('Assinatura do webhook ausente');
@@ -916,6 +878,18 @@ export class CalendlyIntegrationService {
     const parsedSignature = this.parseSignatureHeader(signatureHeader);
     if (!parsedSignature.t || !parsedSignature.v1) {
       throw new ForbiddenException('Formato de assinatura inválido');
+    }
+
+    if (!/^\d+$/.test(parsedSignature.t)) {
+      throw new ForbiddenException('Timestamp da assinatura inválido');
+    }
+    const timestampSeconds = Number(parsedSignature.t);
+    const nowSeconds = Math.floor(this.now() / 1000);
+    if (
+      !Number.isSafeInteger(timestampSeconds) ||
+      Math.abs(nowSeconds - timestampSeconds) > 5 * 60
+    ) {
+      throw new ForbiddenException('Timestamp da assinatura expirado');
     }
 
     const signedPayload = `${parsedSignature.t}.${rawBody}`;
@@ -932,6 +906,21 @@ export class CalendlyIntegrationService {
     ) {
       throw new ForbiddenException('Assinatura do webhook inválida');
     }
+
+    for (const [signature, expiresAt] of this.processedWebhookSignatures) {
+      if (expiresAt <= nowSeconds) {
+        this.processedWebhookSignatures.delete(signature);
+      }
+    }
+    const replayKey = `${parsedSignature.t}.${parsedSignature.v1}`;
+    if (this.processedWebhookSignatures.has(replayKey)) {
+      throw new ForbiddenException('Webhook repetido');
+    }
+    this.processedWebhookSignatures.set(replayKey, nowSeconds + 5 * 60);
+  }
+
+  private now(): number {
+    return Date.now();
   }
 
   private parseSignatureHeader(signatureHeader: string): {

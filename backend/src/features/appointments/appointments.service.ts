@@ -1989,36 +1989,21 @@ export class AppointmentsService {
       }
     }
 
-    let scheduledStartTime = dto.scheduled_start_time
-      ? parseDate(dto.scheduled_start_time)
-      : null;
-
-    if (dto.scheduled_start_time && !scheduledStartTime) {
-      throw new BadRequestException({
-        success: false,
-        error: {
-          code: 400,
-          message: 'scheduled_start_time inválido',
-        },
-      });
-    }
-
-    if (!scheduledStartTime) {
-      try {
-        scheduledStartTime =
-          await this.calendlyIntegrationService.resolveScheduledStartTime(
-            appointment.specialist_id,
-            eventUri,
-            inviteeUri,
-          );
-      } catch (error: any) {
-        if (error instanceof BadRequestException) {
-          throw error;
-        }
-        this.logger.warn(
-          `[registerCalendlyScheduled] Falha ao buscar horário no Calendly API: ${error?.message}`,
+    let scheduledStartTime: Date | null = null;
+    try {
+      scheduledStartTime =
+        await this.calendlyIntegrationService.resolveScheduledStartTime(
+          appointment.specialist_id,
+          eventUri,
+          inviteeUri,
         );
+    } catch (error: any) {
+      if (error instanceof BadRequestException) {
+        throw error;
       }
+      this.logger.warn(
+        `[registerCalendlyScheduled] Falha ao buscar horário no Calendly API: ${error?.message}`,
+      );
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -2100,8 +2085,7 @@ export class AppointmentsService {
         return lockedAppointment;
       }
 
-      const targetDateTime =
-        scheduledStartTime || lockedAppointment.appointment_datetime;
+      const targetDateTime = scheduledStartTime;
       if (targetDateTime && !isFutureDate(targetDateTime)) {
         throw new BadRequestException(
           'O horário sincronizado do Calendly deve ser futuro',

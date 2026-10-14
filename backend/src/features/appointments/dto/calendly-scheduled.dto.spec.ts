@@ -23,6 +23,22 @@ describe('CalendlyScheduledDto — Calendly resource URIs', () => {
     await expect(invalidProperties({})).resolves.toEqual([]);
   });
 
+  it('não expõe scheduled_start_time como campo confiável do contrato', async () => {
+    const errors = await validate(
+      plainToInstance(CalendlyScheduledDto, {
+        ...validPayload,
+        scheduled_start_time: '2099-01-01T10:00:00.000Z',
+      }),
+      { whitelist: true, forbidNonWhitelisted: true },
+    );
+
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ property: 'scheduled_start_time' }),
+      ]),
+    );
+  });
+
   it('aceita HTTPS com a porta padrão explícita', async () => {
     await expect(
       invalidProperties({

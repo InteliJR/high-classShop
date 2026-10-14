@@ -2035,7 +2035,16 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       },
       $transaction: jest.fn(async (callback: any) => callback(tx)),
     } as any;
-    const service = new AppointmentsService(prisma, {} as any, {} as any);
+    const calendlyIntegrationService = {
+      resolveScheduledStartTime: jest
+        .fn()
+        .mockResolvedValue(new Date('2099-01-02T11:00:00.000Z')),
+    } as any;
+    const service = new AppointmentsService(
+      prisma,
+      {} as any,
+      calendlyIntegrationService,
+    );
 
     await service.registerCalendlyScheduled(
       appointment.id,
@@ -2049,6 +2058,13 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       } as any,
     );
 
+    expect(
+      calendlyIntegrationService.resolveScheduledStartTime,
+    ).toHaveBeenCalledWith(
+      appointment.specialist_id,
+      'https://api.calendly.com/scheduled_events/event-1',
+      'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+    );
     expect(tx.$queryRaw).toHaveBeenCalledWith(
       expect.anything(),
       'appointment-schedule:specialist-1',
@@ -2062,10 +2078,82 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
             'https://api.calendly.com/scheduled_events/event-1',
           calendly_invitee_uri:
             'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+          appointment_datetime: new Date('2099-01-02T11:00:00.000Z'),
         }),
       }),
     );
   });
+
+  it.each([
+    ['retorna null', null],
+    ['falha', new Error('Calendly indisponível')],
+  ])(
+    'mantém PENDING e não ocupa agenda quando a API canônica %s',
+    async (_label, apiResult) => {
+      const appointment = {
+        id: 'appointment-1',
+        client_id: 'client-1',
+        specialist_id: 'specialist-1',
+        status: StatusAgendamento.PENDING,
+        scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+        specialist_rescheduled_at: null,
+        calendly_event_uri: null,
+        calendly_invitee_uri: null,
+        calendly_sync_status: 'PENDING',
+        appointment_datetime: null,
+      };
+      const tx = {
+        $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+        appointment: {
+          findUnique: jest.fn().mockResolvedValue(appointment),
+          findFirst: jest.fn(),
+          update: jest.fn().mockImplementation(({ data }) => ({
+            ...appointment,
+            ...data,
+          })),
+        },
+      };
+      const prisma = {
+        appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+        $transaction: jest.fn(async (callback: any) => callback(tx)),
+      } as any;
+      const resolveScheduledStartTime =
+        apiResult instanceof Error
+          ? jest.fn().mockRejectedValue(apiResult)
+          : jest.fn().mockResolvedValue(apiResult);
+      const service = new AppointmentsService(prisma, {} as any, {
+        resolveScheduledStartTime,
+      } as any);
+
+      await expect(
+        service.registerCalendlyScheduled(
+          appointment.id,
+          appointment.client_id,
+          {
+            event_uri:
+              'https://api.calendly.com/scheduled_events/event-1',
+            invitee_uri:
+              'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+            scheduled_start_time: '2099-01-01T10:00:00.000Z',
+          } as any,
+        ),
+      ).resolves.toEqual({
+        appointment_id: appointment.id,
+        calendly_sync_status: 'PENDING',
+        appointment_datetime: null,
+      });
+      expect(resolveScheduledStartTime).toHaveBeenCalledTimes(1);
+      expect(tx.appointment.findFirst).not.toHaveBeenCalled();
+      expect(tx.appointment.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            calendly_sync_status: 'PENDING',
+            appointment_datetime: null,
+          }),
+        }),
+      );
+    },
+  );
 
   it('rejects a reschedule that overlaps an already SCHEDULED appointment', async () => {
     const appointment = {
@@ -2092,7 +2180,11 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
       $transaction: jest.fn(async (callback: any) => callback(tx)),
     } as any;
-    const service = new AppointmentsService(prisma, {} as any, {} as any);
+    const service = new AppointmentsService(prisma, {} as any, {
+      resolveScheduledStartTime: jest
+        .fn()
+        .mockResolvedValue(new Date('2099-01-01T10:00:00.000Z')),
+    } as any);
 
     await expect(
       service.registerCalendlyScheduled(appointment.id, appointment.client_id, {

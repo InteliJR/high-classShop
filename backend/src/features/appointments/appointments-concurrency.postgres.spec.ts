@@ -174,7 +174,9 @@ describeWithPostgres(
           ? signalScheduleLockAttempt(client, attempted)
           : client) as any,
         notifications as any,
-        {} as any,
+        {
+          resolveScheduledStartTime: jest.fn().mockResolvedValue(proposedDate),
+        } as any,
       );
     }
 
@@ -745,7 +747,6 @@ describeWithPostgres(
         {
           event_uri: `https://api.calendly.com/scheduled_events/${appointment.id}`,
           invitee_uri: `https://api.calendly.com/scheduled_events/${appointment.id}/invitees/${appointment.id}`,
-          scheduled_start_time: proposedIso,
         },
       );
     }

@@ -47,7 +47,7 @@ A consulta do próprio pedido retorna somente `{ exists: false }` ou `{ exists: 
 
 Os contatos do cliente aparecem na lista e no detalhe somente para o especialista atribuído ao pedido `PENDING/EMAIL` em `SCHEDULING` e continuam disponíveis para ele após a confirmação. Outros especialistas não podem listar ou abrir esse processo. As projeções de cliente não recebem os contatos privados nesse estado. O e-mail comercial do especialista é intencionalmente público para permitir a composição da mensagem.
 
-O backend recusa a criação direta `SCHEDULED/PLATFORM` por `POST /api/appointments` nesse cenário. O caminho com Calendly ativo continua usando `CALENDLY` e não aceita horário enviado pelo cliente. A consultoria sem produto conserva o pedido `PENDING/EMAIL` sem data e exige sua definição na confirmação. Registros legados sem proposta continuam legíveis. `pending_expires_at` é metadado: não existe expiração automática nesta entrega.
+O backend recusa a criação direta `SCHEDULED/PLATFORM` por `POST /api/appointments` nesse cenário. O caminho com Calendly ativo continua usando `CALENDLY` e não aceita horário enviado pelo cliente: o instante é resolvido na API autenticada do Calendly e, enquanto ela não retornar um horário válido, o pedido permanece `PENDING` sem reservar agenda para que o webhook assinado possa completá-lo. Se `CALENDLY_WEBHOOK_CALLBACK_URL` for configurada, `CALENDLY_WEBHOOK_SIGNING_KEY` é obrigatória; callbacks sem assinatura válida e fresca são rejeitados. A consultoria sem produto conserva o pedido `PENDING/EMAIL` sem data e exige sua definição na confirmação. Registros legados sem proposta continuam legíveis. `pending_expires_at` é metadado: não existe expiração automática nesta entrega.
 
 ## Validação local repetível
 

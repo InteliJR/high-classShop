@@ -115,7 +115,6 @@ export interface RegisterCalendlyScheduledPayload {
   invitee_uri: string;
   client_event?: "calendly.event_scheduled";
   client_observed_at?: string;
-  scheduled_start_time?: string;
 }
 
 export interface CalendlySyncStatus {

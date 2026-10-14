@@ -130,10 +130,4 @@ export class CalendlyScheduledDto {
   )
   client_observed_at?: string;
 
-  @IsOptional()
-  @IsISO8601(
-    {},
-    { message: 'scheduled_start_time deve estar em formato ISO 8601 válido' },
-  )
-  scheduled_start_time?: string;
 }

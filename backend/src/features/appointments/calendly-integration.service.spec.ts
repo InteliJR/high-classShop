@@ -1,7 +1,12 @@
-import { ConflictException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { AppointmentSchedulingMethod } from '@prisma/client';
 import { CalendlyIntegrationService } from './calendly-integration.service';
 import axios from 'axios';
+import { createHmac } from 'crypto';
 
 jest.mock('axios');
 
@@ -15,6 +20,7 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
     process.env.CALENDLY_TOKEN_ENCRYPTION_KEY =
       '12345678901234567890123456789012';
     delete process.env.CALENDLY_WEBHOOK_CALLBACK_URL;
+    delete process.env.CALENDLY_WEBHOOK_SIGNING_KEY;
   });
   afterAll(() => {
     process.env = originalEnv;
@@ -438,7 +444,152 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
   });
 });
 
+describe('CalendlyIntegrationService webhook authentication', () => {
+  const originalEnv = { ...process.env };
+  const signingKey = 'calendly-test-signing-key';
+  const nowSeconds = 1_800_000_000;
+  const rawBody = '{"event":"invitee.created"}';
+
+  function makeService() {
+    const prisma = {
+      calendlyConnection: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+      },
+    };
+    const service = new CalendlyIntegrationService(prisma as any);
+    jest.spyOn(service as any, 'now').mockReturnValue(nowSeconds * 1000);
+    return { prisma, service };
+  }
+
+  function signature(timestamp: string) {
+    const digest = createHmac('sha256', signingKey)
+      .update(`${timestamp}.${rawBody}`)
+      .digest('hex');
+    return `t=${timestamp},v1=${digest}`;
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.CALENDLY_WEBHOOK_SIGNING_KEY = signingKey;
+    process.env.CALENDLY_WEBHOOK_CALLBACK_URL =
+      'https://api.example.test/appointments/calendly/webhook';
+    process.env.CALENDLY_TOKEN_ENCRYPTION_KEY =
+      '12345678901234567890123456789012';
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
+  });
+
+  it('falha fechado quando a chave de assinatura não está configurada', () => {
+    delete process.env.CALENDLY_WEBHOOK_SIGNING_KEY;
+    const { service } = makeService();
+
+    expect(() =>
+      (service as any).validateWebhookSignature(
+        rawBody,
+        signature(String(nowSeconds)),
+      ),
+    ).toThrow(InternalServerErrorException);
+  });
+
+  it.each([
+    ['não numérico', 'not-a-timestamp'],
+    ['fracionário', `${nowSeconds}.5`],
+    ['antigo', String(nowSeconds - 301)],
+    ['futuro', String(nowSeconds + 301)],
+  ])('rejeita timestamp %s na assinatura', (_label, timestamp) => {
+    const { service } = makeService();
+
+    expect(() =>
+      (service as any).validateWebhookSignature(
+        rawBody,
+        signature(timestamp),
+      ),
+    ).toThrow(ForbiddenException);
+  });
+
+  it('rejeita replay da mesma assinatura dentro da janela válida', () => {
+    const { service } = makeService();
+    const header = signature(String(nowSeconds));
+
+    expect(() =>
+      (service as any).validateWebhookSignature(rawBody, header),
+    ).not.toThrow();
+    expect(() =>
+      (service as any).validateWebhookSignature(rawBody, header),
+    ).toThrow('Webhook repetido');
+  });
+
+  it('não cria assinatura de webhook sem signing key', async () => {
+    delete process.env.CALENDLY_WEBHOOK_SIGNING_KEY;
+    const { prisma, service } = makeService();
+
+    await expect(
+      (service as any).ensureWebhookSubscription('specialist-1'),
+    ).rejects.toThrow(InternalServerErrorException);
+    expect(prisma.calendlyConnection.findUnique).not.toHaveBeenCalled();
+    expect(axios.post).not.toHaveBeenCalled();
+  });
+
+  it('não refaz criação do webhook sem signing_key após rejeição do Calendly', async () => {
+    const { prisma, service } = makeService();
+    const connection = {
+      id: 'connection-1',
+      user_id: 'specialist-1',
+      calendly_user_uri: 'https://api.calendly.com/users/user-1',
+      calendly_organization_uri:
+        'https://api.calendly.com/organizations/org-1',
+      access_token_encrypted: (service as any).encryptToken('access-token'),
+    };
+    prisma.calendlyConnection.findUnique.mockResolvedValue(connection);
+    jest.mocked(axios.post).mockRejectedValueOnce({ response: { status: 422 } });
+
+    await expect(
+      (service as any).ensureWebhookSubscription('specialist-1'),
+    ).rejects.toBeDefined();
+    expect(axios.post).toHaveBeenCalledTimes(1);
+    expect(axios.post).toHaveBeenCalledWith(
+      'https://api.calendly.com/webhook_subscriptions',
+      expect.objectContaining({ signing_key: signingKey }),
+      expect.any(Object),
+    );
+  });
+});
+
 describe('CalendlyIntegrationService webhook schedule integrity', () => {
+  it('rejeita payload.uri e payload.invitee divergentes', async () => {
+    const prisma = {
+      appointment: { findMany: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    const service = new CalendlyIntegrationService(prisma as any);
+    jest
+      .spyOn(service as any, 'validateWebhookSignature')
+      .mockReturnValue(undefined);
+
+    await expect(
+      service.processWebhook(
+        {
+          event: 'invitee.created',
+          payload: {
+            event:
+              'https://api.calendly.com/scheduled_events/event-1',
+            uri:
+              'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-official',
+            invitee:
+              'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-legacy',
+          },
+        },
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow('URIs de convidado do Calendly são inconsistentes');
+    expect(prisma.appointment.findMany).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it.each([
     AppointmentSchedulingMethod.EMAIL,
     AppointmentSchedulingMethod.PLATFORM,
