@@ -72,6 +72,40 @@ describe('CreateAppointmentDto — seleção de produto', () => {
       ),
     ).toBe(true);
   });
+
+  it.each([
+    '2099-01-01',
+    '2099-01-01T10:00:00',
+    '2099-01-01T10:00:00.000',
+    '2099-02-30T10:00:00Z',
+    '2099-01-01T10:00:00+25:00',
+  ])(
+    'rejects a pending datetime without a valid time and timezone: %s',
+    async (datetime) => {
+      const dto = Object.assign(new CreatePendingAppointmentDto(), base, {
+        scheduling_method: AppointmentSchedulingMethod.EMAIL,
+        appointment_datetime: datetime,
+      });
+      expect(
+        (await validate(dto)).some(
+          (error) => error.property === 'appointment_datetime',
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each([
+    '2099-01-01T10:00:00.000Z',
+    '2099-01-01T07:00:00-03:00',
+    '2099-01-01T15:30:00+05:30',
+    '2099-01-01T07:00:00-0300',
+  ])('accepts an explicit pending datetime timezone: %s', async (datetime) => {
+    const dto = Object.assign(new CreatePendingAppointmentDto(), base, {
+      scheduling_method: AppointmentSchedulingMethod.EMAIL,
+      appointment_datetime: datetime,
+    });
+    expect(await validate(dto)).toEqual([]);
+  });
 });
 
 describe('AppointmentsService.createPending — associação e atomicidade', () => {
@@ -118,7 +152,7 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
     const storedProcesses: any[] = [];
     const appointmentCreate = jest.fn(async ({ data }) => {
       const appointment = {
-        id: 'appointment-1',
+        id: `appointment-${storedAppointments.length + 1}`,
         ...data,
         created_at: new Date(),
         updated_at: new Date(),
@@ -126,9 +160,9 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
       storedAppointments.push(appointment);
       return appointment;
     });
-    const processCreate = jest.fn(async () => {
+    const processCreate = jest.fn(async ({ data }) => {
       if (options.processFailure) throw options.processFailure;
-      const process = { id: 'process-1' };
+      const process = { id: `process-${storedProcesses.length + 1}`, ...data };
       storedProcesses.push(process);
       return process;
     });
@@ -312,6 +346,99 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
     });
   });
 
+  it.each([false, true])(
+    'checks the new request after rejection regardless of record order (reverse=%s)',
+    async (reverse) => {
+      const { service, prisma, tx, storedAppointments, storedProcesses } =
+        harness({});
+      const matches = (row: any, where: any) =>
+        Object.entries(where).every(([key, value]) =>
+          value !== null && typeof value === 'object' && 'in' in value
+            ? (value.in as unknown[]).includes(row[key])
+            : row[key] === value,
+        );
+      tx.process.findFirst.mockImplementation(
+        async ({ where }) =>
+          storedProcesses.find((row) => matches(row, where)) ?? null,
+      );
+      prisma.appointment.findFirst.mockImplementation(async ({ where }) => {
+        const { process: processFilter, ...appointmentFilter } = where;
+        const rows = reverse
+          ? [...storedAppointments].reverse()
+          : storedAppointments;
+        for (const appointment of rows) {
+          const process = storedProcesses.find(
+            (row) => row.appointment_id === appointment.id,
+          );
+          if (
+            matches(appointment, appointmentFilter) &&
+            process &&
+            matches(process, processFilter.is)
+          ) {
+            return { ...appointment, process };
+          }
+        }
+        return null;
+      });
+
+      await service.createPending(dto, client.id, UserRole.CUSTOMER);
+      // Rejecting a process preserves the original PENDING appointment.
+      storedProcesses[0].status = ProcessStatus.REJECTED;
+      const replacement = await service.createPending(
+        dto,
+        client.id,
+        UserRole.CUSTOMER,
+      );
+
+      expect(
+        await service.findExistingAppointment(
+          client.id,
+          specialist.id,
+          ProductType.CAR,
+          activeProduct.id,
+        ),
+      ).toEqual({
+        exists: true,
+        appointment_id: replacement.id,
+        process_id: replacement.process_id,
+        appointment_status: StatusAgendamento.PENDING,
+        scheduling_method: AppointmentSchedulingMethod.EMAIL,
+        appointment_datetime: new Date(dto.appointment_datetime!),
+      });
+
+      storedProcesses[1].status = ProcessStatus.REJECTED;
+      expect(
+        await service.findExistingAppointment(
+          client.id,
+          specialist.id,
+          ProductType.CAR,
+          activeProduct.id,
+        ),
+      ).toEqual({ exists: false });
+    },
+  );
+
+  it.each([
+    '2099-01-01T07:00:00-03:00',
+    '2099-01-01T15:30:00+05:30',
+    '2099-01-01T07:00:00-0300',
+  ])(
+    'persists the exact instant of a product EMAIL proposal with offset %s',
+    async (datetime) => {
+      const { service } = harness({});
+      await expect(
+        service.createPending(
+          { ...dto, appointment_datetime: datetime },
+          client.id,
+          UserRole.CUSTOMER,
+        ),
+      ).resolves.toMatchObject({
+        appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+        status: StatusAgendamento.PENDING,
+      });
+    },
+  );
+
   it('does not lock or check schedule availability for an EMAIL proposal', async () => {
     const { service, tx } = harness({});
 
@@ -354,18 +481,43 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
     );
   });
 
-  it.each(['not-a-date', '2000-01-01T00:00:00.000Z'])(
-    'rejects an invalid or past product EMAIL date %s',
+  it.each([
+    'not-a-date',
+    '2099-01-01',
+    '2099-01-01T10:00:00',
+    '2099-01-01T10:00:00.000',
+    '2099-02-30T10:00:00Z',
+    '2099-01-01T10:00:00+25:00',
+    '2000-01-01T00:00:00.000Z',
+    '2026-10-14T12:00:00.000Z',
+    '2026-10-14T09:00:00-03:00',
+  ])(
+    'rejects an invalid, ambiguous, past or current product EMAIL date %s before writes',
     async (datetime) => {
-      const { service, appointmentCreate } = harness({});
-      await expect(
-        service.createPending(
-          { ...dto, appointment_datetime: datetime },
-          client.id,
-          UserRole.CUSTOMER,
-        ),
-      ).rejects.toThrow(BadRequestException);
-      expect(appointmentCreate).not.toHaveBeenCalled();
+      jest.useFakeTimers().setSystemTime(new Date('2026-10-14T12:00:00.000Z'));
+      try {
+        const {
+          service,
+          prisma,
+          appointmentCreate,
+          processCreate,
+          historyCreate,
+        } = harness({});
+        await expect(
+          service.createPending(
+            { ...dto, appointment_datetime: datetime },
+            client.id,
+            UserRole.CUSTOMER,
+          ),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.user.findUnique).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(appointmentCreate).not.toHaveBeenCalled();
+        expect(processCreate).not.toHaveBeenCalled();
+        expect(historyCreate).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
     },
   );
 
@@ -496,6 +648,9 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
   it.each([
     'not-a-date',
     '01/01/2099',
+    '2099-01-01',
+    '2099-01-01T10:00:00',
+    '2099-01-01T10:00:00.000',
     '2000-01-01T00:00:00.000Z',
     '2026-10-14T12:00:00.000Z',
   ])(
@@ -645,6 +800,22 @@ describe('AppointmentsService.findExistingAppointment — own minimal projection
           specialist_id: 'specialist-1',
           product_type: ProductType.CAR,
           product_id: 'car-1',
+          process: {
+            is: {
+              client_id: 'client-1',
+              specialist_id: 'specialist-1',
+              product_type: ProductType.CAR,
+              car_id: 'car-1',
+              status: {
+                in: [
+                  ProcessStatus.SCHEDULING,
+                  ProcessStatus.NEGOTIATION,
+                  ProcessStatus.PROCESSING_CONTRACT,
+                  ProcessStatus.DOCUMENTATION,
+                ],
+              },
+            },
+          },
         }),
         select: {
           id: true,

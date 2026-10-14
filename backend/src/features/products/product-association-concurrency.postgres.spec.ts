@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { PrismaClient, ProductCurrency, ProductType, UserRole } from '@prisma/client';
+import {
+  AppointmentSchedulingMethod,
+  PrismaClient,
+  ProductCurrency,
+  ProductType,
+  UserRole,
+} from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
 import { ConflictException } from '@nestjs/common';
 import { CarsService } from '../cars/cars.service';
@@ -93,27 +99,9 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
   const clientId = randomUUID();
   const specialistId = randomUUID();
   const carId = randomUUID();
-  const updater = new PrismaClient({
-    datasources: {
-      db: {
-        url: withApplicationName(databaseUrl!, `product_mutation_${suffix}`),
-      },
-    },
-  });
-  const creator = new PrismaClient({
-    datasources: {
-      db: {
-        url: withApplicationName(databaseUrl!, `product_consumer_${suffix}`),
-      },
-    },
-  });
-  const competitor = new PrismaClient({
-    datasources: {
-      db: {
-        url: withApplicationName(databaseUrl!, `product_competitor_${suffix}`),
-      },
-    },
-  });
+  let updater: PrismaClient;
+  let creator: PrismaClient;
+  let competitor: PrismaClient;
 
   beforeEach(async () => {
     const processes = await updater.process.findMany({
@@ -140,6 +128,27 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
   });
 
   beforeAll(async () => {
+    updater = new PrismaClient({
+      datasources: {
+        db: {
+          url: withApplicationName(databaseUrl!, `product_mutation_${suffix}`),
+        },
+      },
+    });
+    creator = new PrismaClient({
+      datasources: {
+        db: {
+          url: withApplicationName(databaseUrl!, `product_consumer_${suffix}`),
+        },
+      },
+    });
+    competitor = new PrismaClient({
+      datasources: {
+        db: {
+          url: withApplicationName(databaseUrl!, `product_competitor_${suffix}`),
+        },
+      },
+    });
     await updater.user.createMany({
       data: [
         {
@@ -179,17 +188,26 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
   });
 
   afterAll(async () => {
-    await updater.process.deleteMany({
-      where: { client_id: clientId, specialist_id: specialistId },
-    });
-    await updater.appointment.deleteMany({
-      where: { client_id: clientId, specialist_id: specialistId },
-    });
-    await updater.car.deleteMany({ where: { id: carId } });
-    await updater.user.deleteMany({
-      where: { id: { in: [clientId, specialistId] } },
-    });
-    await Promise.all([updater.$disconnect(), creator.$disconnect(), competitor.$disconnect()]);
+    try {
+      if (updater) {
+        await updater.process.deleteMany({
+          where: { client_id: clientId, specialist_id: specialistId },
+        });
+        await updater.appointment.deleteMany({
+          where: { client_id: clientId, specialist_id: specialistId },
+        });
+        await updater.car.deleteMany({ where: { id: carId } });
+        await updater.user.deleteMany({
+          where: { id: { in: [clientId, specialistId] } },
+        });
+      }
+    } finally {
+      await Promise.all([
+        updater?.$disconnect(),
+        creator?.$disconnect(),
+        competitor?.$disconnect(),
+      ]);
+    }
   });
 
   it('serializes deactivation against creation and rejects the now-inactive product', async () => {
@@ -208,14 +226,15 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
 
     const deactivate = cars.remove(carId);
     await mutationReached.promise;
-    const create = appointments.create(
+    const create = appointments.createPending(
       {
         client_id: clientId,
         specialist_id: specialistId,
         product_type: ProductType.CAR,
         product_id: carId,
         appointment_datetime: '2099-01-01T10:00:00.000Z',
-      } as any,
+        scheduling_method: AppointmentSchedulingMethod.EMAIL,
+      },
       clientId,
       UserRole.CUSTOMER,
     );
@@ -225,6 +244,7 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
     await expect(deactivate).resolves.toEqual({ ok: true });
     await expect(create).rejects.toBeInstanceOf(BadRequestException);
     await expect(updater.appointment.count({ where: { product_id: carId } })).resolves.toBe(0);
+    await expect(updater.process.count({ where: { car_id: carId } })).resolves.toBe(0);
   }, 15_000);
 
   it('serializes late assignment against creation on the target product identity', async () => {
@@ -273,14 +293,15 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
         sendAppointmentCreatedEmail: jest.fn().mockResolvedValue(undefined),
       } as any,
       {} as any,
-    ).create(
+    ).createPending(
       {
         client_id: clientId,
         specialist_id: specialistId,
         product_type: ProductType.CAR,
         product_id: carId,
         appointment_datetime: '2099-01-01T10:00:00.000Z',
-      } as any,
+        scheduling_method: AppointmentSchedulingMethod.EMAIL,
+      },
       clientId,
       UserRole.CUSTOMER,
     );
@@ -293,6 +314,14 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
     expect(outcomes.find(({ status }) => status === 'rejected')).toMatchObject({
       reason: expect.any(ConflictException),
     });
+    if (outcomes[1].status === 'fulfilled') {
+      expect(outcomes[1].value).toMatchObject({
+        status: 'PENDING',
+        scheduling_method: AppointmentSchedulingMethod.EMAIL,
+        appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+        process_id: expect.any(String),
+      });
+    }
     await expect(
       updater.process.count({
         where: {

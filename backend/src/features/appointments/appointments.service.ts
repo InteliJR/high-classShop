@@ -13,6 +13,7 @@ import {
   CreatePendingAppointmentDto,
   CreatePlatformAppointmentDto,
   GetAppointmentsQueryDto,
+  PENDING_APPOINTMENT_DATETIME_PATTERN,
   UpdateAppointmentStatusDto,
 } from './dto';
 import {
@@ -43,7 +44,10 @@ import { CalendlyIntegrationService } from './calendly-integration.service';
 import { buildNegotiationSnapshotUpdate } from 'src/features/processes/negotiation-snapshot';
 import { lockNegotiationProductMoney } from 'src/features/products/product-monetary-lock';
 import { validateSpecialistProductAssociation } from 'src/features/products/product-association-validator';
-import { lockAndAssertNoActiveProcess } from 'src/features/processes/process-dedup-lock';
+import {
+  ACTIVE_PROCESS_STATUSES,
+  lockAndAssertNoActiveProcess,
+} from 'src/features/processes/process-dedup-lock';
 import {
   acquireSpecialistScheduleLock,
   assertSpecialistScheduleAvailable,
@@ -1038,12 +1042,13 @@ export class AppointmentsService {
     if (
       hasDate &&
       (typeof dto.appointment_datetime !== 'string' ||
+        !PENDING_APPOINTMENT_DATETIME_PATTERN.test(dto.appointment_datetime) ||
         !isISO8601(dto.appointment_datetime, { strict: true }) ||
         !pendingDateTime ||
         !isFutureDate(pendingDateTime))
     ) {
       throw new BadRequestException(
-        'Data/hora do agendamento deve ser uma data ISO 8601 futura válida',
+        'Data/hora do agendamento deve ser ISO 8601 futura válida com Z ou offset explícito',
       );
     }
     if (
@@ -1684,6 +1689,12 @@ export class AppointmentsService {
     productType: ProductType,
     productId: string,
   ): Promise<ExistingAppointmentCheck> {
+    const productField =
+      productType === ProductType.CAR
+        ? 'car_id'
+        : productType === ProductType.BOAT
+          ? 'boat_id'
+          : 'aircraft_id';
     const appointment = await this.prisma.appointment.findFirst({
       where: {
         client_id: clientId,
@@ -1693,7 +1704,15 @@ export class AppointmentsService {
         status: {
           in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
         },
-        process: { is: { client_id: clientId } },
+        process: {
+          is: {
+            client_id: clientId,
+            specialist_id: specialistId,
+            product_type: productType,
+            [productField]: productId,
+            status: { in: ACTIVE_PROCESS_STATUSES },
+          },
+        },
       },
       select: {
         id: true,
