@@ -112,11 +112,9 @@ export default function DashboardPage() {
     },
     {
       icon: Package,
-      label: "Produtos Cadastrados",
-      value: stats?.totalProducts ?? 0,
-      sub: `${stats?.productsByType.cars ?? 0} carros · ${
-        stats?.productsByType.boats ?? 0
-      } embarcações · ${stats?.productsByType.aircrafts ?? 0} aeronaves`,
+      label: "Produtos ativos",
+      value: stats?.activeProducts ?? 0,
+      sub: `${stats?.totalProducts ?? 0} produtos no total`,
     },
   ];
 

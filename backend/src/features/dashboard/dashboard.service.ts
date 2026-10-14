@@ -25,6 +25,9 @@ export class DashboardService {
       totalCars,
       totalBoats,
       totalAircrafts,
+      activeCars,
+      activeBoats,
+      activeAircrafts,
       salesByMonth,
       consultantsPerformance,
       sales,
@@ -39,6 +42,9 @@ export class DashboardService {
       this.prisma.car.count(),
       this.prisma.boat.count(),
       this.prisma.aircraft.count(),
+      this.prisma.car.count({ where: { is_active: true } }),
+      this.prisma.boat.count({ where: { is_active: true } }),
+      this.prisma.aircraft.count({ where: { is_active: true } }),
       this.buildMonthlySalesData({}),
       this.getConsultantsPerformance(),
       this.commissionsService.listSales(),
@@ -46,6 +52,7 @@ export class DashboardService {
     ]);
 
     const totalProducts = totalCars + totalBoats + totalAircrafts;
+    const activeProducts = activeCars + activeBoats + activeAircrafts;
 
     return {
       activeProcesses,
@@ -53,6 +60,7 @@ export class DashboardService {
       totalClients,
       specialistsCount,
       totalProducts,
+      activeProducts,
       productsByType: {
         cars: totalCars,
         boats: totalBoats,
@@ -110,8 +118,24 @@ export class DashboardService {
               })
             : Promise.resolve(0);
 
+    const activeProductsPromise =
+      specialist?.speciality === 'CAR'
+        ? this.prisma.car.count({
+            where: { specialist_id: specialistId, is_active: true },
+          })
+        : specialist?.speciality === 'BOAT'
+          ? this.prisma.boat.count({
+              where: { specialist_id: specialistId, is_active: true },
+            })
+          : specialist?.speciality === 'AIRCRAFT'
+            ? this.prisma.aircraft.count({
+                where: { specialist_id: specialistId, is_active: true },
+              })
+            : Promise.resolve(0);
+
     const [
       productsListed,
+      activeProducts,
       activeProcesses,
       completedSales,
       totalProcesses,
@@ -119,6 +143,7 @@ export class DashboardService {
       processesByStatus,
     ] = await Promise.all([
       productsListedPromise,
+      activeProductsPromise,
       this.prisma.process.count({
         where: {
           specialist_id: specialistId,
@@ -149,6 +174,7 @@ export class DashboardService {
 
     return {
       productsListed,
+      activeProducts,
       activeProcesses,
       completedSales,
       conversionRate,
