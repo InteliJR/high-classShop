@@ -8,6 +8,10 @@ import {
   readEmailSchedulingE2EConfig,
   seedEmailSchedulingFixtures,
 } from '../prisma/seed-email-scheduling-e2e';
+import {
+  getSanitizeCallCount,
+  resetSanitizeCallCount,
+} from './mocks/isomorphic-dompurify';
 
 const fixture = emailSchedulingFixtures('http');
 const proposedIso = '2099-10-20T17:30:00.000Z';
@@ -100,6 +104,45 @@ describe('email scheduling fixture safety', () => {
     );
     expect(config.namespace).toBe('http');
   });
+
+  it.each(['browser', 'http'] as const)(
+    'rejects collisions across both email namespaces before seeding %s',
+    (namespace) => {
+      expect(() =>
+        readEmailSchedulingE2EConfig(
+          {
+            ...validEnv,
+            EMAIL_SCHEDULING_E2E_SPECIALIST_EMAIL:
+              ' CUSTOMER+HTTP@EXAMPLE.TEST ',
+          },
+          namespace,
+        ),
+      ).toThrow(/distinct/i);
+    },
+  );
+
+  it('keeps all six normalized browser and HTTP addresses distinct', () => {
+    const emails = (['browser', 'http'] as const).flatMap((namespace) =>
+      Object.values(
+        readEmailSchedulingE2EConfig(validEnv, namespace).credentials,
+      ).map(({ email }) => email),
+    );
+    expect(new Set(emails).size).toBe(6);
+  });
+
+  it('fails closed if the out-of-scope SVG sanitizer boundary is called', () => {
+    const boundary =
+      require('isomorphic-dompurify') as typeof import('./mocks/isomorphic-dompurify');
+    boundary.resetSanitizeCallCount();
+    try {
+      expect(() => boundary.default.sanitize('<svg/>')).toThrow(
+        /SVG sanitization is outside the email scheduling E2E gate/,
+      );
+      expect(boundary.getSanitizeCallCount()).toBe(1);
+    } finally {
+      boundary.resetSanitizeCallCount();
+    }
+  });
 });
 
 describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
@@ -125,6 +168,12 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
     }
     process.env.DATABASE_URL = config.databaseUrl;
     process.env.NOTIFICATIONS_ENABLED = 'false';
+    resetSanitizeCallCount();
+    // Resolve the complete application graph before connecting or seeding.
+    // External delivery and unrelated background jobs are outside this gate.
+    const { AppModule } =
+      require('../src/app.module') as typeof import('../src/app.module');
+    expect(getSanitizeCallCount()).toBe(0);
     const { PrismaClient } =
       require('@prisma/client') as typeof import('@prisma/client');
     prisma = new PrismaClient({
@@ -145,10 +194,6 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
       }),
     ).toBe(2);
 
-    // Load the real application only after validating the isolated database.
-    // External delivery and unrelated background jobs are outside this gate.
-    const { AppModule } =
-      require('../src/app.module') as typeof import('../src/app.module');
     const { Test } =
       require('@nestjs/testing') as typeof import('@nestjs/testing');
     const { ClassSerializerInterceptor, ValidationPipe } =
@@ -219,6 +264,7 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
     );
     app.useLogger(false);
     await app.init();
+    expect(getSanitizeCallCount()).toBe(0);
 
     [customerToken, specialistToken, outsiderToken] = await Promise.all([
       login('customer'),
@@ -251,6 +297,7 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
         delete process.env.NOTIFICATIONS_ENABLED;
       else process.env.NOTIFICATIONS_ENABLED = oldNotificationsEnabled;
     }
+    expect(getSanitizeCallCount()).toBe(0);
   });
 
   async function login(actor: 'customer' | 'specialist' | 'outsider') {
@@ -353,7 +400,7 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
         specialist_id: fixture.users[1].id,
         car_id: productId,
       },
-      include: { ProcessStatusHistory: true },
+      include: { ProcessStatusHistory: { orderBy: { id: 'asc' } } },
     });
     expect(appointments).toHaveLength(1);
     expect(processes).toHaveLength(1);
@@ -374,7 +421,7 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
     });
     expect(processes[0].ProcessStatusHistory).toHaveLength(1);
     expect(processes[0].ProcessStatusHistory[0].status).toBe('SCHEDULING');
-    return processes[0];
+    return { appointment: appointments[0], process: processes[0] };
   }
 
   it('serves only the public business profile and blocks private profile IDOR', async () => {
@@ -669,8 +716,10 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
       'SCHEDULED',
       changedIso,
     );
-    expect(firstStored.notes).toContain(`proposta: ${proposedIso}`);
-    expect(firstStored.notes).toContain(`horário confirmado: ${changedIso}`);
+    expect(firstStored.process.notes).toContain(`proposta: ${proposedIso}`);
+    expect(firstStored.process.notes).toContain(
+      `horário confirmado: ${changedIso}`,
+    );
 
     // A confirmed commitment conflicts; a still-pending EMAIL proposal did not.
     const conflict = await confirm(created[1].processId, changedIso).expect(
@@ -706,15 +755,24 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
       'SCHEDULED',
       proposedIso,
     );
-    const beforeRepeat = await prisma!.process.findUniqueOrThrow({
-      where: { id: created[0].processId },
-    });
+    const beforeRepeat = await assertStoredState(
+      created[0].productId,
+      created[0].processId,
+      created[0].appointmentId,
+      'SCHEDULED',
+      changedIso,
+    );
     await confirm(created[0].processId, changedIso).expect(201);
-    expect(
-      await prisma!.process.findUniqueOrThrow({
-        where: { id: created[0].processId },
-      }),
-    ).toEqual(beforeRepeat);
+    const afterRepeat = await assertStoredState(
+      created[0].productId,
+      created[0].processId,
+      created[0].appointmentId,
+      'SCHEDULED',
+      changedIso,
+    );
+    // Equality covers appointment confirmation/audit timestamps, process notes
+    // and the full ordered history; assertStoredState also checks cardinality.
+    expect(afterRepeat).toEqual(beforeRepeat);
     await confirm(created[0].processId, secondIso).expect(400);
 
     for (const item of created) {

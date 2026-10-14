@@ -97,6 +97,7 @@ export function readEmailSchedulingE2EConfig(
   }
 
   const credentials = {} as EmailSchedulingE2EConfig['credentials'];
+  const namespaceEmails: string[] = [];
   for (const actor of ['customer', 'specialist', 'outsider'] as const) {
     const emailKey = `EMAIL_SCHEDULING_E2E_${actor.toUpperCase()}_EMAIL`;
     const passwordKey = `EMAIL_SCHEDULING_E2E_${actor.toUpperCase()}_PASSWORD`;
@@ -109,15 +110,17 @@ export function readEmailSchedulingE2EConfig(
       throw new Error(`${passwordKey} must contain at least 6 characters`);
     }
     const [local, domain] = email.split('@');
+    const httpEmail = `${local}+http@${domain}`;
+    namespaceEmails.push(email, httpEmail);
     credentials[actor] = {
-      email: namespace === 'http' ? `${local}+http@${domain}` : email,
+      email: namespace === 'http' ? httpEmail : email,
       password,
     };
   }
-  if (
-    new Set(Object.values(credentials).map(({ email }) => email)).size !== 3
-  ) {
-    throw new Error('E2E emails must be distinct');
+  if (new Set(namespaceEmails).size !== 6) {
+    throw new Error(
+      'E2E emails must be distinct across browser and HTTP namespaces',
+    );
   }
   return { databaseUrl: databaseUrl!, namespace, credentials };
 }
