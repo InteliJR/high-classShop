@@ -86,6 +86,7 @@ describeWithPostgres(
     const notifications = {
       sendAppointmentConfirmedEmail: jest.fn().mockResolvedValue(undefined),
       sendAppointmentRescheduledEmail: jest.fn().mockResolvedValue(undefined),
+      sendAppointmentCancelledEmail: jest.fn().mockResolvedValue(undefined),
     };
 
     beforeAll(async () => {
@@ -614,6 +615,77 @@ describeWithPostgres(
       15_000,
     );
 
+    it('keeps confirmation/cancellation races consistent and releases the product for a new request', async () => {
+      const request = await createRequest(holder, 0);
+      const outcomes = await race<any>((a, b) => [
+        appointments(first, a).updateStatus(
+          request.id,
+          { status: StatusAgendamento.CANCELLED },
+          clientIds[0],
+          UserRole.CUSTOMER,
+        ),
+        processes(second, b).confirmAppointment(
+          request.process_id,
+          specialistId,
+          proposedIso,
+        ),
+      ]);
+
+      expect(outcomes[0].status).toBe('fulfilled');
+      expect(
+        await holder.appointment.findUniqueOrThrow({
+          where: { id: request.id },
+          include: { process: true },
+        }),
+      ).toMatchObject({
+        status: StatusAgendamento.CANCELLED,
+        process: null,
+      });
+      expect(
+        await holder.process.findUnique({ where: { id: request.process_id } }),
+      ).toBeNull();
+
+      const replacement = await createRequest(holder, 0);
+      expect(replacement).toMatchObject({
+        status: StatusAgendamento.PENDING,
+      });
+      expect(replacement.id).not.toBe(request.id);
+      expect(replacement.process_id).not.toBe(request.process_id);
+      expect(
+        await holder.process.findUniqueOrThrow({
+          where: { id: replacement.process_id },
+        }),
+      ).toMatchObject({ status: ProcessStatus.SCHEDULING });
+    }, 15_000);
+
+    it('serializes the process cancellation route against confirmation without orphaning either record', async () => {
+      const request = await createRequest(holder, 0);
+      const outcomes = await race<any>((a, b) => [
+        processes(first, a).cancelAppointment(
+          request.process_id,
+          clientIds[0],
+        ),
+        processes(second, b).confirmAppointment(
+          request.process_id,
+          specialistId,
+          proposedIso,
+        ),
+      ]);
+
+      expect(outcomes[0].status).toBe('fulfilled');
+      expect(
+        await holder.appointment.findUnique({ where: { id: request.id } }),
+      ).toBeNull();
+      expect(
+        await holder.process.findUnique({ where: { id: request.process_id } }),
+      ).toBeNull();
+
+      const replacement = await createRequest(holder, 0);
+      expect(replacement.status).toBe(StatusAgendamento.PENDING);
+      expect(replacement.id).not.toBe(request.id);
+      expect(replacement.process_id).not.toBe(request.process_id);
+    }, 15_000);
+
     function callback(
       client: PrismaClient,
       attempted: Deferred,
@@ -624,8 +696,8 @@ describeWithPostgres(
         appointment.id,
         clientIds[index],
         {
-          event_uri: `https://calendly.test/events/${appointment.id}`,
-          invitee_uri: `https://calendly.test/invitees/${appointment.id}`,
+          event_uri: `https://api.calendly.com/scheduled_events/${appointment.id}`,
+          invitee_uri: `https://api.calendly.com/scheduled_events/${appointment.id}/invitees/${appointment.id}`,
           scheduled_start_time: proposedIso,
         },
       );

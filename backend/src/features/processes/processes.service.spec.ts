@@ -1940,3 +1940,79 @@ describe('ProcessesService — matriz de contatos do cliente', () => {
     },
   );
 });
+
+describe('ProcessesService.cancelAppointment — serialização canônica', () => {
+  it('adquire o lock da agenda e revalida processo/appointment dentro da transação', async () => {
+    const process = {
+      id: 'process-1',
+      client_id: clientId,
+      specialist_id: specialistId,
+      status: ProcessStatus.SCHEDULING,
+      product_type: ProductType.CAR,
+      appointment_id: 'appointment-1',
+      appointment: {
+        id: 'appointment-1',
+        client_id: clientId,
+        specialist_id: specialistId,
+        status: StatusAgendamento.SCHEDULED,
+        appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+      },
+      client: {
+        id: clientId,
+        name: 'Cliente',
+        surname: 'Teste',
+        email: 'cliente@example.com',
+      },
+      specialist: {
+        id: specialistId,
+        name: 'Especialista',
+        surname: 'Teste',
+        email: 'especialista@example.com',
+      },
+      car: { marca: 'Porsche', modelo: '911' },
+      boat: null,
+      aircraft: null,
+    };
+    const historyDelete = jest.fn().mockResolvedValue({ count: 1 });
+    const processDelete = jest.fn().mockResolvedValue(process);
+    const appointmentDelete = jest.fn().mockResolvedValue(process.appointment);
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: {
+        findUnique: jest.fn().mockResolvedValue(process),
+        delete: processDelete,
+      },
+      appointment: { delete: appointmentDelete },
+      processStatusHistory: { deleteMany: historyDelete },
+    };
+    const prisma = {
+      process: {
+        findUnique: jest.fn().mockResolvedValue(process),
+      },
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    } as any;
+    const notifications = {
+      sendAppointmentCancelledEmail: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new ProcessesService(prisma, notifications as any);
+
+    await service.cancelAppointment(process.id, clientId);
+
+    expect(tx.$queryRaw).toHaveBeenCalledWith(
+      expect.anything(),
+      `appointment-schedule:${specialistId}`,
+    );
+    expect(tx.process.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: process.id } }),
+    );
+    expect(historyDelete).toHaveBeenCalledWith({
+      where: { processId: process.id },
+    });
+    expect(processDelete).toHaveBeenCalledWith({
+      where: { id: process.id },
+    });
+    expect(appointmentDelete).toHaveBeenCalledWith({
+      where: { id: process.appointment.id },
+    });
+  });
+});

@@ -1000,6 +1000,102 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
 });
 
 describe('AppointmentsService.updateStatus — snapshot da negociação', () => {
+  it.each([StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED])(
+    'cancela %s e remove o Process SCHEDULING na mesma transação',
+    async (currentStatus) => {
+      const client = {
+        id: 'client-1',
+        name: 'Cliente',
+        surname: 'Teste',
+        email: 'cliente@example.com',
+      };
+      const specialist = {
+        id: 'specialist-1',
+        name: 'Especialista',
+        surname: 'Teste',
+        email: 'especialista@example.com',
+        speciality: ProductType.CAR,
+      };
+      const process = {
+        id: 'process-1',
+        status: ProcessStatus.SCHEDULING,
+      };
+      const appointment = {
+        id: 'appointment-1',
+        client_id: client.id,
+        specialist_id: specialist.id,
+        product_type: null,
+        product_id: null,
+        status: currentStatus,
+        notes: null,
+        appointment_datetime:
+          currentStatus === StatusAgendamento.SCHEDULED
+            ? new Date('2099-01-01T10:00:00.000Z')
+            : null,
+        created_at: new Date('2026-01-01T00:00:00.000Z'),
+        updated_at: new Date('2026-01-01T00:00:00.000Z'),
+        client,
+        specialist,
+        process,
+      };
+      const updatedAppointment = {
+        ...appointment,
+        status: StatusAgendamento.CANCELLED,
+        process: null,
+      };
+      const deleteHistory = jest.fn().mockResolvedValue({ count: 1 });
+      const deleteProcess = jest.fn().mockResolvedValue({ count: 1 });
+      const tx = {
+        $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+        appointment: {
+          findUnique: jest.fn().mockResolvedValue(appointment),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          findUniqueOrThrow: jest.fn().mockResolvedValue(updatedAppointment),
+        },
+        process: { deleteMany: deleteProcess },
+        processStatusHistory: { deleteMany: deleteHistory },
+      };
+      const prisma = {
+        appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+        $transaction: jest.fn(async (callback) => callback(tx)),
+      } as any;
+      const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+      const result = await service.updateStatus(
+        appointment.id,
+        { status: StatusAgendamento.CANCELLED },
+        appointment.client_id,
+        UserRole.CUSTOMER,
+      );
+
+      expect(tx.appointment.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: appointment.id,
+            status: currentStatus,
+            updated_at: appointment.updated_at,
+          }),
+          data: expect.objectContaining({
+            status: StatusAgendamento.CANCELLED,
+          }),
+        }),
+      );
+      expect(deleteHistory).toHaveBeenCalledWith({
+        where: { processId: process.id },
+      });
+      expect(deleteProcess).toHaveBeenCalledWith({
+        where: {
+          id: process.id,
+          status: ProcessStatus.SCHEDULING,
+        },
+      });
+      expect(deleteHistory.mock.invocationCallOrder[0]).toBeLessThan(
+        deleteProcess.mock.invocationCallOrder[0],
+      );
+      expect(result.status).toBe(StatusAgendamento.CANCELLED);
+    },
+  );
+
   it('rejeita a transição quando perde a reivindicação concorrente do appointment', async () => {
     const appointment = {
       id: 'appointment-1',
@@ -1977,4 +2073,74 @@ describe('AppointmentsService — sugestões compartilham ocupação da agenda',
       );
     },
   );
+});
+
+describe('AppointmentsService.cancelPending — serialização canônica', () => {
+  it('adquire o lock da agenda e revalida appointment/process dentro da transação', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.PENDING,
+      appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+      client: {
+        id: 'client-1',
+        name: 'Cliente',
+        surname: 'Teste',
+        email: 'cliente@example.com',
+      },
+      specialist: {
+        id: 'specialist-1',
+        name: 'Especialista',
+        surname: 'Teste',
+        email: 'especialista@example.com',
+      },
+      process: { id: 'process-1', status: ProcessStatus.SCHEDULING },
+    };
+    const historyDelete = jest.fn().mockResolvedValue({ count: 1 });
+    const processDelete = jest.fn().mockResolvedValue(appointment.process);
+    const appointmentDelete = jest.fn().mockResolvedValue(appointment);
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(appointment),
+        delete: appointmentDelete,
+      },
+      process: { delete: processDelete },
+      processStatusHistory: { deleteMany: historyDelete },
+    };
+    const prisma = {
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(appointment),
+      },
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    } as any;
+    const notifications = {
+      sendAppointmentCancelledEmail: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new AppointmentsService(
+      prisma,
+      notifications as any,
+      {} as any,
+    );
+
+    await service.cancelPending(appointment.id, appointment.client_id);
+
+    expect(tx.$queryRaw).toHaveBeenCalledWith(
+      expect.anything(),
+      'appointment-schedule:specialist-1',
+    );
+    expect(tx.appointment.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: appointment.id } }),
+    );
+    expect(historyDelete).toHaveBeenCalledWith({
+      where: { processId: appointment.process.id },
+    });
+    expect(processDelete).toHaveBeenCalledWith({
+      where: { id: appointment.process.id },
+    });
+    expect(appointmentDelete).toHaveBeenCalledWith({
+      where: { id: appointment.id },
+    });
+  });
 });

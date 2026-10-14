@@ -636,6 +636,35 @@ export class AppointmentsService {
         });
       }
 
+      // Cancellation must release the active scheduling process atomically.
+      // Keeping a SCHEDULING process linked to a CANCELLED appointment makes
+      // the product deduplication gate reject every subsequent request.
+      if (
+        dto.status === StatusAgendamento.CANCELLED &&
+        lockedAppointment.process
+      ) {
+        await tx.processStatusHistory.deleteMany({
+          where: { processId: lockedAppointment.process.id },
+        });
+        const processClaim = await tx.process.deleteMany({
+          where: {
+            id: lockedAppointment.process.id,
+            status: ProcessStatus.SCHEDULING,
+          },
+        });
+        if (processClaim.count !== 1) {
+          throw new ConflictException({
+            success: false,
+            error: {
+              code: 'APPOINTMENT_CANCELLATION_CONFLICT',
+              message:
+                'O processo foi alterado enquanto o agendamento era cancelado',
+              details: { appointment_id: id },
+            },
+          });
+        }
+      }
+
       const updatedAppointment = await tx.appointment.findUniqueOrThrow({
         where: { id },
         include: {
@@ -1566,12 +1595,12 @@ export class AppointmentsService {
       `[cancelPending] Cancelando agendamento ${appointmentId} por ${userId}`,
     );
 
-    const appointment = await this.prisma.appointment.findUnique({
+    const candidate = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
-      include: { client: true, specialist: true, process: true },
+      select: { id: true, client_id: true, specialist_id: true },
     });
 
-    if (!appointment) {
+    if (!candidate) {
       throw new NotFoundException({
         success: false,
         error: { code: 404, message: 'Agendamento não encontrado' },
@@ -1579,8 +1608,8 @@ export class AppointmentsService {
     }
 
     // Apenas cliente ou especialista podem cancelar
-    const isClient = appointment.client_id === userId;
-    const isSpecialist = appointment.specialist_id === userId;
+    const isClient = candidate.client_id === userId;
+    const isSpecialist = candidate.specialist_id === userId;
     if (!isClient && !isSpecialist) {
       throw new ForbiddenException({
         success: false,
@@ -1591,33 +1620,55 @@ export class AppointmentsService {
       });
     }
 
-    // Só pode cancelar PENDING
-    if (appointment.status !== StatusAgendamento.PENDING) {
-      throw new BadRequestException({
-        success: false,
-        error: {
-          code: 400,
-          message:
-            'Apenas agendamentos PENDING podem ser cancelados por esta rota',
-          details: { current_status: appointment.status },
-        },
+    // Serializar com confirmação/reagendamento e revalidar o estado sob lock.
+    const appointment = await this.prisma.$transaction(async (tx) => {
+      await acquireSpecialistScheduleLock(tx, candidate.specialist_id);
+      const lockedAppointment = await tx.appointment.findUnique({
+        where: { id: appointmentId },
+        include: { client: true, specialist: true, process: true },
       });
-    }
+      if (!lockedAppointment) {
+        throw new NotFoundException({
+          success: false,
+          error: { code: 404, message: 'Agendamento não encontrado' },
+        });
+      }
+      if (
+        lockedAppointment.client_id !== userId &&
+        lockedAppointment.specialist_id !== userId
+      ) {
+        throw new ForbiddenException({
+          success: false,
+          error: {
+            code: 403,
+            message: 'Sem permissão para cancelar este agendamento',
+          },
+        });
+      }
+      if (lockedAppointment.status !== StatusAgendamento.PENDING) {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 400,
+            message:
+              'Apenas agendamentos PENDING podem ser cancelados por esta rota',
+            details: { current_status: lockedAppointment.status },
+          },
+        });
+      }
 
-    // Deletar appointment e process em transação
-    await this.prisma.$transaction(async (tx) => {
       // Se existe process, deletar histórico e process primeiro
-      if (appointment.process) {
+      if (lockedAppointment.process) {
         await tx.processStatusHistory.deleteMany({
-          where: { processId: appointment.process.id },
+          where: { processId: lockedAppointment.process.id },
         });
 
         await tx.process.delete({
-          where: { id: appointment.process.id },
+          where: { id: lockedAppointment.process.id },
         });
 
         this.logger.log(
-          `[cancelPending] Process ${appointment.process.id} deletado`,
+          `[cancelPending] Process ${lockedAppointment.process.id} deletado`,
         );
       }
 
@@ -1627,6 +1678,8 @@ export class AppointmentsService {
       });
 
       this.logger.log(`[cancelPending] Appointment ${appointmentId} deletado`);
+
+      return lockedAppointment;
     });
 
     // Fire-and-forget: notificar a outra parte sobre o cancelamento
