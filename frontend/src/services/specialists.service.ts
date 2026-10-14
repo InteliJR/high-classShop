@@ -22,9 +22,9 @@ export type Specialist = {
 
 // Tipo para especialistas agrupados por categoria
 export type GroupedSpecialists = {
-  CAR: Specialist[];
-  BOAT: Specialist[];
-  AIRCRAFT: Specialist[];
+  CAR: PublicSpecialistProfile[];
+  BOAT: PublicSpecialistProfile[];
+  AIRCRAFT: PublicSpecialistProfile[];
 };
 
 // Projeção pública de contato comercial; não contém documentos ou dados OAuth.

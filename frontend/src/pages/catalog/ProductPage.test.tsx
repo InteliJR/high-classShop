@@ -10,7 +10,9 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import ProductPage from "./ProductPage";
+import { createConsultantProcess, getClients } from "../../services/consultant.service";
 import { getCarById } from "../../services/cars.service";
 import { getUserById } from "../../services/users.service";
 import {
@@ -72,13 +74,11 @@ vi.mock("../../hooks/useCalendlyScheduling", () => ({
     closePopup: vi.fn(),
   }),
 }));
-vi.mock("react-calendly", () => ({ PopupModal: () => null }));
+vi.mock("react-calendly", () => ({ PopupModal: () => null, useCalendlyEventListener: vi.fn() }));
 vi.mock("../../components/product/ProductDetails", () => ({
   default: () => <div>Detalhes do produto</div>,
 }));
-vi.mock("../../components/processes/StartProcessForClientModal", () => ({
-  default: () => null,
-}));
+vi.mock("../../services/consultant.service", () => ({ getClients: vi.fn(), createConsultantProcess: vi.fn() }));
 
 const product = {
   id: "car-1",
@@ -139,6 +139,7 @@ function page() {
       <Routes>
         <Route path="/catalog/:productType/:id" element={<ProductPage />} />
         <Route path="/customer/processes" element={<div>Meus processos</div>} />
+        <Route path="/consultant/processes" element={<div>Processos delegados</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -186,7 +187,41 @@ describe("ProductPage scheduling", () => {
     vi.mocked(getPublicSpecialistById).mockResolvedValue(specialist);
     vi.mocked(checkExistingAppointment).mockResolvedValue({ exists: false });
     vi.mocked(createPendingAppointment).mockResolvedValue(appointment);
+    vi.mocked(getClients).mockResolvedValue([{ id: "delegated-client", name: "Cliente", surname: "Delegado", email: "cliente@example.com", cpf: "12345678900", rg: "12345678", role: "CUSTOMER" }]);
     vi.spyOn(window, "open").mockImplementation(() => null);
+  });
+
+  it.each(["Fechar", "Escape", "outside"])("keeps the delegated process dialog open during POST when attempting %s", async (action) => {
+    authState.user = { ...authState.user, role: "CONSULTANT" };
+    let resolve!: (value: Awaited<ReturnType<typeof createConsultantProcess>>) => void;
+    vi.mocked(createConsultantProcess).mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+    render(page());
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar processo para cliente" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Cliente Delegado/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Criar processo" }));
+    const dialog = screen.getByRole("dialog");
+    if (action === "Fechar") {
+      const close = screen.getByRole("button", { name: "Fechar" }) as HTMLButtonElement;
+      expect(close.disabled).toBe(true);
+      fireEvent.click(close);
+    } else if (action === "Escape") {
+      fireEvent.keyDown(dialog, { key: "Escape" });
+    } else {
+      await userEvent.setup({ pointerEventsCheck: 0 }).click(document.body);
+    }
+    expect(screen.getByRole("dialog").getAttribute("data-state")).toBe("open");
+    await act(async () => resolve({ id: "delegated-process", appointment_id: "delegated-appointment", status: "SCHEDULING" }));
+    expect(createConsultantProcess).toHaveBeenCalledOnce();
+    expect(await screen.findByText("Processos delegados")).toBeTruthy();
+  });
+
+  it("allows an idle delegated dialog to close outside", async () => {
+    authState.user = { ...authState.user, role: "CONSULTANT" };
+    render(page());
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar processo para cliente" }));
+    await screen.findByRole("button", { name: /Cliente Delegado/i });
+    await userEvent.setup({ pointerEventsCheck: 0 }).click(document.body);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   afterEach(() => {

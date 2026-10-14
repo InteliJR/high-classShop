@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { X } from "lucide-react";
@@ -13,6 +13,8 @@ export function DialogContent({
   className,
   hideTitle,
   dismissible = true,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
 }: {
   open: boolean;
   title: ReactNode;
@@ -20,6 +22,8 @@ export function DialogContent({
   className?: string;
   hideTitle?: boolean;
   dismissible?: boolean;
+  onOpenAutoFocus?: ComponentPropsWithoutRef<typeof DialogPrimitive.Content>["onOpenAutoFocus"];
+  onCloseAutoFocus?: ComponentPropsWithoutRef<typeof DialogPrimitive.Content>["onCloseAutoFocus"];
 }) {
   const shouldReduceMotion = useReducedMotion();
   const duration = shouldReduceMotion ? 0 : 0.15;
@@ -41,6 +45,8 @@ export function DialogContent({
             asChild
             forceMount
             aria-describedby={undefined}
+            onOpenAutoFocus={onOpenAutoFocus}
+            onCloseAutoFocus={onCloseAutoFocus}
             onEscapeKeyDown={(event) => {
               if (!dismissible) event.preventDefault();
             }}

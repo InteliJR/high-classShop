@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, CheckCircle, ExternalLink, Loader2 } from "lucide-react";
 import { PopupModal } from "react-calendly";
@@ -106,6 +106,15 @@ export default function ProductPage() {
     autoOpen: boolean;
   } | null>(null);
   const [isStartProcessModalOpen, setIsStartProcessModalOpen] = useState(false);
+  const [isStartProcessBusy, setIsStartProcessBusy] = useState(false);
+  const startProcessBusyRef = useRef(false);
+  const handleStartProcessBusyChange = useCallback((busy: boolean) => {
+    startProcessBusyRef.current = busy;
+    setIsStartProcessBusy(busy);
+  }, []);
+  const handleStartProcessOpenChange = (open: boolean) => {
+    if (!startProcessBusyRef.current) setIsStartProcessModalOpen(open);
+  };
   const [isDateTimeModalOpen, setIsDateTimeModalOpen] = useState(false);
   const [dateTimeError, setDateTimeError] = useState<string | null>(null);
   const [creationNotice, setCreationNotice] = useState<string | null>(null);
@@ -666,12 +675,13 @@ export default function ProductPage() {
       {specialist && productType && id && (
         <Dialog
           open={isStartProcessModalOpen}
-          onOpenChange={setIsStartProcessModalOpen}
+          onOpenChange={handleStartProcessOpenChange}
         >
           <DialogContent
             open={isStartProcessModalOpen}
             title="Iniciar processo para cliente"
             hideTitle
+            dismissible={!isStartProcessBusy}
           >
             <StartProcessForClientModal
               productType={requestProductType ?? "CAR"}
@@ -679,7 +689,8 @@ export default function ProductPage() {
               specialistId={specialist.id}
               productLabel={`${product.marca} ${product.modelo}`.trim()}
               mode={user?.role === "OFFICE" ? "OFFICE" : "CONSULTANT"}
-              onClose={() => setIsStartProcessModalOpen(false)}
+              onClose={() => handleStartProcessOpenChange(false)}
+              onBusyChange={handleStartProcessBusyChange}
             />
           </DialogContent>
         </Dialog>

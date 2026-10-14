@@ -15,7 +15,7 @@ import {
   Mail,
   Phone,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Process } from "../../services/processes.service";
 import type { Product, SpecialityType } from "../../types/types";
@@ -23,7 +23,7 @@ import React from "react";
 import UpdateProcessStatusModal from "./UpdateProcessStatusModal";
 import CopyableContact from "./CopyableContact";
 import AppointmentDateTimeModal from "../appointments/AppointmentDateTimeModal";
-import { applyPhoneMask } from "../../utils/mask";
+import { buildWhatsAppHref } from "../../lib/whatsapp";
 import { getContextualStatusMessage } from "../../utils/processStatusMessages";
 import {
   getProcessCompletionReason,
@@ -119,6 +119,8 @@ export default function ProcessCard({
     null,
   );
   const [isRescheduling, setIsRescheduling] = useState(false);
+  const confirmationInFlight = useRef(false);
+  const dateTimeTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   // Verifica se é um processo de consultoria (sem produto atribuído)
   const isConsultancy = !process.product_type || !process.product_id;
@@ -130,6 +132,7 @@ export default function ProcessCard({
   const counterpartLabel = isClientView ? "especialista" : "cliente";
   const counterpartEmail = counterpart?.email?.trim() || null;
   const counterpartPhone = counterpart?.phone?.trim() || null;
+  const whatsAppHref = counterpartPhone ? buildWhatsAppHref(counterpartPhone) : null;
   const isAppointmentConfirmed =
     process.appointment_status === "SCHEDULED" ||
     process.appointment_status === "COMPLETED";
@@ -250,7 +253,9 @@ export default function ProcessCard({
 
   // Handle confirm appointment
   const handleConfirmAppointment = async (appointmentDatetime: string) => {
-    if (isConfirming) return;
+    if (confirmationInFlight.current || isCancelling ||
+      process.appointment_status !== "PENDING" || !process.appointment_id) return;
+    confirmationInFlight.current = true;
 
     try {
       setIsConfirming(true);
@@ -259,18 +264,17 @@ export default function ProcessCard({
       setDateTimeAction(null);
       onStatusUpdated?.();
     } catch (error) {
-      console.error("Error confirming appointment:", error);
       const message = getActionErrorMessage(
         error,
         "Erro ao confirmar agendamento. Tente novamente.",
       );
-      if (dateTimeAction === "confirm") {
-        setDateTimeActionError(message);
-      } else {
-        alert(message);
+      setDateTimeActionError(message);
+      if ((error as { response?: { status?: number } })?.response?.status === 409) {
+        setDateTimeAction("confirm");
       }
     } finally {
       setIsConfirming(false);
+      confirmationInFlight.current = false;
     }
   };
 
@@ -422,10 +426,21 @@ export default function ProcessCard({
               {counterpartPhone && (
                 <CopyableContact
                   icon={<Phone size={12} />}
-                  label={applyPhoneMask(counterpartPhone)}
+                  label={counterpartPhone}
                   value={counterpartPhone}
                   description={`telefone do ${counterpartLabel}`}
                 />
+              )}
+              {whatsAppHref && (
+                <a
+                  href={whatsAppHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-green-700 hover:underline"
+                >
+                  <MessageSquare size={12} />
+                  WhatsApp do {counterpartLabel}
+                </a>
               )}
             </div>
           )}
@@ -501,7 +516,7 @@ export default function ProcessCard({
         </div>
 
         {/* Appointment Confirmation Buttons - SCHEDULING Status (before appointment confirmation) */}
-        {process.status === "SCHEDULING" && !isAppointmentConfirmed && (
+        {process.status === "SCHEDULING" && process.appointment_status === "PENDING" && process.appointment_id && (
           <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-amber-900 mb-2">
@@ -509,10 +524,13 @@ export default function ProcessCard({
                   ? "Aguardando confirmação do especialista"
                   : "Solicitação de agendamento"}
               </p>
+              {dateTimeActionError && dateTimeAction === null && (
+                <p role="alert" className="text-sm text-red-700">{dateTimeActionError}</p>
+              )}
 
               {!isClientView ? (
                 // Specialist view - Confirm or Reject buttons
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={handleCancelAppointment}
                     disabled={isCancelling || isConfirming}
@@ -530,31 +548,34 @@ export default function ProcessCard({
                   {hasValidScheduledMeetingDate ||
                   process.appointment_scheduling_method === "EMAIL" ||
                   process.appointment_scheduling_method == null ? (
-                    <button
-                      onClick={() => {
-                        if (hasValidScheduledMeetingDate && scheduledMeetingDate) {
-                          void handleConfirmAppointment(
-                            scheduledMeetingDate.toISOString(),
-                          );
-                        } else {
+                    <>
+                      {hasValidScheduledMeetingDate && (
+                        <button
+                          onClick={(event) => {
+                            dateTimeTriggerRef.current = event.currentTarget;
+                            void handleConfirmAppointment(process.appointment_datetime!);
+                          }}
+                          disabled={isConfirming || isCancelling}
+                          aria-busy={isConfirming}
+                          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50"
+                        >
+                          {isConfirming ? <Loader2 className="animate-spin h-4 w-4" /> : <CheckCircle size={16} />}
+                          Confirmar horário
+                        </button>
+                      )}
+                      <button
+                        onClick={(event) => {
+                          dateTimeTriggerRef.current = event.currentTarget;
                           setDateTimeActionError(null);
                           setDateTimeAction("confirm");
-                        }
-                      }}
-                      disabled={isConfirming || isCancelling}
-                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50"
-                    >
-                      {isConfirming ? (
-                        <Loader2 className="animate-spin h-4 w-4 text-white" />
-                      ) : (
-                        <>
-                          <CheckCircle size={16} />
-                          {hasValidScheduledMeetingDate
-                            ? "Confirmar"
-                            : "Definir data e hora"}
-                        </>
-                      )}
-                    </button>
+                        }}
+                        disabled={isConfirming || isCancelling}
+                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-white border border-green-600 text-green-700 rounded-lg font-medium hover:bg-green-50 transition disabled:opacity-50"
+                      >
+                        <Clock size={16} />
+                        Alterar e confirmar
+                      </button>
+                    </>
                   ) : (
                     <p className="flex-1 self-center text-center text-xs text-amber-800">
                       Aguardando sincronização do Calendly
@@ -599,7 +620,8 @@ export default function ProcessCard({
                   {canSpecialistReschedule && (
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={(event) => {
+                        dateTimeTriggerRef.current = event.currentTarget;
                         setDateTimeActionError(null);
                         setDateTimeAction("reschedule");
                       }}
@@ -1036,10 +1058,12 @@ export default function ProcessCard({
 
       <AppointmentDateTimeModal
         open={dateTimeAction !== null}
+        initialValue={process.appointment_datetime || undefined}
+        returnFocusRef={dateTimeTriggerRef}
         title={
           dateTimeAction === "reschedule"
             ? "Alterar horário"
-            : "Definir data e hora"
+            : "Alterar e confirmar"
         }
         description={
           dateTimeAction === "reschedule"

@@ -264,7 +264,7 @@ export default function CustomerProfilePage() {
       // Só envia calendly_url se for especialista
       if (user.role === "SPECIALIST") {
         const trimmedUrl = formData.calendly_url?.trim();
-        dataToUpdate.calendly_url = trimmedUrl || undefined;
+        dataToUpdate.calendly_url = trimmedUrl || null;
       }
 
       await updateUser(user.id, dataToUpdate);
