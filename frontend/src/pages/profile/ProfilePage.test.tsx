@@ -45,6 +45,23 @@ describe("ProfilePage Calendly payload", () => {
     await waitFor(() => expect(updateUser).toHaveBeenCalledWith(profile.id, expect.objectContaining({ calendly_url: "https://calendly.com/ana/novo" })));
   });
 
+  it("shows webhook degradation without presenting OAuth as disconnected", async () => {
+    vi.mocked(getCalendlyOAuthStatus).mockResolvedValue({
+      connected: true,
+      calendly_user_uri: "https://api.calendly.com/users/1",
+      expires_at: null,
+      is_active: true,
+      last_error: "webhook_subscription_failed",
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Status: Conectado")).toBeTruthy();
+    expect(
+      screen.getByText(/sincronização automática.*degradada/i),
+    ).toBeTruthy();
+  });
+
   it.each(["CUSTOMER", "CONSULTANT", "OFFICE", "ADMIN"] as const)("never sends calendly_url for %s even if the loaded profile has a URL", async (role) => {
     renderPage(role);
     const save = await screen.findByRole("button", { name: "Salvar Alterações" });

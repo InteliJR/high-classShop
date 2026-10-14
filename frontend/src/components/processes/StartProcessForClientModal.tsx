@@ -4,10 +4,8 @@ import { PopupModal, useCalendlyEventListener } from "react-calendly";
 import { getClients, createConsultantProcess, type Client } from "../../services/consultant.service";
 import { officeService } from "../../services/office";
 import { getPublicSpecialistById, type PublicSpecialistProfile } from "../../services/specialists.service";
-import {
-  registerCalendlyScheduledEvent,
-  getCalendlySyncStatus,
-} from "../../services/appointments.service";
+import type { RegisterCalendlyScheduledPayload } from "../../services/appointments.service";
+import { synchronizeCalendlyRegistration } from "../../services/calendly-sync";
 import Button from "../../components/ui/button";
 import { Loader2, Search } from "lucide-react";
 
@@ -79,6 +77,7 @@ function StartProcessForClientModalInner({
   const submittingRef = useRef(false);
   const mountedRef = useRef(false);
   const operationGeneration = useRef(0);
+  const syncAbortRef = useRef<AbortController | null>(null);
   const busyCallbackRef = useRef(onBusyChange);
   const calendlyOpenCallbackRef = useRef(onCalendlyOpenChange);
   const [pendingOperation, setPendingOperation] = useState<{
@@ -100,6 +99,7 @@ function StartProcessForClientModalInner({
     return () => {
       mountedRef.current = false;
       operationGeneration.current += 1;
+      syncAbortRef.current?.abort();
       calendlyOpenCallbackRef.current?.(false);
       busyCallbackRef.current?.(false);
     };
@@ -167,15 +167,20 @@ function StartProcessForClientModalInner({
 
       try {
         if (eventUri && inviteeUri) {
-          await registerCalendlyScheduledEvent(pending.appointmentId, {
+          const registrationPayload: RegisterCalendlyScheduledPayload = {
             event_uri: eventUri,
             invitee_uri: inviteeUri,
             client_event: "calendly.event_scheduled",
             client_observed_at: new Date().toISOString(),
-          });
-          if (!isCurrentOperation(pending.generation)) return;
-          // Best-effort: garante que o status foi consultado antes de seguir
-          await getCalendlySyncStatus(pending.appointmentId).catch(() => null);
+          };
+          syncAbortRef.current?.abort();
+          const syncController = new AbortController();
+          syncAbortRef.current = syncController;
+          await synchronizeCalendlyRegistration(
+            pending.appointmentId,
+            registrationPayload,
+            { signal: syncController.signal },
+          );
           if (!isCurrentOperation(pending.generation)) return;
         }
       } catch (err) {
@@ -343,6 +348,7 @@ function StartProcessForClientModalInner({
           onModalClose={() => {
             if (!pendingOperation || !isCurrentOperation(pendingOperation.generation)) return;
             operationGeneration.current += 1;
+            syncAbortRef.current?.abort();
             setCalendlyOpen(false);
             setPendingOperation(null);
             submittingRef.current = false;

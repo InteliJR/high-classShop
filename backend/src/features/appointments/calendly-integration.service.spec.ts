@@ -68,6 +68,31 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
     return { prisma, service: new CalendlyIntegrationService(prisma as any) };
   }
 
+  it('expõe degradação da subscription sem desconectar o OAuth', async () => {
+    const prisma = {
+      calendlyConnection: {
+        findUnique: jest.fn().mockResolvedValue({
+          is_active: true,
+          calendly_user_uri: 'https://api.calendly.com/users/1',
+          expires_at: null,
+          last_error: 'webhook_subscription_failed',
+        }),
+      },
+    };
+
+    await expect(
+      new CalendlyIntegrationService(prisma as any).getOAuthStatus(
+        'specialist-1',
+      ),
+    ).resolves.toEqual({
+      connected: true,
+      calendly_user_uri: 'https://api.calendly.com/users/1',
+      expires_at: null,
+      is_active: true,
+      last_error: 'webhook_subscription_failed',
+    });
+  });
+
   it('persiste scheduling_url validada no callback OAuth', async () => {
     const { prisma, service } = makeCallbackService(
       'https://calendly.com/ana/reuniao',
@@ -127,6 +152,7 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
     Object.assign(prisma.calendlyConnection, {
       findUnique: jest.fn().mockResolvedValue(connection),
       update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     });
     jest
       .mocked(axios.post)
@@ -147,6 +173,16 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
     expect(
       (prisma.calendlyConnection as any).update,
     ).not.toHaveBeenCalled();
+    expect(
+      (prisma.calendlyConnection as any).updateMany,
+    ).toHaveBeenCalledWith({
+      where: {
+        id: connection.id,
+        access_token_encrypted: connection.access_token_encrypted,
+        is_active: true,
+      },
+      data: { last_error: 'webhook_subscription_failed' },
+    });
   });
 
   it('desativa e limpa URL e URIs em uma transação', async () => {

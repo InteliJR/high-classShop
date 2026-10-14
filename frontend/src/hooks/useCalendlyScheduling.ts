@@ -1,12 +1,12 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCalendlyEventListener } from "react-calendly";
 import {
   cancelPendingAppointment,
-  getCalendlySyncStatus,
-  registerCalendlyScheduledEvent,
   type CalendlySyncStatus,
+  type RegisterCalendlyScheduledPayload,
 } from "../services/appointments.service";
+import { synchronizeCalendlyRegistration } from "../services/calendly-sync";
 
 export type CalendlySyncState =
   | "idle"
@@ -50,37 +50,18 @@ export function useCalendlyScheduling({
   const [syncState, setSyncState] = useState<CalendlySyncState>("idle");
   const [syncMessage, setSyncMessage] = useState("");
   const confirmedRef = useRef(false);
+  const mountedRef = useRef(false);
+  const syncAbortRef = useRef<AbortController | null>(null);
+  const navigateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const pollCalendlySyncStatus = async (appointmentId: string) => {
-    const maxAttempts = 8;
-    const intervalMs = 3500;
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const status = await getCalendlySyncStatus(appointmentId);
-
-      if (status.calendly_sync_status === "SYNCED" || status.appointment_datetime) {
-        onSynced?.(status);
-        setSyncState("done");
-        setSyncMessage(
-          "Agendamento recebido! Você pode acompanhar os detalhes em Meus Processos.",
-        );
-
-        setTimeout(() => {
-          navigate("/customer/processes", {
-            state: { message: successRedirectMessage },
-          });
-        }, 900);
-        return;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
-    }
-
-    setSyncState("done");
-    setSyncMessage(
-      "Solicitação registrada. Estamos finalizando a sincronização do horário com o calendário.",
-    );
-  };
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      syncAbortRef.current?.abort();
+      if (navigateTimerRef.current) clearTimeout(navigateTimerRef.current);
+    };
+  }, []);
 
   useCalendlyEventListener({
     onEventScheduled: async (event) => {
@@ -107,33 +88,64 @@ export function useCalendlyScheduling({
       // Calendly e a resposta do nosso backend — nesse intervalo o registro
       // NÃO pode ser tratado como abandono e cancelado.
       confirmedRef.current = true;
+      const registrationPayload: RegisterCalendlyScheduledPayload = {
+        event_uri: eventUri,
+        invitee_uri: inviteeUri,
+        client_event: "calendly.event_scheduled",
+        client_observed_at: new Date().toISOString(),
+      };
+      syncAbortRef.current?.abort();
+      const syncController = new AbortController();
+      syncAbortRef.current = syncController;
 
       try {
         setSyncState("syncing");
         setSyncMessage("Sincronizando seu agendamento...");
 
-        await registerCalendlyScheduledEvent(pendingAppointmentId, {
-          event_uri: eventUri,
-          invitee_uri: inviteeUri,
-          client_event: "calendly.event_scheduled",
-          client_observed_at: new Date().toISOString(),
-        });
+        const status = await synchronizeCalendlyRegistration(
+          pendingAppointmentId,
+          registrationPayload,
+          { signal: syncController.signal },
+        );
+        if (!mountedRef.current || syncController.signal.aborted || !status) return;
 
         setIsModalOpen(false);
-        await pollCalendlySyncStatus(pendingAppointmentId);
+        if (
+          status.calendly_sync_status === "SYNCED" ||
+          status.appointment_datetime
+        ) {
+          onSynced?.(status);
+          setSyncState("done");
+          setSyncMessage(
+            "Agendamento recebido! Você pode acompanhar os detalhes em Meus Processos.",
+          );
+          navigateTimerRef.current = setTimeout(() => {
+            if (!mountedRef.current) return;
+            navigate("/customer/processes", {
+              state: { message: successRedirectMessage },
+            });
+          }, 900);
+        } else {
+          setSyncState("done");
+          setSyncMessage(
+            "Solicitação registrada. Estamos finalizando a sincronização do horário com o calendário.",
+          );
+        }
       } catch (err) {
         // O agendamento já aconteceu de verdade no Calendly (confirmedRef já
         // é true) — só a nossa sincronização falhou. Não deixar o usuário
         // preso num popup fechado/stale: fecha e manda pra Meus Processos,
         // igual ao fluxo de sucesso, só que com aviso de que pode faltar
         // atualizar a página.
+        if (!mountedRef.current || syncController.signal.aborted) return;
         console.error("Erro ao sincronizar evento do Calendly:", err);
         setSyncState("error");
         setSyncMessage(
           "Agendamento confirmado no Calendly, mas houve falha ao sincronizar com a plataforma. Redirecionando para Meus Processos...",
         );
         setIsModalOpen(false);
-        setTimeout(() => {
+        navigateTimerRef.current = setTimeout(() => {
+          if (!mountedRef.current) return;
           navigate("/customer/processes", {
             state: {
               message:
@@ -147,6 +159,8 @@ export function useCalendlyScheduling({
 
   /** Seta o agendamento pendente em foco, abre o popup do Calendly. */
   const openPopup = (appointmentId: string, calendlyUrl: string) => {
+    syncAbortRef.current?.abort();
+    if (navigateTimerRef.current) clearTimeout(navigateTimerRef.current);
     confirmedRef.current = false;
     setPendingAppointmentId(appointmentId);
     setModalUrl(calendlyUrl);

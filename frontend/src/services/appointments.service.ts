@@ -117,6 +117,12 @@ export interface RegisterCalendlyScheduledPayload {
   client_observed_at?: string;
 }
 
+export interface CalendlyRegistrationStatus {
+  appointment_id: string;
+  calendly_sync_status: "PENDING" | "SYNCED" | "FAILED";
+  appointment_datetime: string | null;
+}
+
 export interface CalendlySyncStatus {
   appointment_id: string;
   status: "PENDING" | "SCHEDULED" | "COMPLETED" | "CANCELLED";
@@ -130,6 +136,7 @@ export interface CalendlyOAuthStatus {
   calendly_user_uri: string | null;
   expires_at: string | null;
   is_active: boolean;
+  last_error?: string | null;
 }
 
 /**
@@ -287,11 +294,7 @@ export async function cancelPendingAppointment(
 export async function registerCalendlyScheduledEvent(
   appointmentId: string,
   payload: RegisterCalendlyScheduledPayload,
-): Promise<{
-  appointment_id: string;
-  calendly_sync_status: "PENDING" | "SYNCED" | "FAILED";
-  appointment_datetime: string | null;
-}> {
+): Promise<CalendlyRegistrationStatus> {
   const response = await api.post<
     ApiResponse<{
       appointment_id: string;

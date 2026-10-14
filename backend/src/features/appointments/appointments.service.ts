@@ -1951,37 +1951,40 @@ export class AppointmentsService {
       parseCalendlyResourceUri(appointment.calendly_event_uri, 'event')
         ?.canonicalUri === eventUri
     ) {
+      const storedInviteeReference = appointment.calendly_invitee_uri
+        ? parseCalendlyResourceUri(
+            appointment.calendly_invitee_uri,
+            'invitee',
+          )
+        : null;
       if (
         appointment.calendly_invitee_uri &&
-        parseCalendlyResourceUri(
-          appointment.calendly_invitee_uri,
-          'invitee',
-        )?.canonicalUri !== inviteeUri
+        storedInviteeReference?.canonicalUri !== inviteeUri
       ) {
         throw new ConflictException(
           'O evento do Calendly já está associado a outro convidado',
         );
       }
-      let canonicalized = true;
-      if (
-        appointment.calendly_event_uri !== eventUri ||
-        appointment.calendly_invitee_uri !== inviteeUri
-      ) {
-        const repair = await this.prisma.appointment.updateMany({
-          where: {
-            id: appointment.id,
-            calendly_event_uri: appointment.calendly_event_uri,
-            calendly_invitee_uri: appointment.calendly_invitee_uri,
-          },
-          data: {
-            calendly_event_uri: eventUri,
-            calendly_invitee_uri: inviteeUri,
-          },
-        });
-        canonicalized = repair.count === 1;
-      }
-      if (canonicalized) {
-        if (this.hasTrustedCalendlySchedule(appointment)) {
+      if (storedInviteeReference?.canonicalUri === inviteeUri) {
+        let canonicalized = true;
+        if (
+          appointment.calendly_event_uri !== eventUri ||
+          appointment.calendly_invitee_uri !== inviteeUri
+        ) {
+          const repair = await this.prisma.appointment.updateMany({
+            where: {
+              id: appointment.id,
+              calendly_event_uri: appointment.calendly_event_uri,
+              calendly_invitee_uri: appointment.calendly_invitee_uri,
+            },
+            data: {
+              calendly_event_uri: eventUri,
+              calendly_invitee_uri: inviteeUri,
+            },
+          });
+          canonicalized = repair.count === 1;
+        }
+        if (canonicalized && this.hasTrustedCalendlySchedule(appointment)) {
           return {
             appointment_id: appointment.id,
             calendly_sync_status: appointment.calendly_sync_status,

@@ -604,6 +604,16 @@ export default function CustomerProfilePage() {
                         ? "Conectado"
                         : "Não conectado"}
                     </p>
+                    {calendlyOAuthStatus?.connected &&
+                      calendlyOAuthStatus.last_error && (
+                        <p
+                          role="alert"
+                          className="text-sm text-amber-700 mb-3"
+                        >
+                          A sincronização automática está degradada. Reconecte o
+                          Calendly para tentar restaurá-la.
+                        </p>
+                      )}
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"

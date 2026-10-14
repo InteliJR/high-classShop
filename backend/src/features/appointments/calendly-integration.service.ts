@@ -126,6 +126,7 @@ export class CalendlyIntegrationService {
     calendly_user_uri: string | null;
     expires_at: Date | null;
     is_active: boolean;
+    last_error: string | null;
   }> {
     const connection = await this.prisma.calendlyConnection.findUnique({
       where: { user_id: userId },
@@ -133,6 +134,7 @@ export class CalendlyIntegrationService {
         is_active: true,
         calendly_user_uri: true,
         expires_at: true,
+        last_error: true,
       },
     });
 
@@ -142,6 +144,7 @@ export class CalendlyIntegrationService {
         calendly_user_uri: null,
         expires_at: null,
         is_active: false,
+        last_error: null,
       };
     }
 
@@ -150,6 +153,7 @@ export class CalendlyIntegrationService {
       calendly_user_uri: connection.calendly_user_uri,
       expires_at: connection.expires_at,
       is_active: connection.is_active,
+      last_error: connection.last_error,
     };
   }
 
@@ -260,6 +264,21 @@ export class CalendlyIntegrationService {
       this.logger.warn(
         `Falha ao criar webhook Calendly (não crítico): ${error?.message}`,
       );
+      try {
+        await this.prisma.calendlyConnection.updateMany({
+          where: {
+            id: upsertedConnection.id,
+            access_token_encrypted:
+              upsertedConnection.access_token_encrypted,
+            is_active: true,
+          },
+          data: { last_error: 'webhook_subscription_failed' },
+        });
+      } catch (persistError: any) {
+        this.logger.warn(
+          `Falha ao registrar degradação do webhook Calendly: ${persistError?.message}`,
+        );
+      }
     }
 
     return stateRecord.user_id;
