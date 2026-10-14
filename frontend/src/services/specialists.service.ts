@@ -27,6 +27,26 @@ export type GroupedSpecialists = {
   AIRCRAFT: Specialist[];
 };
 
+// Projeção pública de contato comercial; não contém documentos ou dados OAuth.
+export type PublicSpecialistProfile = {
+  id: string;
+  name: string;
+  surname: string;
+  email: string;
+  speciality: "CAR" | "BOAT" | "AIRCRAFT" | null;
+  calendly_url: string | null;
+  calendly_scheduling_available: boolean;
+};
+
+export async function getPublicSpecialistById(
+  id: string,
+): Promise<PublicSpecialistProfile> {
+  const { data } = await api.get<PublicSpecialistProfile>(
+    `/specialists/${id}/public-profile`,
+  );
+  return data;
+}
+
 // Tipo auxiliar para criação (DTO)
 export type CreateSpecialistData = {
   name: string;

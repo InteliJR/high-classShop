@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { PopupModal, useCalendlyEventListener } from "react-calendly";
 import { getClients, createConsultantProcess, type Client } from "../../services/consultant.service";
 import { officeService } from "../../services/office";
-import { getUserById } from "../../services/users.service";
+import { getPublicSpecialistById } from "../../services/specialists.service";
 import {
   registerCalendlyScheduledEvent,
   getCalendlySyncStatus,
@@ -84,7 +84,7 @@ export default function StartProcessForClientModal({
 
   // Carrega o link do Calendly do especialista para permitir agendar a reunião
   useEffect(() => {
-    getUserById(specialistId)
+    getPublicSpecialistById(specialistId)
       .then((u) => setSpecialistCalendlyUrl(u.calendly_url))
       .catch(() => setSpecialistCalendlyUrl(null));
   }, [specialistId]);

@@ -8,7 +8,7 @@ import {
   getAircraftById,
   type RawAircraft,
 } from "../../services/aircrafts.service";
-import { getUserById } from "../../services/users.service";
+import { getPublicSpecialistById } from "../../services/specialists.service";
 import {
   checkExistingAppointment,
   createPendingAppointment,
@@ -223,7 +223,9 @@ export default function ProductPage() {
         // Buscar dados do especialista se houver
         if (rawProduct.specialist_id) {
           try {
-            const specialistData = await getUserById(rawProduct.specialist_id);
+            const specialistData = await getPublicSpecialistById(
+              rawProduct.specialist_id,
+            );
             setSpecialist({
               id: specialistData.id,
               name: specialistData.name,

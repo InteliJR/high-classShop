@@ -62,5 +62,5 @@ export class UpdateUserDto {
   @MaxLength(255, {
     message: 'URL do Calendly deve ter no máximo 255 caracteres',
   })
-  calendly_url?: string;
+  calendly_url?: string | null;
 }

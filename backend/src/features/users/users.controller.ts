@@ -7,16 +7,25 @@ import {
   Body,
   ParseUUIDPipe,
   UseGuards,
+  Req,
+  ForbiddenException,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { GetUsersDto } from './dto/get-users.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuthGuard } from 'src/auth/auth.guard';
-import { Public } from 'src/shared/decorators/public.decorator';
+import { UserRole } from '@prisma/client';
+import { UserEntity } from 'src/auth/entities/user.entity';
 
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  private assertSelfOrAdmin(targetId: string, actor?: UserEntity): void {
+    if (!actor?.id || (actor.id !== targetId && actor.role !== UserRole.ADMIN)) {
+      throw new ForbiddenException('Acesso não autorizado');
+    }
+  }
 
   /**
    * DESATIVADA — GET /api/users (listagem)
@@ -32,7 +41,7 @@ export class UsersController {
    *
    * Comentada em vez de apagada: se a listagem voltar, ela precisa nascer
    * escopada por papel — o ADMIN tem visão global legítima, os demais não.
-   * Note que GET /api/users/:id (abaixo) continua ativa e é @Public().
+   * GET /api/users/:id (abaixo) exige autenticação e acesso self ou ADMIN.
    */
   // /**
   // * GET /api/users
@@ -57,13 +66,17 @@ export class UsersController {
 
   /**
    * GET /api/users/:id
-   * Get a single user by ID (public - used for specialist info on product pages)
+   * Get a private user profile (self or ADMIN)
    * @param userId - The ID of the user (UUID)
    * @returns User data with full details
    */
   @Get(':id')
-  @Public()
-  async getById(@Param('id', new ParseUUIDPipe()) userId: string) {
+  @UseGuards(AuthGuard)
+  async getById(
+    @Param('id', new ParseUUIDPipe()) userId: string,
+    @Req() req: { user?: UserEntity },
+  ) {
+    this.assertSelfOrAdmin(userId, req?.user);
     const user = await this.usersService.getById(userId);
 
     return {
@@ -93,7 +106,9 @@ export class UsersController {
   async update(
     @Param('id', new ParseUUIDPipe()) userId: string,
     @Body() updateUserDto: UpdateUserDto,
+    @Req() req: { user?: UserEntity },
   ) {
+    this.assertSelfOrAdmin(userId, req?.user);
     const updatedUser = await this.usersService.update(userId, updateUserDto);
 
     return {

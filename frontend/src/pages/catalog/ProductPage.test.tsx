@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ProductPage from "./ProductPage";
 import { getCarById } from "../../services/cars.service";
 import { getUserById } from "../../services/users.service";
+import { getPublicSpecialistById, type PublicSpecialistProfile } from "../../services/specialists.service";
 import {
   checkExistingAppointment,
   createPendingAppointment,
@@ -16,6 +17,7 @@ vi.mock("../../services/cars.service", () => ({ getCarById: vi.fn() }));
 vi.mock("../../services/boats.service", () => ({ getBoatById: vi.fn() }));
 vi.mock("../../services/aircrafts.service", () => ({ getAircraftById: vi.fn() }));
 vi.mock("../../services/users.service", () => ({ getUserById: vi.fn() }));
+vi.mock("../../services/specialists.service", () => ({ getPublicSpecialistById: vi.fn() }));
 vi.mock("../../services/processes.service", () => ({
   getProcessesByClient: vi.fn().mockResolvedValue([]),
 }));
@@ -74,13 +76,14 @@ const product = {
   updated_at: "2026-01-01T00:00:00.000Z",
 };
 
-const specialist = {
+const specialist: PublicSpecialistProfile = {
   id: "specialist-1",
   name: "Especialista",
   surname: "Teste",
   email: "especialista@example.com",
   calendly_url: null,
   speciality: "CAR",
+  calendly_scheduling_available: false,
 };
 
 const appointment = {
@@ -112,6 +115,7 @@ function renderPage() {
 describe("ProductPage scheduling", () => {
   beforeEach(() => {
     vi.mocked(getCarById).mockResolvedValue(product);
+    vi.mocked(getPublicSpecialistById).mockResolvedValue(specialist);
     vi.mocked(getUserById).mockResolvedValue(specialist as never);
     vi.mocked(checkExistingAppointment).mockResolvedValue(null);
     vi.mocked(createPendingAppointment).mockResolvedValue({
@@ -122,16 +126,24 @@ describe("ProductPage scheduling", () => {
     vi.mocked(createPlatformAppointment).mockResolvedValue(appointment);
   });
 
+  it("loads specialist contact through the public profile without private user access", async () => {
+    renderPage();
+    expect(await screen.findByRole("link", { name: "especialista@example.com" })).toBeTruthy();
+    expect(getPublicSpecialistById).toHaveBeenCalledWith("specialist-1");
+    expect(getUserById).not.toHaveBeenCalled();
+  });
+
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
   });
 
   it("keeps Calendly as the only path when it is configured", async () => {
-    vi.mocked(getUserById).mockResolvedValue({
+    vi.mocked(getPublicSpecialistById).mockResolvedValue({
       ...specialist,
       calendly_url: "https://calendly.com/especialista",
-    } as never);
+      calendly_scheduling_available: true,
+    });
 
     renderPage();
 
