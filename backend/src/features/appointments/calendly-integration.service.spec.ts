@@ -1,5 +1,223 @@
 import { AppointmentSchedulingMethod } from '@prisma/client';
 import { CalendlyIntegrationService } from './calendly-integration.service';
+import axios from 'axios';
+
+jest.mock('axios');
+
+describe('CalendlyIntegrationService connection lifecycle', () => {
+  const originalEnv = { ...process.env };
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.CALENDLY_OAUTH_CLIENT_ID = 'client-id';
+    process.env.CALENDLY_OAUTH_CLIENT_SECRET = 'client-secret';
+    process.env.CALENDLY_OAUTH_REDIRECT_URI = 'https://app.test/callback';
+    process.env.CALENDLY_TOKEN_ENCRYPTION_KEY =
+      '12345678901234567890123456789012';
+    delete process.env.CALENDLY_WEBHOOK_CALLBACK_URL;
+  });
+  afterAll(() => {
+    process.env = originalEnv;
+  });
+
+  function makeCallbackService(scheduling_url: string | undefined) {
+    const prisma = {
+      calendlyOauthState: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({
+            id: 'state-1',
+            user_id: 'specialist-1',
+            used_at: null,
+            expires_at: new Date(Date.now() + 60000),
+            user: { id: 'specialist-1', role: 'SPECIALIST' },
+          }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      calendlyConnection: {
+        upsert: jest.fn().mockResolvedValue({ user_id: 'specialist-1' }),
+      },
+      user: { update: jest.fn().mockResolvedValue({}) },
+    };
+    jest
+      .mocked(axios.post)
+      .mockResolvedValue({
+        data: {
+          access_token: 'access',
+          refresh_token: 'refresh',
+          expires_in: 3600,
+        },
+      });
+    jest
+      .mocked(axios.get)
+      .mockResolvedValue({
+        data: {
+          resource: {
+            uri: 'https://api.calendly.com/users/1',
+            current_organization: 'https://api.calendly.com/organizations/1',
+            scheduling_url,
+          },
+        },
+      });
+    return { prisma, service: new CalendlyIntegrationService(prisma as any) };
+  }
+
+  it('persiste scheduling_url validada no callback OAuth', async () => {
+    const { prisma, service } = makeCallbackService(
+      'https://calendly.com/ana/reuniao',
+    );
+    expect(await service.handleOAuthCallback('code', 'state')).toBe(
+      'specialist-1',
+    );
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'specialist-1' },
+      data: {
+        calendly_url: 'https://calendly.com/ana/reuniao',
+        calendly_user_uri: 'https://api.calendly.com/users/1',
+        calendly_organization_uri: 'https://api.calendly.com/organizations/1',
+      },
+    });
+    expect(prisma.calendlyConnection.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ is_active: true }),
+        update: expect.objectContaining({ is_active: true }),
+      }),
+    );
+  });
+
+  it.each([
+    undefined,
+    'http://calendly.com/ana',
+    'https://evilcalendly.com/ana',
+    'https://calendly.com.evil.test/ana',
+    'https://calendly.com@evil.test/ana',
+    'not-a-url',
+  ])('rejeita scheduling_url inválida antes de persistir: %s', async (url) => {
+    const { prisma, service } = makeCallbackService(url);
+    await expect(service.handleOAuthCallback('code', 'state')).rejects.toThrow(
+      'Calendly não retornou URL de agendamento válida',
+    );
+    expect(prisma.calendlyConnection.upsert).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.calendlyOauthState.update).not.toHaveBeenCalled();
+  });
+
+  it('desativa e limpa URL e URIs em uma transação', async () => {
+    const tx = {
+      calendlyConnection: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      user: { update: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (callback: any) =>
+        typeof callback === 'function' ? callback(tx) : Promise.all(callback),
+      ),
+      calendlyConnection: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'connection-1' }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      user: { update: jest.fn().mockResolvedValue({}) },
+    };
+    await new CalendlyIntegrationService(prisma as any).disconnect(
+      'specialist-1',
+    );
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(tx.calendlyConnection.updateMany).toHaveBeenCalledWith({
+      where: { user_id: 'specialist-1' },
+      data: { is_active: false, last_sync_at: expect.any(Date) },
+    });
+    expect(tx.user.update).toHaveBeenCalledWith({
+      where: { id: 'specialist-1' },
+      data: {
+        calendly_url: null,
+        calendly_user_uri: null,
+        calendly_organization_uri: null,
+      },
+    });
+  });
+
+  function makeRefreshService() {
+    const prisma = {
+      calendlyConnection: { findUnique: jest.fn(), update: jest.fn() },
+    };
+    const service = new CalendlyIntegrationService(prisma as any);
+    const connection = {
+      id: 'connection-1',
+      user_id: 'specialist-1',
+      is_active: true,
+      expires_at: new Date(0),
+      access_token_encrypted: (service as any).encryptToken('expired-access'),
+      refresh_token_encrypted: (service as any).encryptToken('valid-refresh'),
+    };
+    prisma.calendlyConnection.findUnique.mockResolvedValue(connection);
+    prisma.calendlyConnection.update.mockImplementation(({ data }) =>
+      Promise.resolve({ ...connection, ...data }),
+    );
+    return { service, prisma };
+  }
+
+  it('mantém conexão ativa quando token expirado é renovado com sucesso', async () => {
+    const { service, prisma } = makeRefreshService();
+    jest
+      .mocked(axios.get)
+      .mockRejectedValueOnce({ response: { status: 401 } })
+      .mockResolvedValueOnce({
+        data: { resource: { start_time: '2099-01-01T10:00:00.000Z' } },
+      });
+    jest
+      .mocked(axios.post)
+      .mockResolvedValue({
+        data: {
+          access_token: 'renewed-access',
+          refresh_token: 'renewed-refresh',
+          expires_in: 3600,
+        },
+      });
+    expect(
+      await service.resolveScheduledStartTime(
+        'specialist-1',
+        '/scheduled_events/1',
+      ),
+    ).toEqual(new Date('2099-01-01T10:00:00.000Z'));
+    expect(
+      prisma.calendlyConnection.update.mock.calls.every(
+        ([input]) => input.data.is_active !== false,
+      ),
+    ).toBe(true);
+    expect(axios.get).toHaveBeenLastCalledWith(
+      'https://api.calendly.com/scheduled_events/1',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer renewed-access' },
+      }),
+    );
+  });
+
+  it('persiste desativação e erro após invalid_grant definitivo', async () => {
+    const { service, prisma } = makeRefreshService();
+    const error = {
+      response: { status: 400, data: { error: 'invalid_grant' } },
+    };
+    jest.mocked(axios.get).mockRejectedValue({ response: { status: 401 } });
+    jest.mocked(axios.post).mockRejectedValue(error);
+    await expect(
+      service.resolveScheduledStartTime('specialist-1', '/scheduled_events/1'),
+    ).rejects.toBe(error);
+    expect(prisma.calendlyConnection.update).toHaveBeenCalledWith({
+      where: { id: 'connection-1' },
+      data: { is_active: false, last_error: 'invalid_grant' },
+    });
+  });
+
+  it('preserva conexão ativa após falha transitória de refresh', async () => {
+    const { service, prisma } = makeRefreshService();
+    jest.mocked(axios.get).mockRejectedValue({ response: { status: 401 } });
+    jest.mocked(axios.post).mockRejectedValue({ response: { status: 503 } });
+    await expect(
+      service.resolveScheduledStartTime('specialist-1', '/scheduled_events/1'),
+    ).rejects.toBeDefined();
+    expect(prisma.calendlyConnection.update).not.toHaveBeenCalled();
+  });
+});
 
 describe('CalendlyIntegrationService webhook schedule integrity', () => {
   it.each([

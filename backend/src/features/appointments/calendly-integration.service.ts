@@ -22,6 +22,7 @@ import {
 } from 'crypto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { parseDate } from 'src/shared/utils/date.utils';
+import { isCalendlySchedulingAvailable } from 'src/shared/utils/calendly-scheduling-capability';
 import {
   acquireSpecialistScheduleLock,
   assertSpecialistScheduleAvailable,
@@ -39,6 +40,7 @@ interface CalendlyUserMeResponse {
   resource: {
     uri: string;
     current_organization?: string;
+    scheduling_url?: string;
   };
 }
 
@@ -183,6 +185,18 @@ export class CalendlyIntegrationService {
       );
     }
 
+    const schedulingUrl = me.resource.scheduling_url ?? null;
+    if (
+      !isCalendlySchedulingAvailable({
+        calendlyUrl: schedulingUrl,
+        connectionActive: true,
+      })
+    ) {
+      throw new BadRequestException(
+        'Calendly não retornou URL de agendamento válida',
+      );
+    }
+
     const expiresAt = token.expires_in
       ? new Date(Date.now() + token.expires_in * 1000)
       : null;
@@ -222,6 +236,7 @@ export class CalendlyIntegrationService {
     await this.prisma.user.update({
       where: { id: stateRecord.user_id },
       data: {
+        calendly_url: schedulingUrl,
         calendly_user_uri: me.resource.uri,
         calendly_organization_uri: me.resource.current_organization || null,
       },
@@ -244,30 +259,23 @@ export class CalendlyIntegrationService {
   }
 
   async disconnect(userId: string): Promise<void> {
-    const connection = await this.prisma.calendlyConnection.findUnique({
-      where: { user_id: userId },
-    });
-
-    if (!connection) {
-      return;
-    }
-
-    await this.prisma.$transaction([
-      this.prisma.calendlyConnection.update({
-        where: { id: connection.id },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.calendlyConnection.updateMany({
+        where: { user_id: userId },
         data: {
           is_active: false,
           last_sync_at: new Date(),
         },
-      }),
-      this.prisma.user.update({
+      });
+      await tx.user.update({
         where: { id: userId },
         data: {
+          calendly_url: null,
           calendly_user_uri: null,
           calendly_organization_uri: null,
         },
-      }),
-    ]);
+      });
+    });
   }
 
   async resolveScheduledStartTime(
@@ -550,16 +558,28 @@ export class CalendlyIntegrationService {
       client_secret: clientSecret,
     });
 
-    const { data } = await axios.post<CalendlyTokenResponse>(
-      tokenUrl,
-      payload.toString(),
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+    let data: CalendlyTokenResponse;
+    try {
+      const response = await axios.post<CalendlyTokenResponse>(
+        tokenUrl,
+        payload.toString(),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          timeout: 20000,
         },
-        timeout: 20000,
-      },
-    );
+      );
+      data = response.data;
+    } catch (error: any) {
+      if (error?.response?.data?.error === 'invalid_grant') {
+        await this.prisma.calendlyConnection.update({
+          where: { id: connection.id },
+          data: { is_active: false, last_error: 'invalid_grant' },
+        });
+      }
+      throw error;
+    }
 
     const expiresAt = data.expires_in
       ? new Date(Date.now() + data.expires_in * 1000)

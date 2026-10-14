@@ -15,6 +15,7 @@ import { UpdateSpecialistDto } from './dto/update-specialist.dto';
 import { InviteSpecialistDto } from './dto/invite-specialist.dto';
 import { Roles } from 'src/shared/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { Public } from 'src/shared/decorators/public.decorator';
 
 /**
  * Define a rota base para este controlador.
@@ -30,6 +31,7 @@ export class SpecialistsController {
   // ROTAS CRUD PARA ESPECIALISTAS
 
   // Rota para buscar todos os especialistas.
+  @Roles(UserRole.ADMIN)
   @Get()
   findAll() {
     return this.specialistsService.findAll();
@@ -61,7 +63,14 @@ export class SpecialistsController {
     };
   }
 
+  @Public()
+  @Get(':id/public-profile')
+  findPublicProfile(@Param('id') id: string) {
+    return this.specialistsService.findPublicProfile(id);
+  }
+
   // Rota para buscar um único especialista pelo seu ID.
+  @Roles(UserRole.ADMIN)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.specialistsService.findOne(id);

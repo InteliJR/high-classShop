@@ -3,6 +3,9 @@ import { SpecialistsService } from './specialists.service';
 jest.mock('bcrypt', () => ({
   hash: jest.fn().mockResolvedValue('hashed-password'),
 }));
+jest.mock('src/auth/constants', () => ({
+  jwtConstants: { referral: 'test-referral-secret' },
+}));
 
 describe('SpecialistsService.inviteSpecialist', () => {
   it('assina a comissão definida pelo administrador', async () => {
@@ -39,12 +42,17 @@ describe('SpecialistsService.inviteSpecialist', () => {
 });
 
 describe('SpecialistsService.findAll', () => {
-  it('preserva null e zero como estados distintos', async () => {
+  it('preserva null, zero e Decimal de comissão na listagem administrativa', async () => {
     const prisma = {
       user: {
         findMany: jest.fn().mockResolvedValue([
-          { id: 'legacy', commission_rate: null },
-          { id: 'zero', commission_rate: 0 },
+          { id: 'legacy', commission_rate: null, company: null },
+          { id: 'zero', commission_rate: 0, company: null },
+          {
+            id: 'decimal',
+            commission_rate: { toString: () => '12.5' },
+            company: { id: 'company-1' },
+          },
         ]),
       },
     } as any;
@@ -57,7 +65,12 @@ describe('SpecialistsService.findAll', () => {
 
     const result = await service.findAll();
 
-    expect(result.map((item) => item.commission_rate)).toEqual([null, 0]);
+    expect(result.map((item) => item.commission_rate)).toEqual([null, 0, 12.5]);
+    expect(result[2].company).toEqual({ id: 'company-1' });
+    expect(prisma.user.findMany).toHaveBeenCalledWith({
+      where: { role: 'SPECIALIST' },
+      include: { company: true },
+    });
   });
 });
 
@@ -78,6 +91,111 @@ describe('SpecialistsService.findAllGroupedByCategory', () => {
     const select = prisma.user.findMany.mock.calls[0][0].select;
     expect(select).not.toHaveProperty('commission_rate');
   });
+
+  it('usa a mesma allowlist e serializa capacidade nas categorias', async () => {
+    const prisma = {
+      user: { findMany: jest.fn().mockResolvedValue([publicSpecialist]) },
+    } as any;
+    const service = new SpecialistsService(
+      prisma,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+    expect(await service.findAllGroupedByCategory()).toEqual({
+      CAR: [publicProfile],
+      BOAT: [],
+      AIRCRAFT: [],
+    });
+    expect(prisma.user.findMany).toHaveBeenCalledWith({
+      where: { role: 'SPECIALIST' },
+      select: publicSelect,
+    });
+  });
+});
+
+const publicSelect = {
+  id: true,
+  name: true,
+  surname: true,
+  email: true,
+  speciality: true,
+  calendly_url: true,
+  calendly_connection: { select: { is_active: true } },
+};
+const publicProfile = {
+  id: 'specialist-1',
+  name: 'Ana',
+  surname: 'Silva',
+  email: 'ana@example.com',
+  speciality: 'CAR',
+  calendly_url: 'https://calendly.com/ana/reuniao',
+  calendly_scheduling_available: true,
+};
+const publicSpecialist = {
+  ...publicProfile,
+  calendly_connection: { is_active: true },
+  cpf: 'private-cpf',
+  rg: 'private-rg',
+  password_hash: 'private-password',
+  commission_rate: 25,
+  bank: 'private-bank',
+  calendly_user_uri: 'private-uri',
+};
+
+describe('SpecialistsService.findPublicProfile', () => {
+  function makeService(record: unknown) {
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue(record) },
+    } as any;
+    return {
+      prisma,
+      service: new SpecialistsService(prisma, {} as any, {} as any, {} as any),
+    };
+  }
+
+  it('seleciona e retorna somente a allowlist pública', async () => {
+    const { service, prisma } = makeService(publicSpecialist);
+    expect(await service.findPublicProfile('specialist-1')).toEqual(
+      publicProfile,
+    );
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { id: 'specialist-1', role: 'SPECIALIST' },
+      select: publicSelect,
+    });
+  });
+
+  it.each([null, { is_active: false }])(
+    'desabilita capacidade sem conexão ativa %s',
+    async (calendly_connection) => {
+      const { service } = makeService({
+        ...publicSpecialist,
+        calendly_connection,
+      });
+      expect(await service.findPublicProfile('specialist-1')).toEqual({
+        ...publicProfile,
+        calendly_scheduling_available: false,
+      });
+    },
+  );
+
+  it('desabilita capacidade com URL inválida', async () => {
+    const { service } = makeService({
+      ...publicSpecialist,
+      calendly_url: 'https://evilcalendly.com/a',
+    });
+    expect(
+      (await service.findPublicProfile('specialist-1'))
+        .calendly_scheduling_available,
+    ).toBe(false);
+  });
+
+  it('retorna 404 quando nenhum especialista corresponde ao ID', async () => {
+    const { service } = makeService(null);
+    await expect(service.findPublicProfile('missing')).rejects.toThrow(
+      'Especialista não encontrado',
+    );
+  });
 });
 
 describe('SpecialistsService.create', () => {
@@ -95,9 +213,11 @@ describe('SpecialistsService.create', () => {
     const prisma = {
       user: {
         findUnique: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockImplementation(({ data }) =>
-          Promise.resolve({ id: 'specialist-1', ...data }),
-        ),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ id: 'specialist-1', ...data }),
+          ),
       },
     } as any;
     const notifications = {
@@ -115,15 +235,18 @@ describe('SpecialistsService.create', () => {
     };
   }
 
-  it.each([0, 100])('persiste comissão obrigatória %s', async (commission_rate) => {
-    const { prisma, service } = makeService();
+  it.each([0, 100])(
+    'persiste comissão obrigatória %s',
+    async (commission_rate) => {
+      const { prisma, service } = makeService();
 
-    await service.create({ ...base, commission_rate } as any);
+      await service.create({ ...base, commission_rate } as any);
 
-    expect(prisma.user.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ commission_rate }),
-    });
-  });
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ commission_rate }),
+      });
+    },
+  );
 
   it.each([undefined, null, 12.345, 1e-7])(
     'rejeita comissão inválida %s antes de persistir',
