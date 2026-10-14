@@ -260,6 +260,7 @@ export class AppointmentsService {
    * Respeita permissões por role:
    * - CUSTOMER: vê apenas seus próprios agendamentos
    * - SPECIALIST/CONSULTANT: vê como especialista + seus clientes
+   * - OFFICE: vê clientes vinculados à própria empresa
    * - ADMIN: vê todos
    *
    * @param query Query parameters (paginação, filtros, ordenação)
@@ -295,20 +296,72 @@ export class AppointmentsService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    // Construir filtro WHERE conforme permissões
+    // Construir filtro WHERE conforme permissões. ADMIN é o único papel com
+    // visão global; qualquer papel sem regra explícita deve falhar fechado.
     const where: any = {};
 
-    // Aplicar filtros de role
-    if (userRole === UserRole.CUSTOMER) {
-      where.client_id = userId; // Customer vê apenas seus agendamentos como cliente
-    } else if (
-      userRole === UserRole.SPECIALIST ||
-      userRole === UserRole.CONSULTANT
-    ) {
-      // Specialist vê como especialista OU como cliente
-      where.OR = [{ specialist_id: userId }, { client_id: userId }];
+    switch (userRole) {
+      case UserRole.ADMIN:
+        break;
+
+      case UserRole.CUSTOMER:
+        where.client_id = userId;
+        break;
+
+      case UserRole.SPECIALIST:
+      case UserRole.CONSULTANT:
+        where.OR = [{ specialist_id: userId }, { client_id: userId }];
+        break;
+
+      case UserRole.OFFICE: {
+        const office = await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { company_id: true },
+        });
+        if (!office?.company_id) {
+          this.logger.error(
+            `[getAppointments] OFFICE user=${userId} sem company_id — config inválida`,
+          );
+          throw new ForbiddenException({
+            success: false,
+            error: {
+              code: 403,
+              message: 'Escritório sem empresa vinculada',
+              details: { user_id: userId },
+            },
+          });
+        }
+
+        // Mantém a mesma definição de cliente do escritório aplicada por
+        // OfficeService.listClients e ProcessesService: vínculo direto com a
+        // empresa ou indireto por um consultor pertencente a ela.
+        where.AND = [
+          {
+            client: {
+              role: UserRole.CUSTOMER,
+              OR: [
+                { consultant: { company_id: office.company_id } },
+                { company_id: office.company_id },
+              ],
+            },
+          },
+        ];
+        break;
+      }
+
+      default:
+        this.logger.warn(
+          `[getAppointments] acesso negado role=${userRole} user=${userId}`,
+        );
+        throw new ForbiddenException({
+          success: false,
+          error: {
+            code: 403,
+            message: 'Acesso negado',
+            details: { user_id: userId },
+          },
+        });
     }
-    // ADMIN vê todos (sem filtro de user_id)
 
     // Aplicar filtros de query
     if (query.status) {
