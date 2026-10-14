@@ -27,7 +27,7 @@
 - Consumes: modelos Prisma `car`, `boat` e `aircraft`, todos com `is_active: boolean`.
 - Produces: `getAdminStats(): Promise<{ totalProducts: number; activeProducts: number; ... }>` e `getSpecialistStats(specialistId): Promise<{ productsListed: number; activeProducts: number; ... }>`.
 
-- [ ] **Step 1: Escrever testes que diferenciem ativos e total**
+- [x] **Step 1: Escrever testes que diferenciem ativos e total**
 
 Adicionar casos que configurem contagens diferentes para chamadas sem filtro e chamadas com `where.is_active: true`. Para especialista, verificar também `specialist_id`:
 
@@ -67,13 +67,13 @@ it('retorna ativos separados do total para o especialista', async () => {
 });
 ```
 
-- [ ] **Step 2: Executar o teste e confirmar a falha esperada**
+- [x] **Step 2: Executar o teste e confirmar a falha esperada**
 
 Run: `cd backend && npm test -- dashboard.service.spec.ts --runInBand`
 
 Expected: FAIL porque `activeProducts` ainda não existe e a consulta filtrada ainda não é feita.
 
-- [ ] **Step 3: Implementar as contagens ativas**
+- [x] **Step 3: Implementar as contagens ativas**
 
 No dashboard administrativo, executar em paralelo três novas contagens:
 
@@ -91,13 +91,13 @@ where: { specialist_id: specialistId, is_active: true }
 
 Retornar `activeProducts` sem mudar o significado de `totalProducts` ou `productsListed`.
 
-- [ ] **Step 4: Executar o teste focado e confirmar sucesso**
+- [x] **Step 4: Executar o teste focado e confirmar sucesso**
 
 Run: `cd backend && npm test -- dashboard.service.spec.ts --runInBand`
 
 Expected: PASS, sem falhas.
 
-- [ ] **Step 5: Commitar a camada de dados**
+- [x] **Step 5: Commitar a camada de dados**
 
 ```bash
 git add backend/src/features/dashboard/dashboard.service.ts backend/src/features/dashboard/dashboard.service.spec.ts
@@ -116,7 +116,7 @@ git commit -m "fix(dashboard): separate active and total products"
 - Consumes: `DashboardStats.activeProducts: number`, `DashboardStats.totalProducts: number`, `SpecialistDashboardStats.activeProducts: number` e `SpecialistDashboardStats.productsListed: number`.
 - Produces: cards com título `Produtos ativos`, valor ativo em destaque e texto `<total> produtos no total`.
 
-- [ ] **Step 1: Escrever testes de componente para os dois dashboards**
+- [x] **Step 1: Escrever testes de componente para os dois dashboards**
 
 Mockar os serviços de dashboard, gráficos e animações. Renderizar o admin com `activeProducts: 8`, `totalProducts: 13`; renderizar o especialista com `activeProducts: 2`, `productsListed: 5`. Verificar:
 
@@ -134,13 +134,13 @@ expect(screen.getByText('2')).toBeTruthy();
 expect(screen.getByText('5 produtos no total')).toBeTruthy();
 ```
 
-- [ ] **Step 2: Executar o teste e confirmar a falha esperada**
+- [x] **Step 2: Executar o teste e confirmar a falha esperada**
 
-Run: `cd frontend && npm test -- src/pages/dashboard-product-counts.test.tsx --pool=forks --poolOptions.forks.maxForks=2`
+Run: `cd frontend && npm test -- src/pages/dashboard-product-counts.test.tsx --pool=forks --maxWorkers=2`
 
 Expected: FAIL porque os tipos e os cards ainda não usam `activeProducts`.
 
-- [ ] **Step 3: Atualizar tipos e cards**
+- [x] **Step 3: Atualizar tipos e cards**
 
 Adicionar `activeProducts: number` às duas interfaces. No admin, alterar o KPI de produtos para:
 
@@ -155,13 +155,13 @@ Adicionar `activeProducts: number` às duas interfaces. No admin, alterar o KPI 
 
 No especialista, usar `stats?.activeProducts ?? 0` no destaque e `${stats?.productsListed ?? 0} produtos no total` no auxiliar.
 
-- [ ] **Step 4: Executar o teste focado e confirmar sucesso**
+- [x] **Step 4: Executar o teste focado e confirmar sucesso**
 
-Run: `cd frontend && npm test -- src/pages/dashboard-product-counts.test.tsx --pool=forks --poolOptions.forks.maxForks=2`
+Run: `cd frontend && npm test -- src/pages/dashboard-product-counts.test.tsx --pool=forks --maxWorkers=2`
 
 Expected: PASS, sem falhas.
 
-- [ ] **Step 5: Commitar a interface**
+- [x] **Step 5: Commitar a interface**
 
 ```bash
 git add frontend/src/services/dashboard.service.ts frontend/src/pages/admin/DashboardPage.tsx frontend/src/pages/specialist/SpecialistDashboard.tsx frontend/src/pages/dashboard-product-counts.test.tsx
@@ -180,16 +180,16 @@ git commit -m "fix(dashboard): highlight active products"
 - Consumes: aplicação local, contas de administrador e especialista, base com produtos ativos e inativos.
 - Produces: builds válidos e screenshots desktop/móvel dos dois dashboards.
 
-- [ ] **Step 1: Executar testes focados em sequência**
+- [x] **Step 1: Executar testes focados em sequência**
 
 ```bash
 cd backend && npm test -- dashboard.service.spec.ts --runInBand
-cd frontend && npm test -- src/pages/dashboard-product-counts.test.tsx --pool=forks --poolOptions.forks.maxForks=2
+cd frontend && npm test -- src/pages/dashboard-product-counts.test.tsx --pool=forks --maxWorkers=2
 ```
 
 Expected: os dois comandos terminam com zero falhas.
 
-- [ ] **Step 2: Executar builds em sequência**
+- [x] **Step 2: Executar builds em sequência**
 
 ```bash
 cd backend && npm run build
@@ -198,11 +198,11 @@ cd frontend && npm run build
 
 Expected: ambos terminam com exit code 0.
 
-- [ ] **Step 3: Preparar dados e iniciar aplicação**
+- [x] **Step 3: Preparar dados e iniciar aplicação**
 
 Usar a configuração local documentada no repositório, garantir pelo menos um produto inativo e iniciar backend e frontend sem executar processos pesados em paralelo com testes ou builds.
 
-- [ ] **Step 4: Validar no navegador**
+- [x] **Step 4: Validar no navegador**
 
 Entrar como administrador e especialista. Em cada dashboard, confirmar visualmente:
 
