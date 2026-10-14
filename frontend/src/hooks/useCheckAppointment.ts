@@ -1,108 +1,54 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { checkExistingAppointment } from "../services/appointments.service";
-import type { Appointment } from "../services/appointments.service";
+import type { ExistingAppointmentCheck } from "../services/appointments.service";
+import { useAuth } from "../store/authStateManager";
 
 interface UseCheckAppointmentResult {
-  existingAppointment: Appointment | null;
+  existingAppointment: ExistingAppointmentCheck | null;
   isLoading: boolean;
   error: string | null;
 }
 
-/**
- * Hook para verificar se já existe agendamento entre cliente e especialista para um produto
- * Usado para impedir agendamentos duplicados
- * 
- * **Evita race conditions com debounce de 500ms**
- *
- * @param clientId - ID do cliente autenticado
- * @param specialistId - ID do especialista
- * @param productType - Tipo de produto (CAR, BOAT, AIRCRAFT)
- * @param productId - ID do produto
- * @returns { existingAppointment, isLoading, error }
- *
- * Exemplo:
- * const { existingAppointment, isLoading } = useCheckAppointment(
- *   userId,
- *   specialist.id,
- *   "CAR",
- *   product.id
- * );
- *
- * if (isLoading) return <div>Verificando...</div>;
- * if (existingAppointment) return <div>Você já tem agendamento marcado</div>;
- */
+/** Debounced own-request check; null means unchecked/failed, exists:false means a successful absence. */
 export function useCheckAppointment(
-  clientId: string | undefined,
   specialistId: string | undefined,
   productType: "CAR" | "BOAT" | "AIRCRAFT" | undefined,
-  productId: string | undefined
+  productId: string | undefined,
 ): UseCheckAppointmentResult {
-  const [existingAppointment, setExistingAppointment] =
-    useState<Appointment | null>(null);
+  const userId = useAuth((state) => state.user?.id);
+  const role = useAuth((state) => state.user?.role);
+  const [existingAppointment, setExistingAppointment] = useState<ExistingAppointmentCheck | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestToken = useRef(0);
 
   useEffect(() => {
-    // Limpa timer anterior se existir
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-
-    // Não faz nada se faltam parâmetros
-    if (!clientId || !specialistId || !productType || !productId) {
-      setExistingAppointment(null);
+    const token = ++requestToken.current;
+    setExistingAppointment(null);
+    setError(null);
+    if (!userId || role !== "CUSTOMER" || !specialistId || !productType || !productId) {
       setIsLoading(false);
-      return;
+      return () => { requestToken.current = token + 1; };
     }
-
-    // Debounce de 500ms para evitar múltiplas requisições
-    debounceTimerRef.current = setTimeout(() => {
-      const checkAppointment = async () => {
-        setIsLoading(true);
-        setError(null);
-
-        try {
-          console.log(
-            `[useCheckAppointment] Verificando: cliente=${clientId}, especialista=${specialistId}, tipo=${productType}, produto=${productId}`
-          );
-
-          const appointment = await checkExistingAppointment(
-            clientId,
-            specialistId,
-            productType,
-            productId
-          );
-
-          console.log(
-            `[useCheckAppointment] Resultado:`,
-            appointment ? `Agendamento encontrado (${appointment.id})` : "Nenhum agendamento"
-          );
-
-          setExistingAppointment(appointment);
-        } catch (err) {
-          console.error("Erro ao verificar agendamento:", err);
-          setError("Erro ao verificar agendamentos");
+    setIsLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const result = await checkExistingAppointment(specialistId, productType, productId);
+        if (token === requestToken.current) setExistingAppointment(result);
+      } catch (error) {
+        if (token === requestToken.current) {
           setExistingAppointment(null);
-        } finally {
-          setIsLoading(false);
+          setError(error instanceof Error ? error.message : "Erro ao verificar agendamentos");
         }
-      };
-
-      checkAppointment();
-    }, 500);
-
-    // Cleanup
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
+      } finally {
+        if (token === requestToken.current) setIsLoading(false);
       }
+    }, 500);
+    return () => {
+      requestToken.current = token + 1;
+      clearTimeout(timer);
     };
-  }, [clientId, specialistId, productType, productId]);
+  }, [userId, role, specialistId, productType, productId]);
 
-  return {
-    existingAppointment,
-    isLoading,
-    error,
-  };
+  return { existingAppointment, isLoading, error };
 }

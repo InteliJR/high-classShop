@@ -28,6 +28,13 @@ describe("public specialist profile", () => {
       "/specialists/specialist-1/public-profile",
     );
   });
+
+  it("propagates public-profile errors instead of falling back to a private endpoint", async () => {
+    const error = new Error("Perfil indisponível");
+    vi.mocked(api.get).mockRejectedValueOnce(error);
+    await expect(specialistService.getPublicSpecialistById("specialist-1")).rejects.toBe(error);
+    expect(api.get).toHaveBeenCalledExactlyOnceWith("/specialists/specialist-1/public-profile");
+  });
 });
 
 const createBase = {
