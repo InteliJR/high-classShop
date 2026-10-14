@@ -30,7 +30,10 @@ import { UpdateProcessDto } from './dto/update-process.dto';
 import { ProcessWithHistory } from './entity/process-history.response';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { buildNegotiationSnapshotUpdate } from './negotiation-snapshot';
-import { acquireProductMonetaryLock } from '../products/product-monetary-lock';
+import {
+  acquireProductMonetaryLock,
+  lockNegotiationProductMoney,
+} from '../products/product-monetary-lock';
 import { validateSpecialistProductAssociation } from '../products/product-association-validator';
 import {
   acquireActiveProcessDedupLock,
@@ -71,7 +74,7 @@ const PROCESS_STATUS_TRANSITIONS: Record<
   ProcessStatus,
   readonly ProcessStatus[]
 > = {
-  [ProcessStatus.SCHEDULING]: [],
+  [ProcessStatus.SCHEDULING]: [ProcessStatus.NEGOTIATION],
   [ProcessStatus.NEGOTIATION]: [ProcessStatus.DOCUMENTATION],
   [ProcessStatus.PROCESSING_CONTRACT]: [],
   [ProcessStatus.DOCUMENTATION]: [],
@@ -182,6 +185,18 @@ export class ProcessesService {
         'O processo precisa de produto e snapshot de negociação antes da documentação',
       );
     }
+  }
+
+  private throwStatusTransitionConflict(processId: string): never {
+    throw new ConflictException({
+      success: false,
+      error: {
+        code: 'PROCESS_STATUS_TRANSITION_CONFLICT',
+        message:
+          'O processo foi alterado por outra operação. Recarregue e tente novamente.',
+        details: { process_id: processId },
+      },
+    });
   }
 
   /**
@@ -1274,10 +1289,8 @@ export class ProcessesService {
             'update-status',
           );
 
-          await acquireSpecialistScheduleLock(
-            tx,
-            existingProcess.specialist_id,
-          );
+          const lockedSpecialistId = existingProcess.specialist_id;
+          await acquireSpecialistScheduleLock(tx, lockedSpecialistId);
           existingProcess = await tx.process.findUniqueOrThrow({
             where: { id: processId },
             include: {
@@ -1299,6 +1312,9 @@ export class ProcessesService {
               aircraft: true,
             },
           });
+          if (existingProcess.specialist_id !== lockedSpecialistId) {
+            this.throwStatusTransitionConflict(processId);
+          }
           this.assertProcessAccess(
             existingProcess,
             {
@@ -1323,12 +1339,74 @@ export class ProcessesService {
             updateProcessDto.status,
           );
 
+          if (updateProcessDto.status === ProcessStatus.NEGOTIATION) {
+            // Ordem global: agenda → produto → deduplicação. O lock da agenda
+            // já foi adquirido antes da releitura acima; congelar o preço só
+            // depois dele mantém a ordem compatível com confirmPending.
+            const lockedProductType = existingProcess.product_type;
+            const lockedProductId = this.getProductId(existingProcess);
+            await lockNegotiationProductMoney(tx, existingProcess);
+            existingProcess = await tx.process.findUniqueOrThrow({
+              where: { id: processId },
+              include: {
+                client: {
+                  select: {
+                    email: true,
+                    name: true,
+                    surname: true,
+                    consultant_id: true,
+                    company_id: true,
+                    consultant: { select: { company_id: true } },
+                  },
+                },
+                specialist: {
+                  select: { email: true, name: true, surname: true },
+                },
+                car: true,
+                boat: true,
+                aircraft: true,
+              },
+            });
+            if (
+              existingProcess.product_type !== lockedProductType ||
+              this.getProductId(existingProcess) !== lockedProductId
+            ) {
+              this.throwStatusTransitionConflict(processId);
+            }
+            this.assertProcessAccess(
+              existingProcess,
+              {
+                id: callerId ?? '',
+                role: callerRole as UserRole,
+                companyId: callerCompanyId,
+              },
+              'update-status',
+            );
+            if (existingProcess.status === updateProcessDto.status) {
+              throw new BadRequestException();
+            }
+            this.assertStatusTransition(
+              existingProcess.status,
+              updateProcessDto.status,
+            );
+            this.assertManualStatusPreconditions(
+              existingProcess,
+              updateProcessDto.status,
+            );
+          }
+
+          const snapshotData =
+            updateProcessDto.status === ProcessStatus.NEGOTIATION
+              ? buildNegotiationSnapshotUpdate(existingProcess)
+              : {};
+
           const nextUpdatedAt = new Date();
           const claim = await tx.process.updateMany({
             data: {
               status: updateProcessDto.status,
               notes: updateProcessDto.notes,
               updated_at: nextUpdatedAt,
+              ...snapshotData,
             },
             where: {
               id: processId,
@@ -1338,15 +1416,7 @@ export class ProcessesService {
           });
 
           if (claim.count !== 1) {
-            throw new ConflictException({
-              success: false,
-              error: {
-                code: 'PROCESS_STATUS_TRANSITION_CONFLICT',
-                message:
-                  'O processo foi alterado por outra operação. Recarregue e tente novamente.',
-                details: { process_id: processId },
-              },
-            });
+            this.throwStatusTransitionConflict(processId);
           }
 
           const process = await tx.process.findUniqueOrThrow({

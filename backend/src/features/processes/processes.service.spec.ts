@@ -755,7 +755,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
     };
   }
 
-  it('bloqueia a transição manual para negociação, reservada ao fluxo canônico', async () => {
+  it('adquire agenda → produto e congela o snapshot na entrada em negociação', async () => {
     const processUpdate = jest.fn().mockImplementation(({ data }) =>
       Promise.resolve({
         ...baseProcess(),
@@ -781,21 +781,115 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
     } as any;
     const service = new ProcessesService(prisma, {} as any);
 
+    await service.update(
+      'process-1',
+      { status: ProcessStatus.NEGOTIATION, notes: 'Negociando' },
+      'admin-1',
+      UserRole.ADMIN,
+    );
+
+    expect(processUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'process-1',
+          status: ProcessStatus.SCHEDULING,
+          updated_at: new Date('2026-01-01T00:00:00.000Z'),
+        },
+        data: expect.objectContaining({
+          status: ProcessStatus.NEGOTIATION,
+          negotiation_currency: ProductCurrency.USD,
+          negotiation_product_value: new Prisma.Decimal('120000.00'),
+        }),
+      }),
+    );
+    expect(processUpdate).not.toHaveBeenCalled();
+    expect(tx.$queryRaw.mock.calls.map((call) => call[1])).toEqual([
+      'appointment-schedule:specialist-1',
+      'product-money:CAR:product-1',
+    ]);
+    // leitura inicial, releituras após agenda/produto e leitura final do CAS
+    expect(tx.process.findUniqueOrThrow).toHaveBeenCalledTimes(4);
+  });
+
+  it('conflita se o especialista mudar depois do lock de agenda', async () => {
+    const originalProcess = baseProcess();
+    const movedProcess = baseProcess({ specialist_id: 'specialist-2' });
+    const processUpdateMany = jest.fn();
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: {
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValueOnce(originalProcess)
+          .mockResolvedValueOnce(movedProcess),
+        updateMany: processUpdateMany,
+      },
+      processStatusHistory: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    } as any;
+    const service = new ProcessesService(prisma, {} as any);
+
     await expect(
       service.update(
         'process-1',
-        { status: ProcessStatus.NEGOTIATION, notes: 'Negociando' },
+        { status: ProcessStatus.NEGOTIATION },
         'admin-1',
         UserRole.ADMIN,
       ),
-    ).rejects.toThrow(BadRequestException);
+    ).rejects.toBeInstanceOf(ConflictException);
 
-    expect(processUpdateMany).not.toHaveBeenCalled();
-    expect(processUpdate).not.toHaveBeenCalled();
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
-    expect(tx.$queryRaw.mock.calls[0][1]).toBe(
+    expect(tx.$queryRaw.mock.calls.map((call) => call[1])).toEqual([
       'appointment-schedule:specialist-1',
-    );
+    ]);
+    expect(processUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('conflita se o produto mudar depois do lock monetário', async () => {
+    const originalProcess = baseProcess();
+    const movedProcess = baseProcess({
+      car_id: 'product-2',
+      car: { ...usdProduct, id: 'product-2' },
+    });
+    const processUpdateMany = jest.fn();
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      process: {
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValueOnce(originalProcess)
+          .mockResolvedValueOnce(originalProcess)
+          .mockResolvedValueOnce(movedProcess),
+        updateMany: processUpdateMany,
+      },
+      processStatusHistory: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    } as any;
+    const service = new ProcessesService(prisma, {} as any);
+
+    await expect(
+      service.update(
+        'process-1',
+        { status: ProcessStatus.NEGOTIATION },
+        'admin-1',
+        UserRole.ADMIN,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(tx.$queryRaw.mock.calls.map((call) => call[1])).toEqual([
+      'appointment-schedule:specialist-1',
+      'product-money:CAR:product-1',
+    ]);
+    expect(processUpdateMany).not.toHaveBeenCalled();
   });
 
   it('returns conflict and creates no history when the manual transition loses its CAS claim', async () => {
@@ -2249,8 +2343,19 @@ describe('ProcessesService — autorização centralizada de processos', () => {
     expect(processUpdateMany).not.toHaveBeenCalled();
   });
 
-  it('especialista atribuído não pode burlar a confirmação canônica para entrar em NEGOTIATION', async () => {
-    const { service, processUpdateMany } = updateService();
+  it('especialista atribuído congela o produto ao entrar em NEGOTIATION', async () => {
+    const process = protectedProcess({
+      product_type: ProductType.CAR,
+      car_id: productId,
+      negotiation_currency: null,
+      negotiation_product_value: null,
+      car: {
+        id: productId,
+        valor: new Prisma.Decimal('120000.00'),
+        currency: ProductCurrency.USD,
+      },
+    });
+    const { service, processUpdateMany } = updateService(process);
 
     await expect(
       service.update(
@@ -2259,13 +2364,32 @@ describe('ProcessesService — autorização centralizada de processos', () => {
         assignedSpecialistId,
         UserRole.SPECIALIST,
       ),
-    ).rejects.toThrow(BadRequestException);
+    ).resolves.toBeDefined();
 
-    expect(processUpdateMany).not.toHaveBeenCalled();
+    expect(processUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: ProcessStatus.NEGOTIATION,
+          negotiation_currency: ProductCurrency.USD,
+          negotiation_product_value: new Prisma.Decimal('120000.00'),
+        }),
+      }),
+    );
   });
 
-  it('OFFICE da empresa do cliente não pode burlar a confirmação canônica', async () => {
-    const { service, processUpdateMany } = updateService();
+  it('OFFICE da empresa do cliente usa a mesma entrada serializada em NEGOTIATION', async () => {
+    const process = protectedProcess({
+      product_type: ProductType.CAR,
+      car_id: productId,
+      negotiation_currency: null,
+      negotiation_product_value: null,
+      car: {
+        id: productId,
+        valor: new Prisma.Decimal('120000.00'),
+        currency: ProductCurrency.USD,
+      },
+    });
+    const { service, processUpdateMany } = updateService(process);
 
     await expect(
       service.update(
@@ -2275,9 +2399,9 @@ describe('ProcessesService — autorização centralizada de processos', () => {
         UserRole.OFFICE,
         clientCompanyId,
       ),
-    ).rejects.toThrow(BadRequestException);
+    ).resolves.toBeDefined();
 
-    expect(processUpdateMany).not.toHaveBeenCalled();
+    expect(processUpdateMany).toHaveBeenCalledTimes(1);
   });
 
   it('não promove consultoria sem produto/snapshot de NEGOTIATION para DOCUMENTATION', async () => {
