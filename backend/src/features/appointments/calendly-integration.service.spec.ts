@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { AppointmentSchedulingMethod } from '@prisma/client';
 import { CalendlyIntegrationService } from './calendly-integration.service';
 import axios from 'axios';
@@ -452,7 +453,7 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
     };
     const prisma = {
       appointment: {
-        findFirst: jest.fn().mockResolvedValue(appointment),
+        findMany: jest.fn().mockResolvedValue([appointment]),
         update: jest.fn(),
       },
       $transaction: jest.fn(),
@@ -489,7 +490,7 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
       specialist_rescheduled_at: new Date('2026-01-01T00:00:00.000Z'),
     };
     const prisma = {
-      appointment: { findFirst: jest.fn().mockResolvedValue(appointment) },
+      appointment: { findMany: jest.fn().mockResolvedValue([appointment]) },
       $transaction: jest.fn(),
     };
     const service = new CalendlyIntegrationService(prisma as any);
@@ -524,6 +525,8 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
         'https://calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
       calendly_sync_status: 'PENDING',
       appointment_datetime: null,
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      specialist_rescheduled_at: null,
     };
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
@@ -535,7 +538,8 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
     };
     const prisma = {
       appointment: {
-        findFirst: jest.fn().mockResolvedValue(appointment),
+        findMany: jest.fn().mockResolvedValue([appointment]),
+        findFirst: jest.fn(),
         update: jest.fn().mockResolvedValue(appointment),
       },
       $transaction: jest.fn(async (callback: (client: any) => unknown) =>
@@ -553,43 +557,31 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
         payload: {
           event:
             'https://calendly.com/api/v2/scheduled_events/event-1',
-          invitee:
+          uri:
             'https://api.calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
           scheduled_event: {
             start_time: '2099-01-01T10:00:00.000Z',
           },
         },
-      },
+      } as any,
       undefined,
       undefined,
     );
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(prisma.appointment.findFirst).toHaveBeenCalledWith({
+    expect(prisma.appointment.findMany).toHaveBeenCalledWith({
       where: {
-        OR: [
-          {
-            calendly_event_uri: {
-              in: expect.arrayContaining([
-                'https://api.calendly.com/scheduled_events/event-1',
-                'https://api.calendly.com/api/v2/scheduled_events/event-1',
-                'https://calendly.com/api/v2/scheduled_events/event-1',
-                'https://api.calendly.com:443/scheduled_events/event-1',
-              ]),
-            },
-          },
-          {
-            calendly_invitee_uri: {
-              in: expect.arrayContaining([
-                'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
-                'https://api.calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
-                'https://calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
-              ]),
-            },
-          },
-        ],
+        calendly_invitee_uri: {
+          in: expect.arrayContaining([
+            'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+            'https://api.calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
+            'https://calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
+          ]),
+        },
       },
+      take: 2,
     });
+    expect(prisma.appointment.findFirst).not.toHaveBeenCalled();
     expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
     expect(tx.appointment.findUnique).toHaveBeenCalledWith({
       where: { id: appointment.id },
@@ -626,11 +618,20 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
       calendly_invitee_uri:
         'https://api.calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
     };
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(appointment),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
     const prisma = {
       appointment: {
-        findFirst: jest.fn().mockResolvedValue(appointment),
-        update: jest.fn().mockResolvedValue(appointment),
+        findMany: jest.fn().mockResolvedValue([appointment]),
       },
+      $transaction: jest.fn(async (callback: (client: any) => unknown) =>
+        callback(tx),
+      ),
     };
     const service = new CalendlyIntegrationService(prisma as any);
     jest
@@ -644,10 +645,10 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
           payload: {
             event:
               'https://api.calendly.com/scheduled_events/event-1',
-            invitee:
+            uri:
               'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
           },
-        },
+        } as any,
         undefined,
         undefined,
       ),
@@ -655,30 +656,24 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
       processed: true,
       message: 'Webhook de cancelamento processado',
     });
-    expect(prisma.appointment.findFirst).toHaveBeenCalledWith({
+    expect(prisma.appointment.findMany).toHaveBeenCalledWith({
       where: {
-        OR: [
-          {
-            calendly_event_uri: {
-              in: expect.arrayContaining([
-                appointment.calendly_event_uri,
-                'https://api.calendly.com/scheduled_events/event-1',
-              ]),
-            },
-          },
-          {
-            calendly_invitee_uri: {
-              in: expect.arrayContaining([
-                appointment.calendly_invitee_uri,
-                'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
-              ]),
-            },
-          },
-        ],
+        calendly_invitee_uri: {
+          in: expect.arrayContaining([
+            appointment.calendly_invitee_uri,
+            'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+          ]),
+        },
       },
+      take: 2,
     });
-    expect(prisma.appointment.update).toHaveBeenCalledWith({
-      where: { id: appointment.id },
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.appointment.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: appointment.id,
+        calendly_event_uri: appointment.calendly_event_uri,
+        calendly_invitee_uri: appointment.calendly_invitee_uri,
+      },
       data: {
         calendly_event_uri:
           'https://api.calendly.com/scheduled_events/event-1',
@@ -688,5 +683,217 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
         calendly_sync_status: 'FAILED',
       },
     });
+  });
+
+  it('falha fechado quando fallback por evento encontra dois convidados do mesmo grupo', async () => {
+    const appointments = [
+      {
+        id: 'appointment-1',
+        specialist_id: 'specialist-1',
+        calendly_event_uri:
+          'https://api.calendly.com/scheduled_events/group-event',
+      },
+      {
+        id: 'appointment-2',
+        specialist_id: 'specialist-1',
+        calendly_event_uri:
+          'https://calendly.com/api/v2/scheduled_events/group-event',
+      },
+    ];
+    const prisma = {
+      appointment: { findMany: jest.fn().mockResolvedValue(appointments) },
+      $transaction: jest.fn(),
+    };
+    const service = new CalendlyIntegrationService(prisma as any);
+    jest
+      .spyOn(service as any, 'validateWebhookSignature')
+      .mockReturnValue(undefined);
+
+    await expect(
+      service.processWebhook(
+        {
+          event: 'invitee.created',
+          payload: {
+            event:
+              'https://api.calendly.com/scheduled_events/group-event',
+          },
+        },
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.appointment.findMany).toHaveBeenCalledWith({
+      where: {
+        calendly_event_uri: {
+          in: expect.arrayContaining([
+            'https://api.calendly.com/scheduled_events/group-event',
+            'https://calendly.com/api/v2/scheduled_events/group-event',
+          ]),
+        },
+      },
+      take: 2,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('não deixa webhook created antigo sobrescrever uma nova associação', async () => {
+    const snapshot = {
+      id: 'appointment-1',
+      specialist_id: 'specialist-1',
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      specialist_rescheduled_at: null,
+      calendly_event_uri:
+        'https://api.calendly.com/scheduled_events/event-1',
+      calendly_invitee_uri:
+        'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-old',
+    };
+    const locked = {
+      ...snapshot,
+      calendly_invitee_uri:
+        'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-new',
+    };
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(locked),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+      },
+    };
+    const prisma = {
+      appointment: { findMany: jest.fn().mockResolvedValue([snapshot]) },
+      $transaction: jest.fn(async (callback: (client: any) => unknown) =>
+        callback(tx),
+      ),
+    };
+    const service = new CalendlyIntegrationService(prisma as any);
+    jest
+      .spyOn(service as any, 'validateWebhookSignature')
+      .mockReturnValue(undefined);
+
+    await expect(
+      service.processWebhook(
+        {
+          event: 'invitee.created',
+          payload: {
+            event:
+              'https://api.calendly.com/scheduled_events/event-1',
+            uri: snapshot.calendly_invitee_uri,
+            scheduled_event: { start_time: '2099-01-01T10:00:00.000Z' },
+          },
+        } as any,
+        undefined,
+        undefined,
+      ),
+    ).resolves.toEqual({
+      processed: false,
+      message: 'Webhook ignorado para preservar a associação atual',
+    });
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.appointment.findFirst).not.toHaveBeenCalled();
+    expect(tx.appointment.update).not.toHaveBeenCalled();
+  });
+
+  it('serializa cancelamento e não confirma processamento quando perde o CAS', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      specialist_id: 'specialist-1',
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      specialist_rescheduled_at: null,
+      calendly_event_uri:
+        'https://api.calendly.com/scheduled_events/event-1',
+      calendly_invitee_uri:
+        'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+    };
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(appointment),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+    };
+    const prisma = {
+      appointment: { findMany: jest.fn().mockResolvedValue([appointment]) },
+      $transaction: jest.fn(async (callback: (client: any) => unknown) =>
+        callback(tx),
+      ),
+    };
+    const service = new CalendlyIntegrationService(prisma as any);
+    jest
+      .spyOn(service as any, 'validateWebhookSignature')
+      .mockReturnValue(undefined);
+
+    await expect(
+      service.processWebhook(
+        {
+          event: 'invitee.canceled',
+          payload: {
+            event: appointment.calendly_event_uri,
+            uri: appointment.calendly_invitee_uri,
+          },
+        } as any,
+        undefined,
+        undefined,
+      ),
+    ).resolves.toEqual({
+      processed: false,
+      message: 'Webhook ignorado para preservar a associação atual',
+    });
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.appointment.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('não deixa webhook canceled antigo cancelar uma nova associação', async () => {
+    const snapshot = {
+      id: 'appointment-1',
+      specialist_id: 'specialist-1',
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      specialist_rescheduled_at: null,
+      calendly_event_uri:
+        'https://api.calendly.com/scheduled_events/event-1',
+      calendly_invitee_uri:
+        'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-old',
+    };
+    const locked = {
+      ...snapshot,
+      calendly_invitee_uri:
+        'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-new',
+    };
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(locked),
+        updateMany: jest.fn(),
+      },
+    };
+    const prisma = {
+      appointment: { findMany: jest.fn().mockResolvedValue([snapshot]) },
+      $transaction: jest.fn(async (callback: (client: any) => unknown) =>
+        callback(tx),
+      ),
+    };
+    const service = new CalendlyIntegrationService(prisma as any);
+    jest
+      .spyOn(service as any, 'validateWebhookSignature')
+      .mockReturnValue(undefined);
+
+    await expect(
+      service.processWebhook(
+        {
+          event: 'invitee.canceled',
+          payload: {
+            event: snapshot.calendly_event_uri,
+            uri: snapshot.calendly_invitee_uri,
+          },
+        } as any,
+        undefined,
+        undefined,
+      ),
+    ).resolves.toEqual({
+      processed: false,
+      message: 'Webhook ignorado para preservar a associação atual',
+    });
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.appointment.updateMany).not.toHaveBeenCalled();
   });
 });

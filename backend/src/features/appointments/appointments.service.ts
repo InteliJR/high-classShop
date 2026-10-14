@@ -1951,6 +1951,17 @@ export class AppointmentsService {
       parseCalendlyResourceUri(appointment.calendly_event_uri, 'event')
         ?.canonicalUri === eventUri
     ) {
+      if (
+        appointment.calendly_invitee_uri &&
+        parseCalendlyResourceUri(
+          appointment.calendly_invitee_uri,
+          'invitee',
+        )?.canonicalUri !== inviteeUri
+      ) {
+        throw new ConflictException(
+          'O evento do Calendly já está associado a outro convidado',
+        );
+      }
       let canonicalized = true;
       if (
         appointment.calendly_event_uri !== eventUri ||
@@ -2063,6 +2074,17 @@ export class AppointmentsService {
           'event',
         )?.canonicalUri === eventUri
       ) {
+        if (
+          lockedAppointment.calendly_invitee_uri &&
+          parseCalendlyResourceUri(
+            lockedAppointment.calendly_invitee_uri,
+            'invitee',
+          )?.canonicalUri !== inviteeUri
+        ) {
+          throw new ConflictException(
+            'O evento do Calendly já está associado a outro convidado',
+          );
+        }
         if (
           lockedAppointment.calendly_event_uri !== eventUri ||
           lockedAppointment.calendly_invitee_uri !== inviteeUri

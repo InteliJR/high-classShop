@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
@@ -9,7 +10,6 @@ import {
 import {
   AppointmentSchedulingMethod,
   CalendlySyncStatus,
-  Prisma,
   UserRole,
 } from '@prisma/client';
 import axios from 'axios';
@@ -54,6 +54,7 @@ interface CalendlyWebhookPayload {
   event?: string;
   payload?: {
     event?: string;
+    uri?: string;
     invitee?: string | { uri?: string };
     scheduled_event?: {
       uri?: string;
@@ -397,10 +398,12 @@ export class CalendlyIntegrationService {
     }
 
     const rawEventUri = payload.event || payload.scheduled_event?.uri;
-    const rawInviteeUri =
+    const rawOfficialInviteeUri = payload.uri;
+    const rawLegacyInviteeUri =
       typeof payload.invitee === 'string'
         ? payload.invitee
         : payload.invitee?.uri;
+    const rawInviteeUri = rawOfficialInviteeUri || rawLegacyInviteeUri;
 
     if (!rawEventUri && !rawInviteeUri) {
       return {
@@ -412,9 +415,24 @@ export class CalendlyIntegrationService {
     const eventReference = rawEventUri
       ? this.parseCalendlyResourceUri(rawEventUri, 'event')
       : null;
-    const inviteeReference = rawInviteeUri
-      ? this.parseCalendlyResourceUri(rawInviteeUri, 'invitee')
+    const officialInviteeReference = rawOfficialInviteeUri
+      ? this.parseCalendlyResourceUri(rawOfficialInviteeUri, 'invitee')
       : null;
+    const legacyInviteeReference = rawLegacyInviteeUri
+      ? this.parseCalendlyResourceUri(rawLegacyInviteeUri, 'invitee')
+      : null;
+    if (
+      officialInviteeReference &&
+      legacyInviteeReference &&
+      officialInviteeReference.canonicalUri !==
+        legacyInviteeReference.canonicalUri
+    ) {
+      throw new BadRequestException(
+        'URIs de convidado do Calendly são inconsistentes',
+      );
+    }
+    const inviteeReference =
+      officialInviteeReference || legacyInviteeReference;
     this.assertSameCalendlyEvent(eventReference, inviteeReference);
     const lookupEventReference =
       eventReference ||
@@ -427,26 +445,26 @@ export class CalendlyIntegrationService {
     const eventUri = lookupEventReference?.canonicalUri;
     const inviteeUri = inviteeReference?.canonicalUri;
 
-    const appointment = await this.prisma.appointment.findFirst({
-      where: {
-        OR: [
-          lookupEventReference
-            ? {
-                calendly_event_uri: {
-                  in: getCalendlyResourceUriVariants(lookupEventReference),
-                },
-              }
-            : undefined,
-          inviteeReference
-            ? {
-                calendly_invitee_uri: {
-                  in: getCalendlyResourceUriVariants(inviteeReference),
-                },
-              }
-            : undefined,
-        ].filter(Boolean) as Prisma.AppointmentWhereInput[],
-      },
+    const appointments = await this.prisma.appointment.findMany({
+      where: inviteeReference
+        ? {
+            calendly_invitee_uri: {
+              in: getCalendlyResourceUriVariants(inviteeReference),
+            },
+          }
+        : {
+            calendly_event_uri: {
+              in: getCalendlyResourceUriVariants(lookupEventReference!),
+            },
+          },
+      take: 2,
     });
+    if (appointments.length > 1) {
+      throw new ConflictException(
+        'Webhook Calendly corresponde a múltiplos agendamentos',
+      );
+    }
+    const appointment = appointments[0];
 
     if (!appointment) {
       return {
@@ -496,6 +514,15 @@ export class CalendlyIntegrationService {
         ) {
           return false;
         }
+        if (
+          !this.appointmentStillMatchesWebhook(
+            lockedAppointment,
+            lookupEventReference,
+            inviteeReference,
+          )
+        ) {
+          return false;
+        }
 
         const targetDateTime =
           parsedStartTime || lockedAppointment.appointment_datetime;
@@ -527,7 +554,7 @@ export class CalendlyIntegrationService {
       if (!processed) {
         return {
           processed: false,
-          message: 'Webhook ignorado para preservar o horário atual',
+          message: 'Webhook ignorado para preservar a associação atual',
         };
       }
 
@@ -538,16 +565,50 @@ export class CalendlyIntegrationService {
     }
 
     if (eventType === 'invitee.canceled') {
-      await this.prisma.appointment.update({
-        where: { id: appointment.id },
-        data: {
-          calendly_event_uri: eventUri || appointment.calendly_event_uri,
-          calendly_invitee_uri:
-            inviteeUri || appointment.calendly_invitee_uri,
-          calendly_last_sync_at: new Date(),
-          calendly_sync_status: CalendlySyncStatus.FAILED,
-        },
+      const processed = await this.prisma.$transaction(async (tx) => {
+        await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
+        const lockedAppointment = await tx.appointment.findUnique({
+          where: { id: appointment.id },
+        });
+        if (
+          !lockedAppointment ||
+          (lockedAppointment.scheduling_method &&
+            lockedAppointment.scheduling_method !==
+              AppointmentSchedulingMethod.CALENDLY) ||
+          lockedAppointment.specialist_rescheduled_at ||
+          !this.appointmentStillMatchesWebhook(
+            lockedAppointment,
+            lookupEventReference,
+            inviteeReference,
+          )
+        ) {
+          return false;
+        }
+
+        const updated = await tx.appointment.updateMany({
+          where: {
+            id: lockedAppointment.id,
+            calendly_event_uri: lockedAppointment.calendly_event_uri,
+            calendly_invitee_uri: lockedAppointment.calendly_invitee_uri,
+          },
+          data: {
+            calendly_event_uri:
+              eventUri || lockedAppointment.calendly_event_uri,
+            calendly_invitee_uri:
+              inviteeUri || lockedAppointment.calendly_invitee_uri,
+            calendly_last_sync_at: new Date(),
+            calendly_sync_status: CalendlySyncStatus.FAILED,
+          },
+        });
+        return updated.count === 1;
       });
+
+      if (!processed) {
+        return {
+          processed: false,
+          message: 'Webhook ignorado para preservar a associação atual',
+        };
+      }
 
       return {
         processed: true,
@@ -918,6 +979,34 @@ export class CalendlyIntegrationService {
         'URIs do Calendly pertencem a eventos diferentes',
       );
     }
+  }
+
+  private appointmentStillMatchesWebhook(
+    appointment: {
+      calendly_event_uri?: string | null;
+      calendly_invitee_uri?: string | null;
+    },
+    eventReference: CalendlyResourceReference | null,
+    inviteeReference: CalendlyResourceReference | null,
+  ): boolean {
+    if (inviteeReference) {
+      const currentInvitee = appointment.calendly_invitee_uri
+        ? parseCalendlyResourceUri(
+            appointment.calendly_invitee_uri,
+            'invitee',
+          )
+        : null;
+      return currentInvitee?.canonicalUri === inviteeReference.canonicalUri;
+    }
+
+    if (eventReference) {
+      const currentEvent = appointment.calendly_event_uri
+        ? parseCalendlyResourceUri(appointment.calendly_event_uri, 'event')
+        : null;
+      return currentEvent?.canonicalUri === eventReference.canonicalUri;
+    }
+
+    return false;
   }
 
   private getRequiredEnv(name: string): string {
