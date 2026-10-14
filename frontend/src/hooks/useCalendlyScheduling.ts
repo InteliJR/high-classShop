@@ -8,13 +8,16 @@ import {
 } from "../services/appointments.service";
 import {
   isCalendlySyncComplete,
+  isCalendlySyncTerminalFailure,
   synchronizeCalendlyRegistration,
 } from "../services/calendly-sync";
+import { isTrustedCalendlyOrigin } from "../lib/calendly-origin";
 
 export type CalendlySyncState =
   | "idle"
   | "waiting_event"
   | "syncing"
+  | "pending"
   | "done"
   | "error";
 
@@ -72,18 +75,13 @@ export function useCalendlyScheduling({
         return;
       }
 
-      let expectedOrigin: string | null = null;
-      try {
-        expectedOrigin = modalUrl ? new URL(modalUrl).origin : null;
-      } catch {
-        return;
-      }
       const currentFrame = document.querySelector<HTMLIFrameElement>(
         ".calendly-popup-content iframe",
       );
       if (
-        !expectedOrigin ||
-        event.origin !== expectedOrigin ||
+        !modalUrl ||
+        !isTrustedCalendlyOrigin(modalUrl) ||
+        !isTrustedCalendlyOrigin(event.origin) ||
         !currentFrame?.contentWindow ||
         event.source !== currentFrame.contentWindow
       ) {
@@ -143,8 +141,15 @@ export function useCalendlyScheduling({
               state: { message: successRedirectMessage },
             });
           }, 900);
+        } else if (isCalendlySyncTerminalFailure(status)) {
+          setSyncState("error");
+          setSyncMessage(
+            status.status === "CANCELLED"
+              ? "O agendamento foi cancelado no Calendly. Verifique Meus Processos antes de tentar novamente."
+              : "Não foi possível confirmar o horário no Calendly. Verifique Meus Processos ou tente novamente.",
+          );
         } else {
-          setSyncState("done");
+          setSyncState("pending");
           setSyncMessage(
             "Solicitação registrada. Estamos finalizando a sincronização do horário com o calendário.",
           );

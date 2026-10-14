@@ -190,35 +190,86 @@ describe("useCalendlyScheduling active registration retry", () => {
     expect(getCalendlySyncStatus).toHaveBeenCalledTimes(8);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(registerCalendlyScheduledEvent).toHaveBeenCalledTimes(8);
+    expect(result.current.syncState).toBe("pending");
+    expect(result.current.syncMessage).toContain("finalizando a sincronização");
   });
 
-  it("não considera FAILED com datetime como sincronização concluída", async () => {
+  it.each([
+    {
+      label: "FAILED",
+      terminalStatus: {
+        ...pendingStatus,
+        calendly_sync_status: "FAILED" as const,
+      },
+      expectedMessage: "confirmar",
+    },
+    {
+      label: "CANCELLED",
+      terminalStatus: {
+        ...syncedStatus,
+        status: "CANCELLED" as const,
+      },
+      expectedMessage: "cancelado",
+    },
+  ])(
+    "não considera $label com datetime/status incoerente como sincronização concluída",
+    async ({ terminalStatus, expectedMessage }) => {
+      vi.mocked(registerCalendlyScheduledEvent).mockResolvedValue({
+        appointment_id: "appointment-1",
+        calendly_sync_status: "PENDING",
+        appointment_datetime: null,
+      });
+      vi.mocked(getCalendlySyncStatus).mockResolvedValue(terminalStatus);
+      const onSynced = vi.fn();
+      const { result } = renderHook(() =>
+        useCalendlyScheduling({ successRedirectMessage: "ok", onSynced }),
+      );
+      act(() =>
+        result.current.openPopup(
+          "appointment-1",
+          "https://calendly.com/a",
+        ),
+      );
+      const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
+        .onEventScheduled!;
+
+      await act(async () => {
+        await listener(scheduledEvent());
+      });
+
+      expect(registerCalendlyScheduledEvent).toHaveBeenCalledTimes(1);
+      expect(getCalendlySyncStatus).toHaveBeenCalledTimes(1);
+      expect(onSynced).not.toHaveBeenCalled();
+      expect(navigate).not.toHaveBeenCalled();
+      expect(result.current.syncState).toBe("error");
+      expect(result.current.syncMessage).toContain(expectedMessage);
+    },
+  );
+
+  it("aceita redirect oficial de www.calendly.com para calendly.com no mesmo iframe", async () => {
     vi.mocked(registerCalendlyScheduledEvent).mockResolvedValue({
       appointment_id: "appointment-1",
-      calendly_sync_status: "PENDING",
-      appointment_datetime: null,
+      calendly_sync_status: "SYNCED",
+      appointment_datetime: syncedStatus.appointment_datetime,
     });
-    vi.mocked(getCalendlySyncStatus).mockResolvedValue({
-      ...syncedStatus,
-      status: "CANCELLED",
-      calendly_sync_status: "FAILED",
-    });
+    vi.mocked(getCalendlySyncStatus).mockResolvedValue(syncedStatus);
     const onSynced = vi.fn();
     const { result } = renderHook(() =>
       useCalendlyScheduling({ successRedirectMessage: "ok", onSynced }),
     );
-    act(() => result.current.openPopup("appointment-1", "https://calendly.com/a"));
+    act(() =>
+      result.current.openPopup("appointment-1", "https://www.calendly.com/a"),
+    );
     const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
       .onEventScheduled!;
 
     await act(async () => {
-      await listener(scheduledEvent());
+      await listener(scheduledEvent({ origin: "https://calendly.com" }));
     });
 
     expect(registerCalendlyScheduledEvent).toHaveBeenCalledTimes(1);
-    expect(getCalendlySyncStatus).toHaveBeenCalledTimes(1);
-    expect(onSynced).not.toHaveBeenCalled();
-    expect(navigate).not.toHaveBeenCalled();
+    expect(onSynced).toHaveBeenCalledWith(syncedStatus);
+    expect(result.current.syncState).toBe("done");
   });
 
   it("ignora evento tardio enviado pelo iframe de uma sessão anterior A após abrir B", async () => {
@@ -251,14 +302,19 @@ describe("useCalendlyScheduling active registration retry", () => {
     expect(getCalendlySyncStatus).not.toHaveBeenCalled();
   });
 
-  it("ignora mensagem de origem diferente da URL Calendly aberta", async () => {
+  it.each([
+    "https://evilcalendly.com",
+    "https://calendly.com.evil.test",
+    "http://calendly.com",
+    "https://calendly.com:444",
+  ])("ignora mensagem de origem Calendly maliciosa ou insegura: %s", async (origin) => {
     const { result } = renderHook(() =>
       useCalendlyScheduling({ successRedirectMessage: "ok" }),
     );
     act(() => result.current.openPopup("appointment-1", "https://calendly.com/a"));
     const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
       .onEventScheduled!;
-    const forgedEvent = scheduledEvent({ origin: "https://evil.test" });
+    const forgedEvent = scheduledEvent({ origin });
 
     await act(async () => {
       await listener(forgedEvent);

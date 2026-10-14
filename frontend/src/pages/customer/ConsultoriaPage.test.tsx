@@ -8,10 +8,15 @@ import { AuthContext, type AuthContextProps } from "../../contexts/AuthContext";
 import { getSpecialistsGroupedByCategory, type PublicSpecialistProfile } from "../../services/specialists.service";
 import { createConsultancyAppointment } from "../../services/appointments.service";
 
-const { openPopup } = vi.hoisted(() => ({ openPopup: vi.fn() }));
+const { openPopup, useCalendlySchedulingMock } = vi.hoisted(() => ({
+  openPopup: vi.fn(),
+  useCalendlySchedulingMock: vi.fn(),
+}));
 vi.mock("../../services/specialists.service", () => ({ getSpecialistsGroupedByCategory: vi.fn() }));
 vi.mock("../../services/appointments.service", () => ({ createConsultancyAppointment: vi.fn() }));
-vi.mock("../../hooks/useCalendlyScheduling", () => ({ useCalendlyScheduling: () => ({ isModalOpen: false, modalUrl: null, syncState: "idle", syncMessage: null, openPopup, closePopup: vi.fn() }) }));
+vi.mock("../../hooks/useCalendlyScheduling", () => ({
+  useCalendlyScheduling: useCalendlySchedulingMock,
+}));
 
 const specialist: PublicSpecialistProfile = { id: "specialist-1", name: "Ana", surname: "Silva", email: "ana@example.com", speciality: "CAR", calendly_url: "https://calendly.com/ana/reuniao", calendly_scheduling_available: false };
 function mockSpecialist(value: PublicSpecialistProfile) {
@@ -27,6 +32,14 @@ function renderPage() {
 
 describe("ConsultoriaPage capability", () => {
   beforeEach(() => {
+    useCalendlySchedulingMock.mockReturnValue({
+      isModalOpen: false,
+      modalUrl: null,
+      syncState: "idle",
+      syncMessage: null,
+      openPopup,
+      closePopup: vi.fn(),
+    });
     mockSpecialist(specialist);
     vi.mocked(createConsultancyAppointment).mockResolvedValue({ id: "appointment-1" } as never);
   });
@@ -55,5 +68,23 @@ describe("ConsultoriaPage capability", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("Calendly");
     expect(createConsultancyAppointment).not.toHaveBeenCalled();
     expect(openPopup).not.toHaveBeenCalled();
+  });
+
+  it("renders a terminal Calendly synchronization failure as a danger alert", async () => {
+    useCalendlySchedulingMock.mockReturnValue({
+      isModalOpen: false,
+      modalUrl: null,
+      syncState: "error",
+      syncMessage: "O agendamento foi cancelado no Calendly.",
+      openPopup,
+      closePopup: vi.fn(),
+    });
+
+    renderPage();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("cancelado");
+    expect(alert.className).toContain("bg-status-bad-wash");
+    expect(alert.className).not.toContain("bg-status-ok-wash");
   });
 });

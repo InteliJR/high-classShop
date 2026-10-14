@@ -187,7 +187,7 @@ describe("delegated Calendly with the real Radix dialog and PopupModal", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it.each(["CONSULTANT", "OFFICE"])("synchronizes a real Calendly event before redirecting in %s mode", async (role) => {
+  it.each(["CONSULTANT", "OFFICE"])("does not call the client-only Calendly sync endpoint for delegated EMAIL flow in %s mode", async (role) => {
     authState.user.role = role;
     page();
     await openCalendly();
@@ -196,24 +196,21 @@ describe("delegated Calendly with the real Radix dialog and PopupModal", () => {
       data: { event: "calendly.event_scheduled", payload: { event: { uri: "event-uri" }, invitee: { uri: "invitee-uri" } } },
     }));
     expect(await screen.findByRole("heading", { name: role === "OFFICE" ? "Processos do escritório" : "Processos do consultor" })).toBeTruthy();
-    expect(registerCalendlyScheduledEvent).toHaveBeenCalledWith("appointment-1", expect.objectContaining({ event_uri: "event-uri", invitee_uri: "invitee-uri" }));
-    expect(getCalendlySyncStatus).toHaveBeenCalledWith("appointment-1");
+    expect(registerCalendlyScheduledEvent).not.toHaveBeenCalled();
+    expect(getCalendlySyncStatus).not.toHaveBeenCalled();
     await waitFor(() => expect(document.body.style.pointerEvents).not.toBe("none"));
   });
 
-  it("ignores synchronization completion after the real popup is closed", async () => {
-    let resolve!: (value: Awaited<ReturnType<typeof registerCalendlyScheduledEvent>>) => void;
-    vi.mocked(registerCalendlyScheduledEvent).mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  it("ignores a delegated Calendly event after the real popup is closed without attempting client-only sync", async () => {
     page();
     const { user, iframe } = await openCalendly();
+    await user.click(iframe.closest(".calendly-overlay")!.querySelector<HTMLButtonElement>(".calendly-popup-close")!);
+    expect(await screen.findByRole("heading", { name: "Processos do consultor" })).toBeTruthy();
     fireEvent(window, new MessageEvent("message", {
       origin: "https://calendly.com",
       data: { event: "calendly.event_scheduled", payload: { event: { uri: "event-uri" }, invitee: { uri: "invitee-uri" } } },
     }));
-    await waitFor(() => expect(registerCalendlyScheduledEvent).toHaveBeenCalledOnce());
-    await user.click(iframe.closest(".calendly-overlay")!.querySelector<HTMLButtonElement>(".calendly-popup-close")!);
-    expect(await screen.findByRole("heading", { name: "Processos do consultor" })).toBeTruthy();
-    await act(async () => resolve({} as never));
+    expect(registerCalendlyScheduledEvent).not.toHaveBeenCalled();
     expect(getCalendlySyncStatus).not.toHaveBeenCalled();
     expect(screen.queryByTitle("Calendly Scheduling Page")).toBeNull();
   });

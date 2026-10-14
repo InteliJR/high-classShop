@@ -17,7 +17,9 @@ export function isCalendlySyncComplete(status: CalendlySyncStatus): boolean {
   );
 }
 
-function isTerminal(status: CalendlySyncStatus): boolean {
+export function isCalendlySyncTerminalFailure(
+  status: CalendlySyncStatus,
+): boolean {
   return (
     status.calendly_sync_status === "FAILED" || status.status === "CANCELLED"
   );
@@ -67,7 +69,10 @@ export async function synchronizeCalendlyRegistration(
 
     try {
       lastStatus = await getCalendlySyncStatus(appointmentId);
-      if (isCalendlySyncComplete(lastStatus) || isTerminal(lastStatus)) {
+      if (
+        isCalendlySyncComplete(lastStatus) ||
+        isCalendlySyncTerminalFailure(lastStatus)
+      ) {
         return lastStatus;
       }
     } catch (error) {
