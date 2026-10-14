@@ -22,7 +22,6 @@ const publicSpecialistSelect = {
   id: true,
   name: true,
   surname: true,
-  email: true,
   speciality: true,
   calendly_url: true,
   calendly_connection: { select: { is_active: true } },
@@ -34,7 +33,7 @@ type PublicSpecialistRecord = Prisma.UserGetPayload<{
 
 export type PublicSpecialistProfile = Pick<
   PublicSpecialistRecord,
-  'id' | 'name' | 'surname' | 'email' | 'speciality' | 'calendly_url'
+  'id' | 'name' | 'surname' | 'speciality' | 'calendly_url'
 > & { calendly_scheduling_available: boolean };
 
 function toPublicProfile(
@@ -44,7 +43,6 @@ function toPublicProfile(
     id: specialist.id,
     name: specialist.name,
     surname: specialist.surname,
-    email: specialist.email,
     speciality: specialist.speciality,
     calendly_url: specialist.calendly_url,
     calendly_scheduling_available: isCalendlySchedulingAvailable({

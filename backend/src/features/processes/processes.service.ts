@@ -34,6 +34,7 @@ import { acquireProductMonetaryLock } from '../products/product-monetary-lock';
 import { validateSpecialistProductAssociation } from '../products/product-association-validator';
 import {
   acquireActiveProcessDedupLock,
+  assertNoActiveProcess,
   lockAndAssertNoActiveProcess,
 } from './process-dedup-lock';
 import { parseDate, isFutureDate } from 'src/shared/utils/date.utils';
@@ -355,9 +356,9 @@ export class ProcessesService {
    * Antes disso o endpoint aceitava qualquer `client_id` de qualquer usuário
    * autenticado: dava para abrir processo em nome de um cliente alheio.
    *
-   * O especialista não é restringido a clientes com quem já tem relação —
-   * abrir o primeiro processo de um cliente novo é justamente o caso de uso
-   * da tela dele. O que se exige é que ele seja o especialista do processo.
+   * Especialistas não usam esta rota genérica: o fluxo legítimo parte de um
+   * pedido autenticado do cliente, ou das rotas delegadas de consultor/escritório.
+   * Assim, um client_id arbitrário nunca vira um oráculo de dados pessoais.
    *
    * @throws {ForbiddenException} - Sem vínculo com o cliente informado
    */
@@ -383,11 +384,13 @@ export class ProcessesService {
       case UserRole.ADMIN:
         return;
 
-      case UserRole.SPECIALIST:
-        if (dto.specialist_id !== requester.id) {
-          deny('especialista só cria processo para si mesmo');
-        }
-        return;
+      case UserRole.SPECIALIST: {
+        // O fluxo legítimo começa pelo pedido autenticado do próprio cliente.
+        // Esta rota genérica devolve dados do cliente criado; permitir que o
+        // especialista forneça client_id a transformaria em um oráculo de PII.
+        deny('especialista deve partir de um pedido do cliente');
+        break;
+      }
 
       case UserRole.CUSTOMER:
         if (dto.client_id !== requester.id) {
@@ -587,6 +590,7 @@ export class ProcessesService {
 
       if (isConsultancy) {
         await acquireActiveProcessDedupLock(tx, processScope);
+        await assertNoActiveProcess(tx, processScope);
         const existingAppointment = await tx.appointment.findFirst({
           where: {
             client_id: input.client_id,
@@ -1888,31 +1892,49 @@ export class ProcessesService {
     processes: (ProcessResponse & { rejection_reason?: string | null })[];
     count: number;
   }> {
-    if (userId && userRole !== 'ADMIN' && userId !== clientId) {
-      const client = await this.prismaService.user.findUnique({
-        where: { id: clientId },
-        select: { consultant_id: true },
+    const deny = (): never => {
+      throw new ForbiddenException({
+        success: false,
+        error: {
+          code: 403,
+          message: 'Você não tem acesso a este cliente',
+          details: { user_id: userId, client_id: clientId },
+        },
       });
+    };
+    if (!userId || !userRole) deny();
 
-      const isConsultantOfClient =
-        userRole === 'CONSULTANT' && client?.consultant_id === userId;
-      const isSpecialistWithProcess =
-        userRole === 'SPECIALIST' &&
-        (await this.prismaService.process.findFirst({
-          where: { client_id: clientId, specialist_id: userId },
-          select: { id: true },
-        }));
-
-      if (!isConsultantOfClient && !isSpecialistWithProcess) {
-        throw new ForbiddenException({
-          success: false,
-          error: {
-            code: 403,
-            message: 'Você não tem acesso a este cliente',
-            details: { user_id: userId, client_id: clientId },
-          },
+    const where: Prisma.ProcessWhereInput = { client_id: clientId };
+    switch (userRole) {
+      case UserRole.ADMIN:
+        break;
+      case UserRole.CUSTOMER:
+        if (userId !== clientId) deny();
+        break;
+      case UserRole.SPECIALIST:
+        where.specialist_id = userId;
+        break;
+      case UserRole.CONSULTANT: {
+        const client = await this.prismaService.user.findUnique({
+          where: { id: clientId },
+          select: { role: true, consultant_id: true },
         });
+        if (
+          client?.role !== UserRole.CUSTOMER ||
+          client.consultant_id !== userId
+        )
+          deny();
+        // Repete a capability no próprio filtro de dados. Se o vínculo for
+        // revogado depois da checagem acima, findMany e count deixam de ler o
+        // cliente em vez de depender de uma autorização já obsoleta.
+        where.client = {
+          role: UserRole.CUSTOMER,
+          consultant_id: userId,
+        };
+        break;
       }
+      default:
+        deny();
     }
 
     const pageNum = Number(page) || 1;
@@ -1923,9 +1945,7 @@ export class ProcessesService {
 
     const [processes, count] = await Promise.all([
       this.prismaService.process.findMany({
-        where: {
-          client_id: clientId,
-        },
+        where,
         include: {
           client: true,
           car: true,
@@ -1950,11 +1970,7 @@ export class ProcessesService {
         skip,
         take: perPageNum,
       }),
-      this.prismaService.process.count({
-        where: {
-          client_id: clientId,
-        },
-      }),
+      this.prismaService.process.count({ where }),
     ]);
 
     const processEntities = processes.map((process: any) => ({

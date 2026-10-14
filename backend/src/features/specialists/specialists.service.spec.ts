@@ -118,7 +118,6 @@ const publicSelect = {
   id: true,
   name: true,
   surname: true,
-  email: true,
   speciality: true,
   calendly_url: true,
   calendly_connection: { select: { is_active: true } },
@@ -127,7 +126,6 @@ const publicProfile = {
   id: 'specialist-1',
   name: 'Ana',
   surname: 'Silva',
-  email: 'ana@example.com',
   speciality: 'CAR',
   calendly_url: 'https://calendly.com/ana/reuniao',
   calendly_scheduling_available: true,
@@ -163,6 +161,9 @@ describe('SpecialistsService.findPublicProfile', () => {
       where: { id: 'specialist-1', role: 'SPECIALIST' },
       select: publicSelect,
     });
+    expect(await service.findPublicProfile('specialist-1')).not.toHaveProperty(
+      'email',
+    );
   });
 
   it.each([null, { is_active: false }])(

@@ -1,5 +1,9 @@
 import { ConflictException } from '@nestjs/common';
-import { ProcessStatus, ProductType } from '@prisma/client';
+import {
+  AppointmentSchedulingMethod,
+  ProcessStatus,
+  ProductType,
+} from '@prisma/client';
 import type { ActiveProcessSnapshot } from '../appointments/entities/appointment.response';
 
 export const ACTIVE_PROCESS_STATUSES: ProcessStatus[] = [
@@ -78,6 +82,7 @@ export async function assertNoActiveProcess(
           appointment_datetime: true,
         },
       },
+      specialist: { select: { email: true } },
     },
   });
   if (existing) {
@@ -95,6 +100,10 @@ export async function assertNoActiveProcess(
       appointment_status: appointment?.status ?? null,
       scheduling_method: appointment?.scheduling_method ?? null,
       appointment_datetime: appointment?.appointment_datetime ?? null,
+      ...(appointment?.scheduling_method ===
+        AppointmentSchedulingMethod.EMAIL && existing.specialist?.email
+        ? { specialist_contact_email: existing.specialist.email }
+        : {}),
     };
     throw new ConflictException({
       success: false,

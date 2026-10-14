@@ -120,7 +120,8 @@ export class AppointmentsController {
    *
    * Consulta o próprio pedido do cliente autenticado para especialista/produto.
    * Aceita specialist_id, product_type e product_id; o cliente vem do JWT.
-   * Retorna somente o discriminante e o snapshot mínimo, sem contatos pessoais.
+   * Retorna um snapshot mínimo. O e-mail do especialista só é incluído para
+   * um pedido EMAIL pertencente ao próprio cliente autenticado.
    */
   @Get('check')
   async checkExisting(

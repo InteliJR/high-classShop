@@ -173,4 +173,24 @@ describe('NotificationService proposal emails', () => {
     expect(htmlBody).not.toContain('<img src=x');
     expect(htmlBody).not.toContain('<script>alert(1)</script>');
   });
+
+  it('escapes user-controlled fields in process status HTML', async () => {
+    await service.sendProcessStatusChangedEmail({
+      recipientEmail: 'client@example.com',
+      recipientName: '<img src=x onerror=alert(1)>',
+      processId: 'process-1',
+      previousStatus: 'SCHEDULING',
+      currentStatus: 'REJECTED',
+      changedByName: '<b>Actor</b>',
+      productDetails: '<i>Product</i>',
+      reason: '<script>alert(1)</script>',
+    });
+
+    const htmlBody = sendEmailSafely.mock.calls[0][3];
+    expect(htmlBody).toContain('&lt;img');
+    expect(htmlBody).toContain('&lt;b&gt;Actor&lt;/b&gt;');
+    expect(htmlBody).toContain('&lt;i&gt;Product&lt;/i&gt;');
+    expect(htmlBody).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(htmlBody).not.toContain('<script>alert(1)</script>');
+  });
 });

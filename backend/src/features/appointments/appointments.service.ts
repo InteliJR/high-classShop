@@ -48,6 +48,7 @@ import { validateSpecialistProductAssociation } from 'src/features/products/prod
 import {
   ACTIVE_PROCESS_STATUSES,
   acquireActiveProcessDedupLock,
+  assertNoActiveProcess,
   lockAndAssertNoActiveProcess,
 } from 'src/features/processes/process-dedup-lock';
 import {
@@ -1224,6 +1225,16 @@ export class AppointmentsService {
 
     const { appointment, process, product } = await this.prisma.$transaction(
       async (tx) => {
+        // Ordem global dos advisory locks: agenda → produto → deduplicação.
+        // Consultoria datada não tem lock de produto, portanto agenda → dedup.
+        if (isConsultancy && pendingDateTime) {
+          await lockAndAssertSpecialistScheduleAvailable(
+            tx,
+            dto.specialist_id,
+            pendingDateTime,
+          );
+        }
+
         const product = await validateSpecialistProductAssociation(tx, {
           specialistId: dto.specialist_id,
           productType: dto.product_type,
@@ -1238,27 +1249,17 @@ export class AppointmentsService {
         };
         if (isConsultancy) {
           await acquireActiveProcessDedupLock(tx, processScope);
+          await assertNoActiveProcess(tx, processScope, undefined, {
+            authenticatedClientId: userId,
+          });
           const existingAfterLock = await tx.appointment.findFirst({
             where: consultancyAppointmentWhere,
           });
           assertNoDuplicateAppointment(existingAfterLock);
         } else {
-          await lockAndAssertNoActiveProcess(
-            tx,
-            processScope,
-            undefined,
-            { authenticatedClientId: userId },
-          );
-        }
-
-        // Product EMAIL requests are proposals. Preserve the optional dated
-        // consultancy validation without making any PENDING/EMAIL occupy agenda.
-        if (isConsultancy && pendingDateTime) {
-          await lockAndAssertSpecialistScheduleAvailable(
-            tx,
-            dto.specialist_id,
-            pendingDateTime,
-          );
+          await lockAndAssertNoActiveProcess(tx, processScope, undefined, {
+            authenticatedClientId: userId,
+          });
         }
 
         const appointment = await tx.appointment.create({
@@ -1311,6 +1312,9 @@ export class AppointmentsService {
       this.mapToResponseEntity(appointment, client, specialist, product),
       {
         process_id: process.id,
+        ...(schedulingMethod === AppointmentSchedulingMethod.EMAIL
+          ? { specialist_contact_email: specialist.email }
+          : {}),
       },
     );
   }
@@ -1455,6 +1459,11 @@ export class AppointmentsService {
 
     // Atualizar para SCHEDULED e atualizar Process para NEGOTIATION em transação
     const [updated, process] = await this.prisma.$transaction(async (tx) => {
+      // Ordem global dos advisory locks: agenda → produto → deduplicação.
+      // updateStatus já usa agenda → produto; manter a mesma ordem elimina o
+      // ciclo em que cada transação aguardava o lock retido pela outra.
+      await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
+
       await validateSpecialistProductAssociation(tx, {
         specialistId: appointment.specialist_id,
         productType: appointment.product_type,
@@ -1472,6 +1481,7 @@ export class AppointmentsService {
 
       if (isConsultancy) {
         await acquireActiveProcessDedupLock(tx, processScope);
+        await assertNoActiveProcess(tx, processScope, appointment.process?.id);
         const existingAppointment = await tx.appointment.findFirst({
           where: {
             id: { not: appointmentId },
@@ -1505,8 +1515,6 @@ export class AppointmentsService {
           appointment.process?.id,
         );
       }
-      await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
-
       const lockedAppointment = await tx.appointment.findUnique({
         where: { id: appointmentId },
         include: { client: true, specialist: true, process: true },
@@ -1923,6 +1931,7 @@ export class AppointmentsService {
         scheduling_method: true,
         appointment_datetime: true,
         process: { select: { id: true, client_id: true } },
+        specialist: { select: { email: true } },
       },
     });
 
@@ -1934,6 +1943,7 @@ export class AppointmentsService {
     ) {
       return { exists: false };
     }
+    const specialistContactEmail = appointment.specialist?.email;
     return {
       exists: true,
       appointment_id: appointment.id,
@@ -1941,6 +1951,10 @@ export class AppointmentsService {
       appointment_status: appointment.status,
       scheduling_method: appointment.scheduling_method,
       appointment_datetime: appointment.appointment_datetime,
+      ...(appointment.scheduling_method === AppointmentSchedulingMethod.EMAIL &&
+      specialistContactEmail
+        ? { specialist_contact_email: specialistContactEmail }
+        : {}),
     };
   }
 
@@ -2037,10 +2051,7 @@ export class AppointmentsService {
         ?.canonicalUri === eventUri
     ) {
       const storedInviteeReference = appointment.calendly_invitee_uri
-        ? parseCalendlyResourceUri(
-            appointment.calendly_invitee_uri,
-            'invitee',
-          )
+        ? parseCalendlyResourceUri(appointment.calendly_invitee_uri, 'invitee')
         : null;
       if (
         appointment.calendly_invitee_uri &&
@@ -2150,10 +2161,8 @@ export class AppointmentsService {
       }
       if (
         lockedAppointment.calendly_event_uri &&
-        parseCalendlyResourceUri(
-          lockedAppointment.calendly_event_uri,
-          'event',
-        )?.canonicalUri === eventUri
+        parseCalendlyResourceUri(lockedAppointment.calendly_event_uri, 'event')
+          ?.canonicalUri === eventUri
       ) {
         if (
           lockedAppointment.calendly_invitee_uri &&

@@ -355,6 +355,7 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
     expect(result).toMatchObject({
       id: 'appointment-1',
       process_id: 'process-1',
+      specialist_contact_email: specialist.email,
     });
     expect(historyCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -626,6 +627,7 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
     ).resolves.toMatchObject({
       process_id: 'process-1',
       appointment_datetime: null,
+      specialist_contact_email: specialist.email,
     });
     expect(appointmentCreate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -661,8 +663,50 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
       expect.anything(),
       'appointment-schedule:specialist-1',
     );
+    expect(tx.$queryRaw.mock.calls.map((call) => call[1])).toEqual([
+      'appointment-schedule:specialist-1',
+      'process-dedup:client-1:specialist-1:CONSULTANCY:none',
+    ]);
     expect(tx.appointment.findFirst).toHaveBeenCalledTimes(2);
   });
+
+  it.each([
+    [
+      'appointment concluído',
+      {
+        id: 'completed-appointment',
+        client_id: client.id,
+        status: StatusAgendamento.COMPLETED,
+        scheduling_method: AppointmentSchedulingMethod.EMAIL,
+        appointment_datetime: new Date('2098-01-01T10:00:00.000Z'),
+      },
+    ],
+    ['processo legado sem appointment', null],
+  ])(
+    'rejeita nova consultoria diante de processo ativo com %s',
+    async (_label, appointment) => {
+      const { service, appointmentCreate } = harness({
+        existingProcess: {
+          id: 'active-consultancy',
+          client_id: client.id,
+          appointment,
+        },
+      });
+
+      await expect(
+        service.createPending(
+          {
+            client_id: client.id,
+            specialist_id: specialist.id,
+            scheduling_method: AppointmentSchedulingMethod.EMAIL,
+          },
+          client.id,
+          UserRole.CUSTOMER,
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(appointmentCreate).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     'not-a-date',
@@ -704,6 +748,7 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
       existingProcess: {
         id: 'process-existing',
         client_id: client.id,
+        specialist: { email: specialist.email },
         appointment: {
           id: 'appointment-existing',
           client_id: client.id,
@@ -723,6 +768,7 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
       appointment_status: StatusAgendamento.PENDING,
       scheduling_method: AppointmentSchedulingMethod.EMAIL,
       appointment_datetime: proposedDate,
+      specialist_contact_email: specialist.email,
     });
     expect(prisma.appointment.findFirst).not.toHaveBeenCalled();
     expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
@@ -772,7 +818,11 @@ describe('AppointmentsService.findExistingAppointment — own minimal projection
       name: 'Private Client',
       email: 'private@example.com',
     },
-    specialist: { id: 'specialist-1', name: 'Specialist' },
+    specialist: {
+      id: 'specialist-1',
+      name: 'Specialist',
+      email: 'specialist@example.com',
+    },
     notes: 'private-notes',
     created_at: new Date(),
     updated_at: new Date(),
@@ -812,6 +862,9 @@ describe('AppointmentsService.findExistingAppointment — own minimal projection
         appointment_status: appointment.status,
         scheduling_method: appointment.scheduling_method,
         appointment_datetime: appointment.appointment_datetime,
+        ...(appointment.scheduling_method === AppointmentSchedulingMethod.EMAIL
+          ? { specialist_contact_email: 'specialist@example.com' }
+          : {}),
       });
       expect(prisma.appointment.findFirst).toHaveBeenCalledWith({
         where: expect.objectContaining({
@@ -843,11 +896,27 @@ describe('AppointmentsService.findExistingAppointment — own minimal projection
           scheduling_method: true,
           appointment_datetime: true,
           process: { select: { id: true, client_id: true } },
+          specialist: { select: { email: true } },
         },
       });
       expect(prisma.car.findUnique).not.toHaveBeenCalled();
     },
   );
+  it('não expõe contato do especialista para pedido CALENDLY', async () => {
+    const { service } = harness({
+      ...ownedAppointment,
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+    });
+
+    const result = await service.findExistingAppointment(
+      'client-1',
+      'specialist-1',
+      ProductType.CAR,
+      'car-1',
+    );
+
+    expect(result).not.toHaveProperty('specialist_contact_email');
+  });
   it.each([
     null,
     { ...ownedAppointment, client_id: 'another-client' },
@@ -947,12 +1016,9 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it.each([
-    [undefined, AppointmentSchedulingMethod.CALENDLY],
-    [AppointmentSchedulingMethod.EMAIL, AppointmentSchedulingMethod.EMAIL],
-  ])(
-    'permite consultoria com processo existente e persiste a origem %s como %s',
-    async (inputMethod, expectedMethod) => {
+  it.each([undefined, AppointmentSchedulingMethod.EMAIL])(
+    'bloqueia consultoria com processo ativo para a origem %s',
+    async (inputMethod) => {
       const client = {
         id: 'client-1',
         name: 'Client',
@@ -1005,34 +1071,18 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
           client.id,
           UserRole.CUSTOMER,
         ),
-      ).rejects.toThrow('stop after checks');
+      ).rejects.toThrow(ConflictException);
 
       expect(tx.$queryRaw).toHaveBeenCalledWith(
         expect.anything(),
         'process-dedup:client-1:specialist-1:CONSULTANCY:none',
       );
-      expect(processFindFirst).not.toHaveBeenCalled();
-      expect(appointmentFindFirst).toHaveBeenCalledWith({
-        where: expect.objectContaining({
-          client_id: client.id,
-          specialist_id: specialist.id,
-          product_type: null,
-          product_id: null,
-          status: {
-            in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
-          },
-        }),
-      });
+      expect(processFindFirst).toHaveBeenCalled();
+      expect(appointmentFindFirst).not.toHaveBeenCalled();
       expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
-        appointmentFindFirst.mock.invocationCallOrder[0],
+        processFindFirst.mock.invocationCallOrder[0],
       );
-      expect(tx.appointment.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            scheduling_method: expectedMethod,
-          }),
-        }),
-      );
+      expect(tx.appointment.create).not.toHaveBeenCalled();
     },
   );
 
@@ -1636,7 +1686,7 @@ describe('AppointmentsService.confirmPending — snapshot da negociação', () =
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('confirma consultoria mesmo quando existe processo ativo anterior', async () => {
+  it('rejeita consultoria quando existe outro processo ativo e exclui somente o processo associado', async () => {
     const client = {
       id: 'client-1',
       name: 'Cliente',
@@ -1722,21 +1772,20 @@ describe('AppointmentsService.confirmPending — snapshot da negociação', () =
 
     await expect(
       service.confirmPending(appointment.id, specialist.id),
-    ).resolves.toMatchObject({ id: appointment.id });
+    ).rejects.toThrow(ConflictException);
 
-    expect(processFindFirst).not.toHaveBeenCalled();
-    expect(appointmentFindFirst).toHaveBeenCalledWith({
-      where: {
-        id: { not: appointment.id },
-        client_id: client.id,
-        specialist_id: specialist.id,
-        product_type: null,
-        product_id: null,
-        status: {
-          in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
-        },
-      },
-    });
+    expect(processFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: { not: currentProcess.id },
+          client_id: client.id,
+          specialist_id: specialist.id,
+          product_type: null,
+          status: { in: expect.arrayContaining([ProcessStatus.SCHEDULING]) },
+        }),
+      }),
+    );
+    expect(appointmentFindFirst).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1854,12 +1903,12 @@ describe('AppointmentsService.confirmPending — snapshot da negociação', () =
 
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(tx.$queryRaw).toHaveBeenCalledTimes(4);
-      expect(tx.$queryRaw.mock.calls[0][1]).toBe('product-money:CAR:product-1');
-      expect(tx.$queryRaw.mock.calls[1][1]).toBe(
-        'process-dedup:client-1:specialist-1:CAR:product-1',
-      );
-      expect(tx.$queryRaw.mock.calls[2][1]).toBe(
+      expect(tx.$queryRaw.mock.calls[0][1]).toBe(
         'appointment-schedule:specialist-1',
+      );
+      expect(tx.$queryRaw.mock.calls[1][1]).toBe('product-money:CAR:product-1');
+      expect(tx.$queryRaw.mock.calls[2][1]).toBe(
+        'process-dedup:client-1:specialist-1:CAR:product-1',
       );
       expect(tx.$queryRaw.mock.calls[3][1]).toBe('product-money:CAR:product-1');
       expect(processUpdateMany).toHaveBeenCalledWith({
@@ -2021,8 +2070,7 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
         calendly_invitee_uri: appointment.calendly_invitee_uri,
       },
       data: {
-        calendly_event_uri:
-          'https://api.calendly.com/scheduled_events/event-1',
+        calendly_event_uri: 'https://api.calendly.com/scheduled_events/event-1',
         calendly_invitee_uri:
           'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
       },
@@ -2068,9 +2116,13 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       .fn()
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(trustedDate);
-    const service = new AppointmentsService(prisma, {} as any, {
-      resolveScheduledStartTime,
-    } as any);
+    const service = new AppointmentsService(
+      prisma,
+      {} as any,
+      {
+        resolveScheduledStartTime,
+      } as any,
+    );
 
     await expect(
       service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
@@ -2131,9 +2183,13 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       $transaction: jest.fn(async (callback: any) => callback(tx)),
     } as any;
     const resolveScheduledStartTime = jest.fn().mockResolvedValue(null);
-    const service = new AppointmentsService(prisma, {} as any, {
-      resolveScheduledStartTime,
-    } as any);
+    const service = new AppointmentsService(
+      prisma,
+      {} as any,
+      {
+        resolveScheduledStartTime,
+      } as any,
+    );
 
     await expect(
       service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
@@ -2159,8 +2215,7 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       status: StatusAgendamento.PENDING,
       scheduling_method: AppointmentSchedulingMethod.CALENDLY,
       specialist_rescheduled_at: null,
-      calendly_event_uri:
-        'https://api.calendly.com/scheduled_events/event-1',
+      calendly_event_uri: 'https://api.calendly.com/scheduled_events/event-1',
       calendly_invitee_uri:
         'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
       calendly_sync_status: CalendlySyncStatus.PENDING,
@@ -2189,9 +2244,13 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       };
       return resolvedDate;
     });
-    const service = new AppointmentsService(prisma, {} as any, {
-      resolveScheduledStartTime,
-    } as any);
+    const service = new AppointmentsService(
+      prisma,
+      {} as any,
+      {
+        resolveScheduledStartTime,
+      } as any,
+    );
 
     await expect(
       service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
@@ -2215,8 +2274,7 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       status: StatusAgendamento.PENDING,
       scheduling_method: AppointmentSchedulingMethod.CALENDLY,
       specialist_rescheduled_at: null,
-      calendly_event_uri:
-        'https://api.calendly.com/scheduled_events/event-1',
+      calendly_event_uri: 'https://api.calendly.com/scheduled_events/event-1',
       calendly_invitee_uri:
         'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
       calendly_sync_status: 'PENDING',
@@ -2238,9 +2296,13 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       $transaction: jest.fn(async (callback: any) => callback(tx)),
     } as any;
     const resolveScheduledStartTime = jest.fn().mockResolvedValue(resolvedDate);
-    const service = new AppointmentsService(prisma, {} as any, {
-      resolveScheduledStartTime,
-    } as any);
+    const service = new AppointmentsService(
+      prisma,
+      {} as any,
+      {
+        resolveScheduledStartTime,
+      } as any,
+    );
 
     await expect(
       service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
@@ -2320,8 +2382,7 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
     };
     const lockedAppointment = {
       ...appointment,
-      calendly_event_uri:
-        'https://api.calendly.com/scheduled_events/event-1',
+      calendly_event_uri: 'https://api.calendly.com/scheduled_events/event-1',
       calendly_invitee_uri:
         'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-old',
     };
@@ -2465,8 +2526,7 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       appointment.id,
       appointment.client_id,
       {
-        event_uri:
-          'https://calendly.com/api/v2/scheduled_events/event-1',
+        event_uri: 'https://calendly.com/api/v2/scheduled_events/event-1',
         invitee_uri:
           'https://api.calendly.com/api/v2/scheduled_events/event-1/invitees/invitee-1',
         scheduled_start_time: '2099-01-01T10:00:00.000Z',
@@ -2537,17 +2597,20 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
         apiResult instanceof Error
           ? jest.fn().mockRejectedValue(apiResult)
           : jest.fn().mockResolvedValue(apiResult);
-      const service = new AppointmentsService(prisma, {} as any, {
-        resolveScheduledStartTime,
-      } as any);
+      const service = new AppointmentsService(
+        prisma,
+        {} as any,
+        {
+          resolveScheduledStartTime,
+        } as any,
+      );
 
       await expect(
         service.registerCalendlyScheduled(
           appointment.id,
           appointment.client_id,
           {
-            event_uri:
-              'https://api.calendly.com/scheduled_events/event-1',
+            event_uri: 'https://api.calendly.com/scheduled_events/event-1',
             invitee_uri:
               'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
             scheduled_start_time: '2099-01-01T10:00:00.000Z',
@@ -2600,9 +2663,13 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
         apiResult instanceof Error
           ? jest.fn().mockRejectedValue(apiResult)
           : jest.fn().mockResolvedValue(apiResult);
-      const service = new AppointmentsService(prisma, {} as any, {
-        resolveScheduledStartTime,
-      } as any);
+      const service = new AppointmentsService(
+        prisma,
+        {} as any,
+        {
+          resolveScheduledStartTime,
+        } as any,
+      );
 
       await expect(
         service.registerCalendlyScheduled(
@@ -2651,11 +2718,15 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
       $transaction: jest.fn(async (callback: any) => callback(tx)),
     } as any;
-    const service = new AppointmentsService(prisma, {} as any, {
-      resolveScheduledStartTime: jest
-        .fn()
-        .mockResolvedValue(new Date('2099-01-01T10:00:00.000Z')),
-    } as any);
+    const service = new AppointmentsService(
+      prisma,
+      {} as any,
+      {
+        resolveScheduledStartTime: jest
+          .fn()
+          .mockResolvedValue(new Date('2099-01-01T10:00:00.000Z')),
+      } as any,
+    );
 
     await expect(
       service.registerCalendlyScheduled(appointment.id, appointment.client_id, {

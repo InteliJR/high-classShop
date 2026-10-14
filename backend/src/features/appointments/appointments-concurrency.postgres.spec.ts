@@ -13,14 +13,105 @@ import {
 import { ProcessesService } from '../processes/processes.service';
 import { AppointmentsService } from './appointments.service';
 
-type Deferred = { promise: Promise<void>; resolve: () => void };
+type Deferred<T = void> = { promise: Promise<T>; resolve: (value: T) => void };
 
-function deferred(): Deferred {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
+function deferred<T = void>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
     resolve = done;
   });
   return { promise, resolve };
+}
+
+function observeFirstAdvisoryLock(
+  client: PrismaClient,
+  attempted: Deferred<string>,
+  productAcquired: Deferred,
+) {
+  let observed = false;
+  return new Proxy(client, {
+    get(target, property) {
+      if (property === '$transaction') {
+        return (callback: (tx: any) => Promise<unknown>, options?: any) =>
+          target.$transaction(
+            (tx) =>
+              callback(
+                new Proxy(tx, {
+                  get(transaction, member) {
+                    if (member === '$queryRaw') {
+                      return async (
+                        strings: TemplateStringsArray,
+                        ...values: unknown[]
+                      ) => {
+                        const key = String(values[0]);
+                        if (!observed) {
+                          observed = true;
+                          attempted.resolve(key);
+                        }
+                        const result = await transaction.$queryRaw(
+                          strings,
+                          ...values,
+                        );
+                        if (key.startsWith('product-money:')) {
+                          productAcquired.resolve();
+                        }
+                        return result;
+                      };
+                    }
+                    return bindMember(transaction, member);
+                  },
+                }),
+              ),
+            options,
+          );
+      }
+      return bindMember(target, property);
+    },
+  });
+}
+
+function pauseAfterScheduleLock(
+  client: PrismaClient,
+  acquired: Deferred,
+  release: Deferred,
+) {
+  return new Proxy(client, {
+    get(target, property) {
+      if (property === '$transaction') {
+        return (callback: (tx: any) => Promise<unknown>, options?: any) =>
+          target.$transaction(
+            (tx) =>
+              callback(
+                new Proxy(tx, {
+                  get(transaction, member) {
+                    if (member === '$queryRaw') {
+                      return async (
+                        strings: TemplateStringsArray,
+                        ...values: unknown[]
+                      ) => {
+                        const result = await transaction.$queryRaw(
+                          strings,
+                          ...values,
+                        );
+                        if (
+                          String(values[0]).startsWith('appointment-schedule:')
+                        ) {
+                          acquired.resolve();
+                          await release.promise;
+                        }
+                        return result;
+                      };
+                    }
+                    return bindMember(transaction, member);
+                  },
+                }),
+              ),
+            options,
+          );
+      }
+      return bindMember(target, property);
+    },
+  });
 }
 
 function withApplicationName(url: string, name: string): string {
@@ -618,6 +709,97 @@ describeWithPostgres(
       15_000,
     );
 
+    it('keeps schedule → product lock order across completion and legacy confirmation', async () => {
+      const confirmingAppointment = await holder.appointment.create({
+        data: {
+          client_id: clientIds[0],
+          specialist_id: specialistId,
+          product_type: ProductType.CAR,
+          product_id: carIds[0],
+          status: StatusAgendamento.PENDING,
+          scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+        },
+      });
+      await holder.process.create({
+        data: {
+          client_id: clientIds[0],
+          specialist_id: specialistId,
+          product_type: ProductType.CAR,
+          car_id: carIds[0],
+          appointment_id: confirmingAppointment.id,
+          status: ProcessStatus.SCHEDULING,
+        },
+      });
+
+      const completingAppointment = await holder.appointment.create({
+        data: {
+          client_id: clientIds[1],
+          specialist_id: specialistId,
+          product_type: ProductType.CAR,
+          product_id: carIds[0],
+          status: StatusAgendamento.SCHEDULED,
+          scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+          appointment_datetime: new Date('2099-01-01T08:00:00.000Z'),
+        },
+      });
+      await holder.process.create({
+        data: {
+          client_id: clientIds[1],
+          specialist_id: specialistId,
+          product_type: ProductType.CAR,
+          car_id: carIds[0],
+          appointment_id: completingAppointment.id,
+          status: ProcessStatus.SCHEDULING,
+        },
+      });
+
+      const completionHasSchedule = deferred();
+      const releaseCompletion = deferred();
+      const confirmationFirstAttempt = deferred<string>();
+      const confirmationProductAcquired = deferred();
+      const completionService = new AppointmentsService(
+        pauseAfterScheduleLock(
+          second,
+          completionHasSchedule,
+          releaseCompletion,
+        ) as any,
+        notifications as any,
+        {} as any,
+      );
+      const confirmationService = new AppointmentsService(
+        observeFirstAdvisoryLock(
+          first,
+          confirmationFirstAttempt,
+          confirmationProductAcquired,
+        ) as any,
+        notifications as any,
+        {} as any,
+      );
+
+      const completion = completionService.updateStatus(
+        completingAppointment.id,
+        { status: StatusAgendamento.COMPLETED },
+        specialistId,
+        UserRole.SPECIALIST,
+      );
+      await completionHasSchedule.promise;
+      const confirmation = confirmationService.confirmPending(
+        confirmingAppointment.id,
+        specialistId,
+        new Date('2099-01-02T10:00:00.000Z'),
+      );
+      const firstKey = await confirmationFirstAttempt.promise;
+      if (firstKey.startsWith('product-money:')) {
+        await confirmationProductAcquired.promise;
+      }
+      releaseCompletion.resolve();
+
+      await expect(
+        Promise.all([completion, confirmation]),
+      ).resolves.toHaveLength(2);
+      expect(firstKey).toBe(`appointment-schedule:${specialistId}`);
+    }, 15_000);
+
     it('keeps confirmation/cancellation races consistent and releases the product for a new request', async () => {
       const request = await createRequest(holder, 0);
       const outcomes = await race<any>((a, b) => [
@@ -664,10 +846,7 @@ describeWithPostgres(
     it('serializes the process cancellation route against confirmation without orphaning either record', async () => {
       const request = await createRequest(holder, 0);
       const outcomes = await race<any>((a, b) => [
-        processes(first, a).cancelAppointment(
-          request.process_id,
-          clientIds[0],
-        ),
+        processes(first, a).cancelAppointment(request.process_id, clientIds[0]),
         processes(second, b).confirmAppointment(
           request.process_id,
           specialistId,

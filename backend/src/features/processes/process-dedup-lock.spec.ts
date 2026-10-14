@@ -86,6 +86,7 @@ describe('own active process snapshot', () => {
         id: 'process-1',
         client_id: scope.clientId,
         appointment: attached,
+        specialist: { email: 'specialist@example.com' },
         notes: 'private-notes',
       });
       expect(await response(tx)).toEqual({
@@ -100,6 +101,9 @@ describe('own active process snapshot', () => {
               appointment_status: attached?.status ?? null,
               scheduling_method: attached?.scheduling_method ?? null,
               appointment_datetime: attached?.appointment_datetime ?? null,
+              ...(attached
+                ? { specialist_contact_email: 'specialist@example.com' }
+                : {}),
             },
           },
         },
@@ -118,6 +122,7 @@ describe('own active process snapshot', () => {
               appointment_datetime: true,
             },
           },
+          specialist: { select: { email: true } },
         },
       });
     },

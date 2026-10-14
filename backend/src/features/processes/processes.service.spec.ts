@@ -116,6 +116,7 @@ describe('ProcessesService — produto UUID', () => {
               appointment_datetime: true,
             },
           },
+          specialist: { select: { email: true } },
         },
       }),
     );
@@ -201,6 +202,14 @@ describe('ProcessesService.create — autorização por cliente', () => {
 
     await expect(
       service.create(dto, { id: 'outro-esp', role: 'SPECIALIST' as any }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('SPECIALIST não usa a rota genérica para escolher cliente nem obter PII', async () => {
+    const { service } = mkService();
+
+    await expect(
+      service.create(dto, { id: specialistId, role: UserRole.SPECIALIST }),
     ).rejects.toThrow(ForbiddenException);
   });
 
@@ -381,29 +390,58 @@ describe('ProcessesService.createOnBehalfOfClient', () => {
     expect(data.notes).toContain('Consultoria');
   });
 
-  it('permite consultoria em nome do cliente mesmo com processo ativo anterior', async () => {
+  it('rejeita consultoria em nome do cliente quando há processo ativo mesmo com appointment concluído', async () => {
     const { service, appointmentCreate, tx } = mkService();
-    tx.process.findFirst.mockResolvedValue({ id: 'active-process-1' });
-
-    await service.createOnBehalfOfClient({
-      ...base,
-      product_id: undefined,
-      actorLabel: 'consultor',
-    });
-
-    expect(tx.process.findFirst).not.toHaveBeenCalled();
-    expect(tx.appointment.findFirst).toHaveBeenCalledWith({
-      where: {
+    tx.process.findFirst.mockResolvedValue({
+      id: 'active-process-1',
+      client_id: clientId,
+      appointment: {
+        id: 'completed-appointment-1',
         client_id: clientId,
-        specialist_id: specialistId,
-        product_type: null,
-        product_id: null,
-        status: {
-          in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
-        },
+        status: StatusAgendamento.COMPLETED,
+        scheduling_method: AppointmentSchedulingMethod.EMAIL,
+        appointment_datetime: new Date('2026-01-01T10:00:00.000Z'),
       },
     });
-    expect(appointmentCreate).toHaveBeenCalled();
+
+    await expect(
+      service.createOnBehalfOfClient({
+        ...base,
+        product_id: undefined,
+        actorLabel: 'consultor',
+      }),
+    ).rejects.toThrow(ConflictException);
+
+    expect(tx.process.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          client_id: clientId,
+          specialist_id: specialistId,
+          product_type: null,
+          status: { in: expect.arrayContaining([ProcessStatus.SCHEDULING]) },
+        }),
+      }),
+    );
+    expect(appointmentCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejeita consultoria em nome do cliente diante de processo ativo legado sem appointment', async () => {
+    const { service, appointmentCreate, tx } = mkService();
+    tx.process.findFirst.mockResolvedValue({
+      id: 'legacy-active-process-1',
+      client_id: clientId,
+      appointment: null,
+    });
+
+    await expect(
+      service.createOnBehalfOfClient({
+        ...base,
+        product_id: undefined,
+        actorLabel: 'consultor',
+      }),
+    ).rejects.toThrow(ConflictException);
+
+    expect(appointmentCreate).not.toHaveBeenCalled();
   });
 
   it('rejeita consultoria duplicada em nome do cliente', async () => {
@@ -1581,6 +1619,7 @@ describe('ProcessesService — telefone da contraparte após confirmação', () 
     const prisma = {
       user: {
         findUnique: jest.fn().mockResolvedValue({
+          role: UserRole.CUSTOMER,
           consultant_id: 'consultant-1',
         }),
       },
@@ -1623,6 +1662,55 @@ describe('ProcessesService — telefone da contraparte após confirmação', () 
       expect(result.processes[0].specialist.phone).toBe(expected);
     },
   );
+
+  it('aplica o mesmo escopo do especialista atribuído em findMany e count da lista por cliente', async () => {
+    const service = listService(StatusAgendamento.SCHEDULED);
+
+    await service.getByClientId(
+      clientId,
+      { page: 1, perPage: 20 } as any,
+      specialistId,
+      UserRole.SPECIALIST,
+    );
+
+    const processDelegate = (service as any).prismaService.process;
+    const expectedWhere = {
+      client_id: clientId,
+      specialist_id: specialistId,
+    };
+    expect(processDelegate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere }),
+    );
+    expect(processDelegate.count).toHaveBeenCalledWith({
+      where: expectedWhere,
+    });
+  });
+
+  it('mantém o vínculo do consultor no where de findMany e count', async () => {
+    const service = listService(StatusAgendamento.SCHEDULED);
+
+    await service.getByClientId(
+      clientId,
+      { page: 1, perPage: 20 } as any,
+      'consultant-1',
+      UserRole.CONSULTANT,
+    );
+
+    const processDelegate = (service as any).prismaService.process;
+    const expectedWhere = {
+      client_id: clientId,
+      client: {
+        role: UserRole.CUSTOMER,
+        consultant_id: 'consultant-1',
+      },
+    };
+    expect(processDelegate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere }),
+    );
+    expect(processDelegate.count).toHaveBeenCalledWith({
+      where: expectedWhere,
+    });
+  });
 
   it.each([
     [StatusAgendamento.PENDING, null],
@@ -1812,9 +1900,10 @@ describe('ProcessesService — matriz de contatos do cliente', () => {
     };
     const prisma = {
       user: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({ consultant_id: 'consultant-1' }),
+        findUnique: jest.fn().mockResolvedValue({
+          role: UserRole.CUSTOMER,
+          consultant_id: 'consultant-1',
+        }),
       },
       process: {
         findUniqueOrThrow: jest.fn().mockResolvedValue(process),

@@ -99,6 +99,26 @@ describe("duplicate recovery", () => {
     });
   });
 
+  it("drops a contact field from non-EMAIL duplicate payloads", () => {
+    const calendlySnapshot = {
+      ...snapshot,
+      scheduling_method: "CALENDLY",
+    };
+    expect(
+      service.getActiveProcessSnapshot({
+        response: {
+          status: 409,
+          data: {
+            error: {
+              code: "ACTIVE_PROCESS_EXISTS",
+              details: { existing_request: calendlySnapshot },
+            },
+          },
+        },
+      }),
+    ).not.toHaveProperty("specialist_contact_email");
+  });
+
   it.each([
     { response: { status: 409, data: { message: "Conflito" } } },
     { response: { status: 409, data: { error: { code: "CALENDLY_UNAVAILABLE", details: { existing_request: snapshot } } } } },

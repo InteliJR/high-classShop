@@ -15,6 +15,7 @@ export type ExistingAppointmentCheck =
       appointment_status: StatusAgendamento;
       scheduling_method: AppointmentSchedulingMethod | null;
       appointment_datetime: Date | null;
+      specialist_contact_email?: string;
     };
 
 export interface ActiveProcessSnapshot {
@@ -23,6 +24,7 @@ export interface ActiveProcessSnapshot {
   appointment_status: StatusAgendamento | null;
   scheduling_method: AppointmentSchedulingMethod | null;
   appointment_datetime: Date | null;
+  specialist_contact_email?: string;
 }
 
 /**
@@ -160,6 +162,10 @@ export class ProductResponseDto {
 export class AppointmentResponseEntity {
   @Expose()
   process_id?: string;
+
+  /** Contato liberado somente ao cliente autenticado no fluxo EMAIL. */
+  @Expose()
+  specialist_contact_email?: string;
 
   /**
    * ID único do agendamento (UUID)

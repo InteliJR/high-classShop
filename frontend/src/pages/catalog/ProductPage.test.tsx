@@ -651,6 +651,23 @@ describe("ProductPage scheduling", () => {
     );
   });
 
+  it("does not compose email when an EMAIL snapshot lacks owner-scoped contact", async () => {
+    vi.mocked(checkExistingAppointment).mockResolvedValue({
+      ...existingRequest,
+      exists: true,
+      specialist_contact_email: undefined,
+    });
+    render(page());
+
+    expect(
+      await screen.findByText("Aguardando confirmação do especialista"),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("link", { name: "Abrir aplicativo de e-mail" }),
+    ).toBeNull();
+    expect(screen.queryByRole("link", { name: "Abrir no Gmail" })).toBeNull();
+  });
+
   it.each([
     {
       ...existingRequest,
