@@ -6,7 +6,10 @@ import {
   type CalendlySyncStatus,
   type RegisterCalendlyScheduledPayload,
 } from "../services/appointments.service";
-import { synchronizeCalendlyRegistration } from "../services/calendly-sync";
+import {
+  isCalendlySyncComplete,
+  synchronizeCalendlyRegistration,
+} from "../services/calendly-sync";
 
 export type CalendlySyncState =
   | "idle"
@@ -69,7 +72,25 @@ export function useCalendlyScheduling({
         return;
       }
 
-      const payload = (event as any)?.data?.payload;
+      let expectedOrigin: string | null = null;
+      try {
+        expectedOrigin = modalUrl ? new URL(modalUrl).origin : null;
+      } catch {
+        return;
+      }
+      const currentFrame = document.querySelector<HTMLIFrameElement>(
+        ".calendly-popup-content iframe",
+      );
+      if (
+        !expectedOrigin ||
+        event.origin !== expectedOrigin ||
+        !currentFrame?.contentWindow ||
+        event.source !== currentFrame.contentWindow
+      ) {
+        return;
+      }
+
+      const payload = event.data?.payload;
       const eventUri = payload?.event?.uri;
       const inviteeUri = payload?.invitee?.uri;
 
@@ -110,10 +131,7 @@ export function useCalendlyScheduling({
         if (!mountedRef.current || syncController.signal.aborted || !status) return;
 
         setIsModalOpen(false);
-        if (
-          status.calendly_sync_status === "SYNCED" ||
-          status.appointment_datetime
-        ) {
+        if (isCalendlySyncComplete(status)) {
           onSynced?.(status);
           setSyncState("done");
           setSyncMessage(
@@ -161,9 +179,12 @@ export function useCalendlyScheduling({
   const openPopup = (appointmentId: string, calendlyUrl: string) => {
     syncAbortRef.current?.abort();
     if (navigateTimerRef.current) clearTimeout(navigateTimerRef.current);
+    const normalizedUrl = /^https?:\/\//i.test(calendlyUrl)
+      ? calendlyUrl
+      : `https://${calendlyUrl}`;
     confirmedRef.current = false;
     setPendingAppointmentId(appointmentId);
-    setModalUrl(calendlyUrl);
+    setModalUrl(normalizedUrl);
     setSyncState("waiting_event");
     setSyncMessage(
       "Conclua seu agendamento no Calendly para sincronizar automaticamente com a plataforma.",

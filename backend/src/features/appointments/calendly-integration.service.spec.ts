@@ -227,6 +227,9 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
         update: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
+      user: {
+        findUnique: jest.fn(),
+      },
     };
     const service = new CalendlyIntegrationService(prisma as any);
     const connection = {
@@ -349,6 +352,55 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
       'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
       expect.objectContaining({ maxRedirects: 0 }),
     );
+  });
+
+  it('rejeita invitee autoritativo cujo email pertence a outro cliente', async () => {
+    const { service, prisma } = makeRefreshService();
+    prisma.user.findUnique.mockResolvedValue({ email: 'cliente@example.com' });
+    jest.mocked(axios.get).mockResolvedValueOnce({
+      data: {
+        resource: {
+          email: 'outra-pessoa@example.com',
+          event: 'https://api.calendly.com/scheduled_events/event-1',
+          start_time: '2099-01-01T10:00:00.000Z',
+        },
+      },
+    });
+
+    await expect(
+      service.resolveScheduledStartTime(
+        'specialist-1',
+        'https://api.calendly.com/scheduled_events/event-1',
+        'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+        'client-1',
+      ),
+    ).rejects.toThrow('não pertence ao cliente do agendamento');
+    expect(prisma.calendlyConnection.update).not.toHaveBeenCalled();
+  });
+
+  it('aceita email autoritativo equivalente ignorando espaços e caixa', async () => {
+    const { service, prisma } = makeRefreshService();
+    prisma.user.findUnique.mockResolvedValue({
+      email: '  Cliente@Example.com ',
+    });
+    jest.mocked(axios.get).mockResolvedValueOnce({
+      data: {
+        resource: {
+          email: 'cliente@example.COM',
+          event: 'https://api.calendly.com/scheduled_events/event-1',
+          start_time: '2099-01-01T10:00:00.000Z',
+        },
+      },
+    });
+
+    await expect(
+      service.resolveScheduledStartTime(
+        'specialist-1',
+        'https://api.calendly.com/scheduled_events/event-1',
+        'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+        'client-1',
+      ),
+    ).resolves.toEqual(new Date('2099-01-01T10:00:00.000Z'));
   });
 
   it('rejeita URI de evento não confiável retornada pelo recurso de convidado', async () => {

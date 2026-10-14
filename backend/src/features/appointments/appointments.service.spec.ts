@@ -1,5 +1,6 @@
 import {
   AppointmentSchedulingMethod,
+  CalendlySyncStatus,
   Prisma,
   ProcessStatus,
   ProductCurrency,
@@ -1922,6 +1923,110 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
     );
   });
 
+  it('não persiste URIs controladas pelo cliente quando a API não confirma o horário', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.PENDING,
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      specialist_rescheduled_at: null,
+      calendly_event_uri: null,
+      calendly_invitee_uri: null,
+      calendly_sync_status: CalendlySyncStatus.PENDING,
+      appointment_datetime: null,
+    };
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      appointment: {
+        findUnique: jest.fn().mockResolvedValue(appointment),
+        findFirst: jest.fn(),
+        update: jest.fn().mockImplementation(({ data }) => ({
+          ...appointment,
+          ...data,
+        })),
+      },
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      $transaction: jest.fn(async (callback: any) => callback(tx)),
+    } as any;
+    const resolveScheduledStartTime = jest.fn().mockResolvedValue(null);
+    const service = new AppointmentsService(prisma, {} as any, {
+      resolveScheduledStartTime,
+    } as any);
+
+    await expect(
+      service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
+        event_uri: 'https://api.calendly.com/scheduled_events/event-poison',
+        invitee_uri:
+          'https://api.calendly.com/scheduled_events/event-poison/invitees/invitee-poison',
+      }),
+    ).resolves.toMatchObject({
+      calendly_sync_status: CalendlySyncStatus.PENDING,
+      appointment_datetime: null,
+    });
+    expect(resolveScheduledStartTime).toHaveBeenCalledTimes(1);
+    expect(tx.appointment.update).not.toHaveBeenCalled();
+    expect(tx.appointment.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('não ressuscita como SYNCED um agendamento cancelado pelo webhook enquanto consultava a API', async () => {
+    const resolvedDate = new Date('2099-01-03T14:00:00.000Z');
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.PENDING,
+      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      specialist_rescheduled_at: null,
+      calendly_event_uri:
+        'https://api.calendly.com/scheduled_events/event-1',
+      calendly_invitee_uri:
+        'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+      calendly_sync_status: CalendlySyncStatus.PENDING,
+      appointment_datetime: null,
+    };
+    let stored = { ...appointment };
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      appointment: {
+        findUnique: jest.fn(async () => ({ ...stored })),
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockImplementation(({ data }) => ({
+          ...stored,
+          ...data,
+        })),
+      },
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      $transaction: jest.fn(async (callback: any) => callback(tx)),
+    } as any;
+    const resolveScheduledStartTime = jest.fn(async () => {
+      stored = {
+        ...stored,
+        calendly_sync_status: CalendlySyncStatus.FAILED,
+      };
+      return resolvedDate;
+    });
+    const service = new AppointmentsService(prisma, {} as any, {
+      resolveScheduledStartTime,
+    } as any);
+
+    await expect(
+      service.registerCalendlyScheduled(appointment.id, appointment.client_id, {
+        event_uri: appointment.calendly_event_uri,
+        invitee_uri: appointment.calendly_invitee_uri,
+      }),
+    ).resolves.toMatchObject({
+      calendly_sync_status: CalendlySyncStatus.FAILED,
+      appointment_datetime: null,
+    });
+    expect(tx.appointment.update).not.toHaveBeenCalled();
+    expect(tx.appointment.findFirst).not.toHaveBeenCalled();
+  });
+
   it('reconsulta o Calendly ao repetir a mesma associação ainda PENDING e promove para SYNCED', async () => {
     const resolvedDate = new Date('2099-01-03T14:00:00.000Z');
     const appointment = {
@@ -2195,6 +2300,7 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       appointment.specialist_id,
       'https://api.calendly.com/scheduled_events/event-1',
       'https://api.calendly.com/scheduled_events/event-1/invitees/invitee-1',
+      appointment.client_id,
     );
     expect(tx.$queryRaw).toHaveBeenCalledWith(
       expect.anything(),
@@ -2275,14 +2381,7 @@ describe('AppointmentsService.registerCalendlyScheduled — schedule lock', () =
       });
       expect(resolveScheduledStartTime).toHaveBeenCalledTimes(1);
       expect(tx.appointment.findFirst).not.toHaveBeenCalled();
-      expect(tx.appointment.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            calendly_sync_status: 'PENDING',
-            appointment_datetime: null,
-          }),
-        }),
-      );
+      expect(tx.appointment.update).not.toHaveBeenCalled();
     },
   );
 

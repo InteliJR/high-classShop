@@ -9,10 +9,17 @@ export const CALENDLY_SYNC_MAX_ATTEMPTS = 8;
 export const CALENDLY_SYNC_BASE_DELAY_MS = 500;
 const CALENDLY_SYNC_MAX_DELAY_MS = 3500;
 
-function isSynced(status: CalendlySyncStatus): boolean {
+export function isCalendlySyncComplete(status: CalendlySyncStatus): boolean {
   return (
-    status.calendly_sync_status === "SYNCED" ||
-    Boolean(status.appointment_datetime)
+    status.calendly_sync_status === "SYNCED" &&
+    Boolean(status.appointment_datetime) &&
+    status.status !== "CANCELLED"
+  );
+}
+
+function isTerminal(status: CalendlySyncStatus): boolean {
+  return (
+    status.calendly_sync_status === "FAILED" || status.status === "CANCELLED"
   );
 }
 
@@ -60,7 +67,9 @@ export async function synchronizeCalendlyRegistration(
 
     try {
       lastStatus = await getCalendlySyncStatus(appointmentId);
-      if (isSynced(lastStatus)) return lastStatus;
+      if (isCalendlySyncComplete(lastStatus) || isTerminal(lastStatus)) {
+        return lastStatus;
+      }
     } catch (error) {
       lastError = error;
     }

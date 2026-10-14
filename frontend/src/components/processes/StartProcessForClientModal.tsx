@@ -4,8 +4,6 @@ import { PopupModal, useCalendlyEventListener } from "react-calendly";
 import { getClients, createConsultantProcess, type Client } from "../../services/consultant.service";
 import { officeService } from "../../services/office";
 import { getPublicSpecialistById, type PublicSpecialistProfile } from "../../services/specialists.service";
-import type { RegisterCalendlyScheduledPayload } from "../../services/appointments.service";
-import { synchronizeCalendlyRegistration } from "../../services/calendly-sync";
 import Button from "../../components/ui/button";
 import { Loader2, Search } from "lucide-react";
 
@@ -77,11 +75,9 @@ function StartProcessForClientModalInner({
   const submittingRef = useRef(false);
   const mountedRef = useRef(false);
   const operationGeneration = useRef(0);
-  const syncAbortRef = useRef<AbortController | null>(null);
   const busyCallbackRef = useRef(onBusyChange);
   const calendlyOpenCallbackRef = useRef(onCalendlyOpenChange);
   const [pendingOperation, setPendingOperation] = useState<{
-    appointmentId: string;
     generation: number;
     client: Client;
   } | null>(null);
@@ -99,7 +95,6 @@ function StartProcessForClientModalInner({
     return () => {
       mountedRef.current = false;
       operationGeneration.current += 1;
-      syncAbortRef.current?.abort();
       calendlyOpenCallbackRef.current?.(false);
       busyCallbackRef.current?.(false);
     };
@@ -155,48 +150,19 @@ function StartProcessForClientModalInner({
     );
   }, [clients, search]);
 
-  // Sincroniza o horário escolhido no Calendly com o agendamento criado
+  // Este fluxo cria o processo em nome do cliente como EMAIL. O endpoint de
+  // sincronização Calendly é exclusivo do próprio cliente autenticado, então
+  // o evento do popup apenas conclui a navegação deste fluxo delegado.
   useCalendlyEventListener({
-    onEventScheduled: async (event) => {
+    onEventScheduled: () => {
       const pending = pendingOperation;
       if (!pending || !isCurrentOperation(pending.generation)) return;
-
-      const payload = (event as any)?.data?.payload;
-      const eventUri = payload?.event?.uri;
-      const inviteeUri = payload?.invitee?.uri;
-
-      try {
-        if (eventUri && inviteeUri) {
-          const registrationPayload: RegisterCalendlyScheduledPayload = {
-            event_uri: eventUri,
-            invitee_uri: inviteeUri,
-            client_event: "calendly.event_scheduled",
-            client_observed_at: new Date().toISOString(),
-          };
-          syncAbortRef.current?.abort();
-          const syncController = new AbortController();
-          syncAbortRef.current = syncController;
-          await synchronizeCalendlyRegistration(
-            pending.appointmentId,
-            registrationPayload,
-            { signal: syncController.signal },
-          );
-          if (!isCurrentOperation(pending.generation)) return;
-        }
-      } catch (err) {
-        if (isCurrentOperation(pending.generation)) {
-          console.error("Erro ao sincronizar evento do Calendly:", err);
-        }
-      } finally {
-        if (isCurrentOperation(pending.generation)) {
-          operationGeneration.current += 1;
-          setCalendlyOpen(false);
-          setPendingOperation(null);
-          submittingRef.current = false;
-          setBusy(false);
-          navigate(config.redirectTo);
-        }
-      }
+      operationGeneration.current += 1;
+      setCalendlyOpen(false);
+      setPendingOperation(null);
+      submittingRef.current = false;
+      setBusy(false);
+      navigate(config.redirectTo);
     },
   });
 
@@ -235,7 +201,7 @@ function StartProcessForClientModalInner({
           url = `https://${url}`;
         }
         awaitingCalendly = true;
-        setPendingOperation({ appointmentId: process.appointment_id, generation, client: submittedClient });
+        setPendingOperation({ generation, client: submittedClient });
         setCalendlyUrl(url);
         setCalendlyOpen(true);
         setCalendlyMessage(
@@ -348,7 +314,6 @@ function StartProcessForClientModalInner({
           onModalClose={() => {
             if (!pendingOperation || !isCurrentOperation(pendingOperation.generation)) return;
             operationGeneration.current += 1;
-            syncAbortRef.current?.abort();
             setCalendlyOpen(false);
             setPendingOperation(null);
             submittingRef.current = false;

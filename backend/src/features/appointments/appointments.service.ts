@@ -1946,6 +1946,14 @@ export class AppointmentsService {
       throw this.buildRescheduleAlreadyUsedError(appointmentId);
     }
 
+    if (appointment.calendly_sync_status === CalendlySyncStatus.FAILED) {
+      return {
+        appointment_id: appointment.id,
+        calendly_sync_status: appointment.calendly_sync_status,
+        appointment_datetime: appointment.appointment_datetime,
+      };
+    }
+
     if (
       appointment.calendly_event_uri &&
       parseCalendlyResourceUri(appointment.calendly_event_uri, 'event')
@@ -2001,6 +2009,7 @@ export class AppointmentsService {
           appointment.specialist_id,
           eventUri,
           inviteeUri,
+          appointment.client_id,
         );
     } catch (error: any) {
       if (error instanceof BadRequestException) {
@@ -2058,6 +2067,11 @@ export class AppointmentsService {
         throw this.buildRescheduleAlreadyUsedError(appointmentId);
       }
       if (
+        lockedAppointment.calendly_sync_status === CalendlySyncStatus.FAILED
+      ) {
+        return lockedAppointment;
+      }
+      if (
         lockedAppointment.calendly_event_uri &&
         parseCalendlyResourceUri(
           lockedAppointment.calendly_event_uri,
@@ -2077,10 +2091,7 @@ export class AppointmentsService {
         }
       }
 
-      if (
-        !scheduledStartTime &&
-        this.hasTrustedCalendlySchedule(lockedAppointment)
-      ) {
+      if (!scheduledStartTime) {
         return lockedAppointment;
       }
 

@@ -234,61 +234,35 @@ describe("StartProcessForClientModal capability", () => {
     expect(createConsultantProcess).toHaveBeenCalledWith(expect.objectContaining({ client_id: client.id }));
   });
 
-  it("ignores Calendly sync completion after its scope changes", async () => {
-    let resolve!: (value: Awaited<ReturnType<typeof registerCalendlyScheduledEvent>>) => void;
+  it("ignores a Calendly event after its scope changes", async () => {
     vi.mocked(getPublicSpecialistById).mockImplementation(async (id) => ({ ...specialist, id, calendly_scheduling_available: true }));
-    vi.mocked(registerCalendlyScheduledEvent).mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
     const view = render(scopeContent());
     await selectAndCreate();
     await screen.findByRole("link", { name: "Agendar no Calendly" });
     const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0].onEventScheduled!;
-    let sync!: Promise<unknown>;
-    act(() => { sync = Promise.resolve(listener({ data: { event: "calendly.event_scheduled", payload: { event: { uri: "event-uri" }, invitee: { uri: "invitee-uri" } } } } as Parameters<typeof listener>[0])); });
     view.rerender(scopeContent({ specialistId: "specialist-2" }));
-    await act(async () => { resolve({} as never); await sync; });
+    await act(async () => {
+      await listener({ data: { event: "calendly.event_scheduled", payload: { event: { uri: "event-uri" }, invitee: { uri: "invitee-uri" } } } } as Parameters<typeof listener>[0]);
+    });
+    expect(registerCalendlyScheduledEvent).not.toHaveBeenCalled();
     expect(getCalendlySyncStatus).not.toHaveBeenCalled();
     expect(screen.getByTestId("location").textContent).toBe("/start");
   });
 
-  it("retries the same Calendly registration after PENDING before redirecting", async () => {
+  it("does not register an on-behalf EMAIL appointment through the client-only Calendly endpoint", async () => {
     vi.mocked(getPublicSpecialistById).mockResolvedValue({
       ...specialist,
       calendly_scheduling_available: true,
     });
-    vi.mocked(registerCalendlyScheduledEvent)
-      .mockResolvedValueOnce({
-        appointment_id: "appointment-1",
-        calendly_sync_status: "PENDING",
-        appointment_datetime: null,
-      })
-      .mockResolvedValueOnce({
-        appointment_id: "appointment-1",
-        calendly_sync_status: "SYNCED",
-        appointment_datetime: "2099-01-01T10:00:00.000Z",
-      });
-    vi.mocked(getCalendlySyncStatus)
-      .mockResolvedValueOnce({
-        appointment_id: "appointment-1",
-        status: "PENDING",
-        calendly_sync_status: "PENDING",
-        appointment_datetime: null,
-        calendly_last_sync_at: null,
-      })
-      .mockResolvedValueOnce({
-        appointment_id: "appointment-1",
-        status: "SCHEDULED",
-        calendly_sync_status: "SYNCED",
-        appointment_datetime: "2099-01-01T10:00:00.000Z",
-        calendly_last_sync_at: "2099-01-01T09:59:00.000Z",
-      });
     renderModal();
     await selectAndCreate();
     await screen.findByRole("link", { name: "Agendar no Calendly" });
     vi.useFakeTimers();
     const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
       .onEventScheduled!;
+    let completion!: Promise<unknown>;
     act(() => {
-      void Promise.resolve(
+      completion = Promise.resolve(
         listener({
           data: {
             event: "calendly.event_scheduled",
@@ -301,22 +275,13 @@ describe("StartProcessForClientModal capability", () => {
       );
     });
     await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(registerCalendlyScheduledEvent).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(500);
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
+      await completion;
     });
 
-    expect(registerCalendlyScheduledEvent).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(registerCalendlyScheduledEvent).mock.calls[0][1]).toEqual(
-      vi.mocked(registerCalendlyScheduledEvent).mock.calls[1][1],
-    );
+    expect(registerCalendlyScheduledEvent).not.toHaveBeenCalled();
+    expect(getCalendlySyncStatus).not.toHaveBeenCalled();
     expect(screen.getByText("Processos do consultor")).toBeTruthy();
-    vi.useRealTimers();
   });
 
   it("keeps the selected client when only label or callback props change", async () => {

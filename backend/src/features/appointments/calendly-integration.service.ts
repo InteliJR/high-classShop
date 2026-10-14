@@ -308,6 +308,7 @@ export class CalendlyIntegrationService {
     specialistId: string,
     eventUri?: string | null,
     inviteeUri?: string | null,
+    expectedClientId?: string | null,
   ): Promise<Date | null> {
     if (!specialistId || (!eventUri && !inviteeUri)) {
       return null;
@@ -338,6 +339,23 @@ export class CalendlyIntegrationService {
       : null;
 
     const inviteeResource = inviteeData?.resource || inviteeData;
+    if (expectedClientId) {
+      const client = await this.prisma.user.findUnique({
+        where: { id: expectedClientId },
+        select: { email: true },
+      });
+      const expectedEmail = client?.email?.trim().toLowerCase();
+      const authoritativeEmail = inviteeResource?.email?.trim().toLowerCase();
+      if (
+        !expectedEmail ||
+        !authoritativeEmail ||
+        expectedEmail !== authoritativeEmail
+      ) {
+        throw new BadRequestException(
+          'O convidado do Calendly não pertence ao cliente do agendamento',
+        );
+      }
+    }
     const inviteeEventUri =
       inviteeResource?.event || inviteeResource?.scheduled_event?.uri;
     const inviteeEventReference = inviteeEventUri
