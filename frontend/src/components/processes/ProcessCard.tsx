@@ -98,6 +98,7 @@ export default function ProcessCard({
 }: ProcessCardProps) {
   const navigate = useNavigate();
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
   const [completionReason, setCompletionReason] = useState<string | null>(null);
   const [activeContract, setActiveContract] = useState<any>(null);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -124,6 +125,16 @@ export default function ProcessCard({
 
   // Verifica se é um processo de consultoria (sem produto atribuído)
   const isConsultancy = !process.product_type || !process.product_id;
+  const canManuallyAdvanceProcess =
+    !isClientView && process.status === "NEGOTIATION" && !isConsultancy;
+  const hasPendingAppointmentRejection =
+    process.status === "SCHEDULING" &&
+    process.appointment_status === "PENDING" &&
+    !!process.appointment_id;
+  const canRejectProcess =
+    process.status !== "COMPLETED" &&
+    process.status !== "REJECTED" &&
+    !hasPendingAppointmentRejection;
 
   // Contraparte do processo: quem esta olhando quer o contato do outro lado.
   // Nao ha fallback entre os dois — se o dado da contraparte nao veio, a
@@ -453,7 +464,7 @@ export default function ProcessCard({
             </p>
           )}
         </div>
-        {!isClientView && (
+        {canManuallyAdvanceProcess && (
           <button
             onClick={() => setShowUpdateModal(true)}
             className="p-1 hover:bg-gray-100 rounded transition shrink-0"
@@ -966,14 +977,26 @@ export default function ProcessCard({
 
           {/* Action Buttons */}
           <div className="flex flex-col-reverse sm:flex-row gap-2 pt-3 border-t border-gray-200">
-            {/* Update Status Button */}
-            <button
-              onClick={() => setShowUpdateModal(true)}
-              className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 border border-slate-700 text-slate-700 text-xs md:text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              <Edit2 size={16} />
-              Alterar Status
-            </button>
+            {/* A única transição manual aceita pelo backend. */}
+            {canManuallyAdvanceProcess && (
+              <button
+                onClick={() => setShowUpdateModal(true)}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 border border-slate-700 text-slate-700 text-xs md:text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                <Edit2 size={16} />
+                Alterar Status
+              </button>
+            )}
+
+            {canRejectProcess && (
+              <button
+                onClick={() => setShowRejectModal(true)}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 border border-red-300 text-red-700 text-xs md:text-sm font-medium rounded-lg hover:bg-red-50 transition-colors"
+              >
+                <XCircle size={16} />
+                Recusar processo
+              </button>
+            )}
 
             {/* Negotiation Button: Only show if status is NEGOTIATION and process has product */}
             {process.status === "NEGOTIATION" && !isConsultancy && (
@@ -1047,10 +1070,15 @@ export default function ProcessCard({
 
       {/* Update Status Modal */}
       <UpdateProcessStatusModal
-        isOpen={showUpdateModal}
-        onClose={() => setShowUpdateModal(false)}
+        isOpen={showUpdateModal || showRejectModal}
+        action={showRejectModal ? "reject" : "status"}
+        onClose={() => {
+          setShowUpdateModal(false);
+          setShowRejectModal(false);
+        }}
         onSuccess={() => {
           setShowUpdateModal(false);
+          setShowRejectModal(false);
           onStatusUpdated?.();
         }}
         process={process}

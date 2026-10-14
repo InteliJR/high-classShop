@@ -10,6 +10,7 @@ import {
   getMeetingByProcess,
   getProcessCompletionReason,
   getProcessWithActiveContract,
+  rejectProcess,
 } from "../../services/processes.service";
 import { rescheduleAppointment } from "../../services/appointments.service";
 import { isoToLocalDateTimeInput } from "../../lib/appointment-datetime";
@@ -21,6 +22,7 @@ vi.mock("../../services/processes.service", () => ({
   getProcessCompletionReason: vi.fn(),
   getProcessWithActiveContract: vi.fn(),
   markConversationDone: vi.fn(),
+  rejectProcess: vi.fn(),
   startMeeting: vi.fn(),
   updateProcessStatus: vi.fn(),
 }));
@@ -50,7 +52,11 @@ const baseProcess: Process = {
 
 function renderCard(
   process: Process = baseProcess,
-  props: { isClientView?: boolean; onStatusUpdated?: () => void } = {},
+  props: {
+    isClientView?: boolean;
+    isExpanded?: boolean;
+    onStatusUpdated?: () => void;
+  } = {},
 ) {
   return render(
     <MemoryRouter>
@@ -72,6 +78,7 @@ describe("ProcessCard appointment time actions", () => {
       appointment_status: "SCHEDULED",
     });
     vi.mocked(rescheduleAppointment).mockResolvedValue({} as never);
+    vi.mocked(rejectProcess).mockResolvedValue({} as never);
   });
 
   afterEach(() => {
@@ -318,6 +325,49 @@ describe("ProcessCard appointment time actions", () => {
     expect(screen.queryByRole("button", { name: "Confirmar horário" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Alterar e confirmar" })).toBeNull();
     expect(screen.queryByText("Solicitação de agendamento")).toBeNull();
+  });
+
+  it("offers only the authorized manual transition from negotiation", () => {
+    renderCard({ ...baseProcess, status: "NEGOTIATION" }, { isExpanded: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "Alterar Status" }));
+
+    const statusSelect = screen.getByLabelText(/Novo Status/i);
+    const options = within(statusSelect).getAllByRole("option");
+    expect(options.map((option) => option.textContent)).toEqual([
+      "Documentação",
+    ]);
+    expect(screen.queryByRole("option", { name: "Agendamento" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Negociação" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Concluído" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Rejeitado" })).toBeNull();
+  });
+
+  it.each(["SCHEDULING", "PROCESSING_CONTRACT", "DOCUMENTATION", "COMPLETED", "REJECTED"] as const)(
+    "hides the status pencil when %s has no manual transition",
+    (status) => {
+      renderCard({ ...baseProcess, status }, { isExpanded: true });
+
+      expect(
+        screen.queryByRole("button", { name: "Alterar Status" }),
+      ).toBeNull();
+    },
+  );
+
+  it("keeps rejection separate from the status selector", () => {
+    renderCard(
+      { ...baseProcess, status: "DOCUMENTATION" },
+      { isExpanded: true },
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Alterar Status" }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Recusar processo" }),
+    );
+    expect(screen.getByText("Rejeitar Processo")).toBeTruthy();
+    expect(screen.queryByLabelText(/Novo Status/i)).toBeNull();
   });
 
   it.each(["(11) 98765-4321", "+55 11 98765-4321"])("renders safe WhatsApp and preserves the original phone %s", (phone) => {
