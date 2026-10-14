@@ -91,6 +91,93 @@ function signalProductLockAttempt(client: PrismaClient, attempted: Deferred) {
   });
 }
 
+async function deleteFixtureProcesses(
+  client: PrismaClient,
+  clientId: string,
+  specialistId: string,
+): Promise<void> {
+  const processes = await client.process.findMany({
+    where: { client_id: clientId, specialist_id: specialistId },
+    select: { id: true },
+  });
+  const processIds = processes.map(({ id }) => id);
+  await client.processStatusHistory.deleteMany({
+    where: { processId: { in: processIds } },
+  });
+  await client.process.deleteMany({
+    where: { id: { in: processIds } },
+  });
+}
+
+describe('product association fixture cleanup', () => {
+  it('removes restricted history before its own processes and preserves other fixtures', async () => {
+    const clientId = 'fixture-client';
+    const specialistId = 'fixture-specialist';
+    let processes = [
+      { id: 'own-process', client_id: clientId, specialist_id: specialistId },
+      {
+        id: 'other-client-process',
+        client_id: 'other-client',
+        specialist_id: specialistId,
+      },
+      {
+        id: 'other-specialist-process',
+        client_id: clientId,
+        specialist_id: 'other-specialist',
+      },
+    ];
+    let history = processes.map(({ id }) => ({ processId: id }));
+    const deletionOrder: string[] = [];
+    const client = {
+      process: {
+        findMany: async ({ where }: any) =>
+          processes
+            .filter(
+              (row) =>
+                row.client_id === where.client_id &&
+                row.specialist_id === where.specialist_id,
+            )
+            .map(({ id }) => ({ id })),
+        deleteMany: async ({ where }: any) => {
+          const targets = processes
+            .filter((row) =>
+              where.id
+                ? where.id.in.includes(row.id)
+                : row.client_id === where.client_id &&
+                  row.specialist_id === where.specialist_id,
+            )
+            .map(({ id }) => id);
+          if (history.some(({ processId }) => targets.includes(processId))) {
+            throw new Error('ProcessStatusHistory FK RESTRICT');
+          }
+          processes = processes.filter(({ id }) => !targets.includes(id));
+          deletionOrder.push('process');
+        },
+      },
+      processStatusHistory: {
+        deleteMany: async ({ where }: any) => {
+          history = history.filter(
+            ({ processId }) => !where.processId.in.includes(processId),
+          );
+          deletionOrder.push('history');
+        },
+      },
+    } as unknown as PrismaClient;
+
+    await deleteFixtureProcesses(client, clientId, specialistId);
+
+    expect(deletionOrder).toEqual(['history', 'process']);
+    expect(processes.map(({ id }) => id)).toEqual([
+      'other-client-process',
+      'other-specialist-process',
+    ]);
+    expect(history.map(({ processId }) => processId)).toEqual([
+      'other-client-process',
+      'other-specialist-process',
+    ]);
+  });
+});
+
 const databaseUrl = process.env.POSTGRES_CONCURRENCY_TEST_URL;
 const describeWithPostgres = databaseUrl ? describe : describe.skip;
 
@@ -190,9 +277,7 @@ describeWithPostgres('product association lock — PostgreSQL concurrency', () =
   afterAll(async () => {
     try {
       if (updater) {
-        await updater.process.deleteMany({
-          where: { client_id: clientId, specialist_id: specialistId },
-        });
+        await deleteFixtureProcesses(updater, clientId, specialistId);
         await updater.appointment.deleteMany({
           where: { client_id: clientId, specialist_id: specialistId },
         });
