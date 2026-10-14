@@ -820,6 +820,7 @@ export default function CreateContractPage() {
             productLabel={getProductTypeLabel(prefillData.product_type)}
             currency={prefillData.currency}
             vehiclePrice={vehiclePrice || 0}
+            totalCommissionValue={totalCommissionValue}
             specialistValue={specialistValue}
             showEarningsPreview={
               vehiclePrice > 0 &&
