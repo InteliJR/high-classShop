@@ -213,6 +213,6 @@ Entrar como administrador e especialista. Em cada dashboard, confirmar visualmen
 
 Salvar evidências em `artifacts/e2e/active-product-dashboard/` ou anexá-las diretamente ao relatório da execução quando o navegador não oferecer persistência local.
 
-- [ ] **Step 5: Revisar diff e publicar**
+- [x] **Step 5: Revisar diff e publicar**
 
 Revisar mudanças contra `origin/main`, executar novamente os comandos de verificação finais, enviar `codex/active-product-dashboard` e abrir PR com regra, testes e evidências visuais descritos no corpo.
