@@ -573,7 +573,9 @@ export default function ProcessCard({
               <strong>{formattedAppointmentTime}</strong>
               {isAppointmentConfirmed
                 ? "."
-                : " (aguardando confirmação do especialista)."}
+                : process.appointment_scheduling_method === "CALENDLY"
+                  ? " (aguardando sincronização do Calendly)."
+                  : " (aguardando confirmação do especialista)."}
             </p>
           )}
           {process.specialist_rescheduled_at && (
@@ -589,7 +591,9 @@ export default function ProcessCard({
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-amber-900 mb-2">
                 {isClientView
-                  ? "Aguardando confirmação do especialista"
+                  ? process.appointment_scheduling_method === "CALENDLY"
+                    ? "Aguardando sincronização do Calendly"
+                    : "Aguardando confirmação do especialista"
                   : "Solicitação de agendamento"}
               </p>
               {dateTimeActionError && dateTimeAction === null && (

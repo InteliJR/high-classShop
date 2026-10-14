@@ -107,8 +107,6 @@ export default function ProductPage() {
   } | null>(null);
   const [isStartProcessModalOpen, setIsStartProcessModalOpen] = useState(false);
   const [isStartProcessBusy, setIsStartProcessBusy] = useState(false);
-  const [startProcessPortalElement, setStartProcessPortalElement] = useState<HTMLDivElement | null>(null);
-  const [isStartProcessCalendlyOpen, setIsStartProcessCalendlyOpen] = useState(false);
   const startProcessBusyRef = useRef(false);
   const handleStartProcessBusyChange = useCallback((busy: boolean) => {
     startProcessBusyRef.current = busy;
@@ -564,14 +562,18 @@ export default function ProductPage() {
                 <div>
                   <p className="font-semibold">
                     {currentRequest.appointment_status === "PENDING"
-                      ? "Aguardando confirmação do especialista"
+                      ? currentRequest.scheduling_method === "CALENDLY"
+                        ? "Aguardando sincronização do Calendly"
+                        : "Aguardando confirmação do especialista"
                       : currentRequest.appointment_status === "SCHEDULED"
                         ? "Agendamento já realizado"
                         : "Você já possui um processo ativo para este produto"}
                   </p>
                   <p className="text-sm mt-1">
                     {currentRequest.appointment_status === "PENDING"
-                      ? "Você já demonstrou interesse neste produto. Acompanhe sua solicitação em Meus Processos."
+                      ? currentRequest.scheduling_method === "CALENDLY"
+                        ? "Seu horário foi enviado pelo Calendly e a plataforma está concluindo a sincronização. Acompanhe em Meus Processos."
+                        : "Você já demonstrou interesse neste produto. Acompanhe sua solicitação em Meus Processos."
                       : currentRequest.appointment_status === "SCHEDULED"
                         ? "Você já possui um agendamento marcado com este especialista para este produto."
                         : "Acompanhe o processo existente em Meus Processos."}
@@ -684,9 +686,6 @@ export default function ProductPage() {
             title="Iniciar processo para cliente"
             hideTitle
             dismissible={!isStartProcessBusy}
-            onPortalContainerChange={setStartProcessPortalElement}
-            portalActive={isStartProcessCalendlyOpen}
-            portalLabel="Agendar reunião no Calendly"
           >
             <StartProcessForClientModal
               productType={requestProductType ?? "CAR"}
@@ -696,8 +695,6 @@ export default function ProductPage() {
               mode={user?.role === "OFFICE" ? "OFFICE" : "CONSULTANT"}
               onClose={() => handleStartProcessOpenChange(false)}
               onBusyChange={handleStartProcessBusyChange}
-              calendlyRootElement={startProcessPortalElement}
-              onCalendlyOpenChange={setIsStartProcessCalendlyOpen}
             />
           </DialogContent>
         </Dialog>

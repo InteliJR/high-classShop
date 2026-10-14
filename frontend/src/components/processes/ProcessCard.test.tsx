@@ -121,6 +121,39 @@ describe("ProcessCard appointment time actions", () => {
     expect(screen.getByText("Aguardando sincronização do Calendly")).toBeTruthy();
   });
 
+  it("tells the client that a pending Calendly request is synchronizing, not awaiting specialist confirmation", () => {
+    renderCard(
+      {
+        ...baseProcess,
+        appointment_scheduling_method: "CALENDLY",
+      },
+      { isClientView: true },
+    );
+
+    expect(screen.getByText("Aguardando sincronização do Calendly")).toBeTruthy();
+    expect(
+      screen.queryByText("Aguardando confirmação do especialista"),
+    ).toBeNull();
+  });
+
+  it("labels a provisional Calendly datetime as synchronizing", () => {
+    renderCard(
+      {
+        ...baseProcess,
+        appointment_scheduling_method: "CALENDLY",
+        appointment_datetime: "2099-09-20T17:30:00.000Z",
+      },
+      { isClientView: true },
+    );
+
+    expect(
+      screen.getAllByText(/aguardando sincronização do Calendly/i),
+    ).toHaveLength(2);
+    expect(
+      screen.queryByText(/aguardando confirmação do especialista/i),
+    ).toBeNull();
+  });
+
   it("lets the specialist recover a legacy undated request", () => {
     renderCard({
       ...baseProcess,

@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, renderHook } from "@testing-library/react";
+import { StrictMode, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useCalendlyEventListener,
   type EventScheduledEvent,
 } from "react-calendly";
 import {
+  cancelPendingAppointment,
   getCalendlySyncStatus,
   registerCalendlyScheduledEvent,
 } from "../services/appointments.service";
@@ -83,6 +85,7 @@ describe("useCalendlyScheduling active registration retry", () => {
     popup.className = "calendly-popup-content";
     popup.appendChild(document.createElement("iframe"));
     document.body.appendChild(popup);
+    vi.mocked(cancelPendingAppointment).mockResolvedValue({} as never);
   });
 
   afterEach(() => {
@@ -160,7 +163,112 @@ describe("useCalendlyScheduling active registration retry", () => {
 
     expect(registerCalendlyScheduledEvent).toHaveBeenCalledTimes(1);
     expect(getCalendlySyncStatus).toHaveBeenCalledTimes(1);
+    expect(cancelPendingAppointment).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("cancela exatamente uma vez o PENDING ao desmontar antes do evento", async () => {
+    const { result, unmount } = renderHook(
+      () => useCalendlyScheduling({ successRedirectMessage: "ok" }),
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <StrictMode>{children}</StrictMode>
+        ),
+      },
+    );
+
+    act(() =>
+      result.current.openPopup("appointment-abandoned", "https://calendly.com/a"),
+    );
+    unmount();
+    await flushPromises();
+
+    expect(cancelPendingAppointment).toHaveBeenCalledTimes(1);
+    expect(cancelPendingAppointment).toHaveBeenCalledWith("appointment-abandoned");
+  });
+
+  it("não cancela quando o fechamento disputa com um evento confiável", async () => {
+    vi.mocked(registerCalendlyScheduledEvent).mockResolvedValue({
+      appointment_id: "appointment-race",
+      calendly_sync_status: "SYNCED",
+      appointment_datetime: syncedStatus.appointment_datetime,
+    });
+    vi.mocked(getCalendlySyncStatus).mockResolvedValue({
+      ...syncedStatus,
+      appointment_id: "appointment-race",
+    });
+    const { result } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() =>
+      result.current.openPopup("appointment-race", "https://calendly.com/a"),
+    );
+    const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
+      .onEventScheduled!;
+
+    await act(async () => {
+      const sync = listener(scheduledEvent());
+      await result.current.closePopup();
+      await sync;
+    });
+
+    expect(cancelPendingAppointment).not.toHaveBeenCalled();
+  });
+
+  it("não cancela no unmount depois que um evento confiável foi recebido", async () => {
+    let resolveRegistration!: (value: {
+      appointment_id: string;
+      calendly_sync_status: "SYNCED";
+      appointment_datetime: string;
+    }) => void;
+    vi.mocked(registerCalendlyScheduledEvent).mockReturnValue(
+      new Promise((resolve) => {
+        resolveRegistration = resolve;
+      }),
+    );
+    const { result, unmount } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() =>
+      result.current.openPopup("appointment-confirmed", "https://calendly.com/a"),
+    );
+    const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0]
+      .onEventScheduled!;
+
+    act(() => {
+      void listener(scheduledEvent());
+    });
+    unmount();
+    await flushPromises();
+
+    expect(cancelPendingAppointment).not.toHaveBeenCalled();
+    resolveRegistration({
+      appointment_id: "appointment-confirmed",
+      calendly_sync_status: "SYNCED",
+      appointment_datetime: syncedStatus.appointment_datetime,
+    });
+    await flushPromises();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("deduplica fechamento e cleanup mesmo quando o cancelamento falha", async () => {
+    vi.mocked(cancelPendingAppointment).mockRejectedValue(new Error("offline"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { result, unmount } = renderHook(() =>
+      useCalendlyScheduling({ successRedirectMessage: "ok" }),
+    );
+    act(() =>
+      result.current.openPopup("appointment-once", "https://calendly.com/a"),
+    );
+
+    await act(async () => {
+      await result.current.closePopup();
+    });
+    unmount();
+    await flushPromises();
+
+    expect(cancelPendingAppointment).toHaveBeenCalledTimes(1);
+    expect(consoleError).toHaveBeenCalledTimes(1);
   });
 
   it("encerra após oito tentativas sem criar loop de retry", async () => {

@@ -1,9 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { PopupModal, useCalendlyEventListener } from "react-calendly";
 import { getClients, createConsultantProcess, type Client } from "../../services/consultant.service";
 import { officeService } from "../../services/office";
-import { getPublicSpecialistById, type PublicSpecialistProfile } from "../../services/specialists.service";
 import Button from "../../components/ui/button";
 import { Loader2, Search } from "lucide-react";
 
@@ -37,8 +35,6 @@ interface Props {
   mode?: keyof typeof MODES;
   onClose: () => void;
   onBusyChange?(busy: boolean): void;
-  calendlyRootElement: HTMLElement | null;
-  onCalendlyOpenChange?(open: boolean): void;
 }
 
 export default function StartProcessForClientModal(props: Props) {
@@ -55,8 +51,6 @@ function StartProcessForClientModalInner({
   mode = "CONSULTANT",
   onClose,
   onBusyChange,
-  calendlyRootElement,
-  onCalendlyOpenChange,
 }: Props) {
   const config = MODES[mode];
   const navigate = useNavigate();
@@ -68,34 +62,20 @@ function StartProcessForClientModalInner({
   const [error, setError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Calendly
-  const [specialistProfile, setSpecialistProfile] = useState<PublicSpecialistProfile | null>(null);
-  const [isLoadingSpecialist, setIsLoadingSpecialist] = useState(true);
-  const [specialistError, setSpecialistError] = useState<string | null>(null);
   const submittingRef = useRef(false);
   const mountedRef = useRef(false);
   const operationGeneration = useRef(0);
   const busyCallbackRef = useRef(onBusyChange);
-  const calendlyOpenCallbackRef = useRef(onCalendlyOpenChange);
-  const [pendingOperation, setPendingOperation] = useState<{
-    generation: number;
-    client: Client;
-  } | null>(null);
-  const [calendlyUrl, setCalendlyUrl] = useState<string | null>(null);
-  const [isCalendlyOpen, setIsCalendlyOpen] = useState(false);
-  const [calendlyMessage, setCalendlyMessage] = useState<string | null>(null);
 
   useLayoutEffect(() => {
     busyCallbackRef.current = onBusyChange;
-    calendlyOpenCallbackRef.current = onCalendlyOpenChange;
-  }, [onBusyChange, onCalendlyOpenChange]);
+  }, [onBusyChange]);
 
   useLayoutEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       operationGeneration.current += 1;
-      calendlyOpenCallbackRef.current?.(false);
       busyCallbackRef.current?.(false);
     };
   }, []);
@@ -106,11 +86,6 @@ function StartProcessForClientModalInner({
   const setBusy = (busy: boolean) => {
     setIsSubmitting(busy);
     busyCallbackRef.current?.(busy);
-  };
-
-  const setCalendlyOpen = (open: boolean) => {
-    setIsCalendlyOpen(open);
-    calendlyOpenCallbackRef.current?.(open);
   };
 
   useEffect(() => {
@@ -129,19 +104,6 @@ function StartProcessForClientModalInner({
     return () => { active = false; };
   }, [config]);
 
-  // Carrega o link do Calendly do especialista para permitir agendar a reunião
-  useEffect(() => {
-    let active = true;
-    setSpecialistProfile(null);
-    setSpecialistError(null);
-    setIsLoadingSpecialist(true);
-    getPublicSpecialistById(specialistId)
-      .then((profile) => { if (active) setSpecialistProfile(profile); })
-      .catch(() => { if (active) setSpecialistError("Não foi possível carregar o especialista. Tente novamente."); })
-      .finally(() => { if (active) setIsLoadingSpecialist(false); });
-    return () => { active = false; };
-  }, [specialistId]);
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return clients;
@@ -150,72 +112,34 @@ function StartProcessForClientModalInner({
     );
   }, [clients, search]);
 
-  // Este fluxo cria o processo em nome do cliente como EMAIL. O endpoint de
-  // sincronização Calendly é exclusivo do próprio cliente autenticado, então
-  // o evento do popup apenas conclui a navegação deste fluxo delegado.
-  useCalendlyEventListener({
-    onEventScheduled: () => {
-      const pending = pendingOperation;
-      if (!pending || !isCurrentOperation(pending.generation)) return;
-      operationGeneration.current += 1;
-      setCalendlyOpen(false);
-      setPendingOperation(null);
-      submittingRef.current = false;
-      setBusy(false);
-      navigate(config.redirectTo);
-    },
-  });
-
   const handleSubmit = async () => {
-    if (submittingRef.current || isLoadingSpecialist || specialistError ||
-      !specialistProfile || specialistProfile.id !== specialistId) return;
+    if (submittingRef.current) return;
     if (!selectedClient) {
       setError("Selecione um cliente.");
       return;
     }
     setError(null);
-    const specialistCalendlyUrl = specialistProfile.calendly_url?.trim();
-    if (specialistProfile.calendly_scheduling_available && !specialistCalendlyUrl) {
-      setError("O link do Calendly não está disponível. Tente novamente.");
-      return;
-    }
     submittingRef.current = true;
     const generation = ++operationGeneration.current;
     const submittedClient = selectedClient;
-    let awaitingCalendly = false;
     setBusy(true);
     try {
-      const process = await config.createProcess({
+      await config.createProcess({
         client_id: submittedClient.id,
         specialist_id: specialistId,
         product_type: productType,
         product_id: productId,
       });
       if (!isCurrentOperation(generation)) return;
-
-      // Se o especialista tem Calendly, abre o popup para marcar o horário.
-      // Sem Calendly, segue o fluxo antigo (agendamento definido depois).
-      if (specialistProfile.calendly_scheduling_available && specialistCalendlyUrl && process.appointment_id) {
-        let url = specialistCalendlyUrl.trim();
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-          url = `https://${url}`;
-        }
-        awaitingCalendly = true;
-        setPendingOperation({ generation, client: submittedClient });
-        setCalendlyUrl(url);
-        setCalendlyOpen(true);
-        setCalendlyMessage(
-          "Conclua o agendamento no Calendly para marcar o horário da reunião.",
-        );
-      } else {
-        navigate(config.redirectTo);
-      }
+      // Criação delegada é sempre EMAIL; somente o próprio cliente pode abrir
+      // e sincronizar um popup Calendly em uma sessão autenticada dele.
+      navigate(config.redirectTo);
     } catch (err) {
       if (isCurrentOperation(generation)) {
         setError((err as Error).message || "Erro ao criar processo. Tente novamente.");
       }
     } finally {
-      if (isCurrentOperation(generation) && !awaitingCalendly) {
+      if (isCurrentOperation(generation)) {
         submittingRef.current = false;
         setBusy(false);
       }
@@ -284,11 +208,7 @@ function StartProcessForClientModalInner({
         )}
       </div>
 
-      {specialistError && <p role="alert" className="text-sm text-red-500">{specialistError}</p>}
       {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
-      {calendlyMessage && (
-        <p className="text-sm text-blue-600">{calendlyMessage}</p>
-      )}
 
       <div className="flex justify-end gap-3 pt-2">
         <Button type="button" onClick={() => {
@@ -301,34 +221,11 @@ function StartProcessForClientModalInner({
         <Button
           type="button"
           onClick={handleSubmit}
-          disabled={isSubmitting || !selectedClient || isLoadingClients || isLoadingSpecialist || Boolean(specialistError) || specialistProfile?.id !== specialistId}
+          disabled={isSubmitting || !selectedClient || isLoadingClients}
         >
           {isSubmitting ? "Criando..." : "Criar processo"}
         </Button>
       </div>
-
-      {calendlyRootElement && calendlyUrl && isCalendlyOpen && (
-        <PopupModal
-          url={calendlyUrl}
-          open={isCalendlyOpen}
-          onModalClose={() => {
-            if (!pendingOperation || !isCurrentOperation(pendingOperation.generation)) return;
-            operationGeneration.current += 1;
-            setCalendlyOpen(false);
-            setPendingOperation(null);
-            submittingRef.current = false;
-            setBusy(false);
-            navigate(config.redirectTo);
-          }}
-          rootElement={calendlyRootElement}
-          prefill={{
-            name: pendingOperation
-              ? `${pendingOperation.client.name} ${pendingOperation.client.surname}`.trim()
-              : undefined,
-            email: pendingOperation?.client.email,
-          }}
-        />
-      )}
     </div>
   );
 }

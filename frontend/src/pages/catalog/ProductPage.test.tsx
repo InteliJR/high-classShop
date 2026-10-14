@@ -678,7 +678,7 @@ describe("ProductPage scheduling", () => {
     {
       appointment_status: "PENDING" as const,
       scheduling_method: "CALENDLY" as const,
-      message: "Aguardando confirmação do especialista",
+      message: "Aguardando sincronização do Calendly",
     },
     {
       appointment_status: "SCHEDULED" as const,
