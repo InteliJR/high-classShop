@@ -97,7 +97,6 @@ const specialist: PublicSpecialistProfile = {
   id: "specialist-1",
   name: "Especialista",
   surname: "Teste",
-  email: "especialista@example.com",
   calendly_url: null,
   speciality: "CAR",
   calendly_scheduling_available: false,
@@ -112,6 +111,7 @@ const appointment: PendingAppointmentCreated = {
   appointment_datetime: "2099-09-20T17:30:00.000Z",
   status: "PENDING",
   scheduling_method: "EMAIL",
+  specialist_contact_email: "private-specialist@example.com",
   created_at: "2026-01-01T00:00:00.000Z",
   updated_at: "2026-01-01T00:00:00.000Z",
 };
@@ -121,6 +121,7 @@ const existingRequest: ActiveProcessSnapshot = {
   appointment_status: "PENDING",
   scheduling_method: "EMAIL",
   appointment_datetime: appointment.appointment_datetime ?? null,
+  specialist_contact_email: "private-specialist@example.com",
 };
 
 function ChangeProductButton() {
@@ -454,6 +455,11 @@ describe("ProductPage scheduling", () => {
     );
     expect(createPlatformAppointment).not.toHaveBeenCalled();
     expect(screen.getByRole("link", { name: "Abrir no Gmail" })).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Abrir aplicativo de e-mail" })
+        .getAttribute("href"),
+    ).toContain("private-specialist%40example.com");
     expect(
       screen
         .getByRole("link", { name: "Acompanhar processo" })

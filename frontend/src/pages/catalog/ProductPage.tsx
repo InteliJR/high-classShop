@@ -49,6 +49,7 @@ function appointmentSnapshot(
     appointment_status: appointment.status,
     scheduling_method: appointment.scheduling_method ?? null,
     appointment_datetime: appointment.appointment_datetime ?? null,
+    specialist_contact_email: appointment.specialist_contact_email,
   };
 }
 
@@ -65,12 +66,14 @@ function isPendingEmailRequest(
 ): request is ActiveProcessSnapshot & {
   appointment_id: string;
   appointment_datetime: string;
+  specialist_contact_email: string;
 } {
   return (
     request?.appointment_status === "PENDING" &&
     request.scheduling_method === "EMAIL" &&
     Boolean(request.appointment_id) &&
-    Boolean(validAppointmentDate(request.appointment_datetime))
+    Boolean(validAppointmentDate(request.appointment_datetime)) &&
+    Boolean(request.specialist_contact_email?.trim())
   );
 }
 
@@ -547,7 +550,7 @@ export default function ProductPage() {
             <EmailSchedulingSuccess
               key={emailRequest.appointment_id}
               appointmentId={emailRequest.appointment_id}
-              recipient={specialist.email}
+              recipient={emailRequest.specialist_contact_email}
               specialistName={`${specialist.name} ${specialist.surname}`.trim()}
               clientName={`${user.name} ${user.surname}`.trim()}
               productLabel={`${product.marca} ${product.modelo}`.trim()}

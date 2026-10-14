@@ -13,6 +13,7 @@ const base = {
 const snapshot = {
   appointment_id: "appointment-1", process_id: "process-1", appointment_status: "PENDING" as const,
   scheduling_method: "EMAIL" as const, appointment_datetime: "2099-10-20T17:30:00.000Z",
+  specialist_contact_email: "private-specialist@example.com",
 };
 
 describe("owned existing appointment check", () => {
@@ -35,7 +36,7 @@ describe("owned existing appointment check", () => {
 describe("pending product request contracts", () => {
   it("sends a dated EMAIL proposal and returns its process ID", async () => {
     const input: ProductPendingAppointmentInput = { ...base, scheduling_method: "EMAIL", appointment_datetime: snapshot.appointment_datetime };
-    const created = { ...base, id: snapshot.appointment_id, process_id: snapshot.process_id, status: "PENDING" as const, appointment_datetime: snapshot.appointment_datetime, scheduling_method: "EMAIL" as const, created_at: "2026-10-14T12:00:00Z", updated_at: "2026-10-14T12:00:00Z" };
+    const created = { ...base, id: snapshot.appointment_id, process_id: snapshot.process_id, status: "PENDING" as const, appointment_datetime: snapshot.appointment_datetime, scheduling_method: "EMAIL" as const, specialist_contact_email: snapshot.specialist_contact_email, created_at: "2026-10-14T12:00:00Z", updated_at: "2026-10-14T12:00:00Z" };
     vi.mocked(api.post).mockResolvedValue({ data: { success: true, data: created } });
     await expect(createPendingAppointment(input)).resolves.toEqual(created);
     expect(api.post).toHaveBeenCalledWith("/appointments/pending", input, { withCredentials: true });
@@ -67,8 +68,35 @@ describe("pending product request contracts", () => {
 });
 
 describe("duplicate recovery", () => {
-  it.each([snapshot, { ...snapshot, appointment_id: null, appointment_status: null, scheduling_method: null, appointment_datetime: null }])("reads only the owned snapshot at error.details.existing_request", (existing_request) => {
+  it.each([
+    snapshot,
+    {
+      appointment_id: null,
+      process_id: snapshot.process_id,
+      appointment_status: null,
+      scheduling_method: null,
+      appointment_datetime: null,
+    },
+  ])("reads only the owned snapshot at error.details.existing_request", (existing_request) => {
     expect(service.getActiveProcessSnapshot({ response: { status: 409, data: { error: { code: "ACTIVE_PROCESS_EXISTS", details: { existing_request } } } } })).toEqual(existing_request);
+  });
+
+  it("preserves the owner-scoped specialist contact from an EMAIL duplicate", () => {
+    expect(
+      service.getActiveProcessSnapshot({
+        response: {
+          status: 409,
+          data: {
+            error: {
+              code: "ACTIVE_PROCESS_EXISTS",
+              details: { existing_request: snapshot },
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      specialist_contact_email: snapshot.specialist_contact_email,
+    });
   });
 
   it.each([

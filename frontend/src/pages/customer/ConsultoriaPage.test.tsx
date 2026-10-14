@@ -18,7 +18,7 @@ vi.mock("../../hooks/useCalendlyScheduling", () => ({
   useCalendlyScheduling: useCalendlySchedulingMock,
 }));
 
-const specialist: PublicSpecialistProfile = { id: "specialist-1", name: "Ana", surname: "Silva", email: "ana@example.com", speciality: "CAR", calendly_url: "https://calendly.com/ana/reuniao", calendly_scheduling_available: false };
+const specialist: PublicSpecialistProfile = { id: "specialist-1", name: "Ana", surname: "Silva", speciality: "CAR", calendly_url: "https://calendly.com/ana/reuniao", calendly_scheduling_available: false };
 function mockSpecialist(value: PublicSpecialistProfile) {
   vi.mocked(getSpecialistsGroupedByCategory).mockResolvedValue({ CAR: [value], BOAT: [], AIRCRAFT: [] });
 }

@@ -298,7 +298,6 @@ function SpecialistCard({
           <h3 className="text-lg font-semibold text-ink">
             {specialist.name} {specialist.surname}
           </h3>
-          <p className="text-sm text-muted">{specialist.email}</p>
         </div>
         <Button
           onClick={() => onRequestMeeting(specialist)}

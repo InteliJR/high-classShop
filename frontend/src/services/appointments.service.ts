@@ -25,6 +25,8 @@ export interface Appointment {
   calendly_last_sync_at?: string | null;
   calendly_sync_status?: "PENDING" | "SYNCED" | "FAILED";
   scheduling_method?: AppointmentSchedulingMethod | null;
+  /** Released only by authenticated, owner-scoped EMAIL request responses. */
+  specialist_contact_email?: string;
   specialist_rescheduled_at?: string | null;
   specialist_rescheduled_from?: string | null;
   client?: {
@@ -64,6 +66,7 @@ export type ExistingAppointmentCheck =
       appointment_status: Appointment["status"];
       scheduling_method: AppointmentSchedulingMethod | null;
       appointment_datetime: string | null;
+      specialist_contact_email?: string;
     };
 
 export interface ActiveProcessSnapshot {
@@ -72,6 +75,7 @@ export interface ActiveProcessSnapshot {
   appointment_status: Appointment["status"] | null;
   scheduling_method: AppointmentSchedulingMethod | null;
   appointment_datetime: string | null;
+  specialist_contact_email?: string;
 }
 
 interface BaseProductRequest {
@@ -101,12 +105,20 @@ export function getActiveProcessSnapshot(error: unknown): ActiveProcessSnapshot 
     || !(snapshot.appointment_datetime === null || typeof snapshot.appointment_datetime === "string")
     || !(snapshot.appointment_status === null || ["PENDING", "SCHEDULED", "COMPLETED", "CANCELLED"].includes(snapshot.appointment_status as string))
     || !(snapshot.scheduling_method === null || ["EMAIL", "CALENDLY", "PLATFORM"].includes(snapshot.scheduling_method as string))) return null;
+  const specialistContactEmail = snapshot.specialist_contact_email;
+  const hasValidSpecialistContact =
+    snapshot.scheduling_method === "EMAIL" &&
+    typeof specialistContactEmail === "string" &&
+    specialistContactEmail.trim().length > 0;
   return {
     process_id: snapshot.process_id,
     appointment_id: snapshot.appointment_id as string | null,
     appointment_status: snapshot.appointment_status as ActiveProcessSnapshot["appointment_status"],
     scheduling_method: snapshot.scheduling_method as ActiveProcessSnapshot["scheduling_method"],
     appointment_datetime: snapshot.appointment_datetime as string | null,
+    ...(hasValidSpecialistContact
+      ? { specialist_contact_email: specialistContactEmail.trim() }
+      : {}),
   };
 }
 

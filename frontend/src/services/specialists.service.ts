@@ -32,7 +32,6 @@ export type PublicSpecialistProfile = {
   id: string;
   name: string;
   surname: string;
-  email: string;
   speciality: "CAR" | "BOAT" | "AIRCRAFT" | null;
   calendly_url: string | null;
   calendly_scheduling_available: boolean;
