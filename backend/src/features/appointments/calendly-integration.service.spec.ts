@@ -138,7 +138,11 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
 
   function makeRefreshService() {
     const prisma = {
-      calendlyConnection: { findUnique: jest.fn(), update: jest.fn() },
+      calendlyConnection: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
     };
     const service = new CalendlyIntegrationService(prisma as any);
     const connection = {
@@ -153,7 +157,7 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
     prisma.calendlyConnection.update.mockImplementation(({ data }) =>
       Promise.resolve({ ...connection, ...data }),
     );
-    return { service, prisma };
+    return { service, prisma, connection };
   }
 
   it('mantém conexão ativa quando token expirado é renovado com sucesso', async () => {
@@ -193,7 +197,7 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
   });
 
   it('persiste desativação e erro após invalid_grant definitivo', async () => {
-    const { service, prisma } = makeRefreshService();
+    const { service, prisma, connection } = makeRefreshService();
     const error = {
       response: { status: 400, data: { error: 'invalid_grant' } },
     };
@@ -202,10 +206,91 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
     await expect(
       service.resolveScheduledStartTime('specialist-1', '/scheduled_events/1'),
     ).rejects.toBe(error);
-    expect(prisma.calendlyConnection.update).toHaveBeenCalledWith({
-      where: { id: 'connection-1' },
+    expect(prisma.calendlyConnection.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'connection-1',
+        refresh_token_encrypted: connection.refresh_token_encrypted,
+        is_active: true,
+      },
       data: { is_active: false, last_error: 'invalid_grant' },
     });
+  });
+
+  it('preserva reconexão enquanto refresh antigo está pendente com invalid_grant', async () => {
+    const { service, prisma } = makeCallbackService(
+      'https://calendly.com/ana/reuniao',
+    );
+    const storedConnection = {
+      id: 'connection-1',
+      user_id: 'specialist-1',
+      is_active: true,
+      last_error: null as string | null,
+      access_token_encrypted: (service as any).encryptToken('old-access'),
+      refresh_token_encrypted: (service as any).encryptToken('old-refresh'),
+    };
+    const connectionClient = {
+      ...prisma.calendlyConnection,
+      findUnique: jest.fn(async () => ({ ...storedConnection })),
+      update: jest.fn(async ({ data }) => {
+        Object.assign(storedConnection, data);
+        return { ...storedConnection };
+      }),
+      updateMany: jest.fn(async ({ where, data }) => {
+        const matches = Object.entries(where).every(
+          ([key, value]) =>
+            storedConnection[key as keyof typeof storedConnection] === value,
+        );
+        if (matches) Object.assign(storedConnection, data);
+        return { count: matches ? 1 : 0 };
+      }),
+    };
+    prisma.calendlyConnection = connectionClient;
+    connectionClient.upsert.mockImplementation(async ({ update }) => {
+      Object.assign(storedConnection, update);
+      return { ...storedConnection };
+    });
+
+    let rejectRefresh!: (error: unknown) => void;
+    let markRefreshStarted!: () => void;
+    const refreshStarted = new Promise<void>((resolve) => {
+      markRefreshStarted = resolve;
+    });
+    jest.mocked(axios.get).mockRejectedValueOnce({ response: { status: 401 } });
+    jest.mocked(axios.post).mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectRefresh = reject;
+          markRefreshStarted();
+        }),
+    );
+    const error = {
+      response: { status: 400, data: { error: 'invalid_grant' } },
+    };
+    const refreshResult = expect(
+      service.resolveScheduledStartTime('specialist-1', '/scheduled_events/1'),
+    ).rejects.toBe(error);
+    await refreshStarted;
+    await service.handleOAuthCallback('new-code', 'new-state');
+    const reconnectedTokens = {
+      access_token_encrypted: storedConnection.access_token_encrypted,
+      refresh_token_encrypted: storedConnection.refresh_token_encrypted,
+    };
+    expect(
+      (service as any).decryptToken(reconnectedTokens.access_token_encrypted),
+    ).toBe('access');
+    expect(
+      (service as any).decryptToken(reconnectedTokens.refresh_token_encrypted),
+    ).toBe('refresh');
+
+    rejectRefresh(error);
+    await refreshResult;
+    expect(storedConnection).toEqual(
+      expect.objectContaining({
+        ...reconnectedTokens,
+        is_active: true,
+        last_error: null,
+      }),
+    );
   });
 
   it('preserva conexão ativa após falha transitória de refresh', async () => {
@@ -216,6 +301,7 @@ describe('CalendlyIntegrationService connection lifecycle', () => {
       service.resolveScheduledStartTime('specialist-1', '/scheduled_events/1'),
     ).rejects.toBeDefined();
     expect(prisma.calendlyConnection.update).not.toHaveBeenCalled();
+    expect(prisma.calendlyConnection.updateMany).not.toHaveBeenCalled();
   });
 });
 

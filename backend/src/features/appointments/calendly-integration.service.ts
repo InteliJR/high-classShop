@@ -543,7 +543,8 @@ export class CalendlyIntegrationService {
     access_token_encrypted: string;
     refresh_token_encrypted: string;
   }> {
-    const refreshToken = this.decryptToken(connection.refresh_token_encrypted);
+    const refreshTokenEncrypted = connection.refresh_token_encrypted;
+    const refreshToken = this.decryptToken(refreshTokenEncrypted);
 
     const tokenUrl =
       process.env.CALENDLY_OAUTH_TOKEN_URL ||
@@ -573,8 +574,12 @@ export class CalendlyIntegrationService {
       data = response.data;
     } catch (error: any) {
       if (error?.response?.data?.error === 'invalid_grant') {
-        await this.prisma.calendlyConnection.update({
-          where: { id: connection.id },
+        await this.prisma.calendlyConnection.updateMany({
+          where: {
+            id: connection.id,
+            refresh_token_encrypted: refreshTokenEncrypted,
+            is_active: true,
+          },
           data: { is_active: false, last_error: 'invalid_grant' },
         });
       }
