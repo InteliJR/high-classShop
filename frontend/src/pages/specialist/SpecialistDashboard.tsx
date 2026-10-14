@@ -88,11 +88,9 @@ export default function SpecialistDashboard() {
 
       {/* Cards de Estatísticas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
-        {/* Card 1: Produtos Cadastrados */}
+        {/* Card 1: Produtos ativos */}
         <div className="bg-surface rounded-lg p-6">
-          <p className="text-ink-soft font-semibold mb-2">
-            Produtos Cadastrados
-          </p>
+          <p className="text-ink-soft font-semibold mb-2">Produtos ativos</p>
           {isLoading ? (
             <>
               <Skeleton className="h-9 w-16 mb-2" />
@@ -101,9 +99,11 @@ export default function SpecialistDashboard() {
           ) : (
             <>
               <p className="text-4xl font-bold text-ink mb-2">
-                {stats?.productsListed || 0}
+                {stats?.activeProducts ?? 0}
               </p>
-              <p className="text-sm text-muted">Total de produtos</p>
+              <p className="text-sm text-muted">
+                {stats?.productsListed ?? 0} produtos no total
+              </p>
             </>
           )}
         </div>
