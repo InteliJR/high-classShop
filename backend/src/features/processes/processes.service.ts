@@ -51,6 +51,30 @@ export type ProcessesRequester = {
   companyId?: string | null;
 };
 
+type ProcessAccessAction = 'read' | 'update-status' | 'reject';
+
+type ProcessAccessRecord = {
+  client_id: string;
+  specialist_id: string;
+  client?: {
+    consultant_id?: string | null;
+    company_id?: string | null;
+    consultant?: { company_id?: string | null } | null;
+  } | null;
+};
+
+const PROCESS_STATUS_TRANSITIONS: Record<
+  ProcessStatus,
+  readonly ProcessStatus[]
+> = {
+  [ProcessStatus.SCHEDULING]: [ProcessStatus.NEGOTIATION],
+  [ProcessStatus.NEGOTIATION]: [ProcessStatus.DOCUMENTATION],
+  [ProcessStatus.PROCESSING_CONTRACT]: [ProcessStatus.DOCUMENTATION],
+  [ProcessStatus.DOCUMENTATION]: [ProcessStatus.COMPLETED],
+  [ProcessStatus.COMPLETED]: [],
+  [ProcessStatus.REJECTED]: [],
+};
+
 /**
  * Dados para abrir um processo em nome de um cliente.
  *
@@ -75,6 +99,62 @@ export class ProcessesService {
     private readonly prismaService: PrismaService,
     private readonly notificationService: NotificationService,
   ) {}
+
+  /**
+   * Política única de acesso a um processo. Todo papel desconhecido e toda
+   * combinação de ação/vínculo não declarada são negados por padrão.
+   */
+  private assertProcessAccess(
+    process: ProcessAccessRecord,
+    requester: ProcessesRequester,
+    action: ProcessAccessAction,
+  ): void {
+    const isAssignedSpecialist =
+      requester.role === UserRole.SPECIALIST &&
+      process.specialist_id === requester.id;
+    const isClient =
+      requester.role === UserRole.CUSTOMER &&
+      process.client_id === requester.id;
+    const isClientConsultant =
+      requester.role === UserRole.CONSULTANT &&
+      process.client?.consultant_id === requester.id;
+    const isClientOffice =
+      requester.role === UserRole.OFFICE &&
+      !!requester.companyId &&
+      (process.client?.company_id === requester.companyId ||
+        process.client?.consultant?.company_id === requester.companyId);
+
+    const allowed =
+      requester.role === UserRole.ADMIN ||
+      (action === 'read' &&
+        (isAssignedSpecialist ||
+          isClient ||
+          isClientConsultant ||
+          isClientOffice)) ||
+      (action === 'update-status' &&
+        (isAssignedSpecialist || isClientOffice)) ||
+      (action === 'reject' && (isAssignedSpecialist || isClient));
+
+    if (!allowed) {
+      this.logger.warn(
+        `[process-access] negado action=${action} role=${requester.role} user=${requester.id}`,
+      );
+      throw new ForbiddenException(
+        'Você não tem permissão para acessar este processo',
+      );
+    }
+  }
+
+  private assertStatusTransition(
+    currentStatus: ProcessStatus,
+    nextStatus: ProcessStatus,
+  ): void {
+    if (!PROCESS_STATUS_TRANSITIONS[currentStatus]?.includes(nextStatus)) {
+      throw new BadRequestException(
+        `Transição de ${currentStatus} para ${nextStatus} não permitida`,
+      );
+    }
+  }
 
   /**
    * Cria um objeto "product" de acordo com o processo enviado
@@ -788,13 +868,18 @@ export class ProcessesService {
   async getById(
     processId: string,
     userId?: string,
-    userRole?: string,
+    userRole?: UserRole,
+    companyId?: string | null,
   ): Promise<ProcessResponse> {
     try {
       const process = await this.prismaService.process.findUniqueOrThrow({
         where: { id: processId },
         include: {
-          client: true,
+          client: {
+            include: {
+              consultant: { select: { company_id: true } },
+            },
+          },
           car: true,
           boat: true,
           aircraft: true,
@@ -811,23 +896,15 @@ export class ProcessesService {
         },
       });
 
-      if (userId && userRole !== 'ADMIN') {
-        const isParticipant =
-          process.client_id === userId ||
-          process.specialist_id === userId ||
-          process.client?.consultant_id === userId;
-
-        if (!isParticipant) {
-          throw new ForbiddenException({
-            success: false,
-            error: {
-              code: 403,
-              message: 'Você não é participante deste processo',
-              details: { user_id: userId, process_id: processId },
-            },
-          });
-        }
-      }
+      this.assertProcessAccess(
+        process,
+        {
+          id: userId ?? '',
+          role: userRole as UserRole,
+          companyId,
+        },
+        'read',
+      );
 
       const contactVisible = this.isAppointmentContactVisible(
         process.appointment?.status,
@@ -1096,6 +1173,7 @@ export class ProcessesService {
     updateProcessDto: UpdateProcessDto,
     callerId?: string,
     callerRole?: UserRole,
+    callerCompanyId?: string | null,
   ): Promise<ProcessWithHistory> {
     try {
       // Transction para atualizar o processo, adicionar mais uma linha sobre o histórico de status do processo, e obter o histórico atualizado
@@ -1106,7 +1184,14 @@ export class ProcessesService {
             where: { id: processId },
             include: {
               client: {
-                select: { email: true, name: true, surname: true },
+                select: {
+                  email: true,
+                  name: true,
+                  surname: true,
+                  consultant_id: true,
+                  company_id: true,
+                  consultant: { select: { company_id: true } },
+                },
               },
               specialist: {
                 select: { email: true, name: true, surname: true },
@@ -1117,25 +1202,25 @@ export class ProcessesService {
             },
           });
 
-          // Autorização: apenas participantes do processo (cliente ou especialista)
-          // ou staff (ADMIN/OFFICE) podem alterar o status. Evita que qualquer
-          // usuário autenticado dirija um processo alheio.
-          const isStaff =
-            callerRole === UserRole.ADMIN || callerRole === UserRole.OFFICE;
-          const isParticipant =
-            !!callerId &&
-            (existingProcess.client_id === callerId ||
-              existingProcess.specialist_id === callerId);
-          if (!isStaff && !isParticipant) {
-            throw new ForbiddenException(
-              'Você não tem permissão para alterar este processo',
-            );
-          }
+          this.assertProcessAccess(
+            existingProcess,
+            {
+              id: callerId ?? '',
+              role: callerRole as UserRole,
+              companyId: callerCompanyId,
+            },
+            'update-status',
+          );
 
           //Verificar se ele já está com o status atualizado
           if (existingProcess.status === updateProcessDto.status) {
             throw new BadRequestException();
           }
+
+          this.assertStatusTransition(
+            existingProcess.status,
+            updateProcessDto.status,
+          );
 
           if (updateProcessDto.status === ProcessStatus.NEGOTIATION) {
             await lockNegotiationProductMoney(tx, existingProcess);
@@ -1143,7 +1228,14 @@ export class ProcessesService {
               where: { id: processId },
               include: {
                 client: {
-                  select: { email: true, name: true, surname: true },
+                  select: {
+                    email: true,
+                    name: true,
+                    surname: true,
+                    consultant_id: true,
+                    company_id: true,
+                    consultant: { select: { company_id: true } },
+                  },
                 },
                 specialist: {
                   select: { email: true, name: true, surname: true },
@@ -1614,10 +1706,24 @@ export class ProcessesService {
    * @returns {Promise<string | null>} - Razão de conclusão ou null
    * @throws {NotFoundException} - Processo não encontrado
    */
-  async getProcessCompletionReason(processId: string): Promise<string | null> {
+  async getProcessCompletionReason(
+    processId: string,
+    requester: ProcessesRequester,
+  ): Promise<string | null> {
     const process = await this.prismaService.process.findUnique({
       where: { id: processId },
-      select: { id: true },
+      select: {
+        id: true,
+        client_id: true,
+        specialist_id: true,
+        client: {
+          select: {
+            consultant_id: true,
+            company_id: true,
+            consultant: { select: { company_id: true } },
+          },
+        },
+      },
     });
 
     if (!process) {
@@ -1625,6 +1731,8 @@ export class ProcessesService {
         `Processo com id ${processId} não encontrado`,
       );
     }
+
+    this.assertProcessAccess(process, requester, 'read');
 
     const statusHistory =
       await this.prismaService.processStatusHistory.findFirst({
@@ -1643,13 +1751,21 @@ export class ProcessesService {
    * @returns {Promise<any>} - Processo com contrato ativo
    * @throws {NotFoundException} - Processo não encontrado
    */
-  async getByIdWithActiveContract(processId: string): Promise<any> {
+  async getByIdWithActiveContract(
+    processId: string,
+    requester: ProcessesRequester,
+  ): Promise<any> {
     const process = await this.prismaService.process.findUnique({
       where: { id: processId },
       include: {
         car: true,
         boat: true,
         aircraft: true,
+        client: {
+          include: {
+            consultant: { select: { company_id: true } },
+          },
+        },
       },
     });
 
@@ -1658,6 +1774,8 @@ export class ProcessesService {
         `Processo com id ${processId} não encontrado`,
       );
     }
+
+    this.assertProcessAccess(process, requester, 'read');
 
     // Se houver contrato ativo, buscar seus dados completos
     let activeContract = null;
@@ -1832,6 +1950,8 @@ export class ProcessesService {
     processId: string,
     rejectedById: string,
     rejectionReason?: string,
+    requesterRole?: UserRole,
+    requesterCompanyId?: string | null,
   ): Promise<ProcessWithHistory> {
     try {
       const [updatedProcess, updatedStatusHistory] =
@@ -1841,7 +1961,15 @@ export class ProcessesService {
             where: { id: processId },
             include: {
               client: {
-                select: { id: true, email: true, name: true, surname: true },
+                select: {
+                  id: true,
+                  email: true,
+                  name: true,
+                  surname: true,
+                  consultant_id: true,
+                  company_id: true,
+                  consultant: { select: { company_id: true } },
+                },
               },
               specialist: {
                 select: { id: true, email: true, name: true, surname: true },
@@ -1852,9 +1980,24 @@ export class ProcessesService {
             },
           });
 
+          this.assertProcessAccess(
+            existingProcess,
+            {
+              id: rejectedById ?? '',
+              role: requesterRole as UserRole,
+              companyId: requesterCompanyId,
+            },
+            'reject',
+          );
+
           // Verificar se já está rejeitado
           if (existingProcess.status === 'REJECTED') {
             throw new BadRequestException('Processo já está rejeitado');
+          }
+          if (existingProcess.status === ProcessStatus.COMPLETED) {
+            throw new BadRequestException(
+              'Processo concluído não pode ser rejeitado',
+            );
           }
 
           // Atualizar status para REJECTED
@@ -1922,6 +2065,9 @@ export class ProcessesService {
         status_history: updatedStatusHistory,
       };
     } catch (err) {
+      if (err instanceof HttpException) {
+        throw err;
+      }
       if (err.code === 'P2025') {
         throw new NotFoundException('Processo não encontrado');
       }

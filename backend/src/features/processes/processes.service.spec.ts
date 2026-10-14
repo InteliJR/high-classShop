@@ -1845,7 +1845,6 @@ describe('ProcessesService — matriz de contatos do cliente', () => {
     [UserRole.ADMIN, 'admin-1'],
     [UserRole.CONSULTANT, 'consultant-1'],
     [UserRole.CUSTOMER, clientId],
-    [undefined, undefined],
   ] as const)('detail gives %s no client contacts', async (role, id) => {
     const result = await makeService(
       StatusAgendamento.PENDING,
@@ -1855,6 +1854,16 @@ describe('ProcessesService — matriz de contatos do cliente', () => {
     expect(result.client).not.toHaveProperty('email');
     expect(result.client.phone).toBeNull();
     expect(result.specialist.phone).toBeNull();
+  });
+
+  it('detail denies an unidentified actor', async () => {
+    await expect(
+      makeService(
+        StatusAgendamento.PENDING,
+        AppointmentSchedulingMethod.EMAIL,
+        ProcessStatus.SCHEDULING,
+      ).getById('process-1', undefined, undefined),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it.each([
@@ -1870,14 +1879,14 @@ describe('ProcessesService — matriz de contatos do cliente', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('an actor with the specialist ID but another role cannot read client contacts', async () => {
-    const result = await makeService(
-      StatusAgendamento.PENDING,
-      AppointmentSchedulingMethod.EMAIL,
-      ProcessStatus.SCHEDULING,
-    ).getById('process-1', specialistId, UserRole.CONSULTANT);
-    expect(result.client).not.toHaveProperty('email');
-    expect(result.client.phone).toBeNull();
+  it('an actor with the specialist ID but another role cannot read the detail', async () => {
+    await expect(
+      makeService(
+        StatusAgendamento.PENDING,
+        AppointmentSchedulingMethod.EMAIL,
+        ProcessStatus.SCHEDULING,
+      ).getById('process-1', specialistId, UserRole.CONSULTANT),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it('client list and unscoped legacy specialist projection contain no client contacts', async () => {
@@ -1939,6 +1948,331 @@ describe('ProcessesService — matriz de contatos do cliente', () => {
       expect(result.processes[0].client.phone).toBeNull();
     },
   );
+});
+
+describe('ProcessesService — autorização centralizada de processos', () => {
+  const ownerClientId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const assignedSpecialistId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const outsiderId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const consultantId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const clientCompanyId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  const otherCompanyId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+
+  function protectedProcess(overrides: Record<string, unknown> = {}) {
+    return {
+      id: '99999999-9999-4999-8999-999999999999',
+      client_id: ownerClientId,
+      specialist_id: assignedSpecialistId,
+      status: ProcessStatus.SCHEDULING,
+      updated_at: new Date('2026-01-01T00:00:00.000Z'),
+      notes: null,
+      product_type: null,
+      active_contract_id: 'contract-1',
+      created_at: new Date('2026-01-01T00:00:00.000Z'),
+      client: {
+        id: ownerClientId,
+        email: 'cliente@example.com',
+        name: 'Cliente',
+        surname: 'Teste',
+        consultant_id: consultantId,
+        company_id: null,
+        consultant: { company_id: clientCompanyId },
+      },
+      specialist: {
+        id: assignedSpecialistId,
+        email: 'especialista@example.com',
+        name: 'Especialista',
+        surname: 'Teste',
+      },
+      car: null,
+      boat: null,
+      aircraft: null,
+      ...overrides,
+    };
+  }
+
+  function updateService(process = protectedProcess()) {
+    const processUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const tx = {
+      process: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue(process),
+        updateMany: processUpdateMany,
+      },
+      processStatusHistory: {
+        create: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    } as any;
+    return {
+      service: new ProcessesService(prisma, {
+        sendProcessStatusChangedEmail: jest.fn().mockResolvedValue(undefined),
+      } as any),
+      processUpdateMany,
+    };
+  }
+
+  function rejectionService(process = protectedProcess()) {
+    const processUpdate = jest.fn().mockResolvedValue({
+      ...process,
+      status: ProcessStatus.REJECTED,
+      updated_at: new Date('2026-01-02T00:00:00.000Z'),
+    });
+    const tx = {
+      process: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue(process),
+        update: processUpdate,
+      },
+      processStatusHistory: {
+        create: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      processRejection: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    } as any;
+    return {
+      service: new ProcessesService(prisma, {
+        sendProcessStatusChangedEmail: jest.fn().mockResolvedValue(undefined),
+      } as any),
+      processUpdate,
+    };
+  }
+
+  it.each([
+    ProcessStatus.NEGOTIATION,
+    ProcessStatus.DOCUMENTATION,
+    ProcessStatus.COMPLETED,
+  ])('CUSTOMER não pode avançar seu processo para %s', async (nextStatus) => {
+    const { service, processUpdateMany } = updateService();
+
+    await expect(
+      service.update(
+        '99999999-9999-4999-8999-999999999999',
+        { status: nextStatus, notes: 'tentativa indevida' },
+        ownerClientId,
+        UserRole.CUSTOMER,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(processUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('OFFICE de outra empresa não pode alterar status', async () => {
+    const { service, processUpdateMany } = updateService();
+
+    await expect(
+      (service.update as any)(
+        '99999999-9999-4999-8999-999999999999',
+        { status: ProcessStatus.NEGOTIATION },
+        'office-1',
+        UserRole.OFFICE,
+        otherCompanyId,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(processUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('especialista atribuído não pode pular de SCHEDULING para COMPLETED', async () => {
+    const { service, processUpdateMany } = updateService();
+
+    await expect(
+      service.update(
+        '99999999-9999-4999-8999-999999999999',
+        { status: ProcessStatus.COMPLETED },
+        assignedSpecialistId,
+        UserRole.SPECIALIST,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(processUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('especialista atribuído pode fazer a transição adjacente SCHEDULING para NEGOTIATION', async () => {
+    const { service, processUpdateMany } = updateService();
+
+    await expect(
+      service.update(
+        '99999999-9999-4999-8999-999999999999',
+        { status: ProcessStatus.NEGOTIATION },
+        assignedSpecialistId,
+        UserRole.SPECIALIST,
+      ),
+    ).resolves.toBeDefined();
+
+    expect(processUpdateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('OFFICE da empresa do cliente pode fazer transição adjacente', async () => {
+    const { service, processUpdateMany } = updateService();
+
+    await expect(
+      service.update(
+        '99999999-9999-4999-8999-999999999999',
+        { status: ProcessStatus.NEGOTIATION },
+        'office-1',
+        UserRole.OFFICE,
+        clientCompanyId,
+      ),
+    ).resolves.toBeDefined();
+
+    expect(processUpdateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('outsider não pode rejeitar processo alheio', async () => {
+    const { service, processUpdate } = rejectionService();
+
+    await expect(
+      (service.rejectProcess as any)(
+        '99999999-9999-4999-8999-999999999999',
+        outsiderId,
+        undefined,
+        UserRole.CUSTOMER,
+        null,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(processUpdate).not.toHaveBeenCalled();
+  });
+
+  it('cliente pode rejeitar o próprio processo ativo', async () => {
+    const { service, processUpdate } = rejectionService();
+
+    await expect(
+      service.rejectProcess(
+        '99999999-9999-4999-8999-999999999999',
+        ownerClientId,
+        'Não tenho mais interesse',
+        UserRole.CUSTOMER,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({ status: ProcessStatus.REJECTED }),
+    );
+
+    expect(processUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('não permite rejeitar processo já concluído', async () => {
+    const { service, processUpdate } = rejectionService(
+      protectedProcess({ status: ProcessStatus.COMPLETED }),
+    );
+
+    await expect(
+      service.rejectProcess(
+        '99999999-9999-4999-8999-999999999999',
+        assignedSpecialistId,
+        undefined,
+        UserRole.SPECIALIST,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(processUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['completion reason', 'getProcessCompletionReason'],
+    ['active contract', 'getByIdWithActiveContract'],
+  ])('outsider não pode ler %s', async (_label, method) => {
+    const prisma = {
+      process: { findUnique: jest.fn().mockResolvedValue(protectedProcess()) },
+      processStatusHistory: {
+        findFirst: jest.fn().mockResolvedValue({ reason: 'CONTRACT_SIGNED' }),
+      },
+      contract: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'contract-1' }),
+      },
+    } as any;
+    const service = new ProcessesService(prisma, {} as any);
+
+    await expect(
+      (service[method] as any)('99999999-9999-4999-8999-999999999999', {
+        id: outsiderId,
+        role: UserRole.CUSTOMER,
+        companyId: null,
+      }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it.each([
+    ['completion reason', 'getProcessCompletionReason'],
+    ['active contract', 'getByIdWithActiveContract'],
+  ])('OFFICE de outra empresa não pode ler %s', async (_label, method) => {
+    const prisma = {
+      process: { findUnique: jest.fn().mockResolvedValue(protectedProcess()) },
+      processStatusHistory: {
+        findFirst: jest.fn().mockResolvedValue({ reason: 'CONTRACT_SIGNED' }),
+      },
+      contract: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'contract-1' }),
+      },
+    } as any;
+    const service = new ProcessesService(prisma, {} as any);
+
+    await expect(
+      (service[method] as any)('99999999-9999-4999-8999-999999999999', {
+        id: 'office-1',
+        role: UserRole.OFFICE,
+        companyId: otherCompanyId,
+      }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it.each([
+    [UserRole.CONSULTANT, consultantId, null],
+    [UserRole.OFFICE, 'office-1', clientCompanyId],
+  ])(
+    '%s vinculado ao cliente pode ler contrato ativo',
+    async (role, id, companyId) => {
+      const prisma = {
+        process: {
+          findUnique: jest.fn().mockResolvedValue(protectedProcess()),
+        },
+        contract: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'contract-1' }),
+        },
+      } as any;
+      const service = new ProcessesService(prisma, {} as any);
+
+      await expect(
+        service.getByIdWithActiveContract(
+          '99999999-9999-4999-8999-999999999999',
+          { id, role, companyId },
+        ),
+      ).resolves.toEqual(
+        expect.objectContaining({ id: protectedProcess().id }),
+      );
+    },
+  );
+
+  it('OFFICE mantém acesso quando o consultor é da empresa, mesmo com vínculo direto legado diferente', async () => {
+    const process = protectedProcess({
+      client: {
+        id: ownerClientId,
+        consultant_id: consultantId,
+        company_id: otherCompanyId,
+        consultant: { company_id: clientCompanyId },
+      },
+    });
+    const prisma = {
+      process: { findUnique: jest.fn().mockResolvedValue(process) },
+      contract: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'contract-1' }),
+      },
+    } as any;
+    const service = new ProcessesService(prisma, {} as any);
+
+    await expect(
+      service.getByIdWithActiveContract(process.id, {
+        id: 'office-1',
+        role: UserRole.OFFICE,
+        companyId: clientCompanyId,
+      }),
+    ).resolves.toEqual(expect.objectContaining({ id: process.id }));
+  });
 });
 
 describe('ProcessesService.cancelAppointment — serialização canônica', () => {
