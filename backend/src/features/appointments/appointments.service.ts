@@ -47,6 +47,7 @@ import { lockNegotiationProductMoney } from 'src/features/products/product-monet
 import { validateSpecialistProductAssociation } from 'src/features/products/product-association-validator';
 import {
   ACTIVE_PROCESS_STATUSES,
+  acquireActiveProcessDedupLock,
   lockAndAssertNoActiveProcess,
 } from 'src/features/processes/process-dedup-lock';
 import {
@@ -1154,6 +1155,10 @@ export class AppointmentsService {
     if (specialist.role !== UserRole.SPECIALIST) {
       throw new BadRequestException('Usuário informado não é especialista');
     }
+    this.logger.log(
+      `[createPending] ✓ Especialista encontrado: ${specialist.name}`,
+    );
+
     const calendlyAvailable = isCalendlySchedulingAvailable({
       calendlyUrl: specialist.calendly_url,
       connectionActive: specialist.calendly_connection?.is_active ?? false,
@@ -1185,6 +1190,34 @@ export class AppointmentsService {
       });
     }
 
+    const consultancyAppointmentWhere = {
+      client_id: userId,
+      specialist_id: dto.specialist_id,
+      product_type: null,
+      product_id: null,
+      status: {
+        in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
+      },
+    };
+    const assertNoDuplicateAppointment = (
+      existing: { id: string; status: StatusAgendamento } | null,
+    ): void => {
+      if (!existing) return;
+
+      throw new ConflictException({
+        success: false,
+        error: {
+          code: 409,
+          message:
+            'Já existe um agendamento de consultoria pendente com este especialista',
+          details: {
+            existing_id: existing.id,
+            existing_status: existing.status,
+          },
+        },
+      });
+    };
+
     // Metadata only: automatic expiration is not implemented.
     const pendingExpiresAt = new Date();
     pendingExpiresAt.setDate(pendingExpiresAt.getDate() + 7);
@@ -1196,17 +1229,27 @@ export class AppointmentsService {
           productType: dto.product_type,
           productId: dto.product_id,
         });
-        await lockAndAssertNoActiveProcess(
-          tx,
-          {
-            clientId: userId,
-            specialistId: dto.specialist_id,
-            productType: dto.product_type,
-            productId: dto.product_id,
-          },
-          undefined,
-          { authenticatedClientId: userId },
-        );
+
+        const processScope = {
+          clientId: userId,
+          specialistId: dto.specialist_id,
+          productType: dto.product_type,
+          productId: dto.product_id,
+        };
+        if (isConsultancy) {
+          await acquireActiveProcessDedupLock(tx, processScope);
+          const existingAfterLock = await tx.appointment.findFirst({
+            where: consultancyAppointmentWhere,
+          });
+          assertNoDuplicateAppointment(existingAfterLock);
+        } else {
+          await lockAndAssertNoActiveProcess(
+            tx,
+            processScope,
+            undefined,
+            { authenticatedClientId: userId },
+          );
+        }
 
         // Product EMAIL requests are proposals. Preserve the optional dated
         // consultancy validation without making any PENDING/EMAIL occupy agenda.
@@ -1418,16 +1461,50 @@ export class AppointmentsService {
         productId: appointment.product_id,
       });
 
-      await lockAndAssertNoActiveProcess(
-        tx,
-        {
-          clientId: appointment.client_id,
-          specialistId: appointment.specialist_id,
-          productType: appointment.product_type,
-          productId: appointment.product_id,
-        },
-        appointment.process?.id,
-      );
+      const processScope = {
+        clientId: appointment.client_id,
+        specialistId: appointment.specialist_id,
+        productType: appointment.product_type,
+        productId: appointment.product_id,
+      };
+      const isConsultancy =
+        !appointment.product_type || !appointment.product_id;
+
+      if (isConsultancy) {
+        await acquireActiveProcessDedupLock(tx, processScope);
+        const existingAppointment = await tx.appointment.findFirst({
+          where: {
+            id: { not: appointmentId },
+            client_id: appointment.client_id,
+            specialist_id: appointment.specialist_id,
+            product_type: null,
+            product_id: null,
+            status: {
+              in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
+            },
+          },
+        });
+        if (existingAppointment) {
+          throw new ConflictException({
+            success: false,
+            error: {
+              code: 409,
+              message:
+                'Já existe um agendamento de consultoria pendente com este especialista',
+              details: {
+                existing_id: existingAppointment.id,
+                existing_status: existingAppointment.status,
+              },
+            },
+          });
+        }
+      } else {
+        await lockAndAssertNoActiveProcess(
+          tx,
+          processScope,
+          appointment.process?.id,
+        );
+      }
       await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
 
       const lockedAppointment = await tx.appointment.findUnique({

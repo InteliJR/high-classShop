@@ -283,7 +283,10 @@ describe('ProcessesService.createOnBehalfOfClient', () => {
       car: { findUnique: jest.fn().mockResolvedValue(product) },
       boat: { findUnique: jest.fn().mockResolvedValue(product) },
       aircraft: { findUnique: jest.fn().mockResolvedValue(product) },
-      appointment: { create: appointmentCreate },
+      appointment: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: appointmentCreate,
+      },
       process: {
         findFirst: jest.fn().mockResolvedValue(null),
         create: processCreate,
@@ -376,6 +379,49 @@ describe('ProcessesService.createOnBehalfOfClient', () => {
     const data = processCreate.mock.calls[0][0].data;
     expect(data.product_type).toBeNull();
     expect(data.notes).toContain('Consultoria');
+  });
+
+  it('permite consultoria em nome do cliente mesmo com processo ativo anterior', async () => {
+    const { service, appointmentCreate, tx } = mkService();
+    tx.process.findFirst.mockResolvedValue({ id: 'active-process-1' });
+
+    await service.createOnBehalfOfClient({
+      ...base,
+      product_id: undefined,
+      actorLabel: 'consultor',
+    });
+
+    expect(tx.process.findFirst).not.toHaveBeenCalled();
+    expect(tx.appointment.findFirst).toHaveBeenCalledWith({
+      where: {
+        client_id: clientId,
+        specialist_id: specialistId,
+        product_type: null,
+        product_id: null,
+        status: {
+          in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
+        },
+      },
+    });
+    expect(appointmentCreate).toHaveBeenCalled();
+  });
+
+  it('rejeita consultoria duplicada em nome do cliente', async () => {
+    const { service, appointmentCreate, tx } = mkService();
+    tx.appointment.findFirst.mockResolvedValue({
+      id: 'existing-appointment-1',
+      status: StatusAgendamento.PENDING,
+    });
+
+    await expect(
+      service.createOnBehalfOfClient({
+        ...base,
+        product_id: undefined,
+        actorLabel: 'consultor',
+      }),
+    ).rejects.toThrow(ConflictException);
+
+    expect(appointmentCreate).not.toHaveBeenCalled();
   });
 
   it('especialista inexistente é rejeitado', async () => {

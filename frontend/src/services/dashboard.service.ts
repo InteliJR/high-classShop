@@ -7,6 +7,7 @@ export interface DashboardStats {
   totalClients: number;
   specialistsCount: number;
   totalProducts: number;
+  activeProducts: number;
   productsByType: { cars: number; boats: number; aircrafts: number };
   salesByMonth: MonthData[];
   consultantsPerformance: ConsultantPerformanceData[];
@@ -39,6 +40,7 @@ export interface ConsultantPerformanceData {
 
 export interface SpecialistDashboardStats {
   productsListed: number;
+  activeProducts: number;
   activeProcesses: number;
   completedSales: number;
   conversionRate: number;

@@ -2,6 +2,165 @@ import { ProductImportJobsService } from './product-import-jobs.service';
 import { Prisma, ProductCurrency, ProductType } from '@prisma/client';
 
 describe('ProductImportJobsService', () => {
+  const validCarRow = {
+    marca: 'Ferrari',
+    modelo: 'Roma',
+    identificador: 'FERRARI-ROMA-1',
+    valor: '1000000',
+    estado: 'SP',
+    ano: '2024',
+  };
+
+  it.each([
+    ['identificador', '-', 'Identificador do veículo faltando'],
+    ['marca', ' - ', 'Marca do veículo faltando'],
+    ['modelo', '-', 'Nome do veículo faltando'],
+    ['valor', '   ', 'Valor do veículo faltando'],
+    ['estado', '-', 'Estado do veículo faltando'],
+    ['ano', ' - ', 'Ano do veículo faltando'],
+  ])(
+    'trata %s com marcador de ausência como erro natural da linha',
+    async (field, emptyValue, expectedMessage) => {
+      const prisma = {
+        car: { findFirst: jest.fn(), create: jest.fn() },
+      } as any;
+      const service = new ProductImportJobsService(
+        prisma,
+        {} as any,
+        {} as any,
+      );
+
+      await expect(
+        (service as any).upsertProductFromRow(
+          ProductType.CAR,
+          { ...validCarRow, [field]: emptyValue },
+          '00000000-0000-4000-8000-000000000001',
+        ),
+      ).rejects.toThrow(expectedMessage);
+      expect(prisma.car.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('trata hífen em campos opcionais como célula não preenchida', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'uuid-1' });
+    const prisma = {
+      car: { findFirst: jest.fn().mockResolvedValue(null), create },
+    } as any;
+    const service = new ProductImportJobsService(prisma, {} as any, {} as any);
+
+    await expect(
+      (service as any).upsertProductFromRow(
+        ProductType.CAR,
+        {
+          ...validCarRow,
+          currency: '-',
+          cor: ' - ',
+          km: '-',
+          cambio: '   ',
+        },
+        '00000000-0000-4000-8000-000000000001',
+      ),
+    ).resolves.toEqual({ productId: 'uuid-1', action: 'CREATED' });
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        currency: undefined,
+        cor: undefined,
+        km: undefined,
+        cambio: undefined,
+      }),
+    });
+  });
+
+  it('não inativa produtos ausentes quando alguma linha falha', async () => {
+    const prisma = {
+      productImportJob: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'job-1',
+          product_type: ProductType.CAR,
+          specialist_id: '00000000-0000-4000-8000-000000000001',
+          status: 'PENDING',
+          started_at: null,
+          items: [
+            {
+              id: 'item-1',
+              status: 'PENDING',
+              payload: validCarRow,
+              folder_url: null,
+            },
+            {
+              id: 'item-2',
+              status: 'PENDING',
+              payload: { ...validCarRow, modelo: '-' },
+              folder_url: null,
+            },
+          ],
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      productImportJobItem: {
+        update: jest.fn().mockResolvedValue({}),
+      },
+      car: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'product-1' }),
+      },
+    } as any;
+    const service = new ProductImportJobsService(prisma, {} as any, {} as any);
+    const deactivateMissingProducts = jest
+      .spyOn(service as any, 'deactivateMissingProducts')
+      .mockResolvedValue(['stale-product']);
+    const refreshJobCounters = jest
+      .spyOn(service as any, 'refreshJobCounters')
+      .mockResolvedValue(undefined);
+
+    await (service as any).processJob('job-1');
+
+    expect(deactivateMissingProducts).not.toHaveBeenCalled();
+    expect(refreshJobCounters).toHaveBeenCalledWith('job-1', {
+      deactivatedIds: [],
+      reactivatedCount: 0,
+    });
+    expect(prisma.productImportJobItem.update).toHaveBeenCalledWith({
+      where: { id: 'item-2' },
+      data: expect.objectContaining({
+        status: 'FAILED',
+        error_message: 'Nome do veículo faltando',
+      }),
+    });
+  });
+
+  it('relata a linha não importada com erro em linguagem natural', () => {
+    const service = new ProductImportJobsService(
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    const result = (service as any).buildImportResponse([
+      {
+        row_number: 7,
+        status: 'FAILED',
+        payload: { ...validCarRow, modelo: '-' },
+        action: null,
+        product_id: null,
+        error_message: 'Nome do veículo faltando',
+        warnings: null,
+      },
+    ]);
+
+    expect(result).toMatchObject({
+      success: false,
+      errorCount: 1,
+      errorRows: [
+        {
+          row: 7,
+          reason: 'Nome do veículo faltando',
+        },
+      ],
+    });
+  });
+
   it('lanca erro quando identificador vem vazio', async () => {
     const prisma = { car: { findFirst: jest.fn(), create: jest.fn() } } as any;
     const service = new ProductImportJobsService(prisma, {} as any, {} as any);

@@ -48,6 +48,15 @@ type UpsertResult = {
   reactivated?: boolean;
 };
 
+const REQUIRED_PRODUCT_FIELDS = [
+  { key: 'identificador', label: 'Identificador do veículo' },
+  { key: 'marca', label: 'Marca do veículo' },
+  { key: 'modelo', label: 'Nome do veículo' },
+  { key: 'valor', label: 'Valor do veículo' },
+  { key: 'estado', label: 'Estado do veículo' },
+  { key: 'ano', label: 'Ano do veículo' },
+] as const;
+
 @Injectable()
 export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ProductImportJobsService.name);
@@ -107,6 +116,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
+    const normalizedRows = rows.map((row) => this.normalizeProductRow(row));
+
     let createdJob;
     try {
       createdJob = await this.prisma.productImportJob.create({
@@ -114,10 +125,10 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
           product_type: productType,
           specialist_id: user.id,
           status: ProductImportJobStatus.PENDING,
-          total_items: rows.length,
+          total_items: normalizedRows.length,
           items: {
             createMany: {
-              data: rows.map((row, index) => ({
+              data: normalizedRows.map((row, index) => ({
                 row_number: index + 2,
                 payload: row,
                 folder_url: row.folder_url?.trim() || null,
@@ -304,6 +315,9 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     try {
       const seenProductIds = new Set<string>();
       let reactivatedCount = 0;
+      let hasFailedItems = job.items.some(
+        (item) => item.status === ProductImportItemStatus.FAILED,
+      );
 
       for (const item of job.items) {
         if (
@@ -373,6 +387,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
             },
           });
         } catch (error) {
+          hasFailedItems = true;
           await this.prisma.productImportJobItem.update({
             where: { id: item.id },
             data: {
@@ -385,12 +400,14 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      const deactivatedIds = await this.deactivateMissingProducts(
-        job.product_type,
-        job.specialist_id,
-        seenProductIds,
-        job.id,
-      );
+      const deactivatedIds = hasFailedItems
+        ? []
+        : await this.deactivateMissingProducts(
+            job.product_type,
+            job.specialist_id,
+            seenProductIds,
+            job.id,
+          );
 
       await this.refreshJobCounters(jobId, {
         deactivatedIds,
@@ -549,17 +566,15 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     row: ImportParsedRow,
     specialistId: string,
   ): Promise<UpsertResult> {
+    row = this.normalizeProductRow(row);
+    this.validateRequiredProductFields(row);
+
     // Normaliza uma vez só: a busca do produto existente usava o valor com
     // trim e a gravação usava o valor cru, então " ABC " seria gravado como
     // " ABC " e nunca mais reencontrado — cada reimport criaria uma duplicata.
     // Hoje o parseCsv já entrega tudo trimado, mas a divergência ficava
     // armada para qualquer chamador que não passe pelo CSV.
-    const identificador = row.identificador?.trim();
-    if (!identificador) {
-      throw new BadRequestException(
-        'identificador é obrigatório e não pode ser vazio',
-      );
-    }
+    const identificador = row.identificador;
 
     if (productType === ProductType.CAR) {
       const data = {
@@ -567,9 +582,9 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         modelo: row.modelo,
         identificador,
         valor: Number(row.valor),
-        currency: (row.currency || ProductCurrency.BRL)
-          .trim()
-          .toUpperCase() as ProductCurrency,
+        currency: row.currency
+          ? (row.currency.toUpperCase() as ProductCurrency)
+          : undefined,
         estado: row.estado,
         ano: Number(row.ano),
         cor: row.cor || undefined,
@@ -591,7 +606,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       });
 
       if (existing) {
-        const { specialist_id, ...updateData } = data;
+        const { specialist_id: _specialistId, ...updateData } = data;
         const reactivated = !existing.is_active;
         await updateProductWithMonetaryLock(this.prisma, {
           productType: ProductType.CAR,
@@ -619,9 +634,9 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         modelo: row.modelo,
         identificador,
         valor: Number(row.valor),
-        currency: (row.currency || ProductCurrency.BRL)
-          .trim()
-          .toUpperCase() as ProductCurrency,
+        currency: row.currency
+          ? (row.currency.toUpperCase() as ProductCurrency)
+          : undefined,
         estado: row.estado,
         ano: Number(row.ano),
         fabricante: row.fabricante || undefined,
@@ -646,7 +661,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       });
 
       if (existing) {
-        const { specialist_id, ...updateData } = data;
+        const { specialist_id: _specialistId, ...updateData } = data;
         const reactivated = !existing.is_active;
         await updateProductWithMonetaryLock(this.prisma, {
           productType: ProductType.BOAT,
@@ -673,9 +688,9 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       modelo: row.modelo,
       identificador,
       valor: Number(row.valor),
-      currency: (row.currency || ProductCurrency.BRL)
-        .trim()
-        .toUpperCase() as ProductCurrency,
+      currency: row.currency
+        ? (row.currency.toUpperCase() as ProductCurrency)
+        : undefined,
       estado: row.estado,
       ano: Number(row.ano),
       categoria: row.categoria || undefined,
@@ -695,7 +710,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     });
 
     if (existing) {
-      const { specialist_id, ...updateData } = data;
+      const { specialist_id: _specialistId, ...updateData } = data;
       const reactivated = !existing.is_active;
       await updateProductWithMonetaryLock(this.prisma, {
         productType: ProductType.AIRCRAFT,
@@ -715,6 +730,29 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
     const created = await this.prisma.aircraft.create({ data });
     return { productId: created.id, action: 'CREATED' };
+  }
+
+  private normalizeProductRow(row: ImportParsedRow): ImportParsedRow {
+    return Object.fromEntries(
+      Object.entries(row).map(([key, rawValue]) => {
+        const value = String(rawValue ?? '').trim();
+        return [key, value === '-' ? '' : value];
+      }),
+    );
+  }
+
+  private validateRequiredProductFields(row: ImportParsedRow): void {
+    const missingFields = REQUIRED_PRODUCT_FIELDS.filter(
+      ({ key }) => !row[key],
+    );
+
+    if (missingFields.length === 0) {
+      return;
+    }
+
+    throw new BadRequestException(
+      missingFields.map(({ label }) => `${label} faltando`).join('; '),
+    );
   }
 
   private async validatePayload<T extends object>(

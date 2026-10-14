@@ -25,6 +25,7 @@ function TestCommissionStep({
       productLabel="veículo"
       currency={currency}
       vehiclePrice={100_000}
+      totalCommissionValue={10_000}
       specialistValue={7_000}
       showEarningsPreview={showEarningsPreview}
       onContinue={vi.fn()}
@@ -36,14 +37,19 @@ function TestCommissionStep({
 describe("ContractCommissionStep", () => {
   afterEach(cleanup);
 
-  it("mostra somente o ganho estimado do especialista em BRL", () => {
+  it("mostra o valor total da comissão e o ganho estimado em BRL", () => {
     render(<TestCommissionStep currency="BRL" />);
 
+    expect(screen.getByText("Valor total da comissão")).toBeTruthy();
+    expect(
+      screen.getByText(
+        formatCurrency(10_000, "BRL").replace(/\u00a0/g, " "),
+      ),
+    ).toBeTruthy();
     expect(screen.getByText("Seu ganho estimado")).toBeTruthy();
     expect(
       screen.getByText(formatCurrency(7_000, "BRL").replace(/\u00a0/g, " ")),
     ).toBeTruthy();
-    expect(screen.queryByText("Comissão total")).toBeNull();
     expect(screen.queryByText("Valor líquido do vendedor")).toBeNull();
     expect(screen.queryByText("Distribuição da comissão")).toBeNull();
     expect(screen.queryByText("Plataforma")).toBeNull();
@@ -64,6 +70,7 @@ describe("ContractCommissionStep", () => {
     );
 
     expect(screen.queryByText("Seu ganho estimado")).toBeNull();
+    expect(screen.queryByText("Valor total da comissão")).toBeNull();
     expect(screen.queryByText(formatCurrency(7_000, "BRL"))).toBeNull();
   });
 });

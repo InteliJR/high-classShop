@@ -4,7 +4,6 @@
   import { AppContext } from "../contexts/AppContext";
 import { useIsMobile } from "../hooks/use-is-mobile";
   import { AuthContext } from "../contexts/AuthContext";
-import RequireCalendlyModal from "../components/calendly/RequireCalendlyModal";
 import RequireGoogleMeetModal from "../components/meetings/RequireGoogleMeetModal";
 
   interface MainLayoutProps {
@@ -48,7 +47,6 @@ import RequireGoogleMeetModal from "../components/meetings/RequireGoogleMeetModa
               {children}
             </main>
           </div>
-          {user?.role === "SPECIALIST" && <RequireCalendlyModal />}
           {user?.role === "ADMIN" && <RequireGoogleMeetModal />}
         </div>
     );

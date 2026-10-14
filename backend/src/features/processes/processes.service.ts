@@ -32,7 +32,10 @@ import { NotificationService } from 'src/features/notifications/notification.ser
 import { buildNegotiationSnapshotUpdate } from './negotiation-snapshot';
 import { acquireProductMonetaryLock } from '../products/product-monetary-lock';
 import { validateSpecialistProductAssociation } from '../products/product-association-validator';
-import { lockAndAssertNoActiveProcess } from './process-dedup-lock';
+import {
+  acquireActiveProcessDedupLock,
+  lockAndAssertNoActiveProcess,
+} from './process-dedup-lock';
 import { parseDate, isFutureDate } from 'src/shared/utils/date.utils';
 import { isISO8601 } from 'class-validator';
 import { PENDING_APPOINTMENT_DATETIME_PATTERN } from '../appointments/dto';
@@ -575,12 +578,43 @@ export class ProcessesService {
         productId: isConsultancy ? null : input.product_id,
       });
 
-      await lockAndAssertNoActiveProcess(tx, {
+      const processScope = {
         clientId: input.client_id,
         specialistId: input.specialist_id,
         productType: isConsultancy ? null : input.product_type,
         productId: isConsultancy ? null : input.product_id,
-      });
+      };
+
+      if (isConsultancy) {
+        await acquireActiveProcessDedupLock(tx, processScope);
+        const existingAppointment = await tx.appointment.findFirst({
+          where: {
+            client_id: input.client_id,
+            specialist_id: input.specialist_id,
+            product_type: null,
+            product_id: null,
+            status: {
+              in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
+            },
+          },
+        });
+        if (existingAppointment) {
+          throw new ConflictException({
+            success: false,
+            error: {
+              code: 409,
+              message:
+                'Já existe um agendamento de consultoria pendente com este especialista',
+              details: {
+                existing_id: existingAppointment.id,
+                existing_status: existingAppointment.status,
+              },
+            },
+          });
+        }
+      } else {
+        await lockAndAssertNoActiveProcess(tx, processScope);
+      }
 
       const appointmentData: any = {
         client_id: input.client_id,
