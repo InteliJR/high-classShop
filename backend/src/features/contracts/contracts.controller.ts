@@ -41,7 +41,8 @@ import { ActorContextService } from 'src/shared/actor-context/actor-context.serv
  *
  * Segurança:
  * - AuthGuard: Garante que apenas usuários autenticados podem acessar
- * - preview/send/generate: apenas SPECIALIST e ADMIN, com rate limit
+ * - preview/send: SPECIALIST e ADMIN, com rate limit
+ * - generate legado: apenas SPECIALIST; ADMIN deve usar preview + send
  *
  * Fluxo (ativo):
  * 1. Frontend busca dados pré-preenchidos via GET /contracts/prefill/:processId
@@ -215,7 +216,7 @@ export class ContractsController {
    * proteções.
    */
   @Post('generate')
-  @Roles(UserRole.SPECIALIST, UserRole.ADMIN)
+  @Roles(UserRole.SPECIALIST)
   @UseGuards(RateLimitGuard)
   @RateLimit({ windowMs: 60, max: 10 })
   async generateContract(

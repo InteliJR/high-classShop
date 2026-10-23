@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -44,6 +45,7 @@ import {
 } from '../products/product-monetary-lock';
 import { ActorContext } from 'src/shared/actor-context/actor-context.service';
 import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 export type ProductImportMode = 'ADDITIVE' | 'SYNCHRONIZE';
 
@@ -51,6 +53,22 @@ export type ProductImportOptions = {
   context?: ActorContext;
   mode?: ProductImportMode | string;
   confirmSynchronize?: boolean | string;
+  synchronizePreviewToken?: string;
+};
+
+type SynchronizePreviewClaims = {
+  version: 1;
+  csvDigest: string;
+  specialistId: string;
+  productType: ProductType;
+  mode: 'SYNCHRONIZE';
+  candidateDigest: string;
+  expiresAt: number;
+};
+
+type SynchronizePreviewSnapshot = {
+  candidateIds: string[];
+  csvDigest: string;
 };
 
 type UpsertResult = {
@@ -128,6 +146,13 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         'A sincronização exige confirmação explícita do alvo, tipo e impacto.',
       );
     }
+    if (mode === 'SYNCHRONIZE' && !options.synchronizePreviewToken) {
+      throw new BadRequestException({
+        code: 'SYNCHRONIZE_PREVIEW_REQUIRED',
+        message:
+          'A sincronização exige uma prévia válida. Gere uma nova prévia e confirme novamente.',
+      });
+    }
 
     const { rows } = this.xlsxImportService.parseCsv(fileBuffer);
 
@@ -147,6 +172,16 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
     const normalizedRows = rows.map((row) => this.normalizeProductRow(row));
     const specialistId = options.context?.specialistId ?? user.id;
+    const synchronizeSnapshot =
+      mode === 'SYNCHRONIZE'
+        ? await this.validateSynchronizePreviewToken(
+            options.synchronizePreviewToken!,
+            fileBuffer,
+            productType,
+            specialistId,
+            normalizedRows,
+          )
+        : null;
     const impact = await this.estimateImportImpact(
       productType,
       specialistId,
@@ -184,7 +219,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
           UPDATE "ProductImportJob"
           SET "mode" = ${mode},
               "sync_confirmed" = ${syncConfirmed},
-              "created_by_id" = ${user.id}::uuid
+              "created_by_id" = ${user.id}::uuid,
+              "sync_preview_snapshot" = ${synchronizeSnapshot ? JSON.stringify(synchronizeSnapshot) : null}::jsonb
           WHERE "id" = ${job.id}::uuid
         `;
         if (options.context && this.delegatedAudit) {
@@ -258,13 +294,141 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       normalizedRows,
       mode,
     );
+    const synchronizePreviewToken =
+      mode === 'SYNCHRONIZE'
+        ? await this.createSynchronizePreviewToken(
+            fileBuffer,
+            productType,
+            specialistId,
+            normalizedRows,
+          )
+        : undefined;
     return {
       productType,
       targetSpecialistId: specialistId,
       mode,
       requiresExplicitConfirmation: mode === 'SYNCHRONIZE',
       impact,
+      synchronizePreviewToken,
     };
+  }
+
+  private async createSynchronizePreviewToken(
+    fileBuffer: Buffer,
+    productType: ProductType,
+    specialistId: string,
+    rows: ImportParsedRow[],
+  ): Promise<string> {
+    const candidates = await this.getSynchronizationCandidateIds(
+      productType,
+      specialistId,
+      rows,
+    );
+    const claims: SynchronizePreviewClaims = {
+      version: 1,
+      csvDigest: this.sha256(fileBuffer),
+      specialistId,
+      productType,
+      mode: 'SYNCHRONIZE',
+      candidateDigest: this.sha256(candidates.join(',')),
+      expiresAt: Date.now() + 15 * 60 * 1000,
+    };
+    const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
+    const signature = createHmac('sha256', this.getPreviewSecret())
+      .update(payload)
+      .digest('base64url');
+    return `${payload}.${signature}`;
+  }
+
+  private async validateSynchronizePreviewToken(
+    token: string,
+    fileBuffer: Buffer,
+    productType: ProductType,
+    specialistId: string,
+    rows: ImportParsedRow[],
+  ): Promise<{ candidateIds: string[]; csvDigest: string }> {
+    try {
+      const [payload, providedSignature, extra] = token.split('.');
+      if (!payload || !providedSignature || extra) {
+        throw new Error('token malformado');
+      }
+      const expectedSignature = createHmac('sha256', this.getPreviewSecret())
+        .update(payload)
+        .digest();
+      const providedSignatureBuffer = Buffer.from(
+        providedSignature,
+        'base64url',
+      );
+      if (
+        providedSignatureBuffer.length !== expectedSignature.length ||
+        !timingSafeEqual(providedSignatureBuffer, expectedSignature)
+      ) {
+        throw new Error('assinatura inválida');
+      }
+
+      const claims = JSON.parse(
+        Buffer.from(payload, 'base64url').toString('utf8'),
+      ) as SynchronizePreviewClaims;
+      const candidateIds = await this.getSynchronizationCandidateIds(
+        productType,
+        specialistId,
+        rows,
+      );
+      const csvDigest = this.sha256(fileBuffer);
+      const scopeMatches =
+        claims.version === 1 &&
+        claims.mode === 'SYNCHRONIZE' &&
+        claims.productType === productType &&
+        claims.specialistId === specialistId &&
+        claims.csvDigest === csvDigest &&
+        claims.candidateDigest === this.sha256(candidateIds.join(',')) &&
+        claims.expiresAt >= Date.now();
+      if (!scopeMatches) {
+        throw new Error('escopo ou snapshot divergente');
+      }
+      return { candidateIds, csvDigest };
+    } catch {
+      throw new ConflictException({
+        code: 'SYNCHRONIZE_PREVIEW_STALE',
+        message:
+          'A prévia de sincronização expirou ou o catálogo/CSV mudou. Gere uma nova prévia antes de confirmar.',
+      });
+    }
+  }
+
+  private async getSynchronizationCandidateIds(
+    productType: ProductType,
+    specialistId: string,
+    rows: ImportParsedRow[],
+  ): Promise<string[]> {
+    const incomingIdentifiers = new Set(
+      rows.map((row) => row.identificador?.trim()).filter(Boolean),
+    );
+    const activeProducts = await this.getActiveProductsByType(
+      productType,
+      specialistId,
+    );
+    return activeProducts
+      .filter((product) => !incomingIdentifiers.has(product.identificador))
+      .map((product) => product.id)
+      .sort();
+  }
+
+  private sha256(value: Buffer | string): string {
+    return createHash('sha256').update(value).digest('hex');
+  }
+
+  private getPreviewSecret(): string {
+    const secret =
+      process.env.PRODUCT_IMPORT_PREVIEW_SECRET ??
+      process.env.JWT_SECRET_ACCESS;
+    if (secret) return secret;
+    if (process.env.NODE_ENV === 'test') {
+      return 'product-import-preview-test-secret';
+    }
+    throw new Error(
+      'PRODUCT_IMPORT_PREVIEW_SECRET ou JWT_SECRET_ACCESS deve estar configurado.',
+    );
   }
 
   async getJobStatus(
@@ -442,7 +606,17 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     });
 
     try {
-      const seenProductIds = new Set<string>();
+      const seenProductIds = new Set<string>(
+        job.items
+          .filter(
+            (item) =>
+              (item.status === ProductImportItemStatus.COMPLETED ||
+                item.status ===
+                  ProductImportItemStatus.COMPLETED_WITH_WARNINGS) &&
+              item.product_id,
+          )
+          .map((item) => item.product_id as string),
+      );
       let reactivatedCount = 0;
       let hasFailedItems = job.items.some(
         (item) => item.status === ProductImportItemStatus.FAILED,
@@ -539,6 +713,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
             job.specialist_id,
             seenProductIds,
             job.id,
+            executionContext.syncPreviewSnapshot,
           )
         : [];
 
@@ -566,12 +741,17 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   }): Promise<{
     mode: ProductImportMode;
     syncConfirmed: boolean;
+    syncPreviewSnapshot: SynchronizePreviewSnapshot | null;
     specialistIsEligible: boolean;
   }> {
     const metadata = await this.prisma.$queryRaw<
-      Array<{ mode: string; sync_confirmed: boolean }>
+      Array<{
+        mode: string;
+        sync_confirmed: boolean;
+        sync_preview_snapshot: SynchronizePreviewSnapshot | null;
+      }>
     >`
-      SELECT "mode", "sync_confirmed"
+      SELECT "mode", "sync_confirmed", "sync_preview_snapshot"
       FROM "ProductImportJob"
       WHERE "id" = ${job.id}::uuid
     `;
@@ -583,6 +763,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     return {
       mode: row?.mode === 'SYNCHRONIZE' ? 'SYNCHRONIZE' : 'ADDITIVE',
       syncConfirmed: row?.sync_confirmed === true,
+      syncPreviewSnapshot: row?.sync_preview_snapshot ?? null,
       specialistIsEligible:
         specialist?.role === UserRole.SPECIALIST &&
         specialist.is_active === true &&
@@ -624,18 +805,19 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   private async getActiveProductsByType(
     productType: ProductType,
     specialistId: string,
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
   ): Promise<Array<{ id: string; identificador: string }>> {
     const query = {
       where: { specialist_id: specialistId, is_active: true },
       select: { id: true, identificador: true },
     };
     if (productType === ProductType.CAR) {
-      return this.prisma.car.findMany(query);
+      return (client as PrismaService).car.findMany(query);
     }
     if (productType === ProductType.BOAT) {
-      return this.prisma.boat.findMany(query);
+      return (client as PrismaService).boat.findMany(query);
     }
-    return this.prisma.aircraft.findMany(query);
+    return (client as PrismaService).aircraft.findMany(query);
   }
 
   private async refreshJobCounters(
@@ -702,48 +884,87 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     specialistId: string,
     seenProductIds: Set<string>,
     jobId: string,
+    snapshot: SynchronizePreviewSnapshot | null,
   ): Promise<string[]> {
-    const activeProductIds = await this.getActiveProductIdsByType(
-      productType,
-      specialistId,
-    );
-
-    const staleIds = activeProductIds.filter((id) => !seenProductIds.has(id));
-
-    if (staleIds.length === 0) {
-      return [];
+    if (!snapshot) {
+      throw this.synchronizePreviewStale();
     }
+    return this.prisma.$transaction(
+      async (tx) => {
+        const activeProducts = await this.getActiveProductsByType(
+          productType,
+          specialistId,
+          tx,
+        );
+        const currentCandidateIds = activeProducts
+          .map((product) => product.id)
+          .filter((id) => !seenProductIds.has(id))
+          .sort();
+        const expectedCandidateIds = [...snapshot.candidateIds].sort();
+        if (
+          currentCandidateIds.length !== expectedCandidateIds.length ||
+          currentCandidateIds.some(
+            (id, index) => id !== expectedCandidateIds[index],
+          )
+        ) {
+          throw this.synchronizePreviewStale();
+        }
+        if (expectedCandidateIds.length === 0) {
+          return [];
+        }
 
-    const data = {
-      is_active: false,
-      deactivated_at: new Date(),
-      deactivated_by_sync_job_id: jobId,
-    };
+        for (const productId of expectedCandidateIds) {
+          await acquireProductMonetaryLock(tx, { productType, productId });
+        }
 
-    await this.prisma.$transaction(async (tx) => {
-      for (const productId of [...staleIds].sort()) {
-        await acquireProductMonetaryLock(tx, { productType, productId });
-      }
+        const data = {
+          is_active: false,
+          deactivated_at: new Date(),
+          deactivated_by_sync_job_id: jobId,
+        };
 
-      if (productType === ProductType.CAR) {
-        await tx.car.updateMany({
-          where: { id: { in: staleIds }, specialist_id: specialistId },
-          data,
-        });
-      } else if (productType === ProductType.BOAT) {
-        await tx.boat.updateMany({
-          where: { id: { in: staleIds }, specialist_id: specialistId },
-          data,
-        });
-      } else {
-        await tx.aircraft.updateMany({
-          where: { id: { in: staleIds }, specialist_id: specialistId },
-          data,
-        });
-      }
+        if (productType === ProductType.CAR) {
+          await tx.car.updateMany({
+            where: {
+              id: { in: expectedCandidateIds },
+              specialist_id: specialistId,
+              is_active: true,
+            },
+            data,
+          });
+        } else if (productType === ProductType.BOAT) {
+          await tx.boat.updateMany({
+            where: {
+              id: { in: expectedCandidateIds },
+              specialist_id: specialistId,
+              is_active: true,
+            },
+            data,
+          });
+        } else {
+          await tx.aircraft.updateMany({
+            where: {
+              id: { in: expectedCandidateIds },
+              specialist_id: specialistId,
+              is_active: true,
+            },
+            data,
+          });
+        }
+        return expectedCandidateIds;
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      },
+    );
+  }
+
+  private synchronizePreviewStale(): ConflictException {
+    return new ConflictException({
+      code: 'SYNCHRONIZE_PREVIEW_STALE',
+      message:
+        'O catálogo mudou desde a prévia. Nenhum produto foi desativado; gere uma nova prévia.',
     });
-
-    return staleIds;
   }
 
   private async getActiveProductIdsByType(

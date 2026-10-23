@@ -59,6 +59,7 @@ export type CsvImportPreview = {
   targetSpecialistId: string;
   mode: ProductImportMode;
   requiresExplicitConfirmation: boolean;
+  synchronizePreviewToken?: string;
   impact: {
     csvRows: number;
     existingProducts: number;
@@ -73,12 +74,16 @@ function importForm(
   specialistId: string,
   mode: ProductImportMode,
   confirmSynchronize = false,
+  synchronizePreviewToken?: string,
 ): FormData {
   const form = new FormData();
   form.append("file", file);
   form.append("specialist_id", specialistId);
   form.append("mode", mode);
   form.append("confirm_synchronize", String(confirmSynchronize));
+  if (synchronizePreviewToken) {
+    form.append("synchronize_preview_token", synchronizePreviewToken);
+  }
   return form;
 }
 
@@ -103,13 +108,20 @@ export async function importAdminCatalogCsv(
   file: File,
   mode: ProductImportMode,
   confirmSynchronize: boolean,
+  synchronizePreviewToken?: string,
 ): Promise<CsvImportResponse> {
   const resource = resourceByType[productType];
   const response = await api.post<
     CsvImportResponse | ImportJobAcceptedResponse
   >(
     `/${resource}/import-csv`,
-    importForm(file, specialistId, mode, confirmSynchronize),
+    importForm(
+      file,
+      specialistId,
+      mode,
+      confirmSynchronize,
+      synchronizePreviewToken,
+    ),
     { headers: { "Content-Type": "multipart/form-data" } },
   );
   return resolveImportResponse(response.data);

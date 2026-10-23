@@ -34,6 +34,8 @@ import { Public } from 'src/shared/decorators/public.decorator';
 import { ProductImportJobsService } from '../product-import-jobs/product-import-jobs.service';
 import { ActorContextService } from 'src/shared/actor-context/actor-context.service';
 import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
+import { ProductCsvImportDto } from '../product-import-jobs/dto/product-csv-import.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Controller('boats')
 export class BoatsController {
@@ -42,6 +44,7 @@ export class BoatsController {
     private readonly productImportJobsService: ProductImportJobsService,
     private readonly actorContextService: ActorContextService,
     private readonly delegatedAudit: DelegatedActionAuditService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Post()
@@ -56,14 +59,19 @@ export class BoatsController {
       ProductType.BOAT,
     );
     createBoatDto.specialist_id = context.specialistId;
-    const boat = await this.boatsService.create(createBoatDto);
-    await this.delegatedAudit.record({
-      context,
-      action: 'PRODUCT_CREATE',
-      resourceType: 'BOAT',
-      resourceId: boat.id,
+    return this.prisma.$transaction(async (tx) => {
+      const boat = await this.boatsService.create(createBoatDto, tx);
+      await this.delegatedAudit.record(
+        {
+          context,
+          action: 'PRODUCT_CREATE',
+          resourceType: 'BOAT',
+          resourceId: boat.id,
+        },
+        tx,
+      );
+      return boat;
     });
-    return boat;
   }
 
   @Post('import-csv/preview')
@@ -74,12 +82,11 @@ export class BoatsController {
   async previewCsvImport(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: UserEntity,
-    @Body('specialist_id') targetSpecialistId?: string,
-    @Body('mode') mode: 'ADDITIVE' | 'SYNCHRONIZE' = 'ADDITIVE',
+    @Body() options: ProductCsvImportDto = new ProductCsvImportDto(),
   ) {
     const context = await this.actorContextService.resolve(
       user,
-      targetSpecialistId,
+      options.specialist_id,
       ProductType.BOAT,
     );
     if (!file?.originalname?.toLowerCase().endsWith('.csv')) {
@@ -89,7 +96,7 @@ export class BoatsController {
       file.buffer,
       ProductType.BOAT,
       context.specialistId,
-      mode,
+      options.mode,
     );
   }
 
@@ -101,13 +108,11 @@ export class BoatsController {
   async importCsv(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: UserEntity,
-    @Body('specialist_id') targetSpecialistId?: string,
-    @Body('mode') mode: 'ADDITIVE' | 'SYNCHRONIZE' = 'ADDITIVE',
-    @Body('confirm_synchronize') confirmSynchronize = false,
+    @Body() options: ProductCsvImportDto = new ProductCsvImportDto(),
   ) {
     const context = await this.actorContextService.resolve(
       user,
-      targetSpecialistId,
+      options.specialist_id,
       ProductType.BOAT,
     );
 
@@ -128,7 +133,12 @@ export class BoatsController {
       file.buffer,
       user,
       ProductType.BOAT,
-      { context, mode, confirmSynchronize },
+      {
+        context,
+        mode: options.mode,
+        confirmSynchronize: options.confirm_synchronize,
+        synchronizePreviewToken: options.synchronize_preview_token,
+      },
     );
   }
 
@@ -252,14 +262,19 @@ export class BoatsController {
       context,
       existing?.specialist_id,
     );
-    const boat = await this.boatsService.update(id, updateBoatDto);
-    await this.delegatedAudit.record({
-      context,
-      action: 'PRODUCT_UPDATE',
-      resourceType: 'BOAT',
-      resourceId: id,
+    return this.prisma.$transaction(async (tx) => {
+      const boat = await this.boatsService.update(id, updateBoatDto, tx);
+      await this.delegatedAudit.record(
+        {
+          context,
+          action: 'PRODUCT_UPDATE',
+          resourceType: 'BOAT',
+          resourceId: id,
+        },
+        tx,
+      );
+      return boat;
     });
-    return boat;
   }
 
   @Delete(':id')
@@ -279,13 +294,18 @@ export class BoatsController {
       context,
       existing?.specialist_id,
     );
-    const result = await this.boatsService.remove(id);
-    await this.delegatedAudit.record({
-      context,
-      action: 'PRODUCT_DEACTIVATE',
-      resourceType: 'BOAT',
-      resourceId: id,
+    return this.prisma.$transaction(async (tx) => {
+      const result = await this.boatsService.remove(id, tx);
+      await this.delegatedAudit.record(
+        {
+          context,
+          action: 'PRODUCT_DEACTIVATE',
+          resourceType: 'BOAT',
+          resourceId: id,
+        },
+        tx,
+      );
+      return result;
     });
-    return result;
   }
 }

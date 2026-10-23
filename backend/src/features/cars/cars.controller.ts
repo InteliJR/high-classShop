@@ -31,6 +31,8 @@ import { Public } from 'src/shared/decorators/public.decorator';
 import { ProductImportJobsService } from '../product-import-jobs/product-import-jobs.service';
 import { ActorContextService } from 'src/shared/actor-context/actor-context.service';
 import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
+import { ProductCsvImportDto } from '../product-import-jobs/dto/product-csv-import.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Controller('cars')
 export class CarsController {
@@ -39,6 +41,7 @@ export class CarsController {
     private readonly productImportJobsService: ProductImportJobsService,
     private readonly actorContextService: ActorContextService,
     private readonly delegatedAudit: DelegatedActionAuditService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Post()
@@ -53,14 +56,19 @@ export class CarsController {
       ProductType.CAR,
     );
     createCarDto.specialist_id = context.specialistId;
-    const car = await this.carsService.create(createCarDto);
-    await this.delegatedAudit.record({
-      context,
-      action: 'PRODUCT_CREATE',
-      resourceType: 'CAR',
-      resourceId: car!.id,
+    return this.prisma.$transaction(async (tx) => {
+      const car = await this.carsService.create(createCarDto, tx);
+      await this.delegatedAudit.record(
+        {
+          context,
+          action: 'PRODUCT_CREATE',
+          resourceType: 'CAR',
+          resourceId: car!.id,
+        },
+        tx,
+      );
+      return car;
     });
-    return car;
   }
 
   @Post('import-csv/preview')
@@ -71,12 +79,11 @@ export class CarsController {
   async previewCsvImport(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: UserEntity,
-    @Body('specialist_id') targetSpecialistId?: string,
-    @Body('mode') mode: 'ADDITIVE' | 'SYNCHRONIZE' = 'ADDITIVE',
+    @Body() options: ProductCsvImportDto = new ProductCsvImportDto(),
   ) {
     const context = await this.actorContextService.resolve(
       user,
-      targetSpecialistId,
+      options.specialist_id,
       ProductType.CAR,
     );
     if (!file?.originalname?.toLowerCase().endsWith('.csv')) {
@@ -86,7 +93,7 @@ export class CarsController {
       file.buffer,
       ProductType.CAR,
       context.specialistId,
-      mode,
+      options.mode,
     );
   }
 
@@ -98,13 +105,11 @@ export class CarsController {
   async importCsv(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: UserEntity,
-    @Body('specialist_id') targetSpecialistId?: string,
-    @Body('mode') mode: 'ADDITIVE' | 'SYNCHRONIZE' = 'ADDITIVE',
-    @Body('confirm_synchronize') confirmSynchronize = false,
+    @Body() options: ProductCsvImportDto = new ProductCsvImportDto(),
   ) {
     const context = await this.actorContextService.resolve(
       user,
-      targetSpecialistId,
+      options.specialist_id,
       ProductType.CAR,
     );
 
@@ -125,7 +130,12 @@ export class CarsController {
       file.buffer,
       user,
       ProductType.CAR,
-      { context, mode, confirmSynchronize },
+      {
+        context,
+        mode: options.mode,
+        confirmSynchronize: options.confirm_synchronize,
+        synchronizePreviewToken: options.synchronize_preview_token,
+      },
     );
   }
 
@@ -249,14 +259,19 @@ export class CarsController {
       context,
       existing?.specialist_id,
     );
-    const car = await this.carsService.update(id, updateCarDto);
-    await this.delegatedAudit.record({
-      context,
-      action: 'PRODUCT_UPDATE',
-      resourceType: 'CAR',
-      resourceId: id,
+    return this.prisma.$transaction(async (tx) => {
+      const car = await this.carsService.update(id, updateCarDto, tx);
+      await this.delegatedAudit.record(
+        {
+          context,
+          action: 'PRODUCT_UPDATE',
+          resourceType: 'CAR',
+          resourceId: id,
+        },
+        tx,
+      );
+      return car;
     });
-    return car;
   }
 
   @Delete(':id')
@@ -276,13 +291,18 @@ export class CarsController {
       context,
       existing?.specialist_id,
     );
-    const result = await this.carsService.remove(id);
-    await this.delegatedAudit.record({
-      context,
-      action: 'PRODUCT_DEACTIVATE',
-      resourceType: 'CAR',
-      resourceId: id,
+    return this.prisma.$transaction(async (tx) => {
+      const result = await this.carsService.remove(id, tx);
+      await this.delegatedAudit.record(
+        {
+          context,
+          action: 'PRODUCT_DEACTIVATE',
+          resourceType: 'CAR',
+          resourceId: id,
+        },
+        tx,
+      );
+      return result;
     });
-    return result;
   }
 }

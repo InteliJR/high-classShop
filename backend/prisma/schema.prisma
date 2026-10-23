@@ -1341,6 +1341,7 @@ model ProductImportJob {
   created_by_id           String?                @db.Uuid
   mode                    String                 @default("ADDITIVE") @db.VarChar(20)
   sync_confirmed          Boolean                @default(false)
+  sync_preview_snapshot   Json?
   status                  ProductImportJobStatus @default(PENDING)
   total_items             Int                    @default(0)
   processed_items         Int                    @default(0)

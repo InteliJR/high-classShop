@@ -85,6 +85,10 @@ export default function SpecialistJourneyProductsPage() {
   const runImport = async () => {
     if (!file || !preview) return;
     if (mode === "SYNCHRONIZE" && !syncConfirmed) return;
+    if (mode === "SYNCHRONIZE" && !preview.synchronizePreviewToken) {
+      setError("A prévia expirou. Gere uma nova prévia antes de sincronizar.");
+      return;
+    }
     setImporting(true);
     setError(null);
     try {
@@ -94,13 +98,23 @@ export default function SpecialistJourneyProductsPage() {
         file,
         mode,
         syncConfirmed,
+        preview.synchronizePreviewToken,
       );
       window.alert(result.message);
       setPreview(null);
       setFile(null);
       await load(1);
-    } catch {
-      setError("A importação não foi concluída. O catálogo não foi sincronizado.");
+    } catch (caught) {
+      const explicitMessage =
+        caught instanceof Error &&
+        (caught.message.includes("prévia") ||
+          caught.message.includes("catálogo mudou"))
+          ? caught.message
+          : null;
+      setError(
+        explicitMessage ??
+          "A importação não foi concluída. O catálogo não foi sincronizado.",
+      );
     } finally {
       setImporting(false);
     }

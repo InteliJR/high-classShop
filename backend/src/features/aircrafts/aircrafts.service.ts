@@ -27,7 +27,10 @@ export class AircraftsService {
     private s3Service: S3Service,
   ) {}
 
-  async create(createAircraftDto: CreateAircraftDto) {
+  async create(
+    createAircraftDto: CreateAircraftDto,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
+  ) {
     this.logger.log('[create] Iniciando criação de nova aeronave');
     const { specialist_id, images, ...aircraftData } = createAircraftDto;
 
@@ -51,7 +54,7 @@ export class AircraftsService {
       this.logger.debug(
         `[create] Criando aeronave: ${aircraftData.marca} ${aircraftData.modelo}`,
       );
-      const aircraft = await this.prismaService.aircraft.create({
+      const aircraft = await client.aircraft.create({
         data: payload,
       });
       this.logger.log(
@@ -77,7 +80,7 @@ export class AircraftsService {
             key,
           );
 
-          await this.prismaService.aircraft_image.create({
+          await client.aircraft_image.create({
             data: {
               aircraft_id: aircraft.id,
               image_url: imageKey,
@@ -93,7 +96,7 @@ export class AircraftsService {
       }
 
       // 3. Retornar a aeronave com as imagens
-      const aircraftWithImages = await this.prismaService.aircraft.findUnique({
+      const aircraftWithImages = await client.aircraft.findUnique({
         where: { id: aircraft.id },
         include: { images: true },
       });
@@ -258,7 +261,11 @@ export class AircraftsService {
   //   return `This action updates a #${id} aircraft`;
   // }
 
-  async update(id: string, updateAircraftDto: UpdateAircraftDto) {
+  async update(
+    id: string,
+    updateAircraftDto: UpdateAircraftDto,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
+  ) {
     const { specialist_id, images, ...aircraftData } = updateAircraftDto;
     const payload: Prisma.AircraftUncheckedUpdateInput = {};
 
@@ -299,7 +306,7 @@ export class AircraftsService {
       payload.specialist_id = specialist_id ?? null;
     }
 
-    await updateProductWithMonetaryLock(this.prismaService, {
+    await updateProductWithMonetaryLock(client, {
       productType: ProductType.AIRCRAFT,
       productId: id,
       nextValue: updateAircraftDto.valor,
@@ -312,7 +319,7 @@ export class AircraftsService {
       // 1. Se houver novas imagens, processar
       if (images && images.length > 0) {
         // Remover imagens antigas
-        await this.prismaService.aircraft_image.deleteMany({
+        await client.aircraft_image.deleteMany({
           where: { aircraft_id: id },
         });
 
@@ -328,7 +335,7 @@ export class AircraftsService {
             key,
           );
 
-          await this.prismaService.aircraft_image.create({
+          await client.aircraft_image.create({
             data: {
               aircraft_id: id,
               image_url: imageKey,
@@ -340,7 +347,7 @@ export class AircraftsService {
       }
 
       // 3. Retornar a aeronave atualizada com imagens
-      return await this.prismaService.aircraft.findUnique({
+      return await client.aircraft.findUnique({
         where: { id },
         include: { images: true },
       });
@@ -352,9 +359,12 @@ export class AircraftsService {
     }
   }
 
-  async remove(id: string) {
+  async remove(
+    id: string,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
+  ) {
     try {
-      await updateProductWithMonetaryLock(this.prismaService, {
+      await updateProductWithMonetaryLock(client, {
         productType: ProductType.AIRCRAFT,
         productId: id,
         data: {

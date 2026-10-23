@@ -27,12 +27,15 @@ export class CarsService {
     private s3Service: S3Service,
   ) {}
 
-  async create(createCarDto: CreateCarDto) {
+  async create(
+    createCarDto: CreateCarDto,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
+  ) {
     const { images, ...carData } = createCarDto;
 
     try {
       // 1. Criar o carro
-      const car = await this.prismaService.car.create({ data: carData });
+      const car = await client.car.create({ data: carData });
 
       // 2. Processar e fazer upload das imagens, se existirem
       if (images && images.length > 0) {
@@ -50,7 +53,7 @@ export class CarsService {
           );
 
           // Salvar referência da imagem no banco de dados
-          await this.prismaService.car_image.create({
+          await client.car_image.create({
             data: {
               car_id: car.id,
               image_url: imageKey,
@@ -62,7 +65,7 @@ export class CarsService {
       }
 
       // 3. Retornar o carro com as imagens
-      return await this.prismaService.car.findUnique({
+      return await client.car.findUnique({
         where: { id: car.id },
         include: { images: true },
       });
@@ -211,10 +214,14 @@ export class CarsService {
     return { ...car };
   }
 
-  async update(id: string, updateCarDto: UpdateCarDto) {
+  async update(
+    id: string,
+    updateCarDto: UpdateCarDto,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
+  ) {
     const { images, ...carData } = updateCarDto;
 
-    await updateProductWithMonetaryLock(this.prismaService, {
+    await updateProductWithMonetaryLock(client, {
       productType: ProductType.CAR,
       productId: id,
       nextValue: updateCarDto.valor,
@@ -227,7 +234,7 @@ export class CarsService {
       // 1. Se houver novas imagens, processar
       if (images && images.length > 0) {
         // Remover imagens antigas
-        await this.prismaService.car_image.deleteMany({
+        await client.car_image.deleteMany({
           where: { car_id: id },
         });
 
@@ -243,7 +250,7 @@ export class CarsService {
             key,
           );
 
-          await this.prismaService.car_image.create({
+          await client.car_image.create({
             data: {
               car_id: id,
               image_url: imageKey,
@@ -255,7 +262,7 @@ export class CarsService {
       }
 
       // 2. Retornar o carro atualizado com imagens
-      return await this.prismaService.car.findUnique({
+      return await client.car.findUnique({
         where: { id },
         include: { images: true },
       });
@@ -267,9 +274,12 @@ export class CarsService {
     }
   }
 
-  async remove(id: string) {
+  async remove(
+    id: string,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
+  ) {
     try {
-      await updateProductWithMonetaryLock(this.prismaService, {
+      await updateProductWithMonetaryLock(client, {
         productType: ProductType.CAR,
         productId: id,
         data: {

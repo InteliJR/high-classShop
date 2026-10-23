@@ -27,7 +27,10 @@ export class BoatsService {
     private s3Service: S3Service,
   ) {}
 
-  async create(createBoatDto: CreateBoatDto) {
+  async create(
+    createBoatDto: CreateBoatDto,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
+  ) {
     this.logger.log('[create] Iniciando criação de novo barco');
     const { images, ...boatData } = createBoatDto;
 
@@ -36,7 +39,7 @@ export class BoatsService {
       this.logger.debug(
         `[create] Criando barco: ${boatData.marca} ${boatData.modelo}`,
       );
-      const boat = await this.prismaService.boat.create({ data: boatData });
+      const boat = await client.boat.create({ data: boatData });
       this.logger.log(`[create] Barco criado com sucesso - ID: ${boat.id}`);
 
       // 2. Processar e fazer upload das imagens, se existirem
@@ -58,7 +61,7 @@ export class BoatsService {
             key,
           );
 
-          await this.prismaService.boat_image.create({
+          await client.boat_image.create({
             data: {
               boat_id: boat.id,
               image_url: imageKey,
@@ -74,7 +77,7 @@ export class BoatsService {
       }
 
       // 3. Retornar o barco com as imagens
-      const boatWithImages = await this.prismaService.boat.findUnique({
+      const boatWithImages = await client.boat.findUnique({
         where: { id: boat.id },
         include: { images: true },
       });
@@ -231,10 +234,14 @@ export class BoatsService {
     return { ...boat };
   }
 
-  async update(id: string, updateBoatDto: UpdateBoatDto) {
+  async update(
+    id: string,
+    updateBoatDto: UpdateBoatDto,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
+  ) {
     const { images, ...boatData } = updateBoatDto;
 
-    await updateProductWithMonetaryLock(this.prismaService, {
+    await updateProductWithMonetaryLock(client, {
       productType: ProductType.BOAT,
       productId: id,
       nextValue: updateBoatDto.valor,
@@ -247,7 +254,7 @@ export class BoatsService {
       // 1. Se houver novas imagens, processar
       if (images && images.length > 0) {
         // Remover imagens antigas
-        await this.prismaService.boat_image.deleteMany({
+        await client.boat_image.deleteMany({
           where: { boat_id: id },
         });
 
@@ -263,7 +270,7 @@ export class BoatsService {
             key,
           );
 
-          await this.prismaService.boat_image.create({
+          await client.boat_image.create({
             data: {
               boat_id: id,
               image_url: imageKey,
@@ -275,7 +282,7 @@ export class BoatsService {
       }
 
       // 2. Retornar o barco atualizado com imagens
-      return await this.prismaService.boat.findUnique({
+      return await client.boat.findUnique({
         where: { id },
         include: { images: true },
       });
@@ -287,9 +294,12 @@ export class BoatsService {
     }
   }
 
-  async remove(id: string) {
+  async remove(
+    id: string,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
+  ) {
     try {
-      await updateProductWithMonetaryLock(this.prismaService, {
+      await updateProductWithMonetaryLock(client, {
         productType: ProductType.BOAT,
         productId: id,
         data: {

@@ -34,6 +34,8 @@ import { Public } from 'src/shared/decorators/public.decorator';
 import { ProductImportJobsService } from '../product-import-jobs/product-import-jobs.service';
 import { ActorContextService } from 'src/shared/actor-context/actor-context.service';
 import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
+import { ProductCsvImportDto } from '../product-import-jobs/dto/product-csv-import.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Controller('aircrafts')
 export class AircraftsController {
@@ -42,6 +44,7 @@ export class AircraftsController {
     private readonly productImportJobsService: ProductImportJobsService,
     private readonly actorContextService: ActorContextService,
     private readonly delegatedAudit: DelegatedActionAuditService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Post()
@@ -56,14 +59,22 @@ export class AircraftsController {
       ProductType.AIRCRAFT,
     );
     createAircraftDto.specialist_id = context.specialistId;
-    const aircraft = await this.aircraftsService.create(createAircraftDto);
-    await this.delegatedAudit.record({
-      context,
-      action: 'PRODUCT_CREATE',
-      resourceType: 'AIRCRAFT',
-      resourceId: aircraft.id,
+    return this.prisma.$transaction(async (tx) => {
+      const aircraft = await this.aircraftsService.create(
+        createAircraftDto,
+        tx,
+      );
+      await this.delegatedAudit.record(
+        {
+          context,
+          action: 'PRODUCT_CREATE',
+          resourceType: 'AIRCRAFT',
+          resourceId: aircraft.id,
+        },
+        tx,
+      );
+      return aircraft;
     });
-    return aircraft;
   }
 
   @Post('import-csv/preview')
@@ -74,12 +85,11 @@ export class AircraftsController {
   async previewCsvImport(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: UserEntity,
-    @Body('specialist_id') targetSpecialistId?: string,
-    @Body('mode') mode: 'ADDITIVE' | 'SYNCHRONIZE' = 'ADDITIVE',
+    @Body() options: ProductCsvImportDto = new ProductCsvImportDto(),
   ) {
     const context = await this.actorContextService.resolve(
       user,
-      targetSpecialistId,
+      options.specialist_id,
       ProductType.AIRCRAFT,
     );
     if (!file?.originalname?.toLowerCase().endsWith('.csv')) {
@@ -89,7 +99,7 @@ export class AircraftsController {
       file.buffer,
       ProductType.AIRCRAFT,
       context.specialistId,
-      mode,
+      options.mode,
     );
   }
 
@@ -101,13 +111,11 @@ export class AircraftsController {
   async importCsv(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: UserEntity,
-    @Body('specialist_id') targetSpecialistId?: string,
-    @Body('mode') mode: 'ADDITIVE' | 'SYNCHRONIZE' = 'ADDITIVE',
-    @Body('confirm_synchronize') confirmSynchronize = false,
+    @Body() options: ProductCsvImportDto = new ProductCsvImportDto(),
   ) {
     const context = await this.actorContextService.resolve(
       user,
-      targetSpecialistId,
+      options.specialist_id,
       ProductType.AIRCRAFT,
     );
 
@@ -128,7 +136,12 @@ export class AircraftsController {
       file.buffer,
       user,
       ProductType.AIRCRAFT,
-      { context, mode, confirmSynchronize },
+      {
+        context,
+        mode: options.mode,
+        confirmSynchronize: options.confirm_synchronize,
+        synchronizePreviewToken: options.synchronize_preview_token,
+      },
     );
   }
 
@@ -253,14 +266,23 @@ export class AircraftsController {
       context,
       existing?.specialist_id,
     );
-    const aircraft = await this.aircraftsService.update(id, updateAircraftDto);
-    await this.delegatedAudit.record({
-      context,
-      action: 'PRODUCT_UPDATE',
-      resourceType: 'AIRCRAFT',
-      resourceId: id,
+    return this.prisma.$transaction(async (tx) => {
+      const aircraft = await this.aircraftsService.update(
+        id,
+        updateAircraftDto,
+        tx,
+      );
+      await this.delegatedAudit.record(
+        {
+          context,
+          action: 'PRODUCT_UPDATE',
+          resourceType: 'AIRCRAFT',
+          resourceId: id,
+        },
+        tx,
+      );
+      return aircraft;
     });
-    return aircraft;
   }
 
   @Delete(':id')
@@ -280,13 +302,18 @@ export class AircraftsController {
       context,
       existing?.specialist_id,
     );
-    const result = await this.aircraftsService.remove(id);
-    await this.delegatedAudit.record({
-      context,
-      action: 'PRODUCT_DEACTIVATE',
-      resourceType: 'AIRCRAFT',
-      resourceId: id,
+    return this.prisma.$transaction(async (tx) => {
+      const result = await this.aircraftsService.remove(id, tx);
+      await this.delegatedAudit.record(
+        {
+          context,
+          action: 'PRODUCT_DEACTIVATE',
+          resourceType: 'AIRCRAFT',
+          resourceId: id,
+        },
+        tx,
+      );
+      return result;
     });
-    return result;
   }
 }

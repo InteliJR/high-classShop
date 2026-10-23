@@ -24,13 +24,25 @@ function mkController() {
     assertResourceSpecialist: jest.fn(),
   } as any;
   const audit = { record: jest.fn().mockResolvedValue(undefined) } as any;
-  const controller = new BoatsController(
+  const tx = { name: 'tx' } as any;
+  const prisma = {
+    $transaction: jest.fn(async (callback) => callback(tx)),
+  } as any;
+  const controller = new (BoatsController as any)(
     boatsService,
     productImportJobsService,
     actorContext,
     audit,
+    prisma,
   );
-  return { controller, boatsService, productImportJobsService };
+  return {
+    controller,
+    boatsService,
+    productImportJobsService,
+    audit,
+    prisma,
+    tx,
+  };
 }
 
 const specialist = {
@@ -41,14 +53,14 @@ const specialist = {
 
 describe('BoatsController — Calendly opcional', () => {
   it('permite criação manual sem consultar Calendly', async () => {
-    const { controller, boatsService } = mkController();
+    const { controller, boatsService, tx } = mkController();
     const dto = {} as any;
 
     await expect(controller.create(dto, specialist)).resolves.toEqual({
       id: 'boat-1',
     });
     expect(dto.specialist_id).toBe(specialist.id);
-    expect(boatsService.create).toHaveBeenCalledWith(dto);
+    expect(boatsService.create).toHaveBeenCalledWith(dto, tx);
   });
 
   it('não permite trocar o owner no PATCH comum', async () => {
@@ -62,6 +74,22 @@ describe('BoatsController — Calendly opcional', () => {
       ),
     ).rejects.toMatchObject({ status: 400 });
     expect(boatsService.update).not.toHaveBeenCalled();
+  });
+
+  it('executa criação manual e auditoria na mesma transação', async () => {
+    const { controller, boatsService, audit, prisma, tx } = mkController();
+    audit.record.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    await expect(controller.create({} as any, specialist)).rejects.toThrow(
+      'audit unavailable',
+    );
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(boatsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({ specialist_id: specialist.id }),
+      tx,
+    );
+    expect(audit.record).toHaveBeenCalledWith(expect.any(Object), tx);
   });
 
   it('permite importação CSV sem consultar Calendly', async () => {

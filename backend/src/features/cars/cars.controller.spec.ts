@@ -24,11 +24,16 @@ function mkController() {
     assertResourceSpecialist: jest.fn(),
   } as any;
   const audit = { record: jest.fn().mockResolvedValue(undefined) } as any;
-  const controller = new CarsController(
+  const tx = { name: 'tx' } as any;
+  const prisma = {
+    $transaction: jest.fn(async (callback) => callback(tx)),
+  } as any;
+  const controller = new (CarsController as any)(
     carsService,
     productImportJobsService,
     actorContext,
     audit,
+    prisma,
   );
   return {
     controller,
@@ -36,6 +41,8 @@ function mkController() {
     productImportJobsService,
     actorContext,
     audit,
+    prisma,
+    tx,
   };
 }
 
@@ -47,18 +54,18 @@ const specialist = {
 
 describe('CarsController — Calendly opcional', () => {
   it('permite criação manual sem consultar Calendly', async () => {
-    const { controller, carsService } = mkController();
+    const { controller, carsService, tx } = mkController();
     const dto = {} as any;
 
     await expect(controller.create(dto, specialist)).resolves.toEqual({
       id: 'car-1',
     });
     expect(dto.specialist_id).toBe(specialist.id);
-    expect(carsService.create).toHaveBeenCalledWith(dto);
+    expect(carsService.create).toHaveBeenCalledWith(dto, tx);
   });
 
   it('mantém ADMIN como ator e grava o SPECIALIST selecionado como owner', async () => {
-    const { controller, carsService, actorContext, audit } = mkController();
+    const { controller, carsService, actorContext, audit, tx } = mkController();
     const admin = { id: 'admin-1', role: 'ADMIN' } as any;
     const dto = { specialist_id: 'spec-1' } as any;
 
@@ -71,6 +78,7 @@ describe('CarsController — Calendly opcional', () => {
     );
     expect(carsService.create).toHaveBeenCalledWith(
       expect.objectContaining({ specialist_id: 'spec-1' }),
+      tx,
     );
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -78,7 +86,24 @@ describe('CarsController — Calendly opcional', () => {
         resourceType: 'CAR',
         resourceId: 'car-1',
       }),
+      tx,
     );
+  });
+
+  it('executa criação manual e auditoria na mesma transação', async () => {
+    const { controller, carsService, audit, prisma, tx } = mkController();
+    audit.record.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    await expect(controller.create({} as any, specialist)).rejects.toThrow(
+      'audit unavailable',
+    );
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(carsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({ specialist_id: specialist.id }),
+      tx,
+    );
+    expect(audit.record).toHaveBeenCalledWith(expect.any(Object), tx);
   });
 
   it('não permite remover o owner com specialist_id null no PATCH', async () => {

@@ -511,6 +511,16 @@ describePostgres('ADMIN acting for SPECIALIST journey (HTTP + PostgreSQL)', () =
       city: 'Sao Paulo',
       description: 'Approved E2E legal content',
     };
+    await request(app.getHttpServer())
+      .post('/api/contracts/generate')
+      .query(target())
+      .auth(adminToken, { type: 'bearer' })
+      .send(contractDto)
+      .expect(401);
+    await expect(
+      prisma.contract.count({ where: { process_id: processId } }),
+    ).resolves.toBe(0);
+
     const preview = await request(app.getHttpServer())
       .post('/api/contracts/preview')
       .query(target())
