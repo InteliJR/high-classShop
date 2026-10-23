@@ -363,6 +363,10 @@ export default function NegotiationPage() {
         <div className="space-y-4">
           {processInfo && proposals.map((proposal) => {
             const isOwnProposal = proposal.proposed_by.id === commercialActorId;
+            const adminExecutor =
+              proposal.executed_by?.role === "ADMIN"
+                ? proposal.executed_by.name?.trim() || "admin"
+                : null;
 
             return (
               <div
@@ -392,10 +396,13 @@ export default function NegotiationPage() {
                       >
                         {proposal.proposed_by.name}{" "}
                         {proposal.proposed_by.surname}
-                        {isOwnProposal &&
-                          (adminJourney
-                            ? " (lado do especialista; executado pelo admin)"
-                            : " (você)")}
+                        {adminExecutor
+                          ? user?.role === "SPECIALIST" && isOwnProposal
+                            ? ` (enviada por ${adminExecutor} em seu nome)`
+                            : ` (enviada por ${adminExecutor} em nome da especialista)`
+                          : isOwnProposal && !adminJourney
+                            ? " (você)"
+                            : null}
                       </span>
                       <span
                         className={`text-xs ${

@@ -25,6 +25,11 @@ export interface NegotiationProposal {
     surname: string;
     role: "CUSTOMER" | "SPECIALIST" | "CONSULTANT" | "ADMIN";
   };
+  executed_by?: {
+    id: string;
+    role: "CUSTOMER" | "SPECIALIST" | "CONSULTANT" | "ADMIN";
+    name: string | null;
+  };
 }
 
 /**

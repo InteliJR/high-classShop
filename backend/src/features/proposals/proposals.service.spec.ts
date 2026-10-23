@@ -146,7 +146,10 @@ function setup() {
     sendProposalRejectedEmail: jest.fn().mockResolvedValue(undefined),
     sendProcessStatusChangedEmail: jest.fn().mockResolvedValue(undefined),
   } as any;
-  const audit = { record: jest.fn().mockResolvedValue(undefined) } as any;
+  const audit = {
+    record: jest.fn().mockResolvedValue(undefined),
+    listProposalCreators: jest.fn().mockResolvedValue([]),
+  } as any;
   const service = new ProposalsService(
     prisma,
     settings,
@@ -207,6 +210,43 @@ describe('ProposalsService — snapshot e mínimo dinâmico', () => {
       minimum_enabled: true,
       minimum_value: 80000,
     });
+  });
+
+  it('mostra o executor administrativo sem trocar a autoria comercial', async () => {
+    const { service, prisma, audit } = setup();
+    prisma.process.findUnique.mockResolvedValue(
+      processFixture({
+        proposals: [
+          proposalFixture({
+            proposed_by_id: 'specialist-1',
+            proposed_to_id: 'client-1',
+            proposed_by: {
+              id: 'specialist-1',
+              name: 'Especialista',
+              surname: 'Alfa',
+              role: UserRole.SPECIALIST,
+            },
+          }),
+        ],
+      }),
+    );
+    audit.listProposalCreators.mockResolvedValue([
+      {
+        proposalId: 'proposal-1',
+        actor: { id: 'admin-1', role: UserRole.ADMIN, name: 'Admin Validação' },
+      },
+    ]);
+
+    const response = await service.getByProcess('process-1', 'specialist-1');
+
+    expect(response.proposals[0]).toMatchObject({
+      proposed_by: { id: 'specialist-1' },
+      executed_by: { id: 'admin-1', role: UserRole.ADMIN },
+    });
+    expect(audit.listProposalCreators).toHaveBeenCalledWith(
+      'process-1',
+      'specialist-1',
+    );
   });
 
   it('exposes the cent-rounded minimum used by proposal creation', async () => {

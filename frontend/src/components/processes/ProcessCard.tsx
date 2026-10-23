@@ -141,6 +141,11 @@ export default function ProcessCard({
   const isConsultancy = !process.product_type || !process.product_id;
   const canManuallyAdvanceProcess =
     !isClientView && process.status === "NEGOTIATION" && !isConsultancy;
+  const canPrepareContract =
+    !activeContract ||
+    ["DECLINED", "VOIDED", "TIMEDOUT"].includes(
+      String(activeContract.provider_status ?? "").toUpperCase(),
+    );
 
   // Contraparte do processo: quem esta olhando quer o contato do outro lado.
   // Nao ha fallback entre os dois — se o dado da contraparte nao veio, a
@@ -491,6 +496,7 @@ export default function ProcessCard({
       {/* Upload Contract Button: For DOCUMENTATION status (hidden in client view) */}
       {process.status === "DOCUMENTATION" &&
         onUploadDocuments &&
+        canPrepareContract &&
         !isExpanded &&
         !isClientView && (
           <div className="hidden md:block absolute top-6 right-6 z-20">
@@ -845,6 +851,7 @@ export default function ProcessCard({
         {/* Mobile: botão para enviar contrato em DOCUMENTATION */}
         {process.status === "DOCUMENTATION" &&
           onUploadDocuments &&
+          canPrepareContract &&
           !isExpanded &&
           !isClientView && (
             <div className="md:hidden w-full mb-2 flex flex-col gap-2">
@@ -1146,7 +1153,9 @@ export default function ProcessCard({
             )}
 
             {/* Upload Contract Button: Only show if status is DOCUMENTATION */}
-            {process.status === "DOCUMENTATION" && onUploadDocuments && (
+            {process.status === "DOCUMENTATION" &&
+              onUploadDocuments &&
+              canPrepareContract && (
               <button
                 onClick={onUploadDocuments}
                 className="flex-1 px-3 py-2 md:px-4 md:py-2 bg-orange-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors whitespace-nowrap"

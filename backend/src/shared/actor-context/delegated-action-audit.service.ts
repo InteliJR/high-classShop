@@ -12,6 +12,11 @@ export type DelegatedActionAuditInput = {
   metadata?: Record<string, unknown>;
 };
 
+export type DelegatedProposalExecutor = {
+  proposalId: string;
+  actor: { id: string; role: UserRole; name: string | null };
+};
+
 @Injectable()
 export class DelegatedActionAuditService {
   constructor(private readonly prisma: PrismaService) {}
@@ -37,6 +42,38 @@ export class DelegatedActionAuditService {
         NOW()
       )
     `;
+  }
+
+  async listProposalCreators(
+    processId: string,
+    specialistId: string,
+  ): Promise<DelegatedProposalExecutor[]> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        resource_id: string;
+        actor_id: string;
+        actor_role: UserRole;
+        actor_name: string | null;
+      }>
+    >`
+      SELECT audit."resource_id", audit."actor_id", audit."actor_role",
+        CONCAT_WS(' ', actor."name", actor."surname") AS "actor_name"
+      FROM "DelegatedActionAudit" audit
+      LEFT JOIN "User" actor ON actor."id" = audit."actor_id"
+      WHERE audit."represented_specialist_id" = ${specialistId}::uuid
+        AND audit."resource_type" = 'PROPOSAL'
+        AND audit."action" IN ('PROPOSAL_CREATE', 'PROPOSAL_COUNTER')
+        AND audit."metadata"->>'processId' = ${processId}
+      ORDER BY audit."created_at" DESC
+    `;
+    return rows.map((row) => ({
+      proposalId: row.resource_id,
+      actor: {
+        id: row.actor_id,
+        role: row.actor_role,
+        name: row.actor_name,
+      },
+    }));
   }
 
   async listForProcess(

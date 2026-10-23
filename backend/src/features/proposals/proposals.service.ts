@@ -619,8 +619,24 @@ export class ProposalsService {
       process.status === ProcessStatus.NEGOTIATION &&
       (!lastPendingProposal || lastPendingTargetSide === userSide);
 
+    const proposalExecutors =
+      this.delegatedAudit && process.proposals.length > 0
+        ? await this.delegatedAudit.listProposalCreators(
+            process.id,
+            process.specialist_id,
+          )
+        : [];
+    const executorByProposal = new Map(
+      proposalExecutors.map(({ proposalId, actor }) => [proposalId, actor]),
+    );
+
     return {
-      proposals: process.proposals.map((p) => this.mapToResponseEntity(p)),
+      proposals: process.proposals.map((p) => ({
+        ...this.mapToResponseEntity(p),
+        ...(executorByProposal.has(p.id)
+          ? { executed_by: executorByProposal.get(p.id) }
+          : {}),
+      })),
       process: {
         id: process.id,
         status: process.status,
