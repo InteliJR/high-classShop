@@ -5,6 +5,7 @@ import {
   NotFoundException,
   ForbiddenException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import {
@@ -57,6 +58,8 @@ import {
   buildOccupiedScheduleWhere,
   lockAndAssertSpecialistScheduleAvailable,
 } from './appointment-schedule-lock';
+import { ActorContext } from 'src/shared/actor-context/actor-context.service';
+import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
 
 /**
  * AppointmentsService
@@ -87,7 +90,20 @@ export class AppointmentsService {
     private prisma: PrismaService,
     private notificationService: NotificationService,
     private calendlyIntegrationService: CalendlyIntegrationService,
+    @Optional()
+    private readonly delegatedAudit?: DelegatedActionAuditService,
   ) {}
+
+  private assertRepresentedSpecialist(
+    context: ActorContext | undefined,
+    specialistId: string,
+  ) {
+    if (context && context.specialistId !== specialistId) {
+      throw new ForbiddenException(
+        'O agendamento não pertence ao especialista representado.',
+      );
+    }
+  }
 
   /** Bloqueia a criação direta sem confirmação do especialista. */
   async create(
@@ -109,6 +125,7 @@ export class AppointmentsService {
     appointmentId: string,
     appointmentDatetime: string,
     userId: string,
+    context?: ActorContext,
   ): Promise<AppointmentResponseEntity> {
     const nextDate = parseDate(appointmentDatetime);
     if (!nextDate || !isFutureDate(nextDate)) {
@@ -128,7 +145,8 @@ export class AppointmentsService {
     if (!appointment) {
       throw new NotFoundException('Agendamento não encontrado');
     }
-    if (appointment.specialist_id !== userId) {
+    const representedSpecialistId = context?.specialistId ?? userId;
+    if (appointment.specialist_id !== representedSpecialistId) {
       throw new ForbiddenException(
         'Apenas o especialista responsável pode alterar o horário',
       );
@@ -144,7 +162,8 @@ export class AppointmentsService {
       if (!lockedAppointment) {
         throw new NotFoundException('Agendamento não encontrado');
       }
-      if (lockedAppointment.specialist_id !== userId) {
+      this.assertRepresentedSpecialist(context, lockedAppointment.specialist_id);
+      if (lockedAppointment.specialist_id !== representedSpecialistId) {
         throw new ForbiddenException(
           'Apenas o especialista responsável pode alterar o horário',
         );
@@ -192,6 +211,22 @@ export class AppointmentsService {
       });
       if (claim.count !== 1) {
         throw this.buildRescheduleAlreadyUsedError(appointmentId);
+      }
+
+      if (context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'APPOINTMENT_RESCHEDULE',
+            resourceType: 'APPOINTMENT',
+            resourceId: appointmentId,
+            metadata: {
+              from: lockedAppointment.appointment_datetime,
+              to: nextDate,
+            },
+          },
+          tx,
+        );
       }
 
       return tx.appointment.findUniqueOrThrow({
@@ -572,11 +607,15 @@ export class AppointmentsService {
     dto: UpdateAppointmentStatusDto,
     userId: string,
     userRole: UserRole,
+    context?: ActorContext,
   ): Promise<AppointmentResponseEntity> {
     const assertTransitionAllowed = (current: any): void => {
+      this.assertRepresentedSpecialist(context, current.specialist_id);
+      const representedSpecialistId = context?.specialistId ?? userId;
       const isParticipant =
-        current.client_id === userId || current.specialist_id === userId;
-      if (!isParticipant && userRole !== UserRole.ADMIN) {
+        current.client_id === userId ||
+        current.specialist_id === representedSpecialistId;
+      if (!isParticipant) {
         throw new ForbiddenException({
           success: false,
           error: {
@@ -610,6 +649,11 @@ export class AppointmentsService {
             'Apenas uma reunião agendada pode ser concluída',
           );
         }
+        if (!current.process?.meeting_session?.ended_at) {
+          throw new BadRequestException(
+            'Conclua a reunião pelo fluxo de conversa antes de encerrar o agendamento.',
+          );
+        }
       }
 
       if (
@@ -637,7 +681,7 @@ export class AppointmentsService {
       include: {
         client: true,
         specialist: true,
-        process: true,
+        process: { include: { meeting_session: true } },
       },
     });
 
@@ -661,7 +705,7 @@ export class AppointmentsService {
         include: {
           client: true,
           specialist: true,
-          process: true,
+          process: { include: { meeting_session: true } },
         },
       });
       if (!lockedAppointment) {
@@ -698,6 +742,23 @@ export class AppointmentsService {
             details: { appointment_id: id },
           },
         });
+      }
+
+      if (context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'APPOINTMENT_STATUS_UPDATE',
+            resourceType: 'APPOINTMENT',
+            resourceId: id,
+            metadata: {
+              from: lockedAppointment.status,
+              to: dto.status,
+              reason: dto.notes ?? null,
+            },
+          },
+          tx,
+        );
       }
 
       // Cancellation must release the active scheduling process atomically.
@@ -1399,6 +1460,7 @@ export class AppointmentsService {
     appointmentId: string,
     userId: string,
     appointmentDatetime?: string | Date,
+    context?: ActorContext,
   ): Promise<AppointmentResponseEntity> {
     this.logger.log(
       `[confirmPending] Confirmando agendamento ${appointmentId} por ${userId}`,
@@ -1417,7 +1479,8 @@ export class AppointmentsService {
     }
 
     // Apenas especialista pode confirmar
-    if (appointment.specialist_id !== userId) {
+    const representedSpecialistId = context?.specialistId ?? userId;
+    if (appointment.specialist_id !== representedSpecialistId) {
       throw new ForbiddenException({
         success: false,
         error: {
@@ -1525,7 +1588,8 @@ export class AppointmentsService {
           error: { code: 404, message: 'Agendamento não encontrado' },
         });
       }
-      if (lockedAppointment.specialist_id !== userId) {
+      this.assertRepresentedSpecialist(context, lockedAppointment.specialist_id);
+      if (lockedAppointment.specialist_id !== representedSpecialistId) {
         throw new ForbiddenException({
           success: false,
           error: {
@@ -1675,6 +1739,19 @@ export class AppointmentsService {
         },
       });
 
+      if (context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'APPOINTMENT_CONFIRM',
+            resourceType: 'APPOINTMENT',
+            resourceId: appointmentId,
+            metadata: { processId: updatedProcess.id, confirmedDateTime },
+          },
+          tx,
+        );
+      }
+
       return [updatedApt, updatedProcess];
     });
 
@@ -1737,6 +1814,8 @@ export class AppointmentsService {
   async cancelPending(
     appointmentId: string,
     userId: string,
+    context?: ActorContext,
+    reason?: string,
   ): Promise<{ success: boolean; message: string }> {
     this.logger.log(
       `[cancelPending] Cancelando agendamento ${appointmentId} por ${userId}`,
@@ -1756,7 +1835,8 @@ export class AppointmentsService {
 
     // Apenas cliente ou especialista podem cancelar
     const isClient = candidate.client_id === userId;
-    const isSpecialist = candidate.specialist_id === userId;
+    const representedSpecialistId = context?.specialistId ?? userId;
+    const isSpecialist = candidate.specialist_id === representedSpecialistId;
     if (!isClient && !isSpecialist) {
       throw new ForbiddenException({
         success: false,
@@ -1782,7 +1862,7 @@ export class AppointmentsService {
       }
       if (
         lockedAppointment.client_id !== userId &&
-        lockedAppointment.specialist_id !== userId
+        lockedAppointment.specialist_id !== representedSpecialistId
       ) {
         throw new ForbiddenException({
           success: false,
@@ -1792,6 +1872,7 @@ export class AppointmentsService {
           },
         });
       }
+      this.assertRepresentedSpecialist(context, lockedAppointment.specialist_id);
       if (lockedAppointment.status !== StatusAgendamento.PENDING) {
         throw new BadRequestException({
           success: false,
@@ -1834,6 +1915,22 @@ export class AppointmentsService {
 
         this.logger.log(
           `[cancelPending] Process ${lockedAppointment.process.id} deletado`,
+        );
+      }
+
+      if (context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'APPOINTMENT_CANCEL',
+            resourceType: 'APPOINTMENT',
+            resourceId: appointmentId,
+            metadata: {
+              processId: lockedAppointment.process?.id ?? null,
+              reason: reason ?? null,
+            },
+          },
+          tx,
         );
       }
 

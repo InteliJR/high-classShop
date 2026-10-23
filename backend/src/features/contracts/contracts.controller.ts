@@ -9,6 +9,8 @@ import {
   Logger,
   ParseUUIDPipe,
   UseGuards,
+  Query,
+  Optional,
 } from '@nestjs/common';
 import { ContractsService } from './contracts.service';
 import { DocuSignService } from 'src/providers/docusign/docusign.service';
@@ -26,6 +28,7 @@ import { Roles } from 'src/shared/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 import { RateLimitGuard } from 'src/shared/guards/rate-limit.guard';
 import { RateLimit } from 'src/shared/decorators/rate-limit.decorator';
+import { ActorContextService } from 'src/shared/actor-context/actor-context.service';
 
 /**
  * Controller para gerenciar contratos via formulário.
@@ -53,7 +56,13 @@ export class ContractsController {
   constructor(
     private readonly contractsService: ContractsService,
     private readonly docuSignService: DocuSignService,
+    @Optional() private readonly actorContextService?: ActorContextService,
   ) {}
+
+  private async resolveContext(user: any, targetSpecialistId?: string) {
+    if (!this.actorContextService) return undefined;
+    return this.actorContextService.resolve(user, targetSpecialistId);
+  }
 
   /**
    * GET /api/contracts/prefill/:processId
@@ -97,6 +106,7 @@ export class ContractsController {
   async prefillContract(
     @Param('processId', new ParseUUIDPipe({ version: '4' })) processId: string,
     @Request() req: RequestWithUser,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ): Promise<ApiResponseDto<PrefillContractResponseDto>> {
     const { id: userId } = req.user;
 
@@ -104,9 +114,11 @@ export class ContractsController {
       `Prefill contract requested by user ${userId} for process ${processId}`,
     );
 
+    const context = await this.resolveContext(req.user, targetSpecialistId);
     const prefillData = await this.contractsService.prefillContract(
       processId,
       userId,
+      context,
     );
 
     this.logger.debug(`Prefill data returned for process ${processId}`);
@@ -209,6 +221,7 @@ export class ContractsController {
   async generateContract(
     @Body() generateContractDto: GenerateContractDto,
     @Request() req: RequestWithUser,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ): Promise<ApiResponseDto<ContractResponse>> {
     const { id: userId } = req.user;
 
@@ -217,9 +230,11 @@ export class ContractsController {
     );
     this.logger.debug(`Process: ${generateContractDto.process_id}`);
 
+    const context = await this.resolveContext(req.user, targetSpecialistId);
     const contract = await this.contractsService.generateContract(
       generateContractDto,
       userId,
+      context,
     );
 
     this.logger.log(
@@ -281,6 +296,7 @@ export class ContractsController {
   async previewContract(
     @Body() previewContractDto: PreviewContractDto,
     @Request() req: RequestWithUser,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ): Promise<ApiResponseDto<PreviewContractResponseDto>> {
     const { id: userId } = req.user;
 
@@ -289,9 +305,11 @@ export class ContractsController {
     );
     this.logger.debug(`Process: ${previewContractDto.process_id}`);
 
+    const context = await this.resolveContext(req.user, targetSpecialistId);
     const preview = await this.contractsService.previewContract(
       previewContractDto,
       userId,
+      context,
     );
 
     this.logger.log(
@@ -355,6 +373,7 @@ export class ContractsController {
     @Param('envelopeId') envelopeId: string,
     @Body() previewContractDto: PreviewContractDto,
     @Request() req: RequestWithUser,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ): Promise<ApiResponseDto<SendContractResponseDto>> {
     const { id: userId } = req.user;
 
@@ -365,10 +384,12 @@ export class ContractsController {
       `EnvelopeID: ${envelopeId}, Process: ${previewContractDto.process_id}`,
     );
 
+    const context = await this.resolveContext(req.user, targetSpecialistId);
     const result = await this.contractsService.sendContractAfterPreview(
       envelopeId,
       previewContractDto,
       userId,
+      context,
     );
 
     this.logger.log(
@@ -400,17 +421,20 @@ export class ContractsController {
     @Param('envelopeId') envelopeId: string,
     @Body('process_id', new ParseUUIDPipe({ version: '4' })) processId: string,
     @Request() req: RequestWithUser,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ): Promise<ApiResponseDto<null>> {
     const { id: userId } = req.user;
 
     this.logger.log(`Cancelando preview para usuário ${userId}`);
     this.logger.debug(`EnvelopeID: ${envelopeId}`);
 
+    const context = await this.resolveContext(req.user, targetSpecialistId);
     await this.contractsService.cancelPreview(
       envelopeId,
       processId,
       userId,
       `Cancelado pelo usuário ${userId}`,
+      context,
     );
 
     this.logger.log(`Preview cancelado com sucesso. EnvelopeID: ${envelopeId}`);

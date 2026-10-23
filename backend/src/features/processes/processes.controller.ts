@@ -13,6 +13,7 @@ import {
   ForbiddenException,
   UseGuards,
   Req,
+  Optional,
 } from '@nestjs/common';
 import { ProcessesService } from './processes.service';
 import { CreateProcessDTO } from './dto/create-process.dto';
@@ -30,10 +31,66 @@ import { GetProcessesFilterDto } from './dto/get-processes-filter.dto';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { UserRole } from '@prisma/client';
 import { ConfirmProcessAppointmentDto } from './dto/confirm-process-appointment.dto';
+import {
+  ActorContext,
+  ActorContextService,
+} from 'src/shared/actor-context/actor-context.service';
+import { Roles } from 'src/shared/decorators/roles.decorator';
+import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
 
 @Controller('processes')
 export class ProcessesController {
-  constructor(private readonly processesService: ProcessesService) {}
+  constructor(
+    private readonly processesService: ProcessesService,
+    @Optional() private readonly actorContextService?: ActorContextService,
+    @Optional() private readonly delegatedAudit?: DelegatedActionAuditService,
+  ) {}
+
+  private async resolveSpecialistContext(
+    user: UserEntity,
+    targetSpecialistId?: string,
+  ): Promise<ActorContext | undefined> {
+    if (
+      user.role !== UserRole.ADMIN &&
+      user.role !== UserRole.SPECIALIST
+    ) {
+      return undefined;
+    }
+    if (!this.actorContextService) {
+      return undefined;
+    }
+    return this.actorContextService.resolve(user, targetSpecialistId);
+  }
+
+  @Get(':id/admin-timeline')
+  @Roles(UserRole.ADMIN)
+  async getAdminTimeline(
+    @Param('id', new ParseUUIDPipe()) processId: string,
+    @Query('target_specialist_id') targetSpecialistId: string,
+    @Req() req: { user?: UserEntity },
+  ) {
+    if (!req.user || !this.actorContextService || !this.delegatedAudit) {
+      throw new UnauthorizedException('Contexto administrativo indisponível');
+    }
+    const context = await this.actorContextService.resolve(
+      req.user,
+      targetSpecialistId,
+    );
+    const process = await this.processesService.getById(
+      processId,
+      req.user.id,
+      req.user.role,
+      req.user.company_id,
+    );
+    this.actorContextService.assertResourceSpecialist(
+      context,
+      process.specialist.id,
+    );
+    return {
+      success: true,
+      data: await this.delegatedAudit.listForProcess(context, processId),
+    };
+  }
 
   /**
    * POST /api/processes
@@ -53,11 +110,15 @@ export class ProcessesController {
       throw new UnauthorizedException('Usuário autenticado não identificado');
     }
 
+    const context = await this.resolveSpecialistContext(
+      user,
+      createProcessDto.specialist_id,
+    );
     const process = await this.processesService.create(createProcessDto, {
       id: user.id,
       role: user.role,
       companyId: user.company_id,
-    });
+    }, context);
 
     return {
       success: true,
@@ -131,6 +192,20 @@ export class ProcessesController {
     };
   }
 
+  @Get('admin/client-options')
+  @Roles(UserRole.ADMIN)
+  async getAdminClientOptions(
+    @Query('target_specialist_id') targetSpecialistId: string,
+    @Query('search') search: string | undefined,
+    @Req() req: { user?: UserEntity },
+  ) {
+    if (!req.user) {
+      throw new UnauthorizedException('Usuário autenticado não identificado');
+    }
+    await this.resolveSpecialistContext(req.user, targetSpecialistId);
+    return this.processesService.getAdminClientOptions(search);
+  }
+
   /**
    * GET /api/processes/:id
    * Get a single process by its ID
@@ -144,6 +219,7 @@ export class ProcessesController {
   async getById(
     @Param('id', new ParseUUIDPipe()) processId: string,
     @Req() req: { user?: UserEntity },
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ): Promise<ApiResponseDto<ProcessResponse>> {
     const process = await this.processesService.getById(
       processId,
@@ -151,6 +227,18 @@ export class ProcessesController {
       req.user?.role,
       req.user?.company_id,
     );
+    if (req.user) {
+      const context = await this.resolveSpecialistContext(
+        req.user,
+        targetSpecialistId,
+      );
+      if (context) {
+        this.actorContextService?.assertResourceSpecialist(
+          context,
+          process.specialist.id,
+        );
+      }
+    }
 
     return {
       success: true,
@@ -181,6 +269,15 @@ export class ProcessesController {
     ) {
       throw new ForbiddenException(
         'Você não pode listar processos de outro especialista.',
+      );
+    }
+    const context = await this.resolveSpecialistContext(
+      user,
+      (filters as any).target_specialist_id,
+    );
+    if (context && context.specialistId !== specialistId) {
+      throw new ForbiddenException(
+        'A lista não pertence ao especialista representado.',
       );
     }
     const page = Number(filters.page) || 1;
@@ -241,6 +338,7 @@ export class ProcessesController {
     @Param('id', new ParseUUIDPipe()) processId: string,
     @Body() updateProcessDto: UpdateProcessDto,
     @Req() req: any,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ): Promise<ApiResponseDto<ProcessWithHistory>> {
     const userId = req.user?.sub || req.user?.id;
     const userRole = req.user?.role;
@@ -249,12 +347,17 @@ export class ProcessesController {
       throw new UnauthorizedException('Usuário autenticado não identificado');
     }
 
+    const context = await this.resolveSpecialistContext(
+      req.user,
+      targetSpecialistId,
+    );
     const updatedProcess = await this.processesService.update(
       processId,
       updateProcessDto,
       userId,
       userRole,
       req.user?.company_id,
+      context,
     );
 
     return {
@@ -283,6 +386,7 @@ export class ProcessesController {
     @Param('id', new ParseUUIDPipe()) processId: string,
     @Body() dto: AssignProductToProcessDto,
     @Req() req: any,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ): Promise<ApiResponseDto<ProcessResponse>> {
     const userId = req.user?.sub || req.user?.id;
     const userRole = req.user?.role;
@@ -291,11 +395,16 @@ export class ProcessesController {
       throw new UnauthorizedException('Usuário autenticado não identificado');
     }
 
+    const context = await this.resolveSpecialistContext(
+      req.user,
+      targetSpecialistId,
+    );
     const updatedProcess = await this.processesService.assignProduct(
       processId,
       dto,
       userId,
       userRole,
+      context,
     );
 
     return {
@@ -432,6 +541,7 @@ export class ProcessesController {
     @Param('id', new ParseUUIDPipe()) processId: string,
     @Body() rejectProcessDto: RejectProcessDto,
     @Req() req: any,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ): Promise<ApiResponseDto<ProcessWithHistory>> {
     const userId = req.user?.sub || req.user?.id;
     const userRole = req.user?.role;
@@ -440,12 +550,25 @@ export class ProcessesController {
       throw new UnauthorizedException('Usuário autenticado não identificado');
     }
 
+    if (
+      userRole === UserRole.ADMIN &&
+      !rejectProcessDto.rejection_reason?.trim()
+    ) {
+      throw new BadRequestException(
+        'Motivo é obrigatório para rejeição administrativa.',
+      );
+    }
+    const context = await this.resolveSpecialistContext(
+      req.user,
+      targetSpecialistId,
+    );
     const result = await this.processesService.rejectProcess(
       processId,
       userId,
       rejectProcessDto.rejection_reason,
       userRole,
       req.user?.company_id,
+      context,
     );
 
     return {
@@ -473,20 +596,35 @@ export class ProcessesController {
     @Param('id', new ParseUUIDPipe()) processId: string,
     @Body() dto: ConfirmProcessAppointmentDto,
     @Req() req: any,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ): Promise<ApiResponseDto<any>> {
     const userId = req.user?.sub || req.user?.id;
 
-    if (!userId || req.user?.role !== UserRole.SPECIALIST) {
+    if (
+      !userId ||
+      ![UserRole.SPECIALIST, UserRole.ADMIN].includes(req.user?.role)
+    ) {
       throw new ForbiddenException(
         'Apenas o especialista pode confirmar o agendamento',
       );
     }
 
-    const result = await this.processesService.confirmAppointment(
-      processId,
-      userId,
-      dto.appointment_datetime,
+    const context = await this.resolveSpecialistContext(
+      req.user,
+      targetSpecialistId,
     );
+    const result = context
+      ? await this.processesService.confirmAppointment(
+          processId,
+          userId,
+          dto.appointment_datetime,
+          context,
+        )
+      : await this.processesService.confirmAppointment(
+          processId,
+          userId,
+          dto.appointment_datetime,
+        );
 
     return {
       success: true,
@@ -512,12 +650,25 @@ export class ProcessesController {
   async cancelAppointment(
     @Param('id', new ParseUUIDPipe()) processId: string,
     @Req() req: any,
+    @Body('reason') reason?: string,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ): Promise<ApiResponseDto<any>> {
     const userId = req.user?.sub || req.user?.id;
 
+    if (req.user?.role === UserRole.ADMIN && !reason?.trim()) {
+      throw new BadRequestException(
+        'Motivo é obrigatório para cancelamento administrativo.',
+      );
+    }
+    const context = await this.resolveSpecialistContext(
+      req.user,
+      targetSpecialistId,
+    );
     const result = await this.processesService.cancelAppointment(
       processId,
       userId,
+      context,
+      reason,
     );
 
     return {

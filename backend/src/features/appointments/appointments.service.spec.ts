@@ -1285,7 +1285,10 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
       updated_at: new Date('2099-01-01T00:00:00.000Z'),
       client: { id: 'client-1' },
       specialist: { id: 'specialist-1' },
-      process: null,
+      process: {
+        id: 'process-1',
+        meeting_session: { ended_at: new Date('2099-01-01T11:00:00.000Z') },
+      },
     };
     const appointmentUpdate = jest.fn().mockResolvedValue({
       ...appointment,
@@ -1345,6 +1348,36 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('impede a rota genérica de concluir sem reunião encerrada', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.SCHEDULED,
+      appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+      process: {
+        id: 'process-1',
+        status: ProcessStatus.SCHEDULING,
+        meeting_session: null,
+      },
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      $transaction: jest.fn(),
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await expect(
+      service.updateStatus(
+        appointment.id,
+        { status: StatusAgendamento.COMPLETED },
+        appointment.specialist_id,
+        UserRole.SPECIALIST,
+      ),
+    ).rejects.toThrow('Conclua a reunião pelo fluxo de conversa');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('impede que a rota genérica confirme ou reabra um agendamento', async () => {
     const appointment = {
       id: 'appointment-1',
@@ -1396,6 +1429,7 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
     };
     const process = {
       id: 'process-1',
+      meeting_session: { ended_at: new Date('2026-01-01T11:00:00.000Z') },
       status: ProcessStatus.SCHEDULING,
       notes: null,
       product_type: ProductType.CAR,
@@ -1542,6 +1576,7 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
       };
       const process = {
         id: 'process-1',
+        meeting_session: { ended_at: new Date('2026-01-01T11:00:00.000Z') },
         status: ProcessStatus.SCHEDULING,
         notes: null,
         product_type: ProductType.CAR,

@@ -6,6 +6,7 @@ import {
   NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import {
   ProductImportItemStatus,
@@ -41,6 +42,16 @@ import {
   acquireProductMonetaryLock,
   updateProductWithMonetaryLock,
 } from '../products/product-monetary-lock';
+import { ActorContext } from 'src/shared/actor-context/actor-context.service';
+import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
+
+export type ProductImportMode = 'ADDITIVE' | 'SYNCHRONIZE';
+
+export type ProductImportOptions = {
+  context?: ActorContext;
+  mode?: ProductImportMode | string;
+  confirmSynchronize?: boolean | string;
+};
 
 type UpsertResult = {
   productId: string;
@@ -67,6 +78,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly xlsxImportService: XlsxImportService,
     private readonly driveImportService: DriveImportService,
+    @Optional()
+    private readonly delegatedAudit?: DelegatedActionAuditService,
   ) {}
 
   private isMissingImportJobsTableError(error: unknown): boolean {
@@ -99,7 +112,23 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     fileBuffer: Buffer,
     user: UserEntity,
     productType: ProductType,
+    options: ProductImportOptions = {},
   ) {
+    const mode = `${options.mode ?? 'ADDITIVE'}`.toUpperCase();
+    if (mode !== 'ADDITIVE' && mode !== 'SYNCHRONIZE') {
+      throw new BadRequestException(
+        'Modo de importação inválido. Use ADDITIVE ou SYNCHRONIZE.',
+      );
+    }
+    const syncConfirmed =
+      options.confirmSynchronize === true ||
+      `${options.confirmSynchronize}`.toLowerCase() === 'true';
+    if (mode === 'SYNCHRONIZE' && !syncConfirmed) {
+      throw new BadRequestException(
+        'A sincronização exige confirmação explícita do alvo, tipo e impacto.',
+      );
+    }
+
     const { rows } = this.xlsxImportService.parseCsv(fileBuffer);
 
     const structureValidation = this.xlsxImportService.validateStructure(
@@ -117,31 +146,60 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     }
 
     const normalizedRows = rows.map((row) => this.normalizeProductRow(row));
+    const specialistId = options.context?.specialistId ?? user.id;
+    const impact = await this.estimateImportImpact(
+      productType,
+      specialistId,
+      normalizedRows,
+      mode,
+    );
 
     let createdJob;
     try {
-      createdJob = await this.prisma.productImportJob.create({
-        data: {
-          product_type: productType,
-          specialist_id: user.id,
-          status: ProductImportJobStatus.PENDING,
-          total_items: normalizedRows.length,
-          items: {
-            createMany: {
-              data: normalizedRows.map((row, index) => ({
-                row_number: index + 2,
-                payload: row,
-                folder_url: row.folder_url?.trim() || null,
-              })),
+      createdJob = await this.prisma.$transaction(async (tx) => {
+        const job = await tx.productImportJob.create({
+          data: {
+            product_type: productType,
+            specialist_id: specialistId,
+            status: ProductImportJobStatus.PENDING,
+            total_items: normalizedRows.length,
+            items: {
+              createMany: {
+                data: normalizedRows.map((row, index) => ({
+                  row_number: index + 2,
+                  payload: row,
+                  folder_url: row.folder_url?.trim() || null,
+                })),
+              },
             },
           },
-        },
-        select: {
-          id: true,
-          status: true,
-          total_items: true,
-          product_type: true,
-        },
+          select: {
+            id: true,
+            status: true,
+            total_items: true,
+            product_type: true,
+          },
+        });
+        await tx.$executeRaw`
+          UPDATE "ProductImportJob"
+          SET "mode" = ${mode},
+              "sync_confirmed" = ${syncConfirmed},
+              "created_by_id" = ${user.id}::uuid
+          WHERE "id" = ${job.id}::uuid
+        `;
+        if (options.context && this.delegatedAudit) {
+          await this.delegatedAudit.record(
+            {
+              context: options.context,
+              action: 'PRODUCT_IMPORT_CREATE',
+              resourceType: productType,
+              resourceId: job.id,
+              metadata: { mode, impact },
+            },
+            tx,
+          );
+        }
+        return job;
       });
     } catch (error) {
       if (this.isMissingImportJobsTableError(error)) {
@@ -159,12 +217,61 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       status: createdJob.status,
       productType: createdJob.product_type,
       totalItems: createdJob.total_items,
+      targetSpecialistId: specialistId,
+      mode,
+      synchronizeConfirmed: syncConfirmed,
+      impact,
       pollIntervalMs: 2000,
       message: 'Importação recebida e iniciada em segundo plano.',
     };
   }
 
-  async getJobStatus(jobId: string, user: UserEntity) {
+  async previewCsvImport(
+    fileBuffer: Buffer,
+    productType: ProductType,
+    specialistId: string,
+    requestedMode: ProductImportMode | string = 'ADDITIVE',
+  ) {
+    const mode = `${requestedMode}`.toUpperCase();
+    if (mode !== 'ADDITIVE' && mode !== 'SYNCHRONIZE') {
+      throw new BadRequestException(
+        'Modo de importação inválido. Use ADDITIVE ou SYNCHRONIZE.',
+      );
+    }
+    const { rows } = this.xlsxImportService.parseCsv(fileBuffer);
+    const structureValidation = this.xlsxImportService.validateStructure(
+      rows,
+      this.getColumnsForType(productType),
+    );
+    if (!structureValidation.valid) {
+      throw new BadRequestException({
+        message: 'Estrutura do CSV inválida',
+        errors: structureValidation.errors,
+        missingRequired: structureValidation.missingRequired,
+        unknownColumns: structureValidation.unknownColumns,
+      });
+    }
+    const normalizedRows = rows.map((row) => this.normalizeProductRow(row));
+    const impact = await this.estimateImportImpact(
+      productType,
+      specialistId,
+      normalizedRows,
+      mode,
+    );
+    return {
+      productType,
+      targetSpecialistId: specialistId,
+      mode,
+      requiresExplicitConfirmation: mode === 'SYNCHRONIZE',
+      impact,
+    };
+  }
+
+  async getJobStatus(
+    jobId: string,
+    user: UserEntity,
+    representedSpecialistId?: string,
+  ) {
     let job;
     try {
       job = await this.prisma.productImportJob.findUnique({
@@ -200,6 +307,15 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     if (user.role !== UserRole.ADMIN && job.specialist_id !== user.id) {
       throw new ForbiddenException(
         'Sem permissão para visualizar este job de importação',
+      );
+    }
+    if (
+      user.role === UserRole.ADMIN &&
+      representedSpecialistId &&
+      job.specialist_id !== representedSpecialistId
+    ) {
+      throw new ForbiddenException(
+        'O job não pertence ao especialista representado.',
       );
     }
 
@@ -303,6 +419,19 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    const executionContext = await this.getJobExecutionContext(job);
+    if (!executionContext.specialistIsEligible) {
+      await this.prisma.productImportJob.update({
+        where: { id: jobId },
+        data: {
+          status: ProductImportJobStatus.PENDING,
+          error_message:
+            'Job pausado: especialista-alvo inativo ou incompatível com o tipo do produto.',
+        },
+      });
+      return;
+    }
+
     await this.prisma.productImportJob.update({
       where: { id: jobId },
       data: {
@@ -400,14 +529,18 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      const deactivatedIds = hasFailedItems
-        ? []
-        : await this.deactivateMissingProducts(
+      const shouldSynchronize =
+        executionContext.mode === 'SYNCHRONIZE' &&
+        executionContext.syncConfirmed &&
+        !hasFailedItems;
+      const deactivatedIds = shouldSynchronize
+        ? await this.deactivateMissingProducts(
             job.product_type,
             job.specialist_id,
             seenProductIds,
             job.id,
-          );
+          )
+        : [];
 
       await this.refreshJobCounters(jobId, {
         deactivatedIds,
@@ -424,6 +557,85 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         },
       });
     }
+  }
+
+  private async getJobExecutionContext(job: {
+    id: string;
+    specialist_id: string;
+    product_type: ProductType;
+  }): Promise<{
+    mode: ProductImportMode;
+    syncConfirmed: boolean;
+    specialistIsEligible: boolean;
+  }> {
+    const metadata = await this.prisma.$queryRaw<
+      Array<{ mode: string; sync_confirmed: boolean }>
+    >`
+      SELECT "mode", "sync_confirmed"
+      FROM "ProductImportJob"
+      WHERE "id" = ${job.id}::uuid
+    `;
+    const specialist = await this.prisma.user.findUnique({
+      where: { id: job.specialist_id },
+      select: { role: true, is_active: true, speciality: true },
+    });
+    const row = metadata[0];
+    return {
+      mode: row?.mode === 'SYNCHRONIZE' ? 'SYNCHRONIZE' : 'ADDITIVE',
+      syncConfirmed: row?.sync_confirmed === true,
+      specialistIsEligible:
+        specialist?.role === UserRole.SPECIALIST &&
+        specialist.is_active === true &&
+        specialist.speciality === job.product_type,
+    };
+  }
+
+  private async estimateImportImpact(
+    productType: ProductType,
+    specialistId: string,
+    rows: ImportParsedRow[],
+    mode: ProductImportMode,
+  ) {
+    const activeProducts = await this.getActiveProductsByType(
+      productType,
+      specialistId,
+    );
+    const incomingIdentifiers = new Set(
+      rows.map((row) => row.identificador?.trim()).filter(Boolean),
+    );
+    const matching = activeProducts.filter((product) =>
+      incomingIdentifiers.has(product.identificador),
+    ).length;
+    const deactivationCandidates =
+      mode === 'SYNCHRONIZE'
+        ? activeProducts.filter(
+            (product) => !incomingIdentifiers.has(product.identificador),
+          ).length
+        : 0;
+    return {
+      incomingItems: rows.length,
+      activeItemsBefore: activeProducts.length,
+      matchingItems: matching,
+      newOrReactivatedItems: Math.max(0, incomingIdentifiers.size - matching),
+      deactivationCandidates,
+    };
+  }
+
+  private async getActiveProductsByType(
+    productType: ProductType,
+    specialistId: string,
+  ): Promise<Array<{ id: string; identificador: string }>> {
+    const query = {
+      where: { specialist_id: specialistId, is_active: true },
+      select: { id: true, identificador: true },
+    };
+    if (productType === ProductType.CAR) {
+      return this.prisma.car.findMany(query);
+    }
+    if (productType === ProductType.BOAT) {
+      return this.prisma.boat.findMany(query);
+    }
+    return this.prisma.aircraft.findMany(query);
   }
 
   private async refreshJobCounters(

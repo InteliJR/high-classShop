@@ -101,14 +101,14 @@ export class BoatsService {
     page,
     perPage,
     appliedFilters,
-  }: QueryDto<FiltersBoatMeta>) {
+  }: QueryDto<FiltersBoatMeta>, includeInactive = false) {
     // Cálculo das variáveis que serão utilizadas na requisição ao banco de dados
     const take = perPage;
     const skip = page && take ? (page - 1) * take : 0;
 
     //Exact
     const where: any = {};
-    where.is_active = true;
+    if (!includeInactive) where.is_active = true;
     const exacts: ExactBoatFilters = {
       estado: appliedFilters?.estado,
       tipo_embarcacao: appliedFilters?.tipo_embarcacao,

@@ -146,13 +146,20 @@ function setup() {
     sendProposalRejectedEmail: jest.fn().mockResolvedValue(undefined),
     sendProcessStatusChangedEmail: jest.fn().mockResolvedValue(undefined),
   } as any;
-  const service = new ProposalsService(prisma, settings, notifications);
+  const audit = { record: jest.fn().mockResolvedValue(undefined) } as any;
+  const service = new ProposalsService(
+    prisma,
+    settings,
+    notifications,
+    audit,
+  );
 
   return {
     service,
     prisma,
     settings,
     notifications,
+    audit,
     transactionProposalCreate,
     transactionProposalUpdateMany,
     transactionProcessFindUnique,
@@ -360,6 +367,62 @@ describe('ProposalsService — snapshot e mínimo dinâmico', () => {
         originalValue: 100000,
         currency: ProductCurrency.USD,
       }),
+    );
+  });
+
+  it('não cria uma segunda PENDING sem responder a pendente identificada', async () => {
+    const { service, prisma, transactionProposalCreate } = setup();
+    prisma.process.findUnique.mockResolvedValue(
+      processFixture({ proposals: [proposalFixture()] }),
+    );
+
+    await expect(
+      service.create(
+        { process_id: 'process-1', proposed_value: 90000 },
+        'specialist-1',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        error: expect.objectContaining({
+          code: 'PENDING_PROPOSAL_MUST_BE_ANSWERED',
+        }),
+      }),
+    });
+    expect(transactionProposalCreate).not.toHaveBeenCalled();
+  });
+
+  it('mantém SPECIALIST como parte comercial e ADMIN como executor auditado', async () => {
+    const { service, prisma, transactionProposalCreate, audit } = setup();
+    prisma.process.findUnique.mockResolvedValue(processFixture());
+    const context = {
+      actorId: 'admin-1',
+      actorRole: UserRole.ADMIN,
+      specialistId: 'specialist-1',
+      delegated: true,
+      specialist: {} as any,
+    };
+
+    await service.create(
+      { process_id: 'process-1', proposed_value: 90000 },
+      'admin-1',
+      context,
+    );
+
+    expect(transactionProposalCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          proposed_by_id: 'specialist-1',
+          proposed_to_id: 'client-1',
+        }),
+      }),
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context,
+        action: 'PROPOSAL_CREATE',
+        resourceType: 'PROPOSAL',
+      }),
+      expect.anything(),
     );
   });
 

@@ -5,6 +5,7 @@ import {
   NotFoundException,
   ForbiddenException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProposalDto, RespondProposalDto } from './dto';
@@ -17,6 +18,8 @@ import { SettingsService } from 'src/features/settings/settings.service';
 import { NotificationService } from 'src/features/notifications/notification.service';
 import { requireNegotiationSnapshot } from 'src/features/processes/negotiation-snapshot';
 import { calculateMinimumProposalValue } from './proposal-money';
+import { ActorContext } from 'src/shared/actor-context/actor-context.service';
+import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
 
 /**
  * ProposalsService
@@ -45,6 +48,8 @@ export class ProposalsService {
     private prisma: PrismaService,
     private settingsService: SettingsService,
     private notificationService: NotificationService,
+    @Optional()
+    private readonly delegatedAudit?: DelegatedActionAuditService,
   ) {}
 
   private async lockProposalProcess(tx: any, processId: string): Promise<void> {
@@ -88,6 +93,7 @@ export class ProposalsService {
   async create(
     dto: CreateProposalDto,
     userId: string,
+    context?: ActorContext,
   ): Promise<ProposalResponseEntity> {
     this.logger.log(
       `[create] Criando proposta para processo ${dto.process_id} por usuário ${userId}`,
@@ -172,9 +178,16 @@ export class ProposalsService {
         }
 
         // 3. Validar que usuário é participante do processo (cliente, especialista ou consultor do cliente)
-        const isClient = process.client_id === userId;
-        const isSpecialist = process.specialist_id === userId;
-        const isConsultantOfClient = process.client?.consultant_id === userId;
+        const partyUserId = context?.specialistId ?? userId;
+        if (context && process.specialist_id !== context.specialistId) {
+          throw new ForbiddenException(
+            'O processo não pertence ao especialista representado.',
+          );
+        }
+        const isClient = process.client_id === partyUserId;
+        const isSpecialist = process.specialist_id === partyUserId;
+        const isConsultantOfClient =
+          !context && process.client?.consultant_id === userId;
         const isOnClientSide = isClient || isConsultantOfClient;
 
         if (!isClient && !isSpecialist && !isConsultantOfClient) {
@@ -194,6 +207,17 @@ export class ProposalsService {
         // 4. Validar alternância por lado (cliente/consultor vs especialista) — não pode dois envios seguidos do mesmo lado
         const lastProposal = process.proposals[0];
         if (lastProposal && lastProposal.status === ProposalStatus.PENDING) {
+          if (dto.counter_to_id !== lastProposal.id) {
+            throw new BadRequestException({
+              success: false,
+              error: {
+                code: 'PENDING_PROPOSAL_MUST_BE_ANSWERED',
+                message:
+                  'Responda explicitamente a proposta pendente antes de criar outra.',
+                details: { pending_proposal_id: lastProposal.id },
+              },
+            });
+          }
           const lastProposerSide =
             lastProposal.proposed_by.id === process.specialist_id
               ? 'SPECIALIST'
@@ -315,7 +339,7 @@ export class ProposalsService {
             });
           }
 
-          if (originalProposal.proposed_to_id !== userId) {
+          if (originalProposal.proposed_to_id !== partyUserId) {
             throw new ForbiddenException({
               success: false,
               error: {
@@ -338,7 +362,7 @@ export class ProposalsService {
             where: {
               id: dto.counter_to_id,
               process_id: dto.process_id,
-              proposed_to_id: userId,
+              proposed_to_id: partyUserId,
               status: ProposalStatus.PENDING,
             },
             data: { status: ProposalStatus.COUNTERED },
@@ -362,7 +386,7 @@ export class ProposalsService {
         const proposal = await tx.negotiationProposal.create({
           data: {
             process_id: dto.process_id,
-            proposed_by_id: userId,
+            proposed_by_id: partyUserId,
             proposed_to_id: proposedToId,
             proposed_value: dto.proposed_value,
             message: dto.message,
@@ -378,6 +402,25 @@ export class ProposalsService {
             },
           },
         });
+
+        if (context && this.delegatedAudit) {
+          await this.delegatedAudit.record(
+            {
+              context,
+              action: dto.counter_to_id
+                ? 'PROPOSAL_COUNTER'
+                : 'PROPOSAL_CREATE',
+              resourceType: 'PROPOSAL',
+              resourceId: proposal.id,
+              metadata: {
+                processId: dto.process_id,
+                commercialSide: 'SPECIALIST',
+                proposedValue: dto.proposed_value,
+              },
+            },
+            tx,
+          );
+        }
 
         return { proposal, process, currency, productValue, isOnClientSide };
       });
@@ -432,6 +475,7 @@ export class ProposalsService {
   async getByProcess(
     processId: string,
     userId: string,
+    context?: ActorContext,
   ): Promise<ProposalListResponseEntity> {
     this.logger.log(
       `[getByProcess] Buscando propostas do processo ${processId}`,
@@ -498,10 +542,11 @@ export class ProposalsService {
     }
 
     // 2. Validar que usuário é participante (cliente, especialista ou consultor do cliente)
+    const partyUserId = context?.specialistId ?? userId;
     const isParticipant =
-      process.client_id === userId ||
-      process.specialist_id === userId ||
-      process.client?.consultant_id === userId;
+      process.client_id === partyUserId ||
+      process.specialist_id === partyUserId ||
+      (!context && process.client?.consultant_id === userId);
 
     if (!isParticipant) {
       throw new ForbiddenException({
@@ -555,9 +600,10 @@ export class ProposalsService {
 
     // 5. Verificar se usuário pode criar proposta (lógica por lado)
     const userSide: 'CLIENT' | 'SPECIALIST' | null =
-      process.client_id === userId || process.client?.consultant_id === userId
+      process.client_id === partyUserId ||
+      (!context && process.client?.consultant_id === userId)
         ? 'CLIENT'
-        : process.specialist_id === userId
+        : process.specialist_id === partyUserId
           ? 'SPECIALIST'
           : null;
 
@@ -620,6 +666,7 @@ export class ProposalsService {
     proposalId: string,
     userId: string,
     dto?: RespondProposalDto,
+    context?: ActorContext,
   ): Promise<ProposalResponseEntity> {
     this.logger.log(`[accept] Aceitando proposta ${proposalId}`);
 
@@ -629,6 +676,7 @@ export class ProposalsService {
         proposalId,
         userId,
         tx,
+        context,
       );
       const { currency } = requireNegotiationSnapshot(proposal.process);
 
@@ -668,6 +716,18 @@ export class ProposalsService {
           changed_by: userId,
         },
       });
+      if (context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'PROPOSAL_ACCEPT',
+            resourceType: 'PROPOSAL',
+            resourceId: proposalId,
+            metadata: { processId: proposal.process_id },
+          },
+          tx,
+        );
+      }
 
       const updated = await tx.negotiationProposal.findUniqueOrThrow({
         where: { id: proposalId },
@@ -737,7 +797,9 @@ export class ProposalsService {
         ].filter((recipient) => Boolean(recipient.email));
 
         const changedByName =
-          `${proposal.proposed_to.name} ${proposal.proposed_to.surname || ''}`.trim();
+          context?.delegated && context.actor
+            ? `${context.actor.name} ${context.actor.surname}`.trim()
+            : `${proposal.proposed_to.name} ${proposal.proposed_to.surname || ''}`.trim();
 
         Promise.allSettled(
           recipients.map((recipient) =>
@@ -777,6 +839,7 @@ export class ProposalsService {
     proposalId: string,
     userId: string,
     dto?: RespondProposalDto,
+    context?: ActorContext,
   ): Promise<ProposalResponseEntity> {
     this.logger.log(`[reject] Rejeitando proposta ${proposalId}`);
 
@@ -786,6 +849,7 @@ export class ProposalsService {
         proposalId,
         userId,
         tx,
+        context,
       );
       const { currency } = requireNegotiationSnapshot(proposal.process);
 
@@ -802,6 +866,21 @@ export class ProposalsService {
       });
       if (proposalClaim.count !== 1) {
         throw this.proposalResponseConflict(proposalId);
+      }
+      if (context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'PROPOSAL_REJECT',
+            resourceType: 'PROPOSAL',
+            resourceId: proposalId,
+            metadata: {
+              processId: proposal.process_id,
+              reason: dto?.message ?? null,
+            },
+          },
+          tx,
+        );
       }
 
       const updated = await tx.negotiationProposal.findUniqueOrThrow({
@@ -857,6 +936,7 @@ export class ProposalsService {
   async getById(
     proposalId: string,
     userId: string,
+    context?: ActorContext,
   ): Promise<ProposalResponseEntity> {
     const proposal = await this.prisma.negotiationProposal.findUnique({
       where: { id: proposalId },
@@ -889,10 +969,11 @@ export class ProposalsService {
     }
 
     // Validar participação (cliente, especialista ou consultor do cliente)
+    const partyUserId = context?.specialistId ?? userId;
     const isParticipant =
-      proposal.process.client_id === userId ||
-      proposal.process.specialist_id === userId ||
-      proposal.process.client?.consultant_id === userId;
+      proposal.process.client_id === partyUserId ||
+      proposal.process.specialist_id === partyUserId ||
+      (!context && proposal.process.client?.consultant_id === userId);
 
     if (!isParticipant) {
       throw new ForbiddenException({
@@ -915,6 +996,7 @@ export class ProposalsService {
     proposalId: string,
     userId: string,
     client: PrismaService | Prisma.TransactionClient = this.prisma,
+    context?: ActorContext,
   ): Promise<any> {
     const proposal = await client.negotiationProposal.findUnique({
       where: { id: proposalId },
@@ -954,8 +1036,15 @@ export class ProposalsService {
     }
 
     // Validar destinatário — usuário direto ou consultor do cliente quando a proposta é para o cliente
-    const isDirectTarget = proposal.proposed_to_id === userId;
+    if (context && proposal.process.specialist_id !== context.specialistId) {
+      throw new ForbiddenException(
+        'A proposta não pertence ao especialista representado.',
+      );
+    }
+    const partyUserId = context?.specialistId ?? userId;
+    const isDirectTarget = proposal.proposed_to_id === partyUserId;
     const isConsultantOfTargetClient =
+      !context &&
       proposal.process.client?.consultant_id === userId &&
       proposal.proposed_to_id === proposal.process.client_id;
 

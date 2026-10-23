@@ -292,7 +292,6 @@ describeWithPostgres('admin journey P0 — PostgreSQL + simulated DocuSign', () 
         {
           ...approvedDto,
           seller_name: 'Tampered Seller',
-          vehicle_price: 1,
         },
         adminId,
       ),

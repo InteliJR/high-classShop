@@ -31,12 +31,14 @@ import { CustomerAdvisorsModule } from './features/customer-advisors/customer-ad
 import { OfficeModule } from './features/office/office.module';
 import { CommissionsModule } from './features/commissions/commissions.module';
 import { AdminDatabaseModule } from './features/admin-database/admin-database.module';
+import { ActorContextModule } from './shared/actor-context/actor-context.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ActorContextModule,
     HealthModule,
     ConsultantsModule,
     SpecialistsModule,

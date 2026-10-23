@@ -25,29 +25,69 @@ import { ProductType, UserRole } from '@prisma/client';
 import { CurrentUser } from 'src/shared/decorators/current-user.decorator';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import {
-  assertSpecialistCanCreate,
-  assertSpecialistCanModify,
-  assertSpecialistOwnsProduct,
+  assertNoProductOwnerMutation,
 } from 'src/shared/helpers/specialist-auth.helper';
 import { Public } from 'src/shared/decorators/public.decorator';
 import { ProductImportJobsService } from '../product-import-jobs/product-import-jobs.service';
+import { ActorContextService } from 'src/shared/actor-context/actor-context.service';
+import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
 
 @Controller('cars')
 export class CarsController {
   constructor(
     private readonly carsService: CarsService,
     private readonly productImportJobsService: ProductImportJobsService,
+    private readonly actorContextService: ActorContextService,
+    private readonly delegatedAudit: DelegatedActionAuditService,
   ) {}
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
-  create(
+  async create(
     @Body() createCarDto: CreateCarDto,
     @CurrentUser() user: UserEntity,
   ) {
-    assertSpecialistCanCreate('CAR', user);
-    createCarDto.specialist_id = user.id;
-    return this.carsService.create(createCarDto);
+    const context = await this.actorContextService.resolve(
+      user,
+      createCarDto.specialist_id,
+      ProductType.CAR,
+    );
+    createCarDto.specialist_id = context.specialistId;
+    const car = await this.carsService.create(createCarDto);
+    await this.delegatedAudit.record({
+      context,
+      action: 'PRODUCT_CREATE',
+      resourceType: 'CAR',
+      resourceId: car!.id,
+    });
+    return car;
+  }
+
+  @Post('import-csv/preview')
+  @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }),
+  )
+  async previewCsvImport(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: UserEntity,
+    @Body('specialist_id') targetSpecialistId?: string,
+    @Body('mode') mode: 'ADDITIVE' | 'SYNCHRONIZE' = 'ADDITIVE',
+  ) {
+    const context = await this.actorContextService.resolve(
+      user,
+      targetSpecialistId,
+      ProductType.CAR,
+    );
+    if (!file?.originalname?.toLowerCase().endsWith('.csv')) {
+      throw new BadRequestException('Arquivo CSV é obrigatório.');
+    }
+    return this.productImportJobsService.previewCsvImport(
+      file.buffer,
+      ProductType.CAR,
+      context.specialistId,
+      mode,
+    );
   }
 
   @Post('import-csv')
@@ -58,8 +98,15 @@ export class CarsController {
   async importCsv(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: UserEntity,
+    @Body('specialist_id') targetSpecialistId?: string,
+    @Body('mode') mode: 'ADDITIVE' | 'SYNCHRONIZE' = 'ADDITIVE',
+    @Body('confirm_synchronize') confirmSynchronize = false,
   ) {
-    assertSpecialistCanCreate('CAR', user);
+    const context = await this.actorContextService.resolve(
+      user,
+      targetSpecialistId,
+      ProductType.CAR,
+    );
 
     if (!file) {
       throw new BadRequestException('Arquivo CSV é obrigatório.');
@@ -78,6 +125,7 @@ export class CarsController {
       file.buffer,
       user,
       ProductType.CAR,
+      { context, mode, confirmSynchronize },
     );
   }
 
@@ -138,6 +186,44 @@ export class CarsController {
     };
   }
 
+  @Get('admin/all')
+  @Roles(UserRole.ADMIN)
+  async getAllCarsForAdmin(
+    @Query() query: any,
+    @CurrentUser() user: UserEntity,
+  ) {
+    let { page, perPage, target_specialist_id, ...rawFilters } = query;
+    page = Number(page) || 1;
+    perPage = Number(perPage) || 20;
+    const context = await this.actorContextService.resolve(
+      user,
+      target_specialist_id,
+      ProductType.CAR,
+    );
+    rawFilters.specialist_id = context.specialistId;
+    const { data, count, filters = {} } = await this.carsService.getAllCars(
+      { page, perPage, appliedFilters: rawFilters },
+      true,
+    );
+    const skip = (page - 1) * perPage;
+    return {
+      success: true,
+      message: 'Catálogo administrativo de carros listado com sucesso',
+      data,
+      meta: {
+        pagination: {
+          current_page: page,
+          total_pages: Math.ceil(count / perPage),
+          has_next: skip + perPage < count,
+          has_prev: skip > 0,
+          total: count,
+          per_page: perPage,
+        },
+        filters: { applied_filters: filters, total_without_filters: count },
+      },
+    };
+  }
+
   @Get(':id')
   @Public()
   findOne(@Param('id') id: string) {
@@ -150,23 +236,53 @@ export class CarsController {
     @Param('id') id: string,
     @Body() updateCarDto: UpdateCarDto,
     @CurrentUser() user: UserEntity,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ) {
-    if (updateCarDto.specialist_id) {
-      delete updateCarDto.specialist_id;
-    }
-
-    assertSpecialistCanModify('CAR', user);
+    assertNoProductOwnerMutation(updateCarDto as Record<string, unknown>);
+    const context = await this.actorContextService.resolve(
+      user,
+      targetSpecialistId,
+      ProductType.CAR,
+    );
     const existing = await this.carsService.findOne(id);
-    assertSpecialistOwnsProduct(user, existing?.specialist_id);
-    return this.carsService.update(id, updateCarDto);
+    this.actorContextService.assertResourceSpecialist(
+      context,
+      existing?.specialist_id,
+    );
+    const car = await this.carsService.update(id, updateCarDto);
+    await this.delegatedAudit.record({
+      context,
+      action: 'PRODUCT_UPDATE',
+      resourceType: 'CAR',
+      resourceId: id,
+    });
+    return car;
   }
 
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
-  async remove(@Param('id') id: string, @CurrentUser() user: UserEntity) {
-    assertSpecialistCanModify('CAR', user);
+  async remove(
+    @Param('id') id: string,
+    @CurrentUser() user: UserEntity,
+    @Query('target_specialist_id') targetSpecialistId?: string,
+  ) {
+    const context = await this.actorContextService.resolve(
+      user,
+      targetSpecialistId,
+      ProductType.CAR,
+    );
     const existing = await this.carsService.findOne(id);
-    assertSpecialistOwnsProduct(user, existing?.specialist_id);
-    return this.carsService.remove(id);
+    this.actorContextService.assertResourceSpecialist(
+      context,
+      existing?.specialist_id,
+    );
+    const result = await this.carsService.remove(id);
+    await this.delegatedAudit.record({
+      context,
+      action: 'PRODUCT_DEACTIVATE',
+      resourceType: 'CAR',
+      resourceId: id,
+    });
+    return result;
   }
 }

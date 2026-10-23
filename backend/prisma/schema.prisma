@@ -958,6 +958,26 @@ model ProcessRejection {
   @@index([rejected_at])
 }
 
+// Trilha aditiva de ações executadas por um ator em nome de um especialista.
+// IDs são intencionalmente mantidos sem FK/onDelete para preservar a prova
+// mesmo quando o recurso operacional for removido por regras legadas.
+model DelegatedActionAudit {
+  id                        String   @id @default(uuid()) @db.Uuid
+  actor_id                  String   @db.Uuid
+  actor_role                UserRole
+  represented_specialist_id String   @db.Uuid
+  action                    String   @db.VarChar(80)
+  resource_type             String   @db.VarChar(80)
+  resource_id               String   @db.VarChar(128)
+  metadata                  Json?
+  created_at                DateTime @default(now())
+
+  @@index([actor_id, created_at])
+  @@index([represented_specialist_id, created_at])
+  @@index([resource_type, resource_id])
+  @@index([action, created_at])
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ▸ PROPOSTAS DE NEGOCIAÇÃO
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1318,6 +1338,9 @@ model ProductImportJob {
   id                      String                 @id @default(uuid()) @db.Uuid
   product_type            ProductType
   specialist_id           String                 @db.Uuid
+  created_by_id           String?                @db.Uuid
+  mode                    String                 @default("ADDITIVE") @db.VarChar(20)
+  sync_confirmed          Boolean                @default(false)
   status                  ProductImportJobStatus @default(PENDING)
   total_items             Int                    @default(0)
   processed_items         Int                    @default(0)
@@ -1337,6 +1360,7 @@ model ProductImportJob {
   items      ProductImportJobItem[]
 
   @@index([specialist_id])
+  @@index([created_by_id])
   @@index([status])
   @@index([product_type])
   @@index([created_at])

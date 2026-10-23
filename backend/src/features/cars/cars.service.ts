@@ -78,14 +78,14 @@ export class CarsService {
     page,
     perPage,
     appliedFilters,
-  }: QueryDto<FiltersCarMeta>) {
+  }: QueryDto<FiltersCarMeta>, includeInactive = false) {
     // Cálculo das variáveis usadas na requisição ao banco de dados
     const take = perPage;
     const skip = page && take ? (page - 1) * take : 0;
 
     // Separação dos filtros
     const where: any = {};
-    where.is_active = true;
+    if (!includeInactive) where.is_active = true;
 
     // Exact
     const exacts: ExactCarFilters = {

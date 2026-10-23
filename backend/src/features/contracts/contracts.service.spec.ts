@@ -82,7 +82,7 @@ function processFixture(overrides: Record<string, any> = {}) {
       id: 'client-1',
       name: 'Cliente',
       surname: 'Teste',
-      email: 'cliente@example.com',
+      email: 'buyer@example.test',
       cpf: null,
       rg: null,
       address: null,
@@ -93,7 +93,7 @@ function processFixture(overrides: Record<string, any> = {}) {
       id: 'specialist-1',
       name: 'Especialista',
       surname: 'Teste',
-      email: 'especialista@example.com',
+      email: 'specialist@example.test',
       cpf: null,
       company_id: null,
       commission_rate: 0,
@@ -1030,6 +1030,60 @@ describe('ContractsService — send after preview integrity', () => {
 });
 
 describe('ContractsService — provider operation id', () => {
+  it('canonicalizes buyer and an omitted specialist from the process', () => {
+    const service = mkSvc(mkPrisma(), mkPlatformCompanyService(10));
+    const dto = {
+      buyer_name: 'Untrusted buyer label',
+      buyer_email: 'buyer@example.test',
+      seller_email: 'seller@example.test',
+      vehicle_price: 100000,
+    } as any;
+
+    (service as any).assertContractPartiesAndPrice(dto, processFixture());
+
+    expect(dto).toMatchObject({
+      buyer_name: 'Cliente Teste',
+      specialist_name: 'Especialista Teste',
+      specialist_email: 'specialist@example.test',
+    });
+  });
+
+  it.each([
+    [
+      'comprador diferente do cliente',
+      { buyer_email: 'intruder@example.test' },
+      ForbiddenException,
+    ],
+    [
+      'especialista signatário diferente do responsável',
+      { specialist_email: 'other-specialist@example.test' },
+      ForbiddenException,
+    ],
+    [
+      'vendedor igual ao especialista',
+      { seller_email: 'specialist@example.test' },
+      BadRequestException,
+    ],
+    [
+      'preço diferente da negociação',
+      { vehicle_price: 99999 },
+      BadRequestException,
+    ],
+  ])('bloqueia %s', (_label, override, exceptionType) => {
+    const service = mkSvc(mkPrisma(), mkPlatformCompanyService(10));
+    const dto = {
+      buyer_email: 'buyer@example.test',
+      specialist_email: 'specialist@example.test',
+      seller_email: 'seller@example.test',
+      vehicle_price: 100000,
+      ...override,
+    } as any;
+
+    expect(() =>
+      (service as any).assertContractPartiesAndPrice(dto, processFixture()),
+    ).toThrow(exceptionType);
+  });
+
   it('passes the same public operation_id through to DocuSign preview retries', async () => {
     const process = processFixture();
     const tx = {
@@ -1075,6 +1129,8 @@ describe('ContractsService — provider operation id', () => {
       seller_email: 'seller@example.test',
       buyer_name: 'Buyer',
       buyer_email: 'buyer@example.test',
+      specialist_email: 'specialist@example.test',
+      vehicle_price: 100000,
       total_commission_rate: 10,
       city: 'Sao Paulo',
       return_url: 'https://app.example.test/return',
@@ -1145,6 +1201,8 @@ describe('ContractsService — provider operation id', () => {
       seller_email: 'seller@example.test',
       buyer_name: 'Buyer',
       buyer_email: 'buyer@example.test',
+      specialist_email: 'specialist@example.test',
+      vehicle_price: 100000,
       total_commission_rate: 10,
       city: 'Sao Paulo',
       description: 'Intent A',
@@ -1245,6 +1303,8 @@ describe('ContractsService — provider operation id', () => {
       seller_email: 'seller@example.test',
       buyer_name: 'Buyer',
       buyer_email: 'buyer@example.test',
+      specialist_email: 'specialist@example.test',
+      vehicle_price: 100000,
       total_commission_rate: 10,
       city: 'Sao Paulo',
       description: 'Same legal description',

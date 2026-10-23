@@ -125,14 +125,14 @@ export class AircraftsService {
     page,
     perPage,
     appliedFilters,
-  }: QueryDto<FiltersAircraftMeta>) {
+  }: QueryDto<FiltersAircraftMeta>, includeInactive = false) {
     // Cálculo das variáveis que serão utilizadas
     const take = perPage;
     const skip = page && take ? (page - 1) * take : 0;
 
     // Separação dos filtros
     const where: any = {};
-    where.is_active = true;
+    if (!includeInactive) where.is_active = true;
 
     // Exact
     const exacts: ExactAircraftFilters = {

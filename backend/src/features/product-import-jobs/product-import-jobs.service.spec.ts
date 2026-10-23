@@ -107,6 +107,11 @@ describe('ProductImportJobsService', () => {
       },
     } as any;
     const service = new ProductImportJobsService(prisma, {} as any, {} as any);
+    jest.spyOn(service as any, 'getJobExecutionContext').mockResolvedValue({
+      mode: 'SYNCHRONIZE',
+      syncConfirmed: true,
+      specialistIsEligible: true,
+    });
     const deactivateMissingProducts = jest
       .spyOn(service as any, 'deactivateMissingProducts')
       .mockResolvedValue(['stale-product']);
@@ -127,6 +132,145 @@ describe('ProductImportJobsService', () => {
         status: 'FAILED',
         error_message: 'Nome do veículo faltando',
       }),
+    });
+  });
+
+  it('não inativa produtos ausentes no modo aditivo', async () => {
+    const prisma = {
+      productImportJob: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'job-additive',
+          product_type: ProductType.CAR,
+          specialist_id: '00000000-0000-4000-8000-000000000001',
+          status: 'PENDING',
+          started_at: null,
+          items: [],
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    } as any;
+    const service = new ProductImportJobsService(prisma, {} as any, {} as any);
+    jest.spyOn(service as any, 'getJobExecutionContext').mockResolvedValue({
+      mode: 'ADDITIVE',
+      syncConfirmed: false,
+      specialistIsEligible: true,
+    });
+    const deactivateMissingProducts = jest
+      .spyOn(service as any, 'deactivateMissingProducts')
+      .mockResolvedValue(['stale-product']);
+    const refreshJobCounters = jest
+      .spyOn(service as any, 'refreshJobCounters')
+      .mockResolvedValue(undefined);
+
+    await (service as any).processJob('job-additive');
+
+    expect(deactivateMissingProducts).not.toHaveBeenCalled();
+    expect(refreshJobCounters).toHaveBeenCalledWith('job-additive', {
+      deactivatedIds: [],
+      reactivatedCount: 0,
+    });
+  });
+
+  it('mantém o job pendente quando o especialista-alvo foi desativado', async () => {
+    const prisma = {
+      productImportJob: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'job-inactive',
+          product_type: ProductType.CAR,
+          specialist_id: '00000000-0000-4000-8000-000000000001',
+          status: 'PENDING',
+          started_at: null,
+          items: [],
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    } as any;
+    const service = new ProductImportJobsService(prisma, {} as any, {} as any);
+    jest.spyOn(service as any, 'getJobExecutionContext').mockResolvedValue({
+      mode: 'ADDITIVE',
+      syncConfirmed: false,
+      specialistIsEligible: false,
+    });
+
+    await (service as any).processJob('job-inactive');
+
+    expect(prisma.productImportJob.update).toHaveBeenCalledTimes(1);
+    expect(prisma.productImportJob.update).toHaveBeenCalledWith({
+      where: { id: 'job-inactive' },
+      data: expect.objectContaining({
+        status: 'PENDING',
+        error_message: expect.stringContaining('inativo'),
+      }),
+    });
+  });
+
+  it('exige confirmação explícita para sincronizar', async () => {
+    const xlsxImportService = {
+      parseCsv: jest.fn().mockReturnValue({ rows: [validCarRow] }),
+      validateStructure: jest.fn().mockReturnValue({ valid: true }),
+    } as any;
+    const service = new ProductImportJobsService(
+      {} as any,
+      xlsxImportService,
+      {} as any,
+    );
+
+    await expect(
+      service.createJobFromCsv(
+        Buffer.from('csv'),
+        { id: 'admin-1', role: 'ADMIN' } as any,
+        ProductType.CAR,
+        {
+          mode: 'SYNCHRONIZE',
+          confirmSynchronize: false,
+          context: {
+            actorId: 'admin-1',
+            actorRole: 'ADMIN',
+            specialistId: '00000000-0000-4000-8000-000000000001',
+            specialist: {} as any,
+            delegated: true,
+          },
+        },
+      ),
+    ).rejects.toThrow('confirmação explícita');
+  });
+
+  it('calcula o impacto da sincronização antes de criar o job', async () => {
+    const xlsxImportService = {
+      parseCsv: jest.fn().mockReturnValue({ rows: [validCarRow] }),
+      validateStructure: jest.fn().mockReturnValue({ valid: true }),
+    } as any;
+    const prisma = {
+      car: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'keep', identificador: 'FERRARI-ROMA-1' },
+          { id: 'stale', identificador: 'FERRARI-OLD-1' },
+        ]),
+      },
+    } as any;
+    const service = new ProductImportJobsService(
+      prisma,
+      xlsxImportService,
+      {} as any,
+    );
+
+    await expect(
+      service.previewCsvImport(
+        Buffer.from('csv'),
+        ProductType.CAR,
+        '00000000-0000-4000-8000-000000000001',
+        'SYNCHRONIZE',
+      ),
+    ).resolves.toMatchObject({
+      mode: 'SYNCHRONIZE',
+      targetSpecialistId: '00000000-0000-4000-8000-000000000001',
+      requiresExplicitConfirmation: true,
+      impact: {
+        incomingItems: 1,
+        activeItemsBefore: 2,
+        matchingItems: 1,
+        deactivationCandidates: 1,
+      },
     });
   });
 
