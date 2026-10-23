@@ -745,6 +745,14 @@ describe('ContractsService — locked transaction and compensation', () => {
 describe('ContractsService — send after preview integrity', () => {
   function makeSendHarness(processOverrides: Record<string, any> = {}) {
     const process = processFixture(processOverrides);
+    const commission = {
+      platformValue: 1000,
+      platformRate: 1,
+      officeValue: 0,
+      officeRate: 0,
+      specialistValue: 9000,
+      specialistRate: 9,
+    };
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
       process: {
@@ -778,6 +786,7 @@ describe('ContractsService — send after preview integrity', () => {
     });
     const docusign = {
       getEnvelopeProcessId: jest.fn().mockResolvedValue('process-1'),
+      getEnvelopeRequestFingerprint: jest.fn(),
       getEnvelopeStatus: jest.fn().mockResolvedValue({
         envelopeId: 'envelope-1',
         status: EnvelopeStatus.CREATED,
@@ -796,14 +805,9 @@ describe('ContractsService — send after preview integrity', () => {
       } as any,
       mkPlatformCompanyService(10),
     );
-    jest.spyOn(service as any, 'resolveCommissionFromTotal').mockResolvedValue({
-      platformValue: 1000,
-      platformRate: 1,
-      officeValue: 0,
-      officeRate: 0,
-      specialistValue: 9000,
-      specialistRate: 9,
-    });
+    jest
+      .spyOn(service as any, 'resolveCommissionFromTotal')
+      .mockResolvedValue(commission);
     const dto = {
       operation_id: '11111111-1111-4111-8111-111111111111',
       process_id: 'process-1',
@@ -822,6 +826,14 @@ describe('ContractsService — send after preview integrity', () => {
       specialist_email: 'specialist@example.test',
       city: 'Sao Paulo',
     } as any;
+    docusign.getEnvelopeRequestFingerprint.mockImplementation(async () =>
+      (service as any).buildPreviewFingerprint(
+        dto,
+        process.product_type,
+        commission,
+        dto.template_id,
+      ).requestFingerprint,
+    );
     return { service, docusign, tx, dto };
   }
 

@@ -22,6 +22,7 @@ import {
   ProcessStatus,
   ProductCurrency,
   ProductType,
+  ProviderStatus,
   StatusAgendamento,
   UserRole,
 } from '@prisma/client';
@@ -2171,6 +2172,13 @@ export class ProcessesService {
                   ended_at: true,
                 },
               },
+              active_contract: {
+                select: {
+                  id: true,
+                  provider_id: true,
+                  provider_status: true,
+                },
+              },
             },
           });
 
@@ -2191,6 +2199,21 @@ export class ProcessesService {
           if (existingProcess.status === ProcessStatus.COMPLETED) {
             throw new BadRequestException(
               'Processo concluído não pode ser rejeitado',
+            );
+          }
+          if (
+            existingProcess.active_contract?.provider_id &&
+            ![
+              ProviderStatus.DECLINED,
+              ProviderStatus.VOIDED,
+              ProviderStatus.TIMEDOUT,
+              ProviderStatus.ERROR,
+            ].includes(
+              existingProcess.active_contract.provider_status as ProviderStatus,
+            )
+          ) {
+            throw new BadRequestException(
+              'O contrato ativo ainda possui um envelope DocuSign vigente. Anule e reconcilie o envelope antes de rejeitar o processo.',
             );
           }
           if (

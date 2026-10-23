@@ -65,6 +65,15 @@ interface ExternalEnvelopeEffect {
   providerStatus?: EnvelopeStatus;
 }
 
+type ResolvedContractCommission = {
+  platformRate: number;
+  officeRate: number;
+  specialistRate: number;
+  platformValue: number;
+  officeValue: number;
+  specialistValue: number;
+};
+
 export interface ContractDocumentFields {
   seller_cpf?: string;
   seller_rg?: string;
@@ -159,6 +168,88 @@ export class ContractsService {
     return createHash('sha256')
       .update(JSON.stringify(normalize({ ...input, contract })))
       .digest('hex');
+  }
+
+  private buildPreviewGenerateDto(
+    dto: PreviewContractDto,
+    commission: ResolvedContractCommission,
+  ): GenerateContractDto {
+    return {
+      operation_id: dto.operation_id,
+      process_id: dto.process_id,
+      total_commission_rate: dto.total_commission_rate,
+      seller_name: dto.seller_name,
+      seller_email: dto.seller_email,
+      seller_cpf: dto.seller_cpf,
+      seller_rg: dto.seller_rg,
+      seller_address: dto.seller_address ?? '',
+      seller_cep: dto.seller_cep,
+      seller_bank: dto.seller_bank ?? '',
+      seller_agency: dto.seller_agency ?? '',
+      seller_checking_account: dto.seller_checking_account ?? '',
+      buyer_name: dto.buyer_name,
+      buyer_email: dto.buyer_email,
+      buyer_cpf: dto.buyer_cpf,
+      buyer_rg: dto.buyer_rg,
+      buyer_address: dto.buyer_address ?? '',
+      buyer_cep: dto.buyer_cep,
+      vehicle_model: dto.vehicle_model ?? '',
+      vehicle_year: dto.vehicle_year ?? '',
+      vehicle_registration_id: dto.vehicle_registration_id ?? '',
+      vehicle_serial_number: dto.vehicle_serial_number ?? '',
+      vehicle_technical_info: dto.vehicle_technical_info,
+      vehicle_price: dto.vehicle_price,
+      payment_seller_value: dto.payment_seller_value,
+      platform_value: commission.platformValue,
+      platform_percentage: commission.platformRate,
+      platform_name: dto.platform_name,
+      platform_cnpj: dto.platform_cnpj,
+      platform_bank: dto.platform_bank,
+      platform_agency: dto.platform_agency,
+      platform_checking_account: dto.platform_checking_account,
+      office_value: commission.officeValue,
+      office_name: dto.office_name,
+      office_cnpj: dto.office_cnpj,
+      office_bank: dto.office_bank,
+      office_agency: dto.office_agency,
+      office_checking_account: dto.office_checking_account,
+      specialist_value: commission.specialistValue,
+      specialist_name: dto.specialist_name,
+      specialist_email: dto.specialist_email,
+      specialist_document: dto.specialist_document,
+      specialist_bank: dto.specialist_bank,
+      specialist_agency: dto.specialist_agency,
+      specialist_checking_account: dto.specialist_checking_account,
+      testimonial1_cpf: dto.testimonial1_cpf,
+      testimonial1_email: dto.testimonial1_email,
+      testimonial2_cpf: dto.testimonial2_cpf,
+      testimonial2_email: dto.testimonial2_email,
+      city: dto.city ?? '',
+      description: dto.description,
+    };
+  }
+
+  private buildPreviewFingerprint(
+    dto: PreviewContractDto,
+    productType: ProductType | null,
+    commission: ResolvedContractCommission,
+    templateId: string,
+  ): { formFields: Record<string, string>; requestFingerprint: string } {
+    const generateDto = this.buildPreviewGenerateDto(dto, commission);
+    const formFields = this.buildFormFields(generateDto, productType);
+    return {
+      formFields,
+      requestFingerprint: this.contractIntentionFingerprint({
+        processId: dto.process_id,
+        templateId,
+        contract: {
+          ...(dto as unknown as Record<string, unknown>),
+          ...(generateDto as unknown as Record<string, unknown>),
+        },
+        commission,
+        formFields,
+      }),
+    };
   }
 
   private async getAuthorizedContractProcess(
@@ -1646,70 +1737,6 @@ export class ContractsService {
       // ===== ETAPA 2: FORMATAR DADOS PARA DOCUSIGN =====
       this.logger.log('Preview Etapa 2: Formatando dados para DocuSign...');
 
-      // Reutilizar buildFormFields criando DTO compatível
-      const generateDto: GenerateContractDto = {
-        operation_id: dto.operation_id,
-        process_id: dto.process_id,
-        total_commission_rate: dto.total_commission_rate,
-        seller_name: dto.seller_name,
-        seller_email: dto.seller_email,
-        seller_cpf: dto.seller_cpf,
-        seller_rg: dto.seller_rg,
-        seller_address: dto.seller_address ?? '',
-        seller_cep: dto.seller_cep,
-        seller_bank: dto.seller_bank ?? '',
-        seller_agency: dto.seller_agency ?? '',
-        seller_checking_account: dto.seller_checking_account ?? '',
-        buyer_name: dto.buyer_name,
-        buyer_email: dto.buyer_email,
-        buyer_cpf: dto.buyer_cpf,
-        buyer_rg: dto.buyer_rg,
-        buyer_address: dto.buyer_address ?? '',
-        buyer_cep: dto.buyer_cep,
-        vehicle_model: dto.vehicle_model ?? '',
-        vehicle_year: dto.vehicle_year ?? '',
-        vehicle_registration_id: dto.vehicle_registration_id ?? '',
-        vehicle_serial_number: dto.vehicle_serial_number ?? '',
-        vehicle_technical_info: dto.vehicle_technical_info,
-        vehicle_price: dto.vehicle_price,
-        payment_seller_value: dto.payment_seller_value,
-        platform_value: commission.platformValue,
-        platform_percentage: commission.platformRate,
-        platform_name: dto.platform_name,
-        platform_cnpj: dto.platform_cnpj,
-        platform_bank: dto.platform_bank,
-        platform_agency: dto.platform_agency,
-        platform_checking_account: dto.platform_checking_account,
-        office_value: commission.officeValue,
-        office_name: dto.office_name,
-        office_cnpj: dto.office_cnpj,
-        office_bank: dto.office_bank,
-        office_agency: dto.office_agency,
-        office_checking_account: dto.office_checking_account,
-        specialist_value: commission.specialistValue,
-        specialist_name: dto.specialist_name,
-        specialist_email: dto.specialist_email,
-        specialist_document: dto.specialist_document,
-        specialist_bank: dto.specialist_bank,
-        specialist_agency: dto.specialist_agency,
-        specialist_checking_account: dto.specialist_checking_account,
-        testimonial1_cpf: dto.testimonial1_cpf,
-        testimonial1_email: dto.testimonial1_email,
-        testimonial2_cpf: dto.testimonial2_cpf,
-        testimonial2_email: dto.testimonial2_email,
-        city: dto.city ?? '',
-        description: dto.description,
-      };
-
-      const formFields = this.buildFormFields(
-        generateDto,
-        processRecord.product_type,
-      );
-
-      this.logger.debug(
-        `Form fields preparados: ${Object.keys(formFields).length} campos`,
-      );
-
       // ===== ETAPA 3: CRIAR PREVIEW NO DOCUSIGN =====
       this.logger.log('Preview Etapa 3: Criando preview no DocuSign...');
 
@@ -1721,16 +1748,17 @@ export class ContractsService {
         );
       }
 
-      const requestFingerprint = this.contractIntentionFingerprint({
-        processId: dto.process_id,
-        templateId,
-        contract: {
-          ...(dto as unknown as Record<string, unknown>),
-          ...(generateDto as unknown as Record<string, unknown>),
-        },
-        commission,
-        formFields,
-      });
+      const { formFields, requestFingerprint } =
+        this.buildPreviewFingerprint(
+          dto,
+          processRecord.product_type,
+          commission,
+          templateId,
+        );
+
+      this.logger.debug(
+        `Form fields preparados: ${Object.keys(formFields).length} campos`,
+      );
 
       const previewResponse = await this.docuSignService.createEnvelopePreview({
         transactionId: dto.operation_id,
@@ -2020,6 +2048,39 @@ export class ContractsService {
         tx,
       );
 
+      const templateId =
+        dto.template_id || globalThis.process.env.DOCUSIGN_TEMPLATE_ID;
+      if (!templateId) {
+        throw new InternalServerErrorException(
+          'Nenhum template informado e DOCUSIGN_TEMPLATE_ID não configurado',
+        );
+      }
+      const { requestFingerprint } = this.buildPreviewFingerprint(
+        dto,
+        processRecord.product_type,
+        commission,
+        templateId,
+      );
+      const approvedFingerprint =
+        await this.docuSignService.getEnvelopeRequestFingerprint(envelopeId);
+      if (
+        !approvedFingerprint ||
+        approvedFingerprint !== requestFingerprint
+      ) {
+        throw new ConflictException({
+          success: false,
+          error: {
+            code: 'CONTRACT_PREVIEW_MISMATCH',
+            message:
+              'Os dados do contrato mudaram após o preview. Gere e aprove um novo preview antes de enviar.',
+            details: {
+              process_id: dto.process_id,
+              envelope_id: envelopeId,
+            },
+          },
+        });
+      }
+
       // ===== ETAPA 2: ENVIAR ENVELOPE NO DOCUSIGN =====
       this.logger.log('Enviando envelope para DocuSign...');
 
@@ -2031,9 +2092,6 @@ export class ContractsService {
 
       // ===== ETAPA 3: SALVAR NO BANCO =====
       this.logger.log('Salvando contrato no banco...');
-
-      const templateId =
-        dto.template_id || globalThis.process.env.DOCUSIGN_TEMPLATE_ID || '';
 
       const cleanDocs = stripContractDocumentFields(dto);
       const contract = await tx.contract.create({
@@ -2052,6 +2110,7 @@ export class ContractsService {
             originalStatus: sendResponse.status,
             templateId: templateId,
             previewUsed: true,
+            requestFingerprint,
           } as any,
 
           // Dados do vendedor

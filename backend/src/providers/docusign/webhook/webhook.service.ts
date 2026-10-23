@@ -350,6 +350,16 @@ export class DocuSignWebhookService {
           return updatedContract;
         }
 
+        // O contrato mantém seu próprio estado, mas somente o contrato ativo
+        // pode dirigir a máquina de estados do processo. Eventos atrasados de
+        // envelopes substituídos não podem reativar nem concluir a venda.
+        if (process.active_contract_id !== contract.id) {
+          this.logger.log(
+            `[SYNC] Webhook do contrato não ativo ${contract.id}; processo ${process.id} preservado`,
+          );
+          return updatedContract;
+        }
+
         // 7.3 Sincronizar status do processo com base no status do contrato
         const processStatusUpdate: any = {};
         let updateProcessActiveContract = false;
