@@ -9,6 +9,8 @@ function mkController() {
       specialist_id: 'spec-1',
     }),
     update: jest.fn().mockResolvedValue({ id: 'aircraft-1' }),
+    prepareProductImages: jest.fn().mockResolvedValue([]),
+    cleanupPreparedImages: jest.fn().mockResolvedValue(undefined),
   } as any;
   const productImportJobsService = {
     createJobFromCsv: jest.fn().mockResolvedValue({ id: 'job-1' }),
@@ -60,7 +62,11 @@ describe('AircraftsController — Calendly opcional', () => {
       id: 'aircraft-1',
     });
     expect(dto.specialist_id).toBe(specialist.id);
-    expect(aircraftsService.create).toHaveBeenCalledWith(dto, tx);
+    expect(aircraftsService.create).toHaveBeenCalledWith(
+      dto,
+      tx,
+      expect.objectContaining({ productId: expect.any(String), images: [] }),
+    );
   });
 
   it('não permite remover o owner no PATCH comum', async () => {
@@ -88,8 +94,69 @@ describe('AircraftsController — Calendly opcional', () => {
     expect(aircraftsService.create).toHaveBeenCalledWith(
       expect.objectContaining({ specialist_id: specialist.id }),
       tx,
+      expect.objectContaining({ productId: expect.any(String), images: [] }),
     );
     expect(audit.record).toHaveBeenCalledWith(expect.any(Object), tx);
+  });
+
+  it('aguarda upload fora da transação e compensa se a auditoria falhar', async () => {
+    const { controller, aircraftsService, audit, prisma } = mkController();
+    const prepared = [
+      { image_url: 'aircrafts/new-key.jpg', is_primary: true },
+    ];
+    let finishUpload!: (images: typeof prepared) => void;
+    aircraftsService.prepareProductImages.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishUpload = resolve;
+      }),
+    );
+    audit.record.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const operation = controller.create(
+      { images: [{ data: 'base64', is_primary: true }] } as any,
+      specialist,
+    );
+    const rejection = expect(operation).rejects.toThrow('audit unavailable');
+    await Promise.resolve();
+
+    expect(aircraftsService.prepareProductImages).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    finishUpload(prepared);
+    await rejection;
+    expect(aircraftsService.cleanupPreparedImages).toHaveBeenCalledWith(
+      prepared,
+    );
+  });
+
+  it('também prepara PATCH fora da transação e compensa falha de auditoria', async () => {
+    const { controller, aircraftsService, audit, prisma } = mkController();
+    const prepared = [
+      { image_url: 'aircrafts/patch-key.jpg', is_primary: true },
+    ];
+    let finishUpload!: (images: typeof prepared) => void;
+    aircraftsService.prepareProductImages.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishUpload = resolve;
+      }),
+    );
+    audit.record.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const operation = controller.update(
+      'aircraft-1',
+      { images: [{ data: 'base64', is_primary: true }] } as any,
+      specialist,
+    );
+    const rejection = expect(operation).rejects.toThrow('audit unavailable');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(aircraftsService.prepareProductImages).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    finishUpload(prepared);
+    await rejection;
+    expect(aircraftsService.cleanupPreparedImages).toHaveBeenCalledWith(
+      prepared,
+    );
   });
 
   it('permite importação CSV sem consultar Calendly', async () => {

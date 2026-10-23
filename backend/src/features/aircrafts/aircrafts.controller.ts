@@ -36,6 +36,7 @@ import { ActorContextService } from 'src/shared/actor-context/actor-context.serv
 import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
 import { ProductCsvImportDto } from '../product-import-jobs/dto/product-csv-import.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { randomUUID } from 'node:crypto';
 
 @Controller('aircrafts')
 export class AircraftsController {
@@ -59,22 +60,33 @@ export class AircraftsController {
       ProductType.AIRCRAFT,
     );
     createAircraftDto.specialist_id = context.specialistId;
-    return this.prisma.$transaction(async (tx) => {
-      const aircraft = await this.aircraftsService.create(
-        createAircraftDto,
-        tx,
-      );
-      await this.delegatedAudit.record(
-        {
-          context,
-          action: 'PRODUCT_CREATE',
-          resourceType: 'AIRCRAFT',
-          resourceId: aircraft.id,
-        },
-        tx,
-      );
-      return aircraft;
-    });
+    const productId = randomUUID();
+    const preparedImages = await this.aircraftsService.prepareProductImages(
+      productId,
+      createAircraftDto.images,
+    );
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const aircraft = await this.aircraftsService.create(
+          createAircraftDto,
+          tx,
+          { productId, images: preparedImages },
+        );
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'PRODUCT_CREATE',
+            resourceType: 'AIRCRAFT',
+            resourceId: aircraft.id,
+          },
+          tx,
+        );
+        return aircraft;
+      });
+    } catch (error) {
+      await this.aircraftsService.cleanupPreparedImages(preparedImages);
+      throw error;
+    }
   }
 
   @Post('import-csv/preview')
@@ -266,23 +278,33 @@ export class AircraftsController {
       context,
       existing?.specialist_id,
     );
-    return this.prisma.$transaction(async (tx) => {
-      const aircraft = await this.aircraftsService.update(
-        id,
-        updateAircraftDto,
-        tx,
-      );
-      await this.delegatedAudit.record(
-        {
-          context,
-          action: 'PRODUCT_UPDATE',
-          resourceType: 'AIRCRAFT',
-          resourceId: id,
-        },
-        tx,
-      );
-      return aircraft;
-    });
+    const preparedImages = await this.aircraftsService.prepareProductImages(
+      id,
+      updateAircraftDto.images,
+    );
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const aircraft = await this.aircraftsService.update(
+          id,
+          updateAircraftDto,
+          tx,
+          { images: preparedImages },
+        );
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'PRODUCT_UPDATE',
+            resourceType: 'AIRCRAFT',
+            resourceId: id,
+          },
+          tx,
+        );
+        return aircraft;
+      });
+    } catch (error) {
+      await this.aircraftsService.cleanupPreparedImages(preparedImages);
+      throw error;
+    }
   }
 
   @Delete(':id')

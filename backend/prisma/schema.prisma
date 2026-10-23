@@ -1354,6 +1354,8 @@ model ProductImportJob {
   started_at              DateTime?
   finished_at             DateTime?
   error_message           String?
+  processing_lease_token  String?                @db.Uuid
+  processing_lease_expires_at DateTime?
   created_at              DateTime               @default(now())
   updated_at              DateTime               @updatedAt
 
@@ -1363,6 +1365,7 @@ model ProductImportJob {
   @@index([specialist_id])
   @@index([created_by_id])
   @@index([status])
+  @@index([status, processing_lease_expires_at])
   @@index([product_type])
   @@index([created_at])
 }

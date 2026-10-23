@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import {
+  HttpException,
+  Injectable,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { Prisma, ProductType } from '@prisma/client';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
@@ -14,6 +19,13 @@ import {
 import { CAR_COLUMNS } from 'src/shared/constants/product-columns';
 import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 import { publicCarSelect } from 'src/shared/selects/public-catalog.select';
+import { randomUUID } from 'node:crypto';
+import {
+  cleanupPreparedProductImages,
+  prepareProductImages,
+  PreparedProductImage,
+  ProductImageInput,
+} from '../products/product-image-preparation';
 
 @Injectable()
 export class CarsService {
@@ -27,36 +39,42 @@ export class CarsService {
     private s3Service: S3Service,
   ) {}
 
+  prepareProductImages(productId: string, images?: ProductImageInput[]) {
+    return prepareProductImages(this.s3Service, 'cars', productId, images);
+  }
+
+  cleanupPreparedImages(images: PreparedProductImage[]) {
+    return cleanupPreparedProductImages(this.s3Service, images);
+  }
+
   async create(
     createCarDto: CreateCarDto,
     client: PrismaService | Prisma.TransactionClient = this.prismaService,
+    preparedWrite?: {
+      productId: string;
+      images: PreparedProductImage[];
+    },
   ) {
     const { images, ...carData } = createCarDto;
+    const productId = preparedWrite?.productId ?? randomUUID();
+    const ownsPreparedImages = !preparedWrite;
+    const preparedImages =
+      preparedWrite?.images ??
+      (await this.prepareProductImages(productId, images));
 
     try {
       // 1. Criar o carro
-      const car = await client.car.create({ data: carData });
+      const car = await client.car.create({
+        data: { ...carData, id: productId },
+      });
 
-      // 2. Processar e fazer upload das imagens, se existirem
-      if (images && images.length > 0) {
-        for (let i = 0; i < images.length; i++) {
-          const image = images[i];
-
-          // Gerar chave única para a imagem no S3
-          const timestamp = Date.now();
-          const key = `cars/${car.id}/${timestamp}-${i}.jpg`;
-
-          // Upload da imagem base64 para o S3
-          const imageKey = await this.s3Service.uploadBase64Image(
-            image.data,
-            key,
-          );
-
-          // Salvar referência da imagem no banco de dados
+      // 2. Persistir somente referências já preparadas fora da transação
+      if (preparedImages.length > 0) {
+        for (const image of preparedImages) {
           await client.car_image.create({
             data: {
               car_id: car.id,
-              image_url: imageKey,
+              image_url: image.image_url,
               is_primary: image.is_primary,
               product_type: 'CAR',
             },
@@ -70,7 +88,13 @@ export class CarsService {
         include: { images: true },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (ownsPreparedImages) {
+        await this.cleanupPreparedImages(preparedImages);
+      }
+      if (
+        error instanceof HttpException ||
+        error instanceof Prisma.PrismaClientKnownRequestError
+      ) {
         throw error;
       }
       throw new Error(`Erro ao criar carro: ${error.message}`);
@@ -218,19 +242,23 @@ export class CarsService {
     id: string,
     updateCarDto: UpdateCarDto,
     client: PrismaService | Prisma.TransactionClient = this.prismaService,
+    preparedWrite?: { images: PreparedProductImage[] },
   ) {
     const { images, ...carData } = updateCarDto;
-
-    await updateProductWithMonetaryLock(client, {
-      productType: ProductType.CAR,
-      productId: id,
-      nextValue: updateCarDto.valor,
-      nextCurrency: updateCarDto.currency,
-      data: carData,
-      notFoundMessage: 'Car not found',
-    });
+    const ownsPreparedImages = !preparedWrite;
+    const preparedImages =
+      preparedWrite?.images ?? (await this.prepareProductImages(id, images));
 
     try {
+      await updateProductWithMonetaryLock(client, {
+        productType: ProductType.CAR,
+        productId: id,
+        nextValue: updateCarDto.valor,
+        nextCurrency: updateCarDto.currency,
+        data: carData,
+        notFoundMessage: 'Car not found',
+      });
+
       // 1. Se houver novas imagens, processar
       if (images && images.length > 0) {
         // Remover imagens antigas
@@ -238,22 +266,12 @@ export class CarsService {
           where: { car_id: id },
         });
 
-        // Adicionar novas imagens
-        for (let i = 0; i < images.length; i++) {
-          const image = images[i];
-
-          const timestamp = Date.now();
-          const key = `cars/${id}/${timestamp}-${i}.jpg`;
-
-          const imageKey = await this.s3Service.uploadBase64Image(
-            image.data,
-            key,
-          );
-
+        // Adicionar referências das imagens já preparadas
+        for (const image of preparedImages) {
           await client.car_image.create({
             data: {
               car_id: id,
-              image_url: imageKey,
+              image_url: image.image_url,
               is_primary: image.is_primary,
               product_type: 'CAR',
             },
@@ -267,7 +285,13 @@ export class CarsService {
         include: { images: true },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (ownsPreparedImages) {
+        await this.cleanupPreparedImages(preparedImages);
+      }
+      if (
+        error instanceof HttpException ||
+        error instanceof Prisma.PrismaClientKnownRequestError
+      ) {
         throw error;
       }
       throw new Error(`Erro ao atualizar carro: ${error.message}`);

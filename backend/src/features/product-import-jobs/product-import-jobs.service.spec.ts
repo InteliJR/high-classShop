@@ -2,6 +2,49 @@ import { ProductImportJobsService } from './product-import-jobs.service';
 import { Prisma, ProductCurrency, ProductType } from '@prisma/client';
 
 describe('ProductImportJobsService', () => {
+  beforeEach(() => {
+    jest
+      .spyOn(ProductImportJobsService.prototype as any, 'claimJob')
+      .mockResolvedValue('unit-test-lease');
+    jest
+      .spyOn(ProductImportJobsService.prototype as any, 'releaseJobLease')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(ProductImportJobsService.prototype as any, 'pauseIneligibleJob')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(ProductImportJobsService.prototype as any, 'checkpointProductUpsert')
+      .mockImplementation(function (job: any, _item: any, payload: any) {
+        return (this as any).upsertProductFromRow(
+          job.product_type,
+          payload,
+          job.specialist_id,
+        );
+      });
+    jest
+      .spyOn(ProductImportJobsService.prototype as any, 'finalizeUnsynchronizedJob')
+      .mockImplementation(function (jobId: string, summary: any) {
+        return (this as any).refreshJobCounters(jobId, summary);
+      });
+    jest
+      .spyOn(ProductImportJobsService.prototype as any, 'updateImportItemWithLease')
+      .mockImplementation(function (
+        _jobId: string,
+        _leaseToken: string,
+        itemId: string,
+        data: any,
+      ) {
+        return (this as any).prisma.productImportJobItem.update({
+          where: { id: itemId },
+          data,
+        });
+      });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   const validCarRow = {
     marca: 'Ferrari',
     modelo: 'Roma',
@@ -10,6 +53,25 @@ describe('ProductImportJobsService', () => {
     estado: 'SP',
     ano: '2024',
   };
+
+  it('repete uma transação serializável abortada por P2034', async () => {
+    const transaction = jest
+      .fn()
+      .mockRejectedValueOnce({ code: 'P2034' })
+      .mockImplementationOnce(async (callback: any) => callback({ ok: true }));
+    const service = new ProductImportJobsService(
+      { $transaction: transaction } as any,
+      {} as any,
+      {} as any,
+    );
+    const operation = jest.fn().mockResolvedValue('done');
+
+    await expect(
+      (service as any).runSerializableWithRetry(operation),
+    ).resolves.toBe('done');
+    expect(transaction).toHaveBeenCalledTimes(2);
+    expect(operation).toHaveBeenCalledWith({ ok: true });
+  });
 
   it.each([
     ['identificador', '-', 'Identificador do veículo faltando'],
@@ -113,6 +175,9 @@ describe('ProductImportJobsService', () => {
       syncPreviewSnapshot: { candidateIds: [], csvDigest: 'csv-digest' },
       specialistIsEligible: true,
     });
+    jest
+      .spyOn(service as any, 'assertSynchronizationSnapshotCurrent')
+      .mockResolvedValue(undefined);
     const deactivateMissingProducts = jest
       .spyOn(service as any, 'deactivateMissingProducts')
       .mockResolvedValue(['stale-product']);
@@ -181,32 +246,30 @@ describe('ProductImportJobsService', () => {
       syncPreviewSnapshot: { candidateIds: [], csvDigest: 'csv-digest' },
       specialistIsEligible: true,
     });
+    jest
+      .spyOn(service as any, 'assertSynchronizationSnapshotCurrent')
+      .mockResolvedValue(undefined);
     jest.spyOn(service as any, 'upsertProductFromRow').mockResolvedValue({
       productId: productB,
       action: 'UPDATED',
     });
-    const deactivateMissingProducts = jest
-      .spyOn(service as any, 'deactivateMissingProducts')
-      .mockImplementation(async (_type, _specialist, seen: Set<string>) =>
-        seen.has(productA) && seen.has(productB) ? [] : [productA],
-      );
-    const refreshJobCounters = jest
-      .spyOn(service as any, 'refreshJobCounters')
+    const finalizeSynchronizedJob = jest
+      .spyOn(service as any, 'finalizeSynchronizedJob')
       .mockResolvedValue(undefined);
 
     await (service as any).processJob('job-resume');
 
-    expect(deactivateMissingProducts).toHaveBeenCalledWith(
-      ProductType.CAR,
-      specialistId,
-      new Set([productA, productB]),
+    expect(finalizeSynchronizedJob).toHaveBeenCalledWith(
       'job-resume',
-      { candidateIds: [], csvDigest: 'csv-digest' },
+      {
+        productType: ProductType.CAR,
+        specialistId,
+        seenProductIds: new Set([productA, productB]),
+        snapshot: { candidateIds: [], csvDigest: 'csv-digest' },
+      },
+      0,
+      'unit-test-lease',
     );
-    expect(refreshJobCounters).toHaveBeenCalledWith('job-resume', {
-      deactivatedIds: [],
-      reactivatedCount: 0,
-    });
   });
 
   it('leva o snapshot confirmado para a revalidação transacional antes de desativar', async () => {
@@ -242,21 +305,25 @@ describe('ProductImportJobsService', () => {
       syncPreviewSnapshot: snapshot,
       specialistIsEligible: true,
     });
-    const deactivateMissingProducts = jest
-      .spyOn(service as any, 'deactivateMissingProducts')
-      .mockResolvedValue([]);
     jest
-      .spyOn(service as any, 'refreshJobCounters')
+      .spyOn(service as any, 'assertSynchronizationSnapshotCurrent')
+      .mockResolvedValue(undefined);
+    const finalizeSynchronizedJob = jest
+      .spyOn(service as any, 'finalizeSynchronizedJob')
       .mockResolvedValue(undefined);
 
     await (service as any).processJob('job-snapshot');
 
-    expect(deactivateMissingProducts).toHaveBeenCalledWith(
-      ProductType.CAR,
-      '00000000-0000-4000-8000-000000000001',
-      new Set(['11111111-1111-4111-8111-111111111111']),
+    expect(finalizeSynchronizedJob).toHaveBeenCalledWith(
       'job-snapshot',
-      snapshot,
+      {
+        productType: ProductType.CAR,
+        specialistId: '00000000-0000-4000-8000-000000000001',
+        seenProductIds: new Set(['11111111-1111-4111-8111-111111111111']),
+        snapshot,
+      },
+      0,
+      'unit-test-lease',
     );
   });
 
@@ -374,14 +441,10 @@ describe('ProductImportJobsService', () => {
 
     await (service as any).processJob('job-inactive');
 
-    expect(prisma.productImportJob.update).toHaveBeenCalledTimes(1);
-    expect(prisma.productImportJob.update).toHaveBeenCalledWith({
-      where: { id: 'job-inactive' },
-      data: expect.objectContaining({
-        status: 'PENDING',
-        error_message: expect.stringContaining('inativo'),
-      }),
-    });
+    expect((service as any).pauseIneligibleJob).toHaveBeenCalledWith(
+      'job-inactive',
+      'unit-test-lease',
+    );
   });
 
   it('exige confirmação explícita para sincronizar', async () => {
@@ -413,6 +476,29 @@ describe('ProductImportJobsService', () => {
         },
       ),
     ).rejects.toThrow('confirmação explícita');
+  });
+
+  it('rejeita identificadores duplicados no mesmo CSV', async () => {
+    const xlsxImportService = {
+      parseCsv: jest.fn().mockReturnValue({
+        rows: [validCarRow, { ...validCarRow, modelo: 'Duplicado' }],
+      }),
+      validateStructure: jest.fn().mockReturnValue({ valid: true }),
+    } as any;
+    const service = new ProductImportJobsService(
+      {} as any,
+      xlsxImportService,
+      {} as any,
+    );
+
+    await expect(
+      service.previewCsvImport(
+        Buffer.from('csv-duplicado'),
+        ProductType.CAR,
+        '00000000-0000-4000-8000-000000000001',
+        'SYNCHRONIZE',
+      ),
+    ).rejects.toThrow('identificadores duplicados');
   });
 
   it('exige token da prévia mesmo quando a sincronização foi confirmada', async () => {
@@ -509,6 +595,85 @@ describe('ProductImportJobsService', () => {
     );
   });
 
+  it('deriva impacto e token da mesma leitura do catálogo', async () => {
+    const specialistId = '00000000-0000-4000-8000-000000000001';
+    const productA = {
+      id: '11111111-1111-4111-8111-111111111111',
+      identificador: validCarRow.identificador,
+    };
+    const productC = {
+      id: '33333333-3333-4333-8333-333333333333',
+      identificador: 'NEW-C',
+    };
+    const catalogReads = [[productA], [productA, productC], [productA, productC]];
+    const findMany = jest
+      .fn()
+      .mockImplementation(async () =>
+        catalogReads.shift() ?? [productA, productC],
+      );
+    const xlsxImportService = {
+      parseCsv: jest.fn().mockReturnValue({ rows: [validCarRow] }),
+      validateStructure: jest.fn().mockReturnValue({ valid: true }),
+    } as any;
+    const prisma = {
+      car: {
+        findMany,
+      },
+      $transaction: jest.fn(async (callback) =>
+        callback({
+          car: { findMany },
+          productImportJob: {
+            create: jest.fn().mockResolvedValue({
+              id: 'job-unsafe-preview',
+              status: 'PENDING',
+              total_items: 1,
+              product_type: ProductType.CAR,
+            }),
+          },
+          $executeRaw: jest.fn(),
+        }),
+      ),
+    } as any;
+    const service = new ProductImportJobsService(
+      prisma,
+      xlsxImportService,
+      {} as any,
+    );
+    jest.spyOn(service as any, 'scheduleJob').mockImplementation(() => {});
+    const file = Buffer.from('preview-race-csv');
+
+    const preview = await service.previewCsvImport(
+      file,
+      ProductType.CAR,
+      specialistId,
+      'SYNCHRONIZE',
+    );
+
+    expect(preview.impact.deactivationCandidates).toBe(0);
+    await expect(
+      service.createJobFromCsv(
+        file,
+        { id: 'admin-1', role: 'ADMIN' } as any,
+        ProductType.CAR,
+        {
+          mode: 'SYNCHRONIZE',
+          confirmSynchronize: true,
+          synchronizePreviewToken: preview.synchronizePreviewToken,
+          context: {
+            actorId: 'admin-1',
+            actorRole: 'ADMIN',
+            specialistId,
+            specialist: {} as any,
+            delegated: true,
+          },
+        },
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'SYNCHRONIZE_PREVIEW_STALE' }),
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
   it('rejeita confirmação quando os candidatos mudam antes do POST', async () => {
     const specialistId = '00000000-0000-4000-8000-000000000001';
     const activeProducts = [
@@ -519,12 +684,14 @@ describe('ProductImportJobsService', () => {
       parseCsv: jest.fn().mockReturnValue({ rows: [validCarRow] }),
       validateStructure: jest.fn().mockReturnValue({ valid: true }),
     } as any;
+    const findMany = jest.fn().mockImplementation(async () => [...activeProducts]);
     const prisma = {
       car: {
-        findMany: jest.fn().mockImplementation(async () => [...activeProducts]),
+        findMany,
       },
       $transaction: jest.fn(async (callback) =>
         callback({
+          car: { findMany },
           productImportJob: {
             create: jest.fn().mockResolvedValue({
               id: 'job-stale',
@@ -576,7 +743,7 @@ describe('ProductImportJobsService', () => {
     ).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'SYNCHRONIZE_PREVIEW_STALE' }),
     });
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
   it('relata a linha não importada com erro em linguagem natural', () => {

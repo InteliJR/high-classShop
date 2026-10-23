@@ -40,12 +40,16 @@ import { CreateBoatDto } from '../boats/dto/create-boat.dto';
 import { CreateAircraftDto } from '../aircrafts/dto/create-aircraft.dto';
 import { DriveImportService } from '../drive-import/drive-import.service';
 import {
-  acquireProductMonetaryLock,
   updateProductWithMonetaryLock,
 } from '../products/product-monetary-lock';
 import { ActorContext } from 'src/shared/actor-context/actor-context.service';
 import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import {
+  createHash,
+  createHmac,
+  randomUUID,
+  timingSafeEqual,
+} from 'node:crypto';
 
 export type ProductImportMode = 'ADDITIVE' | 'SYNCHRONIZE';
 
@@ -57,25 +61,71 @@ export type ProductImportOptions = {
 };
 
 type SynchronizePreviewClaims = {
-  version: 1;
+  version: 2;
   csvDigest: string;
   specialistId: string;
   productType: ProductType;
   mode: 'SYNCHRONIZE';
   candidateDigest: string;
+  catalogDigest: string;
   expiresAt: number;
+};
+
+type CatalogProductSnapshot = {
+  id: string;
+  identificador: string;
+  isActive: boolean;
+  updatedAt: string;
+  rowVersion: string;
 };
 
 type SynchronizePreviewSnapshot = {
   candidateIds: string[];
   csvDigest: string;
+  catalogDigest: string;
+  catalogProducts: CatalogProductSnapshot[];
+};
+
+type ImportImpact = {
+  incomingItems: number;
+  activeItemsBefore: number;
+  matchingItems: number;
+  newOrReactivatedItems: number;
+  deactivationCandidates: number;
+};
+
+type SynchronizationCatalogSnapshot = {
+  candidateIds: string[];
+  catalogDigest: string;
+  catalogProducts: CatalogProductSnapshot[];
+  impact: ImportImpact;
 };
 
 type UpsertResult = {
   productId: string;
   action: 'CREATED' | 'UPDATED';
   reactivated?: boolean;
+  updatedAt?: string;
 };
+
+type ProductImportEffect = {
+  productId: string;
+  action: 'CREATED' | 'UPDATED';
+  rowVersion: string;
+  updatedAt?: string;
+  reactivated?: boolean;
+};
+
+type ImportItemPayload = ImportParsedRow & {
+  __productImportEffect?: ProductImportEffect;
+};
+
+class ProductImportJobLeaseLostError extends Error {
+  constructor() {
+    super('Lease do job de importação perdido para outro worker.');
+    this.name = 'ProductImportJobLeaseLostError';
+  }
+}
 
 const REQUIRED_PRODUCT_FIELDS = [
   { key: 'identificador', label: 'Identificador do veículo' },
@@ -90,6 +140,7 @@ const REQUIRED_PRODUCT_FIELDS = [
 export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ProductImportJobsService.name);
   private readonly runningJobs = new Set<string>();
+  private readonly lostJobLeases = new Set<string>();
   private recoveryTimer?: NodeJS.Timeout;
 
   constructor(
@@ -106,6 +157,33 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       error.code === 'P2021' &&
       `${error.meta?.table ?? ''}`.includes('ProductImportJob')
     );
+  }
+
+  private isSerializationFailure(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'P2034'
+    );
+  }
+
+  private async runSerializableWithRetry<T>(
+    operation: (tx: Prisma.TransactionClient) => Promise<T>,
+    maxAttempts = 3,
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(operation, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        if (!this.isSerializationFailure(error) || attempt === maxAttempts) {
+          throw error;
+        }
+      }
+    }
+    throw new Error('Unreachable serializable transaction retry state');
   }
 
   onModuleInit() {
@@ -171,27 +249,43 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     }
 
     const normalizedRows = rows.map((row) => this.normalizeProductRow(row));
+    this.validateUniqueIdentifiers(normalizedRows);
     const specialistId = options.context?.specialistId ?? user.id;
-    const synchronizeSnapshot =
-      mode === 'SYNCHRONIZE'
-        ? await this.validateSynchronizePreviewToken(
-            options.synchronizePreviewToken!,
-            fileBuffer,
+    let creationResult;
+    try {
+      creationResult = await this.runSerializableWithRetry(async (tx) => {
+        if (mode === 'SYNCHRONIZE') {
+          await this.lockProductCatalogForSnapshot(tx, productType);
+        }
+        const validatedSynchronization =
+          mode === 'SYNCHRONIZE'
+            ? await this.validateSynchronizePreviewToken(
+                options.synchronizePreviewToken!,
+                fileBuffer,
+                productType,
+                specialistId,
+                normalizedRows,
+                tx,
+              )
+            : null;
+        const synchronizeSnapshot: SynchronizePreviewSnapshot | null =
+          validatedSynchronization
+            ? {
+                candidateIds: validatedSynchronization.candidateIds,
+                csvDigest: validatedSynchronization.csvDigest,
+                catalogDigest: validatedSynchronization.catalogDigest,
+                catalogProducts: validatedSynchronization.catalogProducts,
+              }
+            : null;
+        const impact =
+          validatedSynchronization?.impact ??
+          (await this.estimateImportImpact(
             productType,
             specialistId,
             normalizedRows,
-          )
-        : null;
-    const impact = await this.estimateImportImpact(
-      productType,
-      specialistId,
-      normalizedRows,
-      mode,
-    );
-
-    let createdJob;
-    try {
-      createdJob = await this.prisma.$transaction(async (tx) => {
+            mode,
+            tx,
+          ));
         const job = await tx.productImportJob.create({
           data: {
             product_type: productType,
@@ -235,7 +329,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
             tx,
           );
         }
-        return job;
+        return { job, impact };
       });
     } catch (error) {
       if (this.isMissingImportJobsTableError(error)) {
@@ -245,6 +339,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       }
       throw error;
     }
+
+    const { job: createdJob, impact } = creationResult;
 
     this.scheduleJob(createdJob.id);
 
@@ -288,19 +384,28 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       });
     }
     const normalizedRows = rows.map((row) => this.normalizeProductRow(row));
-    const impact = await this.estimateImportImpact(
+    this.validateUniqueIdentifiers(normalizedRows);
+    const catalogSnapshot = await this.getSynchronizationCatalogSnapshot(
       productType,
       specialistId,
       normalizedRows,
-      mode,
     );
+    const impact =
+      mode === 'SYNCHRONIZE'
+        ? catalogSnapshot.impact
+        : this.deriveImportImpact(
+            catalogSnapshot.impact.activeItemsBefore,
+            catalogSnapshot.impact.matchingItems,
+            normalizedRows,
+            0,
+          );
     const synchronizePreviewToken =
       mode === 'SYNCHRONIZE'
-        ? await this.createSynchronizePreviewToken(
+        ? this.createSynchronizePreviewToken(
             fileBuffer,
             productType,
             specialistId,
-            normalizedRows,
+            catalogSnapshot,
           )
         : undefined;
     return {
@@ -313,24 +418,20 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private async createSynchronizePreviewToken(
+  private createSynchronizePreviewToken(
     fileBuffer: Buffer,
     productType: ProductType,
     specialistId: string,
-    rows: ImportParsedRow[],
-  ): Promise<string> {
-    const candidates = await this.getSynchronizationCandidateIds(
-      productType,
-      specialistId,
-      rows,
-    );
+    snapshot: SynchronizationCatalogSnapshot,
+  ): string {
     const claims: SynchronizePreviewClaims = {
-      version: 1,
+      version: 2,
       csvDigest: this.sha256(fileBuffer),
       specialistId,
       productType,
       mode: 'SYNCHRONIZE',
-      candidateDigest: this.sha256(candidates.join(',')),
+      candidateDigest: this.sha256(snapshot.candidateIds.join(',')),
+      catalogDigest: snapshot.catalogDigest,
       expiresAt: Date.now() + 15 * 60 * 1000,
     };
     const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
@@ -346,7 +447,14 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     productType: ProductType,
     specialistId: string,
     rows: ImportParsedRow[],
-  ): Promise<{ candidateIds: string[]; csvDigest: string }> {
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
+  ): Promise<{
+    candidateIds: string[];
+    csvDigest: string;
+    catalogDigest: string;
+    catalogProducts: CatalogProductSnapshot[];
+    impact: ImportImpact;
+  }> {
     try {
       const [payload, providedSignature, extra] = token.split('.');
       if (!payload || !providedSignature || extra) {
@@ -369,24 +477,34 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       const claims = JSON.parse(
         Buffer.from(payload, 'base64url').toString('utf8'),
       ) as SynchronizePreviewClaims;
-      const candidateIds = await this.getSynchronizationCandidateIds(
+      const catalogSnapshot = await this.getSynchronizationCatalogSnapshot(
         productType,
         specialistId,
         rows,
+        client,
       );
+      const { candidateIds, catalogDigest, catalogProducts, impact } =
+        catalogSnapshot;
       const csvDigest = this.sha256(fileBuffer);
       const scopeMatches =
-        claims.version === 1 &&
+        claims.version === 2 &&
         claims.mode === 'SYNCHRONIZE' &&
         claims.productType === productType &&
         claims.specialistId === specialistId &&
         claims.csvDigest === csvDigest &&
         claims.candidateDigest === this.sha256(candidateIds.join(',')) &&
+        claims.catalogDigest === catalogDigest &&
         claims.expiresAt >= Date.now();
       if (!scopeMatches) {
         throw new Error('escopo ou snapshot divergente');
       }
-      return { candidateIds, csvDigest };
+      return {
+        candidateIds,
+        csvDigest,
+        catalogDigest,
+        catalogProducts,
+        impact,
+      };
     } catch {
       throw new ConflictException({
         code: 'SYNCHRONIZE_PREVIEW_STALE',
@@ -396,26 +514,56 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async getSynchronizationCandidateIds(
+  private async getSynchronizationCatalogSnapshot(
     productType: ProductType,
     specialistId: string,
     rows: ImportParsedRow[],
-  ): Promise<string[]> {
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
+  ): Promise<SynchronizationCatalogSnapshot> {
     const incomingIdentifiers = new Set(
       rows.map((row) => row.identificador?.trim()).filter(Boolean),
     );
-    const activeProducts = await this.getActiveProductsByType(
+    const catalogProducts = await this.getCatalogProductsByType(
       productType,
       specialistId,
+      client,
     );
-    return activeProducts
+    const activeProducts = catalogProducts.filter((product) => product.isActive);
+    const matchingItems = activeProducts.filter((product) =>
+      incomingIdentifiers.has(product.identificador),
+    ).length;
+    const candidateIds = activeProducts
       .filter((product) => !incomingIdentifiers.has(product.identificador))
       .map((product) => product.id)
       .sort();
+    return {
+      candidateIds,
+      catalogDigest: this.catalogDigest(catalogProducts),
+      catalogProducts,
+      impact: this.deriveImportImpact(
+        activeProducts.length,
+        matchingItems,
+        rows,
+        candidateIds.length,
+      ),
+    };
   }
 
   private sha256(value: Buffer | string): string {
     return createHash('sha256').update(value).digest('hex');
+  }
+
+  private catalogDigest(products: CatalogProductSnapshot[]): string {
+    const canonical = [...products].sort((left, right) =>
+      left.id.localeCompare(right.id),
+    ).map((product) => [
+      product.id,
+      product.identificador,
+      product.isActive,
+      product.updatedAt,
+      product.rowVersion,
+    ]);
+    return this.sha256(JSON.stringify(canonical));
   }
 
   private getPreviewSecret(): string {
@@ -489,6 +637,12 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         : [],
       reactivatedCount: job.reactivated_items,
     });
+    if (
+      job.status === ProductImportJobStatus.COMPLETED_WITH_ERRORS &&
+      job.error_message
+    ) {
+      response.message = job.error_message;
+    }
 
     return {
       jobId: job.id,
@@ -562,6 +716,165 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async processJob(jobId: string) {
+    const leaseToken = await this.claimJob(jobId);
+    if (!leaseToken) return;
+    const leaseKey = this.jobLeaseKey(jobId, leaseToken);
+    const heartbeat = setInterval(() => {
+      this.renewJobLease(jobId, leaseToken)
+        .then((renewed) => {
+          if (!renewed) this.lostJobLeases.add(leaseKey);
+        })
+        .catch((error) => {
+          // Falha de transporte deixa a posse desconhecida; o próximo fence
+          // consulta o PostgreSQL. Somente UPDATE 0 prova perda definitiva.
+          this.logger.error(`Falha ao renovar lease do job ${jobId}`, error);
+        });
+    }, 15000);
+    heartbeat.unref?.();
+    try {
+      await this.processClaimedJob(jobId, leaseToken);
+    } finally {
+      clearInterval(heartbeat);
+      await this.releaseJobLease(jobId, leaseToken);
+      this.lostJobLeases.delete(leaseKey);
+    }
+  }
+
+  private jobLeaseKey(jobId: string, leaseToken: string): string {
+    return `${jobId}:${leaseToken}`;
+  }
+
+  private throwIfJobLeaseLost(jobId: string, leaseToken: string): void {
+    if (this.lostJobLeases.has(this.jobLeaseKey(jobId, leaseToken))) {
+      throw new ProductImportJobLeaseLostError();
+    }
+  }
+
+  private async claimJob(jobId: string): Promise<string | null> {
+    const leaseToken = randomUUID();
+    const claimed = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      UPDATE "ProductImportJob"
+      SET "status" = ${ProductImportJobStatus.PROCESSING}::"ProductImportJobStatus",
+          "started_at" = COALESCE("started_at", NOW()),
+          "error_message" = NULL,
+          "processing_lease_token" = ${leaseToken}::uuid,
+          "processing_lease_expires_at" = NOW() + INTERVAL '5 minutes',
+          "updated_at" = NOW()
+      WHERE "id" = ${jobId}::uuid
+        AND "status" IN (
+          ${ProductImportJobStatus.PENDING}::"ProductImportJobStatus",
+          ${ProductImportJobStatus.PROCESSING}::"ProductImportJobStatus"
+        )
+        AND (
+          "status" = ${ProductImportJobStatus.PENDING}::"ProductImportJobStatus"
+          OR "processing_lease_token" IS NULL
+          OR "processing_lease_expires_at" <= NOW()
+        )
+      RETURNING "id"
+    `;
+    return claimed.length === 1 ? leaseToken : null;
+  }
+
+  private async renewJobLease(
+    jobId: string,
+    leaseToken: string,
+  ): Promise<boolean> {
+    const updated = await this.prisma.$executeRaw`
+      UPDATE "ProductImportJob"
+      SET "processing_lease_expires_at" = GREATEST(
+            "processing_lease_expires_at",
+            NOW() + INTERVAL '5 minutes'
+          ),
+          "updated_at" = NOW()
+      WHERE "id" = ${jobId}::uuid
+        AND "processing_lease_token" = ${leaseToken}::uuid
+        AND "status" = ${ProductImportJobStatus.PROCESSING}::"ProductImportJobStatus"
+        AND "processing_lease_expires_at" > NOW()
+    `;
+    return updated === 1;
+  }
+
+  private async extendJobLeaseForExternalEffect(
+    jobId: string,
+    leaseToken: string,
+  ): Promise<void> {
+    this.throwIfJobLeaseLost(jobId, leaseToken);
+    const updated = await this.prisma.$executeRaw`
+      UPDATE "ProductImportJob"
+      SET "processing_lease_expires_at" = GREATEST(
+            "processing_lease_expires_at",
+            NOW() + INTERVAL '30 minutes'
+          ),
+          "updated_at" = NOW()
+      WHERE "id" = ${jobId}::uuid
+        AND "processing_lease_token" = ${leaseToken}::uuid
+        AND "status" = ${ProductImportJobStatus.PROCESSING}::"ProductImportJobStatus"
+        AND "processing_lease_expires_at" > NOW()
+    `;
+    if (updated !== 1) {
+      this.lostJobLeases.add(this.jobLeaseKey(jobId, leaseToken));
+      throw new ProductImportJobLeaseLostError();
+    }
+  }
+
+  private async assertJobLeaseOwned(
+    tx: Prisma.TransactionClient,
+    jobId: string,
+    leaseToken: string,
+  ): Promise<void> {
+    this.throwIfJobLeaseLost(jobId, leaseToken);
+    const owned = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id"
+      FROM "ProductImportJob"
+      WHERE "id" = ${jobId}::uuid
+        AND "processing_lease_token" = ${leaseToken}::uuid
+        AND "status" = ${ProductImportJobStatus.PROCESSING}::"ProductImportJobStatus"
+        AND "processing_lease_expires_at" > NOW()
+      FOR UPDATE
+    `;
+    if (owned.length !== 1) {
+      this.lostJobLeases.add(this.jobLeaseKey(jobId, leaseToken));
+      throw new ProductImportJobLeaseLostError();
+    }
+  }
+
+  private isJobLeaseLost(error: unknown): boolean {
+    return error instanceof ProductImportJobLeaseLostError;
+  }
+
+  private async releaseJobLease(
+    jobId: string,
+    leaseToken: string,
+  ): Promise<void> {
+    await this.prisma.$executeRaw`
+      UPDATE "ProductImportJob"
+      SET "processing_lease_token" = NULL,
+          "processing_lease_expires_at" = NULL,
+          "updated_at" = NOW()
+      WHERE "id" = ${jobId}::uuid
+        AND "processing_lease_token" = ${leaseToken}::uuid
+        AND "processing_lease_expires_at" > NOW()
+    `;
+  }
+
+  private async pauseIneligibleJob(
+    jobId: string,
+    leaseToken: string,
+  ): Promise<void> {
+    await this.prisma.$executeRaw`
+      UPDATE "ProductImportJob"
+      SET "status" = ${ProductImportJobStatus.PENDING}::"ProductImportJobStatus",
+          "error_message" = 'Job pausado: especialista-alvo inativo ou incompatível com o tipo do produto.',
+          "processing_lease_token" = NULL,
+          "processing_lease_expires_at" = NULL,
+          "updated_at" = NOW()
+      WHERE "id" = ${jobId}::uuid
+        AND "processing_lease_token" = ${leaseToken}::uuid
+        AND "processing_lease_expires_at" > NOW()
+    `;
+  }
+
+  private async processClaimedJob(jobId: string, leaseToken: string) {
     const job = await this.prisma.productImportJob.findUnique({
       where: { id: jobId },
       include: {
@@ -585,26 +898,42 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
     const executionContext = await this.getJobExecutionContext(job);
     if (!executionContext.specialistIsEligible) {
-      await this.prisma.productImportJob.update({
-        where: { id: jobId },
-        data: {
-          status: ProductImportJobStatus.PENDING,
-          error_message:
-            'Job pausado: especialista-alvo inativo ou incompatível com o tipo do produto.',
-        },
-      });
+      await this.pauseIneligibleJob(jobId, leaseToken);
       return;
     }
 
-    await this.prisma.productImportJob.update({
-      where: { id: jobId },
-      data: {
-        status: ProductImportJobStatus.PROCESSING,
-        started_at: job.started_at ?? new Date(),
-        error_message: null,
-      },
-    });
+    if (
+      executionContext.mode === 'SYNCHRONIZE' &&
+      executionContext.syncConfirmed
+    ) {
+      try {
+        await this.assertSynchronizationSnapshotCurrent(
+          job,
+          executionContext.syncPreviewSnapshot,
+        );
+      } catch (error) {
+        if (await this.jobHasPersistedEffects(job)) {
+          await this.markSynchronizationPartial(jobId, 0, leaseToken);
+        } else {
+          await this.markJobFailedUnlessTerminal(
+            jobId,
+            error?.message || 'Prévia de sincronização desatualizada',
+            leaseToken,
+          );
+        }
+        return;
+      }
+    }
 
+    let reactivatedCount = job.items.filter(
+      (item) =>
+        (item.status === ProductImportItemStatus.COMPLETED ||
+          item.status === ProductImportItemStatus.COMPLETED_WITH_WARNINGS) &&
+        Boolean(
+          (item.payload as unknown as ImportItemPayload).__productImportEffect
+            ?.reactivated,
+        ),
+    ).length;
     try {
       const seenProductIds = new Set<string>(
         job.items
@@ -612,17 +941,18 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
             (item) =>
               (item.status === ProductImportItemStatus.COMPLETED ||
                 item.status ===
-                  ProductImportItemStatus.COMPLETED_WITH_WARNINGS) &&
+                  ProductImportItemStatus.COMPLETED_WITH_WARNINGS ||
+                item.status === ProductImportItemStatus.PROCESSING) &&
               item.product_id,
           )
           .map((item) => item.product_id as string),
       );
-      let reactivatedCount = 0;
       let hasFailedItems = job.items.some(
         (item) => item.status === ProductImportItemStatus.FAILED,
       );
 
       for (const item of job.items) {
+        this.throwIfJobLeaseLost(jobId, leaseToken);
         if (
           item.status !== ProductImportItemStatus.PENDING &&
           item.status !== ProductImportItemStatus.PROCESSING
@@ -630,21 +960,21 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
 
-        await this.prisma.productImportJobItem.update({
-          where: { id: item.id },
-          data: {
-            status: ProductImportItemStatus.PROCESSING,
-            attempts: { increment: 1 },
-          },
-        });
-
         try {
-          const row = item.payload as unknown as ImportParsedRow;
-          const upsertResult = await this.upsertProductFromRow(
-            job.product_type,
-            row,
-            job.specialist_id,
-          );
+          const payload = item.payload as unknown as ImportItemPayload;
+          const checkpointedEffect = payload.__productImportEffect;
+          const upsertResult =
+            item.status === ProductImportItemStatus.PROCESSING &&
+            checkpointedEffect &&
+            item.product_id === checkpointedEffect.productId &&
+            item.action === checkpointedEffect.action
+              ? checkpointedEffect
+              : await this.checkpointProductUpsert(
+                  job,
+                  item,
+                  payload,
+                  leaseToken,
+                );
           seenProductIds.add(upsertResult.productId);
           if (upsertResult.reactivated) {
             reactivatedCount += 1;
@@ -655,11 +985,18 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
           if (folderUrl) {
             try {
+              await this.extendJobLeaseForExternalEffect(jobId, leaseToken);
               const folderImportResult =
                 await this.driveImportService.importImagesForProductFromFolder({
                   folder_url: folderUrl,
                   product_type: job.product_type,
                   product_id: upsertResult.productId,
+                  assert_active: () =>
+                    this.extendJobLeaseForExternalEffect(jobId, leaseToken),
+                  import_job_fence: {
+                    job_id: jobId,
+                    lease_token: leaseToken,
+                  },
                 });
 
               if (
@@ -669,36 +1006,33 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
                 warnings.push(...folderImportResult.warnings);
               }
             } catch (driveError: any) {
+              if (this.isJobLeaseLost(driveError)) throw driveError;
               warnings.push(
                 `Aviso: falha ao importar imagens da pasta — ${driveError?.message || 'erro desconhecido'}`,
               );
             }
           }
 
-          await this.prisma.productImportJobItem.update({
-            where: { id: item.id },
-            data: {
-              status:
-                warnings.length > 0
-                  ? ProductImportItemStatus.COMPLETED_WITH_WARNINGS
-                  : ProductImportItemStatus.COMPLETED,
-              product_id: upsertResult.productId,
-              action: upsertResult.action,
-              warnings: warnings.length > 0 ? warnings : undefined,
-              error_message: null,
-              processed_at: new Date(),
-            },
+          await this.updateImportItemWithLease(jobId, leaseToken, item.id, {
+            status:
+              warnings.length > 0
+                ? ProductImportItemStatus.COMPLETED_WITH_WARNINGS
+                : ProductImportItemStatus.COMPLETED,
+            product_id: upsertResult.productId,
+            action: upsertResult.action,
+            warnings: warnings.length > 0 ? warnings : undefined,
+            error_message: null,
+            processed_at: new Date(),
           });
         } catch (error) {
+          if (this.isJobLeaseLost(error)) throw error;
           hasFailedItems = true;
-          await this.prisma.productImportJobItem.update({
-            where: { id: item.id },
-            data: {
-              status: ProductImportItemStatus.FAILED,
-              error_message:
-                error?.message || 'Erro desconhecido no processamento da linha',
-              processed_at: new Date(),
-            },
+          await this.updateImportItemWithLease(jobId, leaseToken, item.id, {
+            status: ProductImportItemStatus.FAILED,
+            attempts: { increment: 1 },
+            error_message:
+              error?.message || 'Erro desconhecido no processamento da linha',
+            processed_at: new Date(),
           });
         }
       }
@@ -707,31 +1041,317 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         executionContext.mode === 'SYNCHRONIZE' &&
         executionContext.syncConfirmed &&
         !hasFailedItems;
-      const deactivatedIds = shouldSynchronize
-        ? await this.deactivateMissingProducts(
-            job.product_type,
-            job.specialist_id,
+      if (shouldSynchronize) {
+        await this.finalizeSynchronizedJob(
+          jobId,
+          {
+            productType: job.product_type,
+            specialistId: job.specialist_id,
             seenProductIds,
-            job.id,
-            executionContext.syncPreviewSnapshot,
-          )
-        : [];
-
-      await this.refreshJobCounters(jobId, {
-        deactivatedIds,
-        reactivatedCount,
-      });
+            snapshot: executionContext.syncPreviewSnapshot,
+          },
+          reactivatedCount,
+          leaseToken,
+        );
+      } else {
+        await this.finalizeUnsynchronizedJob(
+          jobId,
+          { deactivatedIds: [], reactivatedCount },
+          leaseToken,
+        );
+      }
     } catch (error) {
-      await this.prisma.productImportJob.update({
-        where: { id: jobId },
+      if (this.isJobLeaseLost(error)) return;
+      if (
+        executionContext.mode === 'SYNCHRONIZE' &&
+        (this.isSynchronizationPreviewStale(error) ||
+          this.isSerializationFailure(error))
+      ) {
+        await this.markSynchronizationPartial(
+          jobId,
+          reactivatedCount,
+          leaseToken,
+        );
+        return;
+      }
+      await this.markJobFailedUnlessTerminal(
+        jobId,
+        error?.message || 'Erro ao processar job de importação',
+        leaseToken,
+      );
+    }
+  }
+
+  private async checkpointProductUpsert(
+    job: { id: string; product_type: ProductType; specialist_id: string },
+    item: { id: string },
+    payload: ImportItemPayload,
+    leaseToken: string,
+  ): Promise<ProductImportEffect> {
+    return this.prisma.$transaction(async (tx) => {
+      await this.assertJobLeaseOwned(tx, job.id, leaseToken);
+      await tx.productImportJobItem.update({
+        where: { id: item.id },
         data: {
-          status: ProductImportJobStatus.FAILED,
+          status: ProductImportItemStatus.PROCESSING,
+          attempts: { increment: 1 },
+        },
+      });
+      const result = await this.upsertProductFromRow(
+        job.product_type,
+        payload,
+        job.specialist_id,
+        tx,
+      );
+      const version = await this.getProductVersion(
+        job.product_type,
+        result.productId,
+        tx,
+      );
+      const effect: ProductImportEffect = {
+        productId: result.productId,
+        action: result.action,
+        rowVersion: version.rowVersion,
+        updatedAt: version.updatedAt,
+        ...(result.reactivated !== undefined
+          ? { reactivated: result.reactivated }
+          : {}),
+      };
+      await tx.productImportJobItem.update({
+        where: { id: item.id },
+        data: {
+          status: ProductImportItemStatus.PROCESSING,
+          product_id: effect.productId,
+          action: effect.action,
+          payload: {
+            ...payload,
+            __productImportEffect: effect,
+          },
+          error_message: null,
+        },
+      });
+      return effect;
+    });
+  }
+
+  private async updateImportItemWithLease(
+    jobId: string,
+    leaseToken: string,
+    itemId: string,
+    data: Prisma.ProductImportJobItemUpdateInput,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await this.assertJobLeaseOwned(tx, jobId, leaseToken);
+      await tx.productImportJobItem.update({
+        where: { id: itemId },
+        data,
+      });
+    });
+  }
+
+  private async getProductVersion(
+    productType: ProductType,
+    productId: string,
+    client: Prisma.TransactionClient,
+  ): Promise<{ rowVersion: string; updatedAt: string }> {
+    type VersionRow = { rowVersion: string; updatedAt: Date };
+    const rows =
+      productType === ProductType.CAR
+        ? await client.$queryRaw<VersionRow[]>`
+            SELECT xmin::text AS "rowVersion", "updated_at" AS "updatedAt"
+            FROM "Car" WHERE "id" = ${productId}::uuid
+          `
+        : productType === ProductType.BOAT
+          ? await client.$queryRaw<VersionRow[]>`
+              SELECT xmin::text AS "rowVersion", "updated_at" AS "updatedAt"
+              FROM "Boat" WHERE "id" = ${productId}::uuid
+            `
+          : await client.$queryRaw<VersionRow[]>`
+              SELECT xmin::text AS "rowVersion", "updated_at" AS "updatedAt"
+              FROM "Aircraft" WHERE "id" = ${productId}::uuid
+            `;
+    if (rows.length !== 1) {
+      throw new NotFoundException('Produto importado não encontrado.');
+    }
+    return {
+      rowVersion: rows[0].rowVersion,
+      updatedAt: rows[0].updatedAt.toISOString(),
+    };
+  }
+
+  private async markJobFailedUnlessTerminal(
+    jobId: string,
+    message: string,
+    leaseToken: string,
+  ): Promise<void> {
+    await this.prisma.$executeRaw`
+      UPDATE "ProductImportJob"
+      SET "status" = ${ProductImportJobStatus.FAILED}::"ProductImportJobStatus",
+          "error_message" = ${message},
+          "finished_at" = NOW(),
+          "updated_at" = NOW()
+      WHERE "id" = ${jobId}::uuid
+        AND "status" = ${ProductImportJobStatus.PROCESSING}::"ProductImportJobStatus"
+        AND "processing_lease_token" = ${leaseToken}::uuid
+        AND "processing_lease_expires_at" > NOW()
+    `;
+  }
+
+  private async jobHasPersistedEffects(job: {
+    id: string;
+    product_type: ProductType;
+    specialist_id: string;
+    items: Array<{
+      status: ProductImportItemStatus;
+      product_id: string | null;
+      payload: unknown;
+    }>;
+  }): Promise<boolean> {
+    if (
+      job.items.some(
+        (item) =>
+          item.status === ProductImportItemStatus.COMPLETED ||
+          item.status === ProductImportItemStatus.COMPLETED_WITH_WARNINGS ||
+          (item.status === ProductImportItemStatus.PROCESSING &&
+            Boolean(item.product_id) &&
+            Boolean(
+              (item.payload as unknown as ImportItemPayload)
+                .__productImportEffect,
+            )),
+      )
+    ) {
+      return true;
+    }
+    const deactivatedIds = await this.getProductsDeactivatedByJob(
+      job.product_type,
+      job.specialist_id,
+      job.id,
+      this.prisma,
+    );
+    return deactivatedIds.length > 0;
+  }
+
+  private isSynchronizationPreviewStale(error: unknown): boolean {
+    if (!(error instanceof ConflictException)) return false;
+    const response = error.getResponse();
+    return (
+      typeof response === 'object' &&
+      response !== null &&
+      'code' in response &&
+      response.code === 'SYNCHRONIZE_PREVIEW_STALE'
+    );
+  }
+
+  private async markSynchronizationPartial(
+    jobId: string,
+    reactivatedCount: number,
+    leaseToken: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await this.assertJobLeaseOwned(tx, jobId, leaseToken);
+      const job = await tx.productImportJob.findUnique({
+        where: { id: jobId },
+        select: {
+          status: true,
+          product_type: true,
+          specialist_id: true,
+          reactivated_items: true,
+        },
+      });
+      if (
+        !job ||
+        job.status === ProductImportJobStatus.COMPLETED ||
+        job.status === ProductImportJobStatus.COMPLETED_WITH_ERRORS ||
+        job.status === ProductImportJobStatus.FAILED
+      ) {
+        return;
+      }
+      await tx.productImportJobItem.updateMany({
+        where: {
+          job_id: jobId,
+          status: ProductImportItemStatus.PROCESSING,
+          product_id: { not: null },
+        },
+        data: {
+          status: ProductImportItemStatus.COMPLETED_WITH_WARNINGS,
+          warnings: [
+            'O catálogo mudou após o checkpoint; confira a importação de imagens antes de gerar uma nova prévia.',
+          ],
+          processed_at: new Date(),
+        },
+      });
+      const items = await tx.productImportJobItem.findMany({
+        where: { job_id: jobId },
+        select: {
+          status: true,
+          action: true,
+          product_id: true,
+        },
+      });
+      const completed = items.filter(
+        (item) =>
+          item.status === ProductImportItemStatus.COMPLETED ||
+          item.status === ProductImportItemStatus.COMPLETED_WITH_WARNINGS ||
+          (item.status === ProductImportItemStatus.PROCESSING &&
+            Boolean(item.product_id)),
+      );
+      const changedProductIds = completed
+        .map((item) => item.product_id)
+        .filter((id): id is string => Boolean(id));
+      const insertedCount = completed.filter(
+        (item) => item.action === 'CREATED',
+      ).length;
+      const updatedCount = completed.filter(
+        (item) => item.action === 'UPDATED',
+      ).length;
+      const warningItems = completed.filter(
+        (item) =>
+          item.status === ProductImportItemStatus.COMPLETED_WITH_WARNINGS,
+      ).length;
+      const failedItems = items.filter(
+        (item) => item.status === ProductImportItemStatus.FAILED,
+      ).length;
+      const deactivatedIds = await this.getProductsDeactivatedByJob(
+        job.product_type,
+        job.specialist_id,
+        jobId,
+        tx,
+      );
+      const details = changedProductIds.length
+        ? ` Produtos alterados: ${changedProductIds.join(', ')}.`
+        : '';
+      await tx.productImportJob.updateMany({
+        where: {
+          id: jobId,
+          status: {
+            in: [
+              ProductImportJobStatus.PENDING,
+              ProductImportJobStatus.PROCESSING,
+            ],
+          },
+        },
+        data: {
+          status: ProductImportJobStatus.COMPLETED_WITH_ERRORS,
+          total_items: items.length,
+          processed_items: completed.length + failedItems,
+          success_items: completed.length,
+          warning_items: warningItems,
+          failed_items: failedItems,
+          deactivated_items: deactivatedIds.length,
+          deactivated_product_ids: deactivatedIds,
+          reactivated_items: Math.max(
+            reactivatedCount,
+            job.reactivated_items,
+          ),
           error_message:
-            error?.message || 'Erro ao processar job de importação',
+            `Importação parcial: ${insertedCount} inserido(s), ${updatedCount} atualizado(s). ` +
+            `O catálogo mudou durante o processamento; nenhuma nova desativação foi aplicada` +
+            `${deactivatedIds.length ? ` e ${deactivatedIds.length} desativação(ões) anterior(es) do job foi(ram) preservada(s)` : ''}. ` +
+            `Gere uma nova prévia.${details}`,
           finished_at: new Date(),
         },
       });
-    }
+    });
   }
 
   private async getJobExecutionContext(job: {
@@ -776,30 +1396,121 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     specialistId: string,
     rows: ImportParsedRow[],
     mode: ProductImportMode,
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
-    const activeProducts = await this.getActiveProductsByType(
+    const snapshot = await this.getSynchronizationCatalogSnapshot(
       productType,
       specialistId,
+      rows,
+      client,
     );
+    if (mode === 'SYNCHRONIZE') return snapshot.impact;
+    return { ...snapshot.impact, deactivationCandidates: 0 };
+  }
+
+  private deriveImportImpact(
+    activeItemsBefore: number,
+    matchingItems: number,
+    rows: ImportParsedRow[],
+    deactivationCandidates: number,
+  ): ImportImpact {
     const incomingIdentifiers = new Set(
       rows.map((row) => row.identificador?.trim()).filter(Boolean),
     );
-    const matching = activeProducts.filter((product) =>
-      incomingIdentifiers.has(product.identificador),
-    ).length;
-    const deactivationCandidates =
-      mode === 'SYNCHRONIZE'
-        ? activeProducts.filter(
-            (product) => !incomingIdentifiers.has(product.identificador),
-          ).length
-        : 0;
     return {
       incomingItems: rows.length,
-      activeItemsBefore: activeProducts.length,
-      matchingItems: matching,
-      newOrReactivatedItems: Math.max(0, incomingIdentifiers.size - matching),
+      activeItemsBefore,
+      matchingItems,
+      newOrReactivatedItems: Math.max(
+        0,
+        incomingIdentifiers.size - matchingItems,
+      ),
       deactivationCandidates,
     };
+  }
+
+  private async getCatalogProductsByType(
+    productType: ProductType,
+    specialistId: string,
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
+  ): Promise<CatalogProductSnapshot[]> {
+    type CatalogRow = {
+      id: string;
+      identificador: string;
+      isActive: boolean;
+      updatedAt: Date;
+      rowVersion: string;
+    };
+    const rawClient = client as PrismaService;
+    if (typeof rawClient.$queryRaw === 'function') {
+      const rows =
+        productType === ProductType.CAR
+          ? await rawClient.$queryRaw<CatalogRow[]>`
+              SELECT "id"::text AS "id", "identificador",
+                     COALESCE("is_active", true) AS "isActive",
+                     "updated_at" AS "updatedAt", xmin::text AS "rowVersion"
+              FROM "Car" WHERE "specialist_id" = ${specialistId}::uuid
+            `
+          : productType === ProductType.BOAT
+            ? await rawClient.$queryRaw<CatalogRow[]>`
+                SELECT "id"::text AS "id", "identificador",
+                       COALESCE("is_active", true) AS "isActive",
+                       "updated_at" AS "updatedAt", xmin::text AS "rowVersion"
+                FROM "Boat" WHERE "specialist_id" = ${specialistId}::uuid
+              `
+            : await rawClient.$queryRaw<CatalogRow[]>`
+                SELECT "id"::text AS "id", "identificador",
+                       COALESCE("is_active", true) AS "isActive",
+                       "updated_at" AS "updatedAt", xmin::text AS "rowVersion"
+                FROM "Aircraft" WHERE "specialist_id" = ${specialistId}::uuid
+              `;
+      return rows.map((product) => ({
+        id: product.id,
+        identificador: product.identificador,
+        isActive: product.isActive,
+        updatedAt: product.updatedAt.toISOString(),
+        rowVersion: product.rowVersion,
+      }));
+    }
+
+    // Doubles unitários simples não expõem query raw. Em execução real,
+    // a consulta única acima captura dados e xmin no mesmo snapshot.
+    const query = {
+      where: { specialist_id: specialistId },
+      select: {
+        id: true,
+        identificador: true,
+        is_active: true,
+        updated_at: true,
+      },
+    };
+    let products: Array<{
+      id: string;
+      identificador: string;
+      is_active: boolean;
+      updated_at: Date;
+    }>;
+    if (productType === ProductType.CAR) {
+      products = await (client as PrismaService).car.findMany(query);
+    } else if (productType === ProductType.BOAT) {
+      products = await (client as PrismaService).boat.findMany(query);
+    } else {
+      products = await (client as PrismaService).aircraft.findMany(query);
+    }
+    return products.map((product) => ({
+      id: product.id,
+      identificador: product.identificador,
+      isActive: product.is_active ?? true,
+      updatedAt:
+        product.updated_at instanceof Date
+          ? product.updated_at.toISOString()
+          : '1970-01-01T00:00:00.000Z',
+      rowVersion: `test-double:${product.id}:${
+        product.updated_at instanceof Date
+          ? product.updated_at.toISOString()
+          : 'unknown'
+      }`,
+    }));
   }
 
   private async getActiveProductsByType(
@@ -807,24 +1518,22 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     specialistId: string,
     client: PrismaService | Prisma.TransactionClient = this.prisma,
   ): Promise<Array<{ id: string; identificador: string }>> {
-    const query = {
-      where: { specialist_id: specialistId, is_active: true },
-      select: { id: true, identificador: true },
-    };
-    if (productType === ProductType.CAR) {
-      return (client as PrismaService).car.findMany(query);
-    }
-    if (productType === ProductType.BOAT) {
-      return (client as PrismaService).boat.findMany(query);
-    }
-    return (client as PrismaService).aircraft.findMany(query);
+    const products = await this.getCatalogProductsByType(
+      productType,
+      specialistId,
+      client,
+    );
+    return products
+      .filter((product) => product.isActive)
+      .map(({ id, identificador }) => ({ id, identificador }));
   }
 
   private async refreshJobCounters(
     jobId: string,
     syncSummary?: { deactivatedIds: string[]; reactivatedCount: number },
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
-    const items = await this.prisma.productImportJobItem.findMany({
+    const items = await (client as PrismaService).productImportJobItem.findMany({
       where: { job_id: jobId },
       select: {
         status: true,
@@ -862,7 +1571,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       finalStatus = ProductImportJobStatus.FAILED;
     }
 
-    await this.prisma.productImportJob.update({
+    await (client as PrismaService).productImportJob.update({
       where: { id: jobId },
       data: {
         status: finalStatus,
@@ -879,84 +1588,344 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  private async finalizeUnsynchronizedJob(
+    jobId: string,
+    syncSummary: { deactivatedIds: string[]; reactivatedCount: number },
+    leaseToken: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await this.assertJobLeaseOwned(tx, jobId, leaseToken);
+      await this.refreshJobCounters(jobId, syncSummary, tx);
+    });
+  }
+
+  private async finalizeSynchronizedJob(
+    jobId: string,
+    input: {
+      productType: ProductType;
+      specialistId: string;
+      seenProductIds: Set<string>;
+      snapshot: SynchronizePreviewSnapshot | null;
+    },
+    reactivatedCount: number,
+    leaseToken: string,
+  ): Promise<void> {
+    await this.runSerializableWithRetry(async (tx) => {
+      await this.assertJobLeaseOwned(tx, jobId, leaseToken);
+      await this.lockProductCatalogForSnapshot(tx, input.productType);
+      const items = await tx.productImportJobItem.findMany({
+        where: { job_id: jobId },
+        select: {
+          status: true,
+          action: true,
+          product_id: true,
+          payload: true,
+        },
+      });
+      await this.assertLogicalCatalogMatches(
+        input.productType,
+        input.specialistId,
+        jobId,
+        input.snapshot,
+        items,
+        tx,
+      );
+      const deactivatedIds = await this.deactivateMissingProducts(
+        input.productType,
+        input.specialistId,
+        input.seenProductIds,
+        jobId,
+        input.snapshot,
+        tx,
+      );
+      await this.refreshJobCounters(
+        jobId,
+        { deactivatedIds, reactivatedCount },
+        tx,
+      );
+    });
+  }
+
+  private async lockProductCatalogForSnapshot(
+    tx: Prisma.TransactionClient,
+    productType: ProductType,
+  ): Promise<void> {
+    if (productType === ProductType.CAR) {
+      await tx.$executeRaw`LOCK TABLE "Car" IN SHARE ROW EXCLUSIVE MODE`;
+    } else if (productType === ProductType.BOAT) {
+      await tx.$executeRaw`LOCK TABLE "Boat" IN SHARE ROW EXCLUSIVE MODE`;
+    } else {
+      await tx.$executeRaw`LOCK TABLE "Aircraft" IN SHARE ROW EXCLUSIVE MODE`;
+    }
+  }
+
+  private async assertSynchronizationSnapshotCurrent(
+    job: {
+      id: string;
+      product_type: ProductType;
+      specialist_id: string;
+      items: Array<{
+        payload: unknown;
+        status: ProductImportItemStatus;
+        action: string | null;
+        product_id: string | null;
+      }>;
+    },
+    snapshot: SynchronizePreviewSnapshot | null,
+  ): Promise<void> {
+    if (!snapshot) {
+      throw this.synchronizePreviewStale();
+    }
+    const incomingIdentifiers = new Set(
+      job.items
+        .map((item) => {
+          const row = item.payload as unknown as ImportParsedRow;
+          return row.identificador?.trim();
+        })
+        .filter(Boolean),
+    );
+    await this.runSerializableWithRetry(async (tx) => {
+      await this.assertLogicalCatalogMatches(
+        job.product_type,
+        job.specialist_id,
+        job.id,
+        snapshot,
+        job.items,
+        tx,
+      );
+      const activeProducts = await this.getActiveProductsByType(
+        job.product_type,
+        job.specialist_id,
+        tx,
+      );
+      const alreadyDeactivatedIds = await this.getProductsDeactivatedByJob(
+        job.product_type,
+        job.specialist_id,
+        job.id,
+        tx,
+      );
+      const currentCandidateIds = [
+        ...activeProducts
+          .filter(
+            (product) => !incomingIdentifiers.has(product.identificador),
+          )
+          .map((product) => product.id),
+        ...alreadyDeactivatedIds,
+      ].sort();
+      this.assertCandidateIdsMatch(
+        currentCandidateIds,
+        snapshot.candidateIds,
+      );
+    });
+  }
+
+  private async assertLogicalCatalogMatches(
+    productType: ProductType,
+    specialistId: string,
+    jobId: string,
+    snapshot: SynchronizePreviewSnapshot | null,
+    items: Array<{
+      status: ProductImportItemStatus;
+      action: string | null;
+      product_id: string | null;
+      payload: unknown;
+    }>,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    if (
+      !snapshot?.catalogDigest ||
+      !Array.isArray(snapshot.catalogProducts)
+    ) {
+      throw this.synchronizePreviewStale();
+    }
+    const currentCatalog = await this.getCatalogProductsByType(
+      productType,
+      specialistId,
+      tx,
+    );
+    const originals = new Map(
+      snapshot.catalogProducts.map((product) => [product.id, product]),
+    );
+    const checkpointedItems = items.filter(
+      (item) =>
+        item.status === ProductImportItemStatus.COMPLETED ||
+        item.status === ProductImportItemStatus.COMPLETED_WITH_WARNINGS ||
+        item.status === ProductImportItemStatus.PROCESSING,
+    );
+    const effects = new Map<string, ProductImportEffect>();
+    for (const item of checkpointedItems) {
+      const effect = (item.payload as unknown as ImportItemPayload)
+        .__productImportEffect;
+      if (
+        effect &&
+        item.product_id === effect.productId &&
+        item.action === effect.action
+      ) {
+        effects.set(effect.productId, effect);
+      }
+    }
+    const currentProducts = new Map(
+      currentCatalog.map((product) => [product.id, product]),
+    );
+    for (const effect of effects.values()) {
+      if (
+        effect.action === 'CREATED' &&
+        (!currentProducts.has(effect.productId) ||
+          currentProducts.get(effect.productId)?.rowVersion !==
+            effect.rowVersion)
+      ) {
+        // Produto criado pelo CSV removido/alterado depois do checkpoint não
+        // existia no snapshot original e, sem esta guarda, desapareceria do
+        // catálogo lógico sem invalidar a sincronização.
+        throw this.synchronizePreviewStale();
+      }
+    }
+    const alreadyDeactivatedIds = new Set(
+      await this.getProductsDeactivatedByJob(
+        productType,
+        specialistId,
+        jobId,
+        tx,
+      ),
+    );
+    const logicalCatalog: CatalogProductSnapshot[] = [];
+    for (const product of currentCatalog) {
+      const effect = effects.get(product.id);
+      const wasDeactivatedByJob = alreadyDeactivatedIds.has(product.id);
+      if (!effect && !wasDeactivatedByJob) {
+        logicalCatalog.push(product);
+        continue;
+      }
+      const original = originals.get(product.id);
+      if (wasDeactivatedByJob) {
+        if (original) logicalCatalog.push(original);
+      } else if (effect && product.rowVersion !== effect.rowVersion) {
+        // Mudança posterior ao checkpoint não pertence a este job.
+        logicalCatalog.push(product);
+      } else if (original) {
+        logicalCatalog.push(original);
+      } else if (effect?.action !== 'CREATED') {
+        // Um UPDATED desconhecido não pode ser atribuído ao job com segurança.
+        logicalCatalog.push(product);
+      }
+    }
+    if (this.catalogDigest(logicalCatalog) !== snapshot.catalogDigest) {
+      throw this.synchronizePreviewStale();
+    }
+  }
+
   private async deactivateMissingProducts(
     productType: ProductType,
     specialistId: string,
     seenProductIds: Set<string>,
     jobId: string,
     snapshot: SynchronizePreviewSnapshot | null,
+    tx: Prisma.TransactionClient,
   ): Promise<string[]> {
     if (!snapshot) {
       throw this.synchronizePreviewStale();
     }
-    return this.prisma.$transaction(
-      async (tx) => {
-        const activeProducts = await this.getActiveProductsByType(
-          productType,
-          specialistId,
-          tx,
-        );
-        const currentCandidateIds = activeProducts
-          .map((product) => product.id)
-          .filter((id) => !seenProductIds.has(id))
-          .sort();
-        const expectedCandidateIds = [...snapshot.candidateIds].sort();
-        if (
-          currentCandidateIds.length !== expectedCandidateIds.length ||
-          currentCandidateIds.some(
-            (id, index) => id !== expectedCandidateIds[index],
-          )
-        ) {
-          throw this.synchronizePreviewStale();
-        }
-        if (expectedCandidateIds.length === 0) {
-          return [];
-        }
-
-        for (const productId of expectedCandidateIds) {
-          await acquireProductMonetaryLock(tx, { productType, productId });
-        }
-
-        const data = {
-          is_active: false,
-          deactivated_at: new Date(),
-          deactivated_by_sync_job_id: jobId,
-        };
-
-        if (productType === ProductType.CAR) {
-          await tx.car.updateMany({
-            where: {
-              id: { in: expectedCandidateIds },
-              specialist_id: specialistId,
-              is_active: true,
-            },
-            data,
-          });
-        } else if (productType === ProductType.BOAT) {
-          await tx.boat.updateMany({
-            where: {
-              id: { in: expectedCandidateIds },
-              specialist_id: specialistId,
-              is_active: true,
-            },
-            data,
-          });
-        } else {
-          await tx.aircraft.updateMany({
-            where: {
-              id: { in: expectedCandidateIds },
-              specialist_id: specialistId,
-              is_active: true,
-            },
-            data,
-          });
-        }
-        return expectedCandidateIds;
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      },
+    const activeProducts = await this.getActiveProductsByType(
+      productType,
+      specialistId,
+      tx,
     );
+    const alreadyDeactivatedIds = await this.getProductsDeactivatedByJob(
+      productType,
+      specialistId,
+      jobId,
+      tx,
+    );
+    const currentCandidateIds = [
+      ...activeProducts
+        .map((product) => product.id)
+        .filter((id) => !seenProductIds.has(id)),
+      ...alreadyDeactivatedIds,
+    ].sort();
+    const expectedCandidateIds = [...snapshot.candidateIds].sort();
+    this.assertCandidateIdsMatch(currentCandidateIds, expectedCandidateIds);
+    if (expectedCandidateIds.length === 0) {
+      return [];
+    }
+
+    const data = {
+      is_active: false,
+      deactivated_at: new Date(),
+      deactivated_by_sync_job_id: jobId,
+    };
+
+    if (productType === ProductType.CAR) {
+      await tx.car.updateMany({
+        where: {
+          id: { in: expectedCandidateIds },
+          specialist_id: specialistId,
+          is_active: true,
+        },
+        data,
+      });
+    } else if (productType === ProductType.BOAT) {
+      await tx.boat.updateMany({
+        where: {
+          id: { in: expectedCandidateIds },
+          specialist_id: specialistId,
+          is_active: true,
+        },
+        data,
+      });
+    } else {
+      await tx.aircraft.updateMany({
+        where: {
+          id: { in: expectedCandidateIds },
+          specialist_id: specialistId,
+          is_active: true,
+        },
+        data,
+      });
+    }
+    return expectedCandidateIds;
+  }
+
+  private async getProductsDeactivatedByJob(
+    productType: ProductType,
+    specialistId: string,
+    jobId: string,
+    client: PrismaService | Prisma.TransactionClient,
+  ): Promise<string[]> {
+    const query = {
+      where: {
+        specialist_id: specialistId,
+        is_active: false,
+        deactivated_by_sync_job_id: jobId,
+      },
+      select: { id: true },
+    };
+    if (productType === ProductType.CAR) {
+      return (await (client as PrismaService).car.findMany(query)).map(
+        ({ id }) => id,
+      );
+    }
+    if (productType === ProductType.BOAT) {
+      return (await (client as PrismaService).boat.findMany(query)).map(
+        ({ id }) => id,
+      );
+    }
+    return (await (client as PrismaService).aircraft.findMany(query)).map(
+      ({ id }) => id,
+    );
+  }
+
+  private assertCandidateIdsMatch(
+    currentCandidateIds: string[],
+    expectedCandidateIds: string[],
+  ): void {
+    const current = [...currentCandidateIds].sort();
+    const expected = [...expectedCandidateIds].sort();
+    if (
+      current.length !== expected.length ||
+      current.some((id, index) => id !== expected[index])
+    ) {
+      throw this.synchronizePreviewStale();
+    }
   }
 
   private synchronizePreviewStale(): ConflictException {
@@ -998,6 +1967,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     productType: ProductType,
     row: ImportParsedRow,
     specialistId: string,
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
   ): Promise<UpsertResult> {
     row = this.normalizeProductRow(row);
     this.validateRequiredProductFields(row);
@@ -1031,7 +2001,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
       await this.validatePayload(data, CreateCarDto);
 
-      const existing = await this.prisma.car.findFirst({
+      const existing = await (client as PrismaService).car.findFirst({
         where: {
           specialist_id: specialistId,
           identificador,
@@ -1041,7 +2011,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       if (existing) {
         const { specialist_id: _specialistId, ...updateData } = data;
         const reactivated = !existing.is_active;
-        await updateProductWithMonetaryLock(this.prisma, {
+        const updated = (await updateProductWithMonetaryLock(client, {
           productType: ProductType.CAR,
           productId: existing.id,
           nextValue: data.valor,
@@ -1052,13 +2022,22 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
             deactivated_at: null,
             deactivated_by_sync_job_id: null,
           },
-        });
+        })) as { updated_at?: Date };
 
-        return { productId: existing.id, action: 'UPDATED', reactivated };
+        return {
+          productId: existing.id,
+          action: 'UPDATED',
+          reactivated,
+          updatedAt: updated.updated_at?.toISOString(),
+        };
       }
 
-      const created = await this.prisma.car.create({ data });
-      return { productId: created.id, action: 'CREATED' };
+      const created = await (client as PrismaService).car.create({ data });
+      return {
+        productId: created.id,
+        action: 'CREATED',
+        updatedAt: created.updated_at?.toISOString(),
+      };
     }
 
     if (productType === ProductType.BOAT) {
@@ -1086,7 +2065,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
       await this.validatePayload(data, CreateBoatDto);
 
-      const existing = await this.prisma.boat.findFirst({
+      const existing = await (client as PrismaService).boat.findFirst({
         where: {
           specialist_id: specialistId,
           identificador,
@@ -1096,7 +2075,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       if (existing) {
         const { specialist_id: _specialistId, ...updateData } = data;
         const reactivated = !existing.is_active;
-        await updateProductWithMonetaryLock(this.prisma, {
+        const updated = (await updateProductWithMonetaryLock(client, {
           productType: ProductType.BOAT,
           productId: existing.id,
           nextValue: data.valor,
@@ -1107,13 +2086,22 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
             deactivated_at: null,
             deactivated_by_sync_job_id: null,
           },
-        });
+        })) as { updated_at?: Date };
 
-        return { productId: existing.id, action: 'UPDATED', reactivated };
+        return {
+          productId: existing.id,
+          action: 'UPDATED',
+          reactivated,
+          updatedAt: updated.updated_at?.toISOString(),
+        };
       }
 
-      const created = await this.prisma.boat.create({ data });
-      return { productId: created.id, action: 'CREATED' };
+      const created = await (client as PrismaService).boat.create({ data });
+      return {
+        productId: created.id,
+        action: 'CREATED',
+        updatedAt: created.updated_at?.toISOString(),
+      };
     }
 
     const data = {
@@ -1135,7 +2123,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
     await this.validatePayload(data, CreateAircraftDto);
 
-    const existing = await this.prisma.aircraft.findFirst({
+    const existing = await (client as PrismaService).aircraft.findFirst({
       where: {
         specialist_id: specialistId,
         identificador,
@@ -1145,7 +2133,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     if (existing) {
       const { specialist_id: _specialistId, ...updateData } = data;
       const reactivated = !existing.is_active;
-      await updateProductWithMonetaryLock(this.prisma, {
+      const updated = (await updateProductWithMonetaryLock(client, {
         productType: ProductType.AIRCRAFT,
         productId: existing.id,
         nextValue: data.valor,
@@ -1156,13 +2144,22 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
           deactivated_at: null,
           deactivated_by_sync_job_id: null,
         },
-      });
+      })) as { updated_at?: Date };
 
-      return { productId: existing.id, action: 'UPDATED', reactivated };
+      return {
+        productId: existing.id,
+        action: 'UPDATED',
+        reactivated,
+        updatedAt: updated.updated_at?.toISOString(),
+      };
     }
 
-    const created = await this.prisma.aircraft.create({ data });
-    return { productId: created.id, action: 'CREATED' };
+    const created = await (client as PrismaService).aircraft.create({ data });
+    return {
+      productId: created.id,
+      action: 'CREATED',
+      updatedAt: created.updated_at?.toISOString(),
+    };
   }
 
   private normalizeProductRow(row: ImportParsedRow): ImportParsedRow {
@@ -1172,6 +2169,22 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         return [key, value === '-' ? '' : value];
       }),
     );
+  }
+
+  private validateUniqueIdentifiers(rows: ImportParsedRow[]): void {
+    const seen = new Set<string>();
+    const duplicates = new Set<string>();
+    for (const row of rows) {
+      const identifier = row.identificador?.trim();
+      if (!identifier) continue;
+      if (seen.has(identifier)) duplicates.add(identifier);
+      seen.add(identifier);
+    }
+    if (duplicates.size > 0) {
+      throw new BadRequestException(
+        `O CSV contém identificadores duplicados: ${[...duplicates].join(', ')}.`,
+      );
+    }
   }
 
   private validateRequiredProductFields(row: ImportParsedRow): void {

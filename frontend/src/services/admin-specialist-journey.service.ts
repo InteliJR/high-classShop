@@ -61,11 +61,11 @@ export type CsvImportPreview = {
   requiresExplicitConfirmation: boolean;
   synchronizePreviewToken?: string;
   impact: {
-    csvRows: number;
-    existingProducts: number;
-    wouldCreate: number;
-    wouldUpdate: number;
-    wouldDeactivate: number;
+    incomingItems: number;
+    activeItemsBefore: number;
+    matchingItems: number;
+    newOrReactivatedItems: number;
+    deactivationCandidates: number;
   };
 };
 

@@ -36,6 +36,7 @@ import { ActorContextService } from 'src/shared/actor-context/actor-context.serv
 import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
 import { ProductCsvImportDto } from '../product-import-jobs/dto/product-csv-import.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { randomUUID } from 'node:crypto';
 
 @Controller('boats')
 export class BoatsController {
@@ -59,19 +60,32 @@ export class BoatsController {
       ProductType.BOAT,
     );
     createBoatDto.specialist_id = context.specialistId;
-    return this.prisma.$transaction(async (tx) => {
-      const boat = await this.boatsService.create(createBoatDto, tx);
-      await this.delegatedAudit.record(
-        {
-          context,
-          action: 'PRODUCT_CREATE',
-          resourceType: 'BOAT',
-          resourceId: boat.id,
-        },
-        tx,
-      );
-      return boat;
-    });
+    const productId = randomUUID();
+    const preparedImages = await this.boatsService.prepareProductImages(
+      productId,
+      createBoatDto.images,
+    );
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const boat = await this.boatsService.create(createBoatDto, tx, {
+          productId,
+          images: preparedImages,
+        });
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'PRODUCT_CREATE',
+            resourceType: 'BOAT',
+            resourceId: boat.id,
+          },
+          tx,
+        );
+        return boat;
+      });
+    } catch (error) {
+      await this.boatsService.cleanupPreparedImages(preparedImages);
+      throw error;
+    }
   }
 
   @Post('import-csv/preview')
@@ -262,19 +276,30 @@ export class BoatsController {
       context,
       existing?.specialist_id,
     );
-    return this.prisma.$transaction(async (tx) => {
-      const boat = await this.boatsService.update(id, updateBoatDto, tx);
-      await this.delegatedAudit.record(
-        {
-          context,
-          action: 'PRODUCT_UPDATE',
-          resourceType: 'BOAT',
-          resourceId: id,
-        },
-        tx,
-      );
-      return boat;
-    });
+    const preparedImages = await this.boatsService.prepareProductImages(
+      id,
+      updateBoatDto.images,
+    );
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const boat = await this.boatsService.update(id, updateBoatDto, tx, {
+          images: preparedImages,
+        });
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'PRODUCT_UPDATE',
+            resourceType: 'BOAT',
+            resourceId: id,
+          },
+          tx,
+        );
+        return boat;
+      });
+    } catch (error) {
+      await this.boatsService.cleanupPreparedImages(preparedImages);
+      throw error;
+    }
   }
 
   @Delete(':id')

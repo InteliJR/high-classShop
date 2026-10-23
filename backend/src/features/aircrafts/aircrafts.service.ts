@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import {
+  HttpException,
+  Injectable,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { CreateAircraftDto } from './dto/create-aircraft.dto';
 import { UpdateAircraftDto } from './dto/update-aircraft.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -14,6 +19,13 @@ import { Prisma, ProductType } from '@prisma/client';
 import { AIRCRAFT_COLUMNS } from 'src/shared/constants/product-columns';
 import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 import { publicAircraftSelect } from 'src/shared/selects/public-catalog.select';
+import { randomUUID } from 'node:crypto';
+import {
+  cleanupPreparedProductImages,
+  prepareProductImages,
+  PreparedProductImage,
+  ProductImageInput,
+} from '../products/product-image-preparation';
 
 @Injectable()
 export class AircraftsService {
@@ -27,12 +39,34 @@ export class AircraftsService {
     private s3Service: S3Service,
   ) {}
 
+  prepareProductImages(productId: string, images?: ProductImageInput[]) {
+    return prepareProductImages(
+      this.s3Service,
+      'aircrafts',
+      productId,
+      images,
+    );
+  }
+
+  cleanupPreparedImages(images: PreparedProductImage[]) {
+    return cleanupPreparedProductImages(this.s3Service, images);
+  }
+
   async create(
     createAircraftDto: CreateAircraftDto,
     client: PrismaService | Prisma.TransactionClient = this.prismaService,
+    preparedWrite?: {
+      productId: string;
+      images: PreparedProductImage[];
+    },
   ) {
     this.logger.log('[create] Iniciando criação de nova aeronave');
     const { specialist_id, images, ...aircraftData } = createAircraftDto;
+    const productId = preparedWrite?.productId ?? randomUUID();
+    const ownsPreparedImages = !preparedWrite;
+    const preparedImages =
+      preparedWrite?.images ??
+      (await this.prepareProductImages(productId, images));
 
     const payload: Prisma.AircraftUncheckedCreateInput = {
       categoria: aircraftData.categoria,
@@ -47,6 +81,7 @@ export class AircraftsService {
       currency: aircraftData.currency,
       tipo_aeronave: aircraftData.tipo_aeronave,
       specialist_id: specialist_id ?? null,
+      id: productId,
     };
 
     try {
@@ -61,37 +96,23 @@ export class AircraftsService {
         `[create] Aeronave criada com sucesso - ID: ${aircraft.id}`,
       );
 
-      // 2. Processar e fazer upload das imagens, se existirem
-      if (images && images.length > 0) {
+      // 2. Persistir somente referências já preparadas fora da transação
+      if (preparedImages.length > 0) {
         this.logger.log(
-          `[create] Processando ${images.length} imagens para a aeronave ${aircraft.id}`,
+          `[create] Persistindo ${preparedImages.length} imagens para a aeronave ${aircraft.id}`,
         );
-        for (let i = 0; i < images.length; i++) {
-          const image = images[i];
-
-          const timestamp = Date.now();
-          const key = `aircrafts/${aircraft.id}/${timestamp}-${i}.jpg`;
-
-          this.logger.debug(
-            `[create] Fazendo upload da imagem ${i + 1}/${images.length} para S3`,
-          );
-          const imageKey = await this.s3Service.uploadBase64Image(
-            image.data,
-            key,
-          );
-
+        for (const image of preparedImages) {
           await client.aircraft_image.create({
             data: {
               aircraft_id: aircraft.id,
-              image_url: imageKey,
+              image_url: image.image_url,
               is_primary: image.is_primary,
               product_type: 'AIRCRAFT',
             },
           });
-          this.logger.debug(`[create] Imagem ${i + 1} salva com sucesso`);
         }
         this.logger.log(
-          `[create] Todas as ${images.length} imagens processadas com sucesso`,
+          `[create] Todas as ${preparedImages.length} imagens persistidas com sucesso`,
         );
       }
 
@@ -108,7 +129,13 @@ export class AircraftsService {
       );
       return aircraftWithImages;
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (ownsPreparedImages) {
+        await this.cleanupPreparedImages(preparedImages);
+      }
+      if (
+        error instanceof HttpException ||
+        error instanceof Prisma.PrismaClientKnownRequestError
+      ) {
         throw error;
       }
       this.logger.error(
@@ -265,8 +292,12 @@ export class AircraftsService {
     id: string,
     updateAircraftDto: UpdateAircraftDto,
     client: PrismaService | Prisma.TransactionClient = this.prismaService,
+    preparedWrite?: { images: PreparedProductImage[] },
   ) {
     const { specialist_id, images, ...aircraftData } = updateAircraftDto;
+    const ownsPreparedImages = !preparedWrite;
+    const preparedImages =
+      preparedWrite?.images ?? (await this.prepareProductImages(id, images));
     const payload: Prisma.AircraftUncheckedUpdateInput = {};
 
     if (aircraftData.categoria !== undefined) {
@@ -306,16 +337,16 @@ export class AircraftsService {
       payload.specialist_id = specialist_id ?? null;
     }
 
-    await updateProductWithMonetaryLock(client, {
-      productType: ProductType.AIRCRAFT,
-      productId: id,
-      nextValue: updateAircraftDto.valor,
-      nextCurrency: updateAircraftDto.currency,
-      data: payload,
-      notFoundMessage: 'Aircraft not found',
-    });
-
     try {
+      await updateProductWithMonetaryLock(client, {
+        productType: ProductType.AIRCRAFT,
+        productId: id,
+        nextValue: updateAircraftDto.valor,
+        nextCurrency: updateAircraftDto.currency,
+        data: payload,
+        notFoundMessage: 'Aircraft not found',
+      });
+
       // 1. Se houver novas imagens, processar
       if (images && images.length > 0) {
         // Remover imagens antigas
@@ -323,22 +354,12 @@ export class AircraftsService {
           where: { aircraft_id: id },
         });
 
-        // Adicionar novas imagens
-        for (let i = 0; i < images.length; i++) {
-          const image = images[i];
-
-          const timestamp = Date.now();
-          const key = `aircrafts/${id}/${timestamp}-${i}.jpg`;
-
-          const imageKey = await this.s3Service.uploadBase64Image(
-            image.data,
-            key,
-          );
-
+        // Adicionar referências das imagens já preparadas
+        for (const image of preparedImages) {
           await client.aircraft_image.create({
             data: {
               aircraft_id: id,
-              image_url: imageKey,
+              image_url: image.image_url,
               is_primary: image.is_primary,
               product_type: 'AIRCRAFT',
             },
@@ -352,7 +373,13 @@ export class AircraftsService {
         include: { images: true },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (ownsPreparedImages) {
+        await this.cleanupPreparedImages(preparedImages);
+      }
+      if (
+        error instanceof HttpException ||
+        error instanceof Prisma.PrismaClientKnownRequestError
+      ) {
         throw error;
       }
       throw new Error(`Erro ao atualizar aeronave: ${error.message}`);

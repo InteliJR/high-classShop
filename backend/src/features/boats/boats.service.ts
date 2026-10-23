@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import {
+  HttpException,
+  Injectable,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { Prisma, ProductType } from '@prisma/client';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
@@ -14,6 +19,13 @@ import {
 import { BOAT_COLUMNS } from 'src/shared/constants/product-columns';
 import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 import { publicBoatSelect } from 'src/shared/selects/public-catalog.select';
+import { randomUUID } from 'node:crypto';
+import {
+  cleanupPreparedProductImages,
+  prepareProductImages,
+  PreparedProductImage,
+  ProductImageInput,
+} from '../products/product-image-preparation';
 
 @Injectable()
 export class BoatsService {
@@ -27,52 +39,57 @@ export class BoatsService {
     private s3Service: S3Service,
   ) {}
 
+  prepareProductImages(productId: string, images?: ProductImageInput[]) {
+    return prepareProductImages(this.s3Service, 'boats', productId, images);
+  }
+
+  cleanupPreparedImages(images: PreparedProductImage[]) {
+    return cleanupPreparedProductImages(this.s3Service, images);
+  }
+
   async create(
     createBoatDto: CreateBoatDto,
     client: PrismaService | Prisma.TransactionClient = this.prismaService,
+    preparedWrite?: {
+      productId: string;
+      images: PreparedProductImage[];
+    },
   ) {
     this.logger.log('[create] Iniciando criação de novo barco');
     const { images, ...boatData } = createBoatDto;
+    const productId = preparedWrite?.productId ?? randomUUID();
+    const ownsPreparedImages = !preparedWrite;
+    const preparedImages =
+      preparedWrite?.images ??
+      (await this.prepareProductImages(productId, images));
 
     try {
       // 1. Criar o barco
       this.logger.debug(
         `[create] Criando barco: ${boatData.marca} ${boatData.modelo}`,
       );
-      const boat = await client.boat.create({ data: boatData });
+      const boat = await client.boat.create({
+        data: { ...boatData, id: productId },
+      });
       this.logger.log(`[create] Barco criado com sucesso - ID: ${boat.id}`);
 
-      // 2. Processar e fazer upload das imagens, se existirem
-      if (images && images.length > 0) {
+      // 2. Persistir somente referências já preparadas fora da transação
+      if (preparedImages.length > 0) {
         this.logger.log(
-          `[create] Processando ${images.length} imagens para o barco ${boat.id}`,
+          `[create] Persistindo ${preparedImages.length} imagens para o barco ${boat.id}`,
         );
-        for (let i = 0; i < images.length; i++) {
-          const image = images[i];
-
-          const timestamp = Date.now();
-          const key = `boats/${boat.id}/${timestamp}-${i}.jpg`;
-
-          this.logger.debug(
-            `[create] Fazendo upload da imagem ${i + 1}/${images.length} para S3`,
-          );
-          const imageKey = await this.s3Service.uploadBase64Image(
-            image.data,
-            key,
-          );
-
+        for (const image of preparedImages) {
           await client.boat_image.create({
             data: {
               boat_id: boat.id,
-              image_url: imageKey,
+              image_url: image.image_url,
               is_primary: image.is_primary,
               product_type: 'BOAT',
             },
           });
-          this.logger.debug(`[create] Imagem ${i + 1} salva com sucesso`);
         }
         this.logger.log(
-          `[create] Todas as ${images.length} imagens processadas com sucesso`,
+          `[create] Todas as ${preparedImages.length} imagens persistidas com sucesso`,
         );
       }
 
@@ -89,7 +106,13 @@ export class BoatsService {
       );
       return boatWithImages;
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (ownsPreparedImages) {
+        await this.cleanupPreparedImages(preparedImages);
+      }
+      if (
+        error instanceof HttpException ||
+        error instanceof Prisma.PrismaClientKnownRequestError
+      ) {
         throw error;
       }
       this.logger.error(
@@ -238,19 +261,23 @@ export class BoatsService {
     id: string,
     updateBoatDto: UpdateBoatDto,
     client: PrismaService | Prisma.TransactionClient = this.prismaService,
+    preparedWrite?: { images: PreparedProductImage[] },
   ) {
     const { images, ...boatData } = updateBoatDto;
-
-    await updateProductWithMonetaryLock(client, {
-      productType: ProductType.BOAT,
-      productId: id,
-      nextValue: updateBoatDto.valor,
-      nextCurrency: updateBoatDto.currency,
-      data: boatData,
-      notFoundMessage: 'Boat not found',
-    });
+    const ownsPreparedImages = !preparedWrite;
+    const preparedImages =
+      preparedWrite?.images ?? (await this.prepareProductImages(id, images));
 
     try {
+      await updateProductWithMonetaryLock(client, {
+        productType: ProductType.BOAT,
+        productId: id,
+        nextValue: updateBoatDto.valor,
+        nextCurrency: updateBoatDto.currency,
+        data: boatData,
+        notFoundMessage: 'Boat not found',
+      });
+
       // 1. Se houver novas imagens, processar
       if (images && images.length > 0) {
         // Remover imagens antigas
@@ -258,22 +285,12 @@ export class BoatsService {
           where: { boat_id: id },
         });
 
-        // Adicionar novas imagens
-        for (let i = 0; i < images.length; i++) {
-          const image = images[i];
-
-          const timestamp = Date.now();
-          const key = `boats/${id}/${timestamp}-${i}.jpg`;
-
-          const imageKey = await this.s3Service.uploadBase64Image(
-            image.data,
-            key,
-          );
-
+        // Adicionar referências das imagens já preparadas
+        for (const image of preparedImages) {
           await client.boat_image.create({
             data: {
               boat_id: id,
-              image_url: imageKey,
+              image_url: image.image_url,
               is_primary: image.is_primary,
               product_type: 'BOAT',
             },
@@ -287,7 +304,13 @@ export class BoatsService {
         include: { images: true },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (ownsPreparedImages) {
+        await this.cleanupPreparedImages(preparedImages);
+      }
+      if (
+        error instanceof HttpException ||
+        error instanceof Prisma.PrismaClientKnownRequestError
+      ) {
         throw error;
       }
       throw new Error(`Erro ao atualizar lancha: ${error.message}`);

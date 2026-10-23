@@ -9,6 +9,8 @@ function mkController() {
       specialist_id: 'spec-1',
     }),
     update: jest.fn().mockResolvedValue({ id: 'car-1' }),
+    prepareProductImages: jest.fn().mockResolvedValue([]),
+    cleanupPreparedImages: jest.fn().mockResolvedValue(undefined),
   } as any;
   const productImportJobsService = {
     createJobFromCsv: jest.fn().mockResolvedValue({ id: 'job-1' }),
@@ -61,7 +63,11 @@ describe('CarsController — Calendly opcional', () => {
       id: 'car-1',
     });
     expect(dto.specialist_id).toBe(specialist.id);
-    expect(carsService.create).toHaveBeenCalledWith(dto, tx);
+    expect(carsService.create).toHaveBeenCalledWith(
+      dto,
+      tx,
+      expect.objectContaining({ productId: expect.any(String), images: [] }),
+    );
   });
 
   it('mantém ADMIN como ator e grava o SPECIALIST selecionado como owner', async () => {
@@ -79,6 +85,7 @@ describe('CarsController — Calendly opcional', () => {
     expect(carsService.create).toHaveBeenCalledWith(
       expect.objectContaining({ specialist_id: 'spec-1' }),
       tx,
+      expect.objectContaining({ productId: expect.any(String), images: [] }),
     );
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -102,8 +109,61 @@ describe('CarsController — Calendly opcional', () => {
     expect(carsService.create).toHaveBeenCalledWith(
       expect.objectContaining({ specialist_id: specialist.id }),
       tx,
+      expect.objectContaining({ productId: expect.any(String), images: [] }),
     );
     expect(audit.record).toHaveBeenCalledWith(expect.any(Object), tx);
+  });
+
+  it('aguarda upload fora da transação e compensa se a auditoria falhar', async () => {
+    const { controller, carsService, audit, prisma } = mkController();
+    const prepared = [{ image_url: 'cars/new-key.jpg', is_primary: true }];
+    let finishUpload!: (images: typeof prepared) => void;
+    carsService.prepareProductImages.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishUpload = resolve;
+      }),
+    );
+    audit.record.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const operation = controller.create(
+      { images: [{ data: 'base64', is_primary: true }] } as any,
+      specialist,
+    );
+    const rejection = expect(operation).rejects.toThrow('audit unavailable');
+    await Promise.resolve();
+
+    expect(carsService.prepareProductImages).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    finishUpload(prepared);
+    await rejection;
+    expect(carsService.cleanupPreparedImages).toHaveBeenCalledWith(prepared);
+  });
+
+  it('também prepara PATCH fora da transação e compensa falha de auditoria', async () => {
+    const { controller, carsService, audit, prisma } = mkController();
+    const prepared = [{ image_url: 'cars/patch-key.jpg', is_primary: true }];
+    let finishUpload!: (images: typeof prepared) => void;
+    carsService.prepareProductImages.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishUpload = resolve;
+      }),
+    );
+    audit.record.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const operation = controller.update(
+      'car-1',
+      { images: [{ data: 'base64', is_primary: true }] } as any,
+      specialist,
+    );
+    const rejection = expect(operation).rejects.toThrow('audit unavailable');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(carsService.prepareProductImages).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    finishUpload(prepared);
+    await rejection;
+    expect(carsService.cleanupPreparedImages).toHaveBeenCalledWith(prepared);
   });
 
   it('não permite remover o owner com specialist_id null no PATCH', async () => {

@@ -172,7 +172,7 @@ export default function SpecialistJourneyProductsPage() {
         {preview && (
           <div className="mt-4 rounded-lg border border-border bg-bg p-4 text-sm">
             <p>
-              {preview.impact.csvRows} linhas · {preview.impact.wouldCreate} criações · {preview.impact.wouldUpdate} atualizações · <strong>{preview.impact.wouldDeactivate} desativações</strong>
+              {preview.impact.incomingItems} linhas · {preview.impact.newOrReactivatedItems} criações/reativações · {preview.impact.matchingItems} atualizações · <strong>{preview.impact.deactivationCandidates} desativações</strong>
             </p>
             {mode === "SYNCHRONIZE" && (
               <label className="mt-3 flex items-start gap-2 text-ink">
