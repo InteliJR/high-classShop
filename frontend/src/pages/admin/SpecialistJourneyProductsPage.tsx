@@ -126,7 +126,7 @@ export default function SpecialistJourneyProductsPage() {
         <div>
           <h2 className="text-2xl font-semibold text-ink">Catálogo administrativo</h2>
           <p className="text-sm text-ink-soft">
-            Itens ativos e inativos de {context.specialist.name}; dono imutável após a criação.
+            Itens ativos e inativos de {context.specialist.name} {context.specialist.surname}; dono imutável após a criação.
           </p>
         </div>
         <Button onClick={() => navigate("/admin/journey/products/new")}>
