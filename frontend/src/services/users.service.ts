@@ -21,7 +21,7 @@ export interface UpdateUserData {
   cpf?: string;
   rg?: string;
   phone?: string;
-  calendly_url?: string;
+  calendly_url?: string | null;
 }
 
 export interface ApiResponse<T> {

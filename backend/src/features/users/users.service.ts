@@ -2,11 +2,13 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { GetUsersDto } from './dto/get-users.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponse } from './entity/user.response';
+import { UserRole } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
@@ -171,6 +173,15 @@ export class UsersService {
 
     if (!existingUser) {
       throw new NotFoundException(`Usuário com id ${userId} não encontrado`);
+    }
+
+    if (
+      updateUserDto.calendly_url != null &&
+      existingUser.role !== UserRole.SPECIALIST
+    ) {
+      throw new ForbiddenException(
+        'Somente especialistas podem definir uma URL do Calendly',
+      );
     }
 
     // Verificar CPF duplicado (se estiver sendo atualizado)

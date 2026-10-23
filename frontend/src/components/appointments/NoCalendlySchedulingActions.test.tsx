@@ -1,88 +1,33 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import NoCalendlySchedulingActions from "./NoCalendlySchedulingActions";
 
+afterEach(cleanup);
+
 describe("NoCalendlySchedulingActions", () => {
-  const writeText = vi.fn();
-
-  beforeEach(() => {
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
-    writeText.mockResolvedValue(undefined);
-  });
-
-  afterEach(() => {
-    cleanup();
-    vi.clearAllMocks();
-  });
-
-  it("offers both scheduling paths and a permanent email fallback", async () => {
-    const onEmail = vi.fn();
-    const onChooseDateTime = vi.fn();
-    render(
-      <NoCalendlySchedulingActions
-        specialistEmail="especialista@example.com"
-        onEmail={onEmail}
-        onChooseDateTime={onChooseDateTime}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Enviar e-mail" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Escolher data e hora" }),
-    );
-
-    expect(onEmail).toHaveBeenCalledOnce();
-    expect(onChooseDateTime).toHaveBeenCalledOnce();
-    expect(
-      screen.getByRole("link", { name: "especialista@example.com" }),
-    ).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Copiar e-mail" }));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith("especialista@example.com");
-    });
-    expect(await screen.findByText("E-mail copiado")).toBeTruthy();
-  });
-
-  it("disables both actions while a request is running", () => {
-    render(
-      <NoCalendlySchedulingActions
-        specialistEmail="especialista@example.com"
-        onEmail={vi.fn()}
-        onChooseDateTime={vi.fn()}
-        busy
-      />,
-    );
-
-    expect(
-      (screen.getByRole("button", { name: "Enviar e-mail" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-    expect(
-      (screen.getByRole("button", {
-        name: "Escolher data e hora",
-      }) as HTMLButtonElement).disabled,
-    ).toBe(true);
-  });
-
-  it("can preserve only the copyable email after creating the request", () => {
-    render(
-      <NoCalendlySchedulingActions
-        specialistEmail="especialista@example.com"
-        onEmail={vi.fn()}
-        onChooseDateTime={vi.fn()}
-        showActions={false}
-      />,
-    );
-
+  it("offers one request action and explains that the chosen time is a proposal", () => {
+    const onRequest = vi.fn();
+    render(<NoCalendlySchedulingActions onRequest={onRequest} />);
+    fireEvent.click(screen.getByRole("button", { name: "Solicitar reunião" }));
+    expect(onRequest).toHaveBeenCalledOnce();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByText(/confirmação do especialista/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Enviar e-mail" })).toBeNull();
     expect(
-      screen.getByRole("link", { name: "especialista@example.com" }),
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: "Escolher data e hora" }),
+    ).toBeNull();
+  });
+
+  it("disables the request action while busy", () => {
+    const onRequest = vi.fn();
+    render(<NoCalendlySchedulingActions onRequest={onRequest} busy />);
+    const button = screen.getByRole("button", {
+      name: "Solicitar reunião",
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(onRequest).not.toHaveBeenCalled();
   });
 });

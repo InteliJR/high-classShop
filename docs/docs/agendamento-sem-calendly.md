@@ -3,344 +3,104 @@ sidebar_position: 6
 title: Agendamento sem Calendly
 ---
 
-# Agendamento sem Calendly — especificação de design
+# Agendamento sem Calendly por e-mail
 
-**Data:** 14 de setembro de 2026  
-**Status:** aprovado para planejamento  
-**Escopo:** cadastro de produtos e início de negociação quando o especialista não possui Calendly conectado
+Sem Calendly ativo, o cliente usa **Solicitar reunião**, propõe uma data e hora futura e registra um pedido pendente. O especialista atribuído pode confirmar a sugestão ou **Alterar e confirmar**. A confirmação reserva o horário; o processo continua em `SCHEDULING` para permitir a reunião.
 
-## 1. Objetivo
+Conectar Calendly é opcional e não bloqueia cadastro, edição ou publicação de produtos. A capacidade `calendly_scheduling_available` vem do backend: exige uma URL HTTPS do domínio Calendly e uma conexão OAuth ativa. Uma URL residual, sozinha, não ativa esse caminho.
 
-Permitir que especialistas operem normalmente sem uma conta Calendly e oferecer ao cliente duas formas simples de iniciar uma negociação:
+## Fluxo do cliente
 
-1. entrar em contato livremente por e-mail e combinar o horário fora da plataforma; ou
-2. escolher uma data e hora diretamente na plataforma.
+1. Entre como cliente, abra o produto e escolha **Solicitar reunião**.
+2. Informe a data e hora futura no modal. A interface mostra o fuso local; a API recebe e armazena um instante UTC em ISO 8601.
+3. Após a criação, a página mostra o sucesso e tenta abrir o aplicativo padrão de e-mail com destinatário, assunto e corpo sugeridos. O pedido já está salvo como `PENDING/EMAIL`, com o horário proposto, junto ao processo `SCHEDULING`.
+4. Use os fallbacks **Abrir aplicativo de e-mail**, **Abrir no Gmail**, **Copiar e-mail** ou **Acompanhar processo**. Eles continuam disponíveis após recarregar ou revisitar o produto enquanto o próprio pedido está pendente.
 
-O Calendly continua disponível como conveniência, mas deixa de ser requisito para cadastrar produtos ou receber solicitações.
+A abertura automática ocorre no máximo uma vez por pedido recém-criado. Reload, revisita e recuperação de duplicidade restauram o painel sem repetir essa tentativa. Falha do navegador, ausência de aplicativo padrão ou indisponibilidade do clipboard não desfazem o pedido; o endereço permanece visível e selecionável.
 
-## 2. Estado atual e problemas encontrados
+O assunto e o corpo são editáveis no compositor externo. A plataforma não captura nem persiste essas edições e não comprova que um e-mail foi enviado. Um `mailto:` ou link Gmail válido demonstra apenas que a composição foi preparada. Uma falha na criação não abre o compositor.
 
-O sistema já possui boa parte da infraestrutura necessária:
+## Fluxo do especialista
 
-- `Appointment` registra data, participantes e estado do agendamento;
-- `Process` representa o processo comercial e nasce em `SCHEDULING`;
-- o backend já valida conflitos de horário e consegue criar `Appointment` e `Process` atomicamente;
-- a página de produto já possui um fallback que cria uma solicitação pendente e abre um `mailto:`;
-- a área de processos já possui a sala de reunião interna e ações para iniciar e entrar em uma reunião;
-- existe um modal global dispensável que incentiva o especialista a conectar o Calendly.
+No processo pendente por e-mail, o especialista atribuído vê a proposta, o e-mail do cliente e seu telefone, quando preenchido. Um número brasileiro normalizável também produz um atalho WhatsApp. Telefone ausente não produz ação; telefone inválido permanece como texto, sem link incorreto.
 
-Entretanto, o comportamento atual não atende integralmente ao objetivo:
+- **Confirmar horário** envia o instante proposto ao endpoint canônico do processo.
+- **Alterar e confirmar** abre o seletor com a proposta existente e envia o horário escolhido. Sem edição efetiva, o instante ISO original é preservado.
 
-- `ProductFormPage` substitui o formulário por um bloqueio quando o especialista não tem Calendly;
-- o modal global afirma que a negociação fica bloqueada sem Calendly;
-- o cliente sem Calendly só recebe a opção de e-mail;
-- não existe interface ativa para o cliente escolher uma data e hora na plataforma;
-- no fluxo de e-mail, a confirmação do especialista não exige o horário combinado;
-- não existe controle explícito da única alteração de horário permitida ao especialista;
-- o endpoint direto de agendamento precisa garantir que o usuário autenticado seja o próprio cliente informado.
+Ambas as ações resultam em `Appointment=SCHEDULED` e `Process=SCHEDULING`. A primeira definição ou alteração antes da confirmação não consome a remarcação posterior: `specialist_rescheduled_at` e `specialist_rescheduled_from` continuam nulos. As notas preservam a proposta e o horário confirmado. O cliente passa a ver o horário efetivo, e os controles da reunião continuam disponíveis no processo.
 
-## 3. Decisões de produto
+Pedidos `PENDING/EMAIL` são propostas e não ocupam a agenda. A confirmação valida o conflito novamente sob trava de agenda. Se houver `409`, o especialista pode escolher outro horário no modal, que conserva a mensagem do erro. Dupla submissão do mesmo horário confirmado não cria registros ou histórico adicionais.
 
-- Conectar o Calendly é opcional.
-- A ausência ou indisponibilidade do Calendly nunca bloqueia criação, edição ou publicação de produtos.
-- Um especialista com Calendly mantém o fluxo atual de agendamento.
-- Um cliente que escolhe um produto de especialista sem Calendly pode optar por e-mail ou agendamento interno.
-- Um horário escolhido pelo cliente na plataforma é confirmado imediatamente.
-- No fluxo por e-mail, somente o especialista registra o horário acordado.
-- Registrar o primeiro horário após a conversa por e-mail não conta como alteração.
-- Depois que um horário está confirmado, o especialista pode alterá-lo uma única vez.
-- A alteração feita pelo especialista é definitiva e não depende de aprovação do cliente.
-- O MVP não restringe tecnicamente o início da sala a uma janela exata ao redor do horário; o horário é exibido e o especialista inicia a sala quando chega o momento.
+A remarcação de um compromisso já confirmado continua sendo uma ação separada, permitida uma vez ao especialista responsável. Ela preenche os dois campos de auditoria. A reunião e o avanço comercial seguem o fluxo existente.
 
-## 4. Abordagem escolhida
+## Contratos e privacidade
 
-A implementação evoluirá o fluxo atual, reutilizando `Appointment`, `Process`, as validações de agenda e a sala interna.
+| Operação | Contrato |
+|---|---|
+| `POST /api/appointments/pending` | Cliente autenticado cria para si, com `scheduling_method=EMAIL`, produto/especialista e `appointment_datetime` futura. Retorna o appointment e o `process_id` criados atomicamente. |
+| `GET /api/appointments/check` | Somente `CUSTOMER`; aceita `specialist_id`, `product_type` e `product_id`. A identidade vem do JWT; enviar `client_id` na query é inválido. |
+| `POST /api/processes/:id/confirm-appointment` | Somente o especialista atribuído; aceita o horário sugerido ou outro futuro, confirma sob lock e mantém `SCHEDULING`. |
+| `GET /api/specialists/:id/public-profile` | ID, nome comercial, especialidade, e-mail comercial, URL Calendly e booleano de capacidade. Não inclui documentos, telefone pessoal ou dados OAuth. |
+| `GET/PATCH /api/users/:id` | Perfil privado: somente o próprio usuário ou `ADMIN`. Apenas especialista pode definir uma URL Calendly; `null` remove a URL. |
 
-Não será criado um calendário completo de disponibilidade. Essa alternativa exigiria regras de jornada, recorrência, bloqueios e fuso horário que não são necessárias para o primeiro lançamento.
+A consulta do próprio pedido retorna somente `{ exists: false }` ou `{ exists: true, appointment_id, process_id, appointment_status, scheduling_method, appointment_datetime }`, sem nomes ou contatos. Um pedido ativo duplicado responde `409/ACTIVE_PROCESS_EXISTS` com `error.details.existing_request` nesse mesmo formato mínimo, sem o discriminante `exists`. Outros conflitos não expõem IDs ou contatos do compromisso concorrente.
 
-Também não haverá uma etapa de aprovação da sugestão do cliente: no agendamento interno, a seleção já cria um horário confirmado.
+Os contatos do cliente aparecem na lista e no detalhe somente para o especialista atribuído ao pedido `PENDING/EMAIL` em `SCHEDULING` e continuam disponíveis para ele após a confirmação. Outros especialistas não podem listar ou abrir esse processo. As projeções de cliente não recebem os contatos privados nesse estado. O e-mail comercial do especialista é intencionalmente público para permitir a composição da mensagem.
 
-## 5. Modelo de dados
+O backend recusa a criação direta `SCHEDULED/PLATFORM` por `POST /api/appointments` nesse cenário. O caminho com Calendly ativo continua usando `CALENDLY` e não aceita horário enviado pelo cliente: o instante é resolvido na API autenticada do Calendly e, enquanto ela não retornar um horário válido, o pedido permanece `PENDING` sem reservar agenda para que o webhook assinado possa completá-lo. Se `CALENDLY_WEBHOOK_CALLBACK_URL` for configurada, `CALENDLY_WEBHOOK_SIGNING_KEY` é obrigatória; callbacks sem assinatura válida e fresca são rejeitados. A consultoria sem produto conserva o pedido `PENDING/EMAIL` sem data e exige sua definição na confirmação. Registros legados sem proposta continuam legíveis. `pending_expires_at` é metadado: não existe expiração automática nesta entrega.
 
-### 5.1 Origem do agendamento
+## Validação local repetível
 
-Adicionar ao Prisma:
+Use PostgreSQL local e o banco dedicado `bmfluxdb_email_scheduling_e2e`, com as migrations existentes aplicadas. A URL deve ser explícita, usar loopback (`localhost`, `127.0.0.1` ou `::1`) e nome de banco terminado em `email_scheduling_e2e`. O seed não carrega `.env` nem usa `DATABASE_URL` como fallback.
 
-```prisma
-enum AppointmentSchedulingMethod {
-  CALENDLY
-  EMAIL
-  PLATFORM
-}
+Configure as variáveis na sessão local, sem salvar ou publicar credenciais:
+
+- `EMAIL_SCHEDULING_E2E_DATABASE_URL`;
+- `EMAIL_SCHEDULING_E2E_CUSTOMER_EMAIL` e `EMAIL_SCHEDULING_E2E_CUSTOMER_PASSWORD`;
+- `EMAIL_SCHEDULING_E2E_SPECIALIST_EMAIL` e `EMAIL_SCHEDULING_E2E_SPECIALIST_PASSWORD`;
+- `EMAIL_SCHEDULING_E2E_OUTSIDER_EMAIL` e `EMAIL_SCHEDULING_E2E_OUTSIDER_PASSWORD`;
+- `JWT_SECRET_ACCESS`, `JWT_SECRET_REFRESH`, `JWT_SECRET_REFERRAL` e `JWT_SECRET_ADVISOR` para o HTTP E2E; `JWT_SECRET_PASSWORD_RESET` pode ser dedicado ou usar o fallback existente.
+
+Os três e-mails devem ser distintos e terminar em `.test`, domínio reservado para testes. As senhas exigem pelo menos seis caracteres e são armazenadas com bcrypt (custo 10). O seed não imprime URL, e-mails, senhas ou hashes.
+
+```sh
+rtk docker compose up -d db
+rtk docker compose exec -T db pg_isready -U user -d bmfluxdb
+# Crie o banco dedicado antes de aplicar as migrations.
+rtk env DATABASE_URL="$EMAIL_SCHEDULING_E2E_DATABASE_URL" DIRECT_URL="$EMAIL_SCHEDULING_E2E_DATABASE_URL" npm --prefix backend exec -- prisma migrate deploy
+rtk npm --prefix backend run seed:email-scheduling-e2e
+rtk node -e 'if (!process.env.EMAIL_SCHEDULING_E2E_DATABASE_URL) process.exit(1)'
+rtk npm --prefix backend run test:e2e -- --runInBand --runTestsByPath test/email-scheduling.e2e-spec.ts --json --outputFile=/tmp/email-scheduling-http-e2e.json
+rtk node -e 'const r=require("/tmp/email-scheduling-http-e2e.json");if(!r.success||r.numPendingTests!==0)process.exit(1)'
 ```
 
-Adicionar a `Appointment`:
+O seed cria ou atualiza três usuários sintéticos e dois carros ativos atribuídos ao especialista sem Calendly. Os IDs-base são fixos:
 
-```prisma
-scheduling_method             AppointmentSchedulingMethod?
-specialist_rescheduled_at     DateTime?
-specialist_rescheduled_from   DateTime?
-```
+| Fixture | UUID no namespace de navegador |
+|---|---|
+| Cliente | `c848f474-6492-4ac1-8a7d-000000000001` |
+| Especialista atribuído | `c848f474-6492-4ac1-8a7d-000000000002` |
+| Especialista não atribuído | `c848f474-6492-4ac1-8a7d-000000000003` |
+| Produto A | `c848f474-6492-4ac1-8a7d-000000000101` |
+| Produto B | `c848f474-6492-4ac1-8a7d-000000000102` |
 
-`scheduling_method` será opcional para permitir uma migração aditiva sem classificar incorretamente registros históricos. Todos os novos agendamentos devem preenchê-lo explicitamente.
+O HTTP E2E usa outro prefixo, `8c26e2a3-fd13-447a-9b6c`, e deriva aliases `local+http@dominio.test` dos e-mails da sessão. Assim ele não limpa pedidos feitos com o seed de navegador. Ele inicializa o `AppModule` real, autentica as três identidades pelo login e usa guards, validação, serializer e prefixo reais. Somente fronteiras externas (SES/S3/DocuSign), recuperação de jobs e o timer de rate limit são neutralizados; autenticação, autorização, transações e persistência não são simuladas. No ambiente Jest desse E2E, a fronteira `isomorphic-dompurify`/SVG é substituída por um stub *fail-closed*: qualquer chamada ao sanitizador falha imediatamente. Portanto, o HTTP E2E não comprova a sanitização; a implementação de produção e os testes próprios do sanitizador continuam usando a dependência real. Sem a URL explícita, o grupo HTTP é pulado; o gate dedicado exige zero testes pulados.
 
-`specialist_rescheduled_at` funciona como a trava da única alteração. `specialist_rescheduled_from` preserva o horário anterior para auditoria.
+O teste cobre criação pendente, identidade derivada do JWT, IDOR de GET/PATCH, bypass direto, contato autorizado na lista/detalhe, duplicidade, conflito sem PII, confirmação alterada e inalterada, idempotência e estados/cardinalidade no banco. O seed também é executado duas vezes pelo teste para comprovar a idempotência dos IDs-base.
 
-Não é necessário um contador: campo vazio significa que a alteração ainda está disponível; campo preenchido significa que ela já foi consumida.
+A limpeza resolve os IDs gerados de appointments/processes apenas a partir dos usuários/produtos determinísticos e valida ambos os participantes, método e vínculos antes de excluir qualquer registro. Histórico, processo e appointment são apagados nessa ordem dentro de uma transação; tokens são limitados aos usuários da fixture. Contrato, proposta, reunião, `Product` ou vínculo inesperado interrompem o reset integralmente. Usuários e carros são atualizados por ID; nunca são truncados ou apagados. Rodar novamente o seed reinicia somente os pedidos desse namespace.
 
-### 5.2 Estados
+## Checklist de navegador e gates
 
-| Método | Criação | Quando passa a `SCHEDULED` | Processo |
-|---|---|---|---|
-| `CALENDLY` | `PENDING` | após sincronização/confirmação atual | permanece com o comportamento existente |
-| `EMAIL` | `PENDING`, sem horário | quando o especialista registra o horário acordado | permanece em `SCHEDULING` até a reunião |
-| `PLATFORM` | `SCHEDULED`, com horário | na própria criação | nasce em `SCHEDULING` |
+Inicie backend e frontend do source atual, apontando ambos para o banco dedicado. No backend, use `NOTIFICATIONS_ENABLED=false` para evitar entrega de notificações; no frontend, `VITE_API_BASE_URL=http://localhost:3000/api`. Use contextos independentes para cliente, especialista atribuído e usuário não atribuído.
 
-Confirmar um horário não significa concluir a reunião nem iniciar a negociação financeira. O processo continua em `SCHEDULING` enquanto a conversa ainda não aconteceu.
+1. No produto A, crie a proposta futura e capture status/payload do POST e do check. Inspecione destinatário, assunto e corpo dos links `mailto:`/Gmail sem afirmar envio externo.
+2. Recarregue e revisite o produto: os fallbacks persistem e não ocorre outra tentativa automática de abrir e-mail.
+3. Como especialista atribuído, veja proposta, e-mail, telefone e WhatsApp; altere e confirme. Confirme `SCHEDULED`, processo `SCHEDULING` e controles da reunião.
+4. Repita no produto B confirmando a sugestão sem alteração.
+5. Como não atribuído, tente ler o processo/lista, confirmar e acessar/editar o perfil privado do cliente: as operações retornam `403`, sem contatos e sem alterações.
+6. Repita o caminho crítico em viewport móvel e por teclado, observando foco, labels, anúncio de sucesso/erro e retorno de foco do modal.
 
-## 6. Fluxos
+Após cada confirmação, consulte o banco em modo somente leitura usando os IDs-base acima e os IDs retornados pelo POST. Exija exatamente um appointment e um processo por produto, vínculo recíproco correto, `appointment_datetime` efetiva, `SCHEDULED/SCHEDULING` e ambos os campos de remarcação nulos. A aparência do navegador sozinha não comprova essas condições.
 
-### 6.1 Especialista sem Calendly
-
-1. O especialista entra na área autenticada.
-2. A plataforma consulta o estado da conexão Calendly.
-3. Se não houver conexão ativa, exibe um modal informativo.
-4. O especialista pode escolher `Conectar agora` ou `Continuar sem Calendly`.
-5. Ao dispensar o modal, continua usando todas as funcionalidades, inclusive cadastro de produtos.
-6. O modal não volta durante a mesma sessão do navegador.
-
-Falha na consulta do Calendly não bloqueia nenhuma tela. O formulário de produto deve ser renderizado independentemente do resultado dessa consulta.
-
-### 6.2 Cliente escolhe contato por e-mail
-
-1. Na página do produto, o cliente seleciona `Enviar e-mail`.
-2. A plataforma cria `Appointment(PENDING, EMAIL)` e o `Process(SCHEDULING)` associado na mesma transação.
-3. A plataforma abre um `mailto:` com destinatário, assunto e texto sugeridos, todos editáveis no cliente de e-mail.
-4. A página redireciona para `Meus Processos` e informa que o horário será definido após o contato.
-5. O especialista combina o horário com o cliente fora da plataforma.
-6. No card do processo, o especialista escolhe `Definir data e hora`.
-7. O backend valida e grava o horário, muda o agendamento para `SCHEDULED` e mantém o processo em `SCHEDULING`.
-8. O cliente recebe uma notificação e passa a ver o horário no processo.
-
-Se o navegador não conseguir abrir o cliente de e-mail, a solicitação continua criada. A interface deve exibir o endereço do especialista com uma ação de copiar.
-
-### 6.3 Cliente escolhe data e hora na plataforma
-
-1. Na página do produto, o cliente seleciona `Escolher data e hora`.
-2. Um modal simples exibe um campo `datetime-local`, o fuso local do navegador e o botão `Confirmar agendamento`.
-3. O frontend converte o valor local para ISO 8601 UTC.
-4. O backend valida o usuário, o produto, o horário futuro, conflito de agenda e processo ativo duplicado.
-5. A transação cria `Appointment(SCHEDULED, PLATFORM)` e `Process(SCHEDULING)`.
-6. O cliente é redirecionado para `Meus Processos` com o horário confirmado.
-7. O especialista é notificado sobre o novo agendamento.
-
-O cliente não escolhe a duração no MVP. Será usada a mesma janela de conflito de uma hora já adotada pelo backend.
-
-### 6.4 Alteração única pelo especialista
-
-1. Um agendamento `SCHEDULED` com horário e `specialist_rescheduled_at` vazio exibe `Alterar horário` somente ao especialista responsável.
-2. O especialista escolhe um novo horário futuro.
-3. A interface avisa que essa será a única alteração e pede confirmação explícita.
-4. O backend trava a agenda do especialista, revalida conflito excluindo o próprio agendamento e atualiza atomicamente:
-   - `specialist_rescheduled_from` com o horário vigente;
-   - `appointment_datetime` com o novo horário;
-   - `specialist_rescheduled_at` com o instante da operação.
-5. O novo horário passa a valer imediatamente.
-6. O cliente é notificado e a ação desaparece para o especialista.
-
-Uma segunda tentativa retorna `409 Conflict` com mensagem de que a alteração definitiva já foi utilizada.
-
-### 6.5 Reunião interna
-
-1. Enquanto o processo está em `SCHEDULING` e o agendamento está `SCHEDULED`, ambos veem o horário confirmado.
-2. Ao chegar o momento, o especialista usa `Iniciar reunião`.
-3. O cliente passa a ver `Entrar na reunião` assim que a sessão existir.
-4. O encerramento da conversa segue o fluxo atual de avanço para negociação.
-
-## 7. Backend e contratos HTTP
-
-### 7.1 Criação direta
-
-Manter `POST /appointments` como operação de agendamento interno e endurecer suas regras:
-
-- aceitar somente usuário autenticado com papel `CUSTOMER`;
-- exigir `req.user.id === client_id`;
-- exigir `appointment_datetime` para esse fluxo;
-- definir `scheduling_method = PLATFORM` no servidor;
-- criar agendamento e processo na mesma transação;
-- manter o processo em `SCHEDULING`.
-
-O cliente não poderá enviar outro `scheduling_method` nesse endpoint.
-
-### 7.2 Solicitação por e-mail
-
-`POST /appointments/pending` passa a aceitar `scheduling_method` apenas com os valores `EMAIL` ou `CALENDLY`. As chamadas da página de produto devem enviar o valor de forma explícita.
-
-Para reduzir risco de compatibilidade, chamadas antigas sem o campo continuam sendo tratadas como `CALENDLY` no serviço, mas o banco não aplica um default retroativo.
-
-### 7.3 Definição inicial pelo especialista
-
-Evoluir `POST /processes/:id/confirm-appointment` para aceitar:
-
-```json
-{
-  "appointment_datetime": "2026-09-20T17:00:00.000Z"
-}
-```
-
-Para `EMAIL`, a data é obrigatória. A operação:
-
-- exige que o solicitante seja o especialista do processo;
-- exige processo em `SCHEDULING` e agendamento em `PENDING`;
-- valida data futura e conflito sob a trava já existente;
-- muda o agendamento para `SCHEDULED`;
-- não preenche os campos de reagendamento;
-- não avança o processo para `NEGOTIATION`.
-
-### 7.4 Reagendamento definitivo
-
-Adicionar `PATCH /appointments/:id/reschedule`:
-
-```json
-{
-  "appointment_datetime": "2026-09-21T19:00:00.000Z"
-}
-```
-
-Regras:
-
-- somente o especialista responsável;
-- agendamento em `SCHEDULED`;
-- horário atual existente;
-- `specialist_rescheduled_at` ainda vazio;
-- novo horário futuro e diferente do atual;
-- ausência de conflito com outro agendamento do especialista;
-- atualização atômica e protegida contra duas alterações concorrentes.
-
-## 8. Frontend
-
-### 8.1 `RequireCalendlyModal`
-
-- Trocar o texto que afirma haver bloqueio.
-- Usar `Continuar sem Calendly` no lugar de `Lembrar mais tarde`.
-- Manter o comportamento dispensável por sessão.
-
-### 8.2 `ProductFormPage`
-
-- Remover o gate de Calendly.
-- Não esperar a consulta da conexão para renderizar o formulário.
-- O modal global continua responsável por recomendar a conexão.
-
-### 8.3 `ProductPage`
-
-- Manter o popup atual quando existe URL Calendly.
-- Sem URL, apresentar duas ações claras:
-  - `Enviar e-mail`;
-  - `Escolher data e hora`.
-- Reutilizar um modal de agendamento enxuto para o segundo caminho.
-- Manter o tratamento de duplicidade e o redirecionamento para processos.
-
-### 8.4 `ProcessCard`
-
-- Para `EMAIL + PENDING`, substituir a confirmação sem horário por `Definir data e hora`.
-- Para `SCHEDULED`, exibir o horário aos dois participantes.
-- Exibir `Alterar horário` ao especialista apenas quando a alteração ainda estiver disponível.
-- Após o reagendamento, exibir `Horário alterado definitivamente`.
-- Manter o início da sala exclusivamente com o especialista; o cliente entra depois que a sessão é criada.
-
-## 9. Erros e mensagens
-
-| Situação | Resposta | Comportamento da interface |
-|---|---|---|
-| Horário passado | `400` | manter modal aberto e explicar que deve ser futuro |
-| Conflito de agenda | `409` | manter modal aberto e pedir outro horário |
-| Processo ativo duplicado | `409` | direcionar para o processo existente |
-| Cliente agendando por outro usuário | `403` | negar sem criar registros |
-| Usuário que não é o especialista tentando definir/alterar | `403` | negar sem alterar registros |
-| Segunda alteração do especialista | `409` | informar que a alteração definitiva já foi usada |
-| Falha no envio da notificação | operação continua | registrar erro; não reverter agendamento |
-| Falha ao consultar Calendly | nenhuma restrição | manter produtos e alternativas disponíveis |
-| Falha ao abrir `mailto:` | solicitação continua | mostrar e-mail copiável e link para processos |
-
-## 10. Notificações
-
-As notificações continuam assíncronas e não críticas, seguindo o padrão existente do `NotificationService`.
-
-- Agendamento interno criado: avisar o especialista com cliente, produto e horário.
-- Horário do fluxo por e-mail definido: avisar o cliente.
-- Horário alterado definitivamente: avisar o cliente, mostrando horário anterior e novo.
-
-Não será implementada resposta por e-mail, convite de calendário ou confirmação adicional no MVP.
-
-## 11. Segurança e concorrência
-
-- Toda decisão de autorização ocorre no backend; o frontend apenas oculta ações indisponíveis.
-- O agendamento direto verifica a identidade do cliente autenticado.
-- Definição e alteração do horário verificam o especialista vinculado ao processo/agendamento.
-- A validação de produto continua exigindo produto ativo, do tipo correto e pertencente ao especialista.
-- A trava de agenda do especialista é adquirida antes de verificar conflitos e escrever.
-- A alteração única usa atualização condicional com `specialist_rescheduled_at: null`; duas requisições concorrentes não podem consumir a alteração duas vezes.
-- Criação de `Appointment`, `Process` e histórico permanece atômica.
-
-## 12. Estratégia de testes
-
-### Frontend
-
-- `ProductFormPage` renderiza e envia o formulário mesmo sem Calendly.
-- O modal Calendly é dispensável e comunica que a integração é opcional.
-- `ProductPage` mantém Calendly quando conectado e mostra as duas alternativas quando desconectado.
-- O modal interno converte corretamente a data local para UTC.
-- O fluxo de e-mail cria solicitação antes de abrir `mailto:` e oferece fallback copiável.
-- `ProcessCard` exige data na confirmação por e-mail.
-- A ação de alterar horário aparece uma vez e desaparece após sucesso.
-
-### Backend
-
-- Cliente só agenda para si mesmo.
-- Agendamento interno exige horário futuro e nasce `SCHEDULED/PLATFORM`.
-- Solicitação por e-mail nasce `PENDING/EMAIL` sem horário.
-- Apenas o especialista registra o primeiro horário do fluxo por e-mail.
-- Definição inicial mantém o processo em `SCHEDULING` e não consome reagendamento.
-- Primeira alteração grava horário anterior e instante da alteração.
-- Segunda alteração retorna conflito.
-- Requisições concorrentes permitem apenas uma alteração.
-- Conflito de agenda, produto incorreto e processo duplicado continuam bloqueados.
-- Falha ao criar o processo reverte o agendamento.
-- Falha de notificação não reverte alterações confirmadas.
-- Testes existentes do Calendly continuam passando.
-
-### Verificação integrada
-
-Validar manualmente com dois usuários, cliente e especialista sem Calendly:
-
-1. cadastrar um produto;
-2. iniciar uma solicitação por e-mail e registrar o horário pelo especialista;
-3. criar outro agendamento escolhendo o horário na plataforma;
-4. alterar uma vez e confirmar que a segunda alteração é bloqueada;
-5. iniciar e acessar a sala pelos dois participantes.
-
-## 13. Critérios de aceite
-
-- Especialista sem Calendly cadastra, edita e publica produtos sem bloqueio.
-- O lembrete de Calendly pode ser fechado e não contém mensagem de bloqueio.
-- Cliente de produto sem Calendly escolhe entre e-mail e data/hora interna.
-- Os dois caminhos criam processo rastreável em `SCHEDULING`.
-- O fluxo de e-mail só ganha horário quando o especialista o registra.
-- O agendamento interno nasce confirmado.
-- Ambos visualizam o horário vigente.
-- O especialista consegue alterá-lo uma vez, com efeito imediato.
-- A segunda alteração é recusada também sob concorrência.
-- O cliente é notificado quando o especialista define ou altera o horário.
-- A sala interna continua acessível pelo processo no momento combinado.
-- O fluxo Calendly existente não sofre regressão.
-
-## 14. Fora de escopo
-
-- agenda de disponibilidade recorrente do especialista;
-- bloqueio de feriados, horário comercial ou intervalos personalizados;
-- aprovação do cliente após alteração;
-- múltiplas propostas de reagendamento;
-- integração com Google Calendar, Outlook ou convites `.ics`;
-- abertura automática da sala exatamente no horário;
-- escolha de duração pelo cliente;
-- chat interno para substituir o e-mail.
+O gate de concorrência PostgreSQL usa `POSTGRES_CONCURRENCY_TEST_URL` no banco dedicado e executa `src/features/appointments/appointments-concurrency.postgres.spec.ts` com `--runInBand`; confira zero skips no resultado JSON. Depois execute sequencialmente os testes/builds de backend e frontend e o lint. Limite Jest a dois workers ou `--runInBand`, Vitest a dois workers/forks, e verifique `rtk free -h` antes das suites amplas. Preserve somente evidência sem credenciais ou PII no repositório.

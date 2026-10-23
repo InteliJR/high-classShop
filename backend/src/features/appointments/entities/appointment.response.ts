@@ -6,6 +6,27 @@ import {
 } from '@prisma/client';
 import { Expose, Type } from 'class-transformer';
 
+export type ExistingAppointmentCheck =
+  | { exists: false }
+  | {
+      exists: true;
+      appointment_id: string;
+      process_id: string;
+      appointment_status: StatusAgendamento;
+      scheduling_method: AppointmentSchedulingMethod | null;
+      appointment_datetime: Date | null;
+      specialist_contact_email?: string;
+    };
+
+export interface ActiveProcessSnapshot {
+  process_id: string;
+  appointment_id: string | null;
+  appointment_status: StatusAgendamento | null;
+  scheduling_method: AppointmentSchedulingMethod | null;
+  appointment_datetime: Date | null;
+  specialist_contact_email?: string;
+}
+
 /**
  * DTO aninhado: dados do cliente no agendamento
  * Contém informações mínimas necessárias para exibição
@@ -139,6 +160,13 @@ export class ProductResponseDto {
  * - Exemplo: "2024-10-10T14:00:00Z" → 14:00 (São Paulo, -03:00)
  */
 export class AppointmentResponseEntity {
+  @Expose()
+  process_id?: string;
+
+  /** Contato liberado somente ao cliente autenticado no fluxo EMAIL. */
+  @Expose()
+  specialist_contact_email?: string;
+
   /**
    * ID único do agendamento (UUID)
    */

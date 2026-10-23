@@ -75,8 +75,13 @@ cp .env.example .env
 - `CALENDLY_OAUTH_CLIENT_SECRET`
 - `CALENDLY_OAUTH_REDIRECT_URI`
 - `CALENDLY_TOKEN_ENCRYPTION_KEY`
-- `CALENDLY_WEBHOOK_CALLBACK_URL` (recomendado)
-- `CALENDLY_WEBHOOK_SIGNING_KEY` (recomendado)
+- `CALENDLY_WEBHOOK_CALLBACK_URL` (opcional; habilita callbacks)
+- `CALENDLY_WEBHOOK_SIGNING_KEY` (obrigatório quando `CALENDLY_WEBHOOK_CALLBACK_URL` estiver configurado)
+
+O backend não cria assinaturas de webhook sem `CALENDLY_WEBHOOK_SIGNING_KEY` e
+rejeita callbacks quando a chave estiver ausente. A chave gerada pelo Calendly
+na criação do aplicativo OAuth deve ser copiada para o backend. Ela valida os
+callbacks localmente e não é reenviada no payload da subscription OAuth.
 
 > Observação: `CALENDLY_ACCESS_TOKEN` pode existir como fallback simples, mas o fluxo recomendado no projeto atual é OAuth por especialista.
 
