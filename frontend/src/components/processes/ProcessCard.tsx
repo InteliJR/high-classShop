@@ -28,6 +28,7 @@ import { getContextualStatusMessage } from "../../utils/processStatusMessages";
 import {
   getProcessCompletionReason,
   getProcessWithActiveContract,
+  getAdminProcessTimeline,
   confirmAppointment,
   cancelAppointment,
   getMeetingByProcess,
@@ -35,8 +36,10 @@ import {
   startMeeting,
   updateProcessStatus,
   type MeetingSession,
+  type DelegatedProcessTimelineEvent,
 } from "../../services/processes.service";
 import { rescheduleAppointment } from "../../services/appointments.service";
+import { adminJourneyRoute } from "../../lib/admin-specialist-journey";
 
 function getActionErrorMessage(error: unknown, fallback: string): string {
   if (typeof error === "object" && error !== null) {
@@ -80,6 +83,7 @@ interface ProcessCardProps {
   isClientView?: boolean; // Se true, remove botões de ação (apenas visualização)
   onSelectProduct?: () => void; // Callback para abrir seleção de produto em consultoria
   specialistSpeciality?: SpecialityType; // Especialidade do especialista para filtrar produtos
+  adminJourney?: boolean;
 }
 
 /**
@@ -95,12 +99,16 @@ export default function ProcessCard({
   onStatusUpdated,
   isClientView = false,
   onSelectProduct,
+  adminJourney = false,
 }: ProcessCardProps) {
   const navigate = useNavigate();
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [completionReason, setCompletionReason] = useState<string | null>(null);
   const [activeContract, setActiveContract] = useState<any>(null);
+  const [delegatedTimeline, setDelegatedTimeline] = useState<
+    DelegatedProcessTimelineEvent[]
+  >([]);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [meetingSession, setMeetingSession] = useState<MeetingSession | null>(
@@ -219,6 +227,24 @@ export default function ProcessCard({
 
   useEffect(() => {
     let current = true;
+    if (!adminJourney || !isExpanded) {
+      setDelegatedTimeline([]);
+      return () => {
+        current = false;
+      };
+    }
+    void getAdminProcessTimeline(process.id)
+      .then((events) => {
+        if (current) setDelegatedTimeline(events);
+      })
+      .catch((error) => console.error("Error loading delegated timeline:", error));
+    return () => {
+      current = false;
+    };
+  }, [adminJourney, isExpanded, process.id]);
+
+  useEffect(() => {
+    let current = true;
 
     if (!shouldLookupMeeting) {
       setMeetingSession(null);
@@ -265,7 +291,11 @@ export default function ProcessCard({
       setIsStartingMeeting(true);
       await startMeeting(process.id);
       onStatusUpdated?.();
-      navigate(`/processes/${process.id}/meeting`);
+      navigate(
+        adminJourney
+          ? adminJourneyRoute("meeting", process.id)
+          : `/processes/${process.id}/meeting`,
+      );
     } catch (error) {
       console.error("Error starting meeting:", error);
       alert(
@@ -280,7 +310,11 @@ export default function ProcessCard({
   };
 
   const handleJoinMeeting = () => {
-    navigate(`/processes/${process.id}/meeting`);
+    navigate(
+      adminJourney
+        ? adminJourneyRoute("meeting", process.id)
+        : `/processes/${process.id}/meeting`,
+    );
   };
 
   const handleConversationDone = async () => {
@@ -368,9 +402,18 @@ export default function ProcessCard({
 
     if (!confirmed) return;
 
+    const administrativeReason = adminJourney
+      ? window.prompt("Informe o motivo do cancelamento administrativo:")
+      : undefined;
+    if (adminJourney && !administrativeReason?.trim()) return;
+
     try {
       setIsCancelling(true);
-      await cancelAppointment(process.id);
+      if (adminJourney) {
+        await cancelAppointment(process.id, administrativeReason!.trim());
+      } else {
+        await cancelAppointment(process.id);
+      }
     } catch (error) {
       console.error("Error cancelling appointment:", error);
       alert(
@@ -431,7 +474,13 @@ export default function ProcessCard({
       {process.status === "NEGOTIATION" && !isConsultancy && !isExpanded && (
         <div className="hidden md:block absolute top-6 right-6 z-20">
           <button
-            onClick={() => navigate(`/processes/${process.id}/negotiation`)}
+            onClick={() =>
+              navigate(
+                adminJourney
+                  ? adminJourneyRoute("negotiation", process.id)
+                  : `/processes/${process.id}/negotiation`,
+              )
+            }
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs md:text-sm font-medium rounded-lg shadow-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
           >
             <MessageSquare size={16} />
@@ -778,7 +827,13 @@ export default function ProcessCard({
         {process.status === "NEGOTIATION" && !isConsultancy && !isExpanded && (
           <div className="md:hidden w-full mb-2 flex flex-col gap-2">
             <button
-              onClick={() => navigate(`/processes/${process.id}/negotiation`)}
+              onClick={() =>
+                navigate(
+                  adminJourney
+                    ? adminJourneyRoute("negotiation", process.id)
+                    : `/processes/${process.id}/negotiation`,
+                )
+              }
               className="w-full px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-blue-700 transition-colors inline-flex items-center justify-center gap-1"
             >
               <MessageSquare size={14} />
@@ -853,6 +908,9 @@ export default function ProcessCard({
                   <span>Contrato recusado ou cancelado</span>
                 </div>
               )}
+              <p className="mt-2 text-xs text-blue-800">
+                Estado externo: {activeContract.provider_status || activeContract.status}
+              </p>
             </div>
           )}
 
@@ -989,6 +1047,27 @@ export default function ProcessCard({
       {/* Expandable Details Section */}
       {isExpanded && (
         <div className="px-3 py-4 md:px-6 md:py-4 bg-gray-50 border-t border-gray-100">
+          {adminJourney && (
+            <div className="mb-4 rounded-lg border border-border bg-surface p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Última ação delegada
+              </p>
+              {delegatedTimeline[0] ? (
+                <p className="mt-1 text-sm text-ink">
+                  {delegatedTimeline[0].action} por{" "}
+                  <strong>
+                    {delegatedTimeline[0].actor.name || delegatedTimeline[0].actor.id}
+                  </strong>{" "}
+                  ({delegatedTimeline[0].actor.role}), em nome do especialista,
+                  em {new Date(delegatedTimeline[0].createdAt).toLocaleString("pt-BR")}.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-muted">
+                  Nenhuma ação administrativa registrada neste processo.
+                </p>
+              )}
+            </div>
+          )}
           {product && (
             <div className="space-y-3 mb-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
@@ -1052,7 +1131,13 @@ export default function ProcessCard({
             {/* Negotiation Button: Only show if status is NEGOTIATION and process has product */}
             {process.status === "NEGOTIATION" && !isConsultancy && (
               <button
-                onClick={() => navigate(`/processes/${process.id}/negotiation`)}
+                onClick={() =>
+                  navigate(
+                    adminJourney
+                      ? adminJourneyRoute("negotiation", process.id)
+                      : `/processes/${process.id}/negotiation`,
+                  )
+                }
                 className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 bg-blue-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
               >
                 <MessageSquare size={16} />
@@ -1134,6 +1219,7 @@ export default function ProcessCard({
           onStatusUpdated?.();
         }}
         process={process}
+        reasonRequired={adminJourney}
       />
 
       <AppointmentDateTimeModal

@@ -31,6 +31,8 @@ import {
   getProposalSubmissionError,
   normalizeMinimumFormError,
 } from "../../lib/negotiation-money";
+import { useAdminSpecialistJourney } from "../../contexts/AdminSpecialistJourneyContext";
+import { adminJourneyRoute } from "../../lib/admin-specialist-journey";
 
 /**
  * Página de Negociação
@@ -40,6 +42,8 @@ export default function NegotiationPage() {
   const { processId } = useParams<{ processId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const adminJourney = useAdminSpecialistJourney();
+  const commercialActorId = adminJourney?.targetSpecialistId ?? user?.id;
 
   const [proposals, setProposals] = useState<NegotiationProposal[]>([]);
   const [processInfo, setProcessInfo] = useState<NegotiationProcessInfo | null>(
@@ -53,6 +57,7 @@ export default function NegotiationPage() {
   const [isRejecting, setIsRejecting] = useState(false);
 
   const getProcessesRouteByRole = (): string => {
+    if (adminJourney) return adminJourneyRoute("processes");
     return user?.role === "SPECIALIST"
       ? "/specialist/processes"
       : "/customer/processes";
@@ -122,7 +127,7 @@ export default function NegotiationPage() {
   // Carregar propostas ao montar
   useEffect(() => {
     loadProposals();
-  }, [processId, user?.role]);
+  }, [processId, user?.role, adminJourney?.targetSpecialistId]);
 
   /**
    * Envia uma nova proposta
@@ -244,8 +249,8 @@ export default function NegotiationPage() {
    * Verifica se o usuário pode responder a uma proposta
    */
   const canRespondToProposal = (proposal: NegotiationProposal): boolean => {
-    if (!user || proposal.status !== "PENDING") return false;
-    return proposal.proposed_to.id === user.id;
+    if (!commercialActorId || proposal.status !== "PENDING") return false;
+    return proposal.proposed_to.id === commercialActorId;
   };
 
   // Loading state
@@ -349,7 +354,7 @@ export default function NegotiationPage() {
             icon={MessageSquare}
             title="Nenhuma proposta ainda"
             description={`Inicie a negociação enviando uma proposta de valor para o ${
-              user?.role === "SPECIALIST" ? "cliente" : "especialista"
+              user?.role === "SPECIALIST" || adminJourney ? "cliente" : "especialista"
             }.`}
           />
         )}
@@ -357,7 +362,7 @@ export default function NegotiationPage() {
         {/* Proposals list (chat style) */}
         <div className="space-y-4">
           {processInfo && proposals.map((proposal) => {
-            const isOwnProposal = proposal.proposed_by.id === user?.id;
+            const isOwnProposal = proposal.proposed_by.id === commercialActorId;
 
             return (
               <div
@@ -387,7 +392,10 @@ export default function NegotiationPage() {
                       >
                         {proposal.proposed_by.name}{" "}
                         {proposal.proposed_by.surname}
-                        {isOwnProposal && " (você)"}
+                        {isOwnProposal &&
+                          (adminJourney
+                            ? " (lado do especialista; executado pelo admin)"
+                            : " (você)")}
                       </span>
                       <span
                         className={`text-xs ${
@@ -557,7 +565,7 @@ export default function NegotiationPage() {
           <div className="max-w-4xl mx-auto px-4 py-4 text-center">
             <p className="text-sm text-muted">
               Aguardando resposta do{" "}
-              {meta?.pending_response_from === user?.id
+              {meta?.pending_response_from === commercialActorId
                 ? "outro participante"
                 : "outro participante"}
               ...
