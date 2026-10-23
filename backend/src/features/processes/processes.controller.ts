@@ -273,7 +273,7 @@ export class ProcessesController {
     }
     const context = await this.resolveSpecialistContext(
       user,
-      (filters as any).target_specialist_id,
+      filters.target_specialist_id,
     );
     if (context && context.specialistId !== specialistId) {
       throw new ForbiddenException(
