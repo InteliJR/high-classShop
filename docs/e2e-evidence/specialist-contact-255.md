@@ -61,4 +61,13 @@ Chromium real, frontend local e API totalmente interceptada com dados fictícios
 
 ![Telefone ausente sem bloquear o restante do contato](specialist-contact-255-missing-phone.png)
 
-A combinação com a task #252 será verificada em checkout temporário antes da entrega; as branches permanecem independentes.
+## Integração com #252
+
+A aplicação da implementação #252 (`bca6550`) sobre o commit #255 (`d4767fc`) ocorreu sem conflitos textuais em checkout temporário. Nenhuma mudança foi integrada em `develop`.
+
+- Frontend completo combinado: **57 arquivos, 507 testes aprovados**.
+- Backend unitário combinado: **70 suítes, 1.110 testes aprovados**; comando com `--testPathIgnorePatterns=\.postgres\.spec\.ts$`, excluindo integrações que exigem PostgreSQL dedicado.
+- Builds frontend e backend combinados aprovados; permanece o aviso de tamanho do bundle.
+- Chromium combinado: **nove cenários aprovados**, cobrindo o fluxo de motivo/recebimento e as regras de contato acima, sem erros de JavaScript. API inteiramente simulada.
+
+As duas branches continuam independentes, originadas do mesmo commit de `develop`. A integração real com PostgreSQL dedicado e Calendly e a conferência no ambiente publicado não foram executadas.
