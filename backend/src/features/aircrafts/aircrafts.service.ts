@@ -72,7 +72,7 @@ export class AircraftsService {
           this.logger.debug(
             `[create] Fazendo upload da imagem ${i + 1}/${images.length} para S3`,
           );
-          const imageKey = await this.s3Service.uploadBase64Image(
+          const imageKey = await this.s3Service.uploadImageAuto(
             image.data,
             key,
           );
@@ -323,7 +323,7 @@ export class AircraftsService {
           const timestamp = Date.now();
           const key = `aircrafts/${id}/${timestamp}-${i}.jpg`;
 
-          const imageKey = await this.s3Service.uploadBase64Image(
+          const imageKey = await this.s3Service.uploadImageAuto(
             image.data,
             key,
           );

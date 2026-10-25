@@ -43,8 +43,8 @@ export class CarsService {
           const timestamp = Date.now();
           const key = `cars/${car.id}/${timestamp}-${i}.jpg`;
 
-          // Upload da imagem base64 para o S3
-          const imageKey = await this.s3Service.uploadBase64Image(
+          // O formulário pode enviar base64 ou uma URL assinada existente.
+          const imageKey = await this.s3Service.uploadImageAuto(
             image.data,
             key,
           );
@@ -238,7 +238,7 @@ export class CarsService {
           const timestamp = Date.now();
           const key = `cars/${id}/${timestamp}-${i}.jpg`;
 
-          const imageKey = await this.s3Service.uploadBase64Image(
+          const imageKey = await this.s3Service.uploadImageAuto(
             image.data,
             key,
           );
