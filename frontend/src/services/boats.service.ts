@@ -18,7 +18,7 @@ export interface RawBoat {
   marca: string;
   modelo: string;
   identificador: string;
-  valor: number;
+  valor: number | string;
   currency: ProductCurrency;
   estado: string;
   ano: number;

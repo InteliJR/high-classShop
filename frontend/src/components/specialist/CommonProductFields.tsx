@@ -1,4 +1,5 @@
 import type { UseFormRegister, FieldErrors } from "react-hook-form";
+import { parseCurrencyValue } from "../../lib/currency";
 
 interface CommonProductFieldsProps {
   register: UseFormRegister<any>;
@@ -124,6 +125,13 @@ export default function CommonProductFields({ register, errors, productType }: C
           {...register("valor", {
             required: "Valor é obrigatório",
             min: { value: 0.01, message: "Valor deve ser maior que 0" },
+            validate: (value) => {
+              const amount = parseCurrencyValue(value);
+              return (
+                (amount !== null && amount > 0) ||
+                "Informe um valor válido maior que 0"
+              );
+            },
           })}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder={productType ? placeholders.valor[productType] : "Ex: 1500000"}

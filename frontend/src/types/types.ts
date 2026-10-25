@@ -102,7 +102,7 @@ export interface Product {
   marca: string;
   modelo: string;
   descricao?: string;
-  valor: number;
+  valor: number | string;
   currency: ProductCurrency;
   imageUrl?: string;
   images?: {

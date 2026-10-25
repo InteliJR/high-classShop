@@ -44,7 +44,7 @@ interface ProductItem {
   type: SpecialityType;
   marca: string;
   modelo: string;
-  valor: number;
+  valor: number | string;
   currency: ProductCurrency;
   ano: number;
   imageUrl?: string;

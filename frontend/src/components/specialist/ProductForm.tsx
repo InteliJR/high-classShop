@@ -36,6 +36,7 @@ import {
 import { Dialog, DialogContent } from "../../components/ui/dialog";
 import type { ProductCurrency, SpecialityType, UserRole } from "../../types/types";
 import { getProductSaveErrorMessage } from "../../lib/product-error-message";
+import { parseCurrencyValue } from "../../lib/currency";
 
 type ProductType = "CAR" | "BOAT" | "AIRCRAFT";
 
@@ -43,7 +44,7 @@ interface ProductFormData {
   marca: string;
   modelo: string;
   ano: number;
-  valor: number;
+  valor: number | string;
   currency: ProductCurrency;
   estado: string;
   [key: string]: any;
@@ -131,8 +132,11 @@ export default function ProductForm({
     handleSubmit,
     formState: { errors },
     reset,
+    setError,
   } = useForm<ProductFormData>({
-    defaultValues: (productData as any) || {},
+    defaultValues: productData
+      ? { ...productData, valor: parseCurrencyValue(productData.valor) ?? "" }
+      : {},
   });
 
   // Função para converter URL de imagem para base64
@@ -160,7 +164,10 @@ export default function ProductForm({
   useEffect(() => {
     const loadProductData = async () => {
       if (productData) {
-        reset(productData as any);
+        reset({
+          ...productData,
+          valor: parseCurrencyValue(productData.valor) ?? "",
+        });
 
         // Carregar imagens existentes no modo de edição
         if (
@@ -195,6 +202,15 @@ export default function ProductForm({
       return;
     }
 
+    const amount = parseCurrencyValue(data.valor);
+    if (amount === null || amount <= 0) {
+      setError("valor", {
+        type: "validate",
+        message: "Informe um valor válido maior que 0",
+      });
+      return;
+    }
+
     // Validar que pelo menos uma imagem foi adicionada
     if (images.length === 0) {
       window.alert("Ao menos uma imagem é obrigatória para o produto.");
@@ -209,7 +225,7 @@ export default function ProductForm({
         modelo: data.modelo,
         identificador: data.identificador,
         ano: Number(data.ano),
-        valor: Number(data.valor),
+        valor: amount,
         currency: data.currency ?? "BRL",
         estado: data.estado,
       };
