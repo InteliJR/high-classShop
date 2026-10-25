@@ -22,6 +22,11 @@ const specialist: PublicSpecialistProfile = { id: "specialist-1", name: "Ana", s
 function mockSpecialist(value: PublicSpecialistProfile) {
   vi.mocked(getSpecialistsGroupedByCategory).mockResolvedValue({ CAR: [value], BOAT: [], AIRCRAFT: [] });
 }
+const reason = "Preciso de orientação para escolher um carro";
+async function submitReason(value = reason) {
+  fireEvent.change(await screen.findByRole("textbox", { name: "Comente brevemente sobre o motivo dessa conversa" }), { target: { value } });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar solicitação" }));
+}
 function renderPage() {
   const context = { user: { id: "customer-1", name: "Cliente", surname: "Teste", email: "cliente@example.com", role: "CUSTOMER" } } as AuthContextProps;
   return render(<AuthContext.Provider value={context}><MemoryRouter initialEntries={["/consultoria?type=CAR"]}><Routes>
@@ -48,8 +53,9 @@ describe("ConsultoriaPage capability", () => {
   it("creates EMAIL consultancy without product or date even with a stale URL", async () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Solicitar Reunião" }));
+    await submitReason();
     expect(await screen.findByText("Meus processos")).toBeTruthy();
-    expect(createConsultancyAppointment).toHaveBeenCalledWith({ client_id: "customer-1", specialist_id: specialist.id, scheduling_method: "EMAIL", notes: "Consultoria solicitada pelo cliente" });
+    expect(createConsultancyAppointment).toHaveBeenCalledWith({ client_id: "customer-1", specialist_id: specialist.id, scheduling_method: "EMAIL", notes: reason });
     expect(openPopup).not.toHaveBeenCalled();
   });
 
@@ -57,6 +63,7 @@ describe("ConsultoriaPage capability", () => {
     mockSpecialist({ ...specialist, calendly_scheduling_available: true });
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Solicitar Reunião" }));
+    await submitReason();
     await waitFor(() => expect(openPopup).toHaveBeenCalledWith("appointment-1", specialist.calendly_url));
     expect(createConsultancyAppointment).toHaveBeenCalledWith(expect.objectContaining({ scheduling_method: "CALENDLY" }));
   });
@@ -65,6 +72,7 @@ describe("ConsultoriaPage capability", () => {
     mockSpecialist({ ...specialist, calendly_scheduling_available: true, calendly_url: null });
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Solicitar Reunião" }));
+    await submitReason();
     expect((await screen.findByRole("alert")).textContent).toContain("Calendly");
     expect(createConsultancyAppointment).not.toHaveBeenCalled();
     expect(openPopup).not.toHaveBeenCalled();
@@ -86,5 +94,25 @@ describe("ConsultoriaPage capability", () => {
     expect(alert.textContent).toContain("cancelado");
     expect(alert.className).toContain("bg-status-bad-wash");
     expect(alert.className).not.toContain("bg-status-ok-wash");
+  });
+
+  it("collects the reason before registering a request and does not repeat account fields", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Solicitar Reunião" }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(createConsultancyAppointment).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("textbox")).toHaveLength(1);
+    expect(screen.queryByLabelText(/e-mail|nome/i)).toBeNull();
+  });
+
+  it("keeps the reason and shows a retryable error without redirecting when registration fails", async () => {
+    vi.mocked(createConsultancyAppointment).mockRejectedValue({ response: { data: { error: { message: "Falha ao registrar pedido" } } } });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Solicitar Reunião" }));
+    await submitReason();
+    expect((await screen.findByRole("alert")).textContent).toContain("Falha ao registrar pedido");
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe(reason);
+    expect(screen.queryByText("Meus processos")).toBeNull();
+    expect(openPopup).not.toHaveBeenCalled();
   });
 });

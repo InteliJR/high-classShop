@@ -138,6 +138,36 @@ describe("useCalendlyScheduling active registration retry", () => {
     expect(onSynced).toHaveBeenCalledWith(syncedStatus);
   });
 
+  it("passes the synchronized appointment identity to the consultancy receipt", async () => {
+    vi.mocked(registerCalendlyScheduledEvent).mockResolvedValue({ appointment_id: "appointment-1", calendly_sync_status: "SYNCED", appointment_datetime: syncedStatus.appointment_datetime });
+    vi.mocked(getCalendlySyncStatus).mockResolvedValue(syncedStatus);
+    const getSuccessRedirectState = vi.fn(status => ({ consultancyAppointmentId: status.appointment_id }));
+    const { result } = renderHook(() => useCalendlyScheduling({ successRedirectMessage: "ok", getSuccessRedirectState }));
+    act(() => result.current.openPopup("appointment-1", "https://calendly.com/a"));
+    const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0].onEventScheduled!;
+    await act(async () => { await listener(scheduledEvent()); await vi.advanceTimersByTimeAsync(900); });
+    expect(getSuccessRedirectState).toHaveBeenCalledWith(syncedStatus);
+    expect(navigate).toHaveBeenCalledWith("/customer/processes", { state: { message: "ok", consultancyAppointmentId: "appointment-1" } });
+  });
+
+  it("does not claim a confirmed appointment or attach a receipt identity after synchronization errors", async () => {
+    vi.mocked(registerCalendlyScheduledEvent).mockRejectedValue(new Error("offline"));
+    vi.mocked(getCalendlySyncStatus).mockRejectedValue(new Error("offline"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const getSuccessRedirectState = vi.fn();
+    const { result } = renderHook(() => useCalendlyScheduling({ successRedirectMessage: "ok", getSuccessRedirectState }));
+    act(() => result.current.openPopup("appointment-1", "https://calendly.com/a"));
+    const listener = vi.mocked(useCalendlyEventListener).mock.calls.at(-1)![0].onEventScheduled!;
+    let sync!: Promise<void>;
+    act(() => { sync = Promise.resolve(listener(scheduledEvent())); });
+    await act(async () => { await vi.runAllTimersAsync(); await sync; });
+    expect(result.current.syncState).toBe("error");
+    expect(result.current.syncMessage).not.toMatch(/confirmado/i);
+    expect(getSuccessRedirectState).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith("/customer/processes", { state: { message: expect.stringContaining("Não foi possível verificar") } });
+    log.mockRestore();
+  });
+
   it("interrompe backoff e chamadas HTTP ao desmontar", async () => {
     vi.mocked(registerCalendlyScheduledEvent).mockResolvedValue({
       appointment_id: "appointment-1",

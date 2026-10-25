@@ -204,12 +204,15 @@ export async function createConsultancyAppointment(data: {
   client_id: string;
   specialist_id: string;
   scheduling_method: "CALENDLY" | "EMAIL";
-  notes?: string;
-}): Promise<Appointment> {
-  const response = await api.post<ApiResponse<Appointment>>(
+  notes: string;
+}): Promise<PendingAppointmentCreated> {
+  const reason = data.notes.trim();
+  if (!reason || reason.length > 500) throw new Error("Informe o motivo da consultoria com até 500 caracteres.");
+  const response = await api.post<ApiResponse<PendingAppointmentCreated>>(
     "/appointments/pending",
     {
       ...data,
+      notes: reason,
       // Não envia product_type e product_id para consultoria
     },
     { withCredentials: true },

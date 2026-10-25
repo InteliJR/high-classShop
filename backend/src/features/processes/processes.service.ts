@@ -1,3 +1,4 @@
+import { getConsultancyReason } from './consultancy-reason';
 import {
   BadRequestException,
   ConflictException,
@@ -868,6 +869,9 @@ export class ProcessesService {
             appointment: {
               select: {
                 status: true,
+                notes: true,
+                product_type: true,
+                product_id: true,
                 appointment_datetime: true,
                 scheduling_method: true,
                 specialist_rescheduled_at: true,
@@ -907,6 +911,7 @@ export class ProcessesService {
         status: process.status,
         appointment_id: process.appointment_id ?? null,
         appointment_status: process.appointment?.status ?? null,
+        consultancy_reason: getConsultancyReason(process.appointment),
         appointment_datetime: process.appointment?.appointment_datetime ?? null,
         appointment_scheduling_method:
           process.appointment?.scheduling_method ?? null,
@@ -964,6 +969,9 @@ export class ProcessesService {
           appointment: {
             select: {
               status: true,
+              notes: true,
+              product_type: true,
+              product_id: true,
               appointment_datetime: true,
               scheduling_method: true,
               specialist_rescheduled_at: true,
@@ -995,6 +1003,7 @@ export class ProcessesService {
         status: process.status,
         appointment_id: process.appointment_id ?? null,
         appointment_status: process.appointment?.status ?? null,
+        consultancy_reason: getConsultancyReason(process.appointment),
         appointment_datetime: process.appointment?.appointment_datetime ?? null,
         appointment_scheduling_method:
           process.appointment?.scheduling_method ?? null,
@@ -1065,6 +1074,9 @@ export class ProcessesService {
           appointment: {
             select: {
               status: true,
+              notes: true,
+              product_type: true,
+              product_id: true,
               appointment_datetime: true,
               scheduling_method: true,
               specialist_rescheduled_at: true,
@@ -1090,6 +1102,7 @@ export class ProcessesService {
         status: process.status,
         appointment_id: process.appointment_id ?? null,
         appointment_status: process.appointment?.status ?? null,
+        consultancy_reason: getConsultancyReason(process.appointment),
         appointment_datetime: process.appointment?.appointment_datetime ?? null,
         appointment_scheduling_method:
           process.appointment?.scheduling_method ?? null,
@@ -1187,6 +1200,9 @@ export class ProcessesService {
           appointment: {
             select: {
               status: true,
+              notes: true,
+              product_type: true,
+              product_id: true,
               appointment_datetime: true,
               scheduling_method: true,
               specialist_rescheduled_at: true,
@@ -1208,6 +1224,7 @@ export class ProcessesService {
         status: process.status,
         appointment_id: process.appointment_id ?? null,
         appointment_status: process.appointment?.status ?? null,
+        consultancy_reason: getConsultancyReason(process.appointment),
         appointment_datetime: process.appointment?.appointment_datetime ?? null,
         appointment_scheduling_method:
           process.appointment?.scheduling_method ?? null,
@@ -2025,6 +2042,9 @@ export class ProcessesService {
           appointment: {
             select: {
               status: true,
+              notes: true,
+              product_type: true,
+              product_id: true,
               appointment_datetime: true,
               scheduling_method: true,
               specialist_rescheduled_at: true,
@@ -2048,6 +2068,7 @@ export class ProcessesService {
       status: process.status,
       appointment_id: process.appointment_id ?? null,
       appointment_status: process.appointment?.status ?? null,
+        consultancy_reason: getConsultancyReason(process.appointment),
       appointment_datetime: process.appointment?.appointment_datetime ?? null,
       appointment_scheduling_method:
         process.appointment?.scheduling_method ?? null,

@@ -49,6 +49,8 @@ export class UpdateAppointmentStatusDto {
    * - Ao marcar como COMPLETED: sugerir "Reunião concluída com sucesso"
    * - Ao cancelar: pedir motivo do cancelamento
    * - Campo opcional, mas recomendado preencher para auditoria
+   * - Para consultorias com motivo registrado, não pode substituir o motivo.
+   *   Observações do atendimento devem ser registradas no processo.
    */
   @IsOptional()
   @MaxLength(500, { message: 'notes não pode ter mais que 500 caracteres' })

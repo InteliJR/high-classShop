@@ -96,6 +96,21 @@ describe("ProcessCard appointment time actions", () => {
     vi.clearAllMocks();
   });
 
+  it("shows the persisted consultancy reason to the specialist even after product assignment", async () => {
+    const reason = "Quero um carro para viagens em família";
+    const process = { ...baseProcess, consultancy_reason: reason, notes: "Nota técnica" };
+    const { unmount } = renderCard(process);
+    expect(screen.getByRole("region", { name: "Motivo da consultoria" }).textContent).toContain(reason);
+    unmount();
+    renderCard(process, { isClientView: true });
+    expect(screen.queryByRole("region", { name: "Motivo da consultoria" })).toBeNull();
+  });
+
+  it("keeps legacy processes without a reason readable", () => {
+    renderCard(baseProcess);
+    expect(screen.queryByRole("region", { name: "Motivo da consultoria" })).toBeNull();
+  });
+
   it("lets only the specialist define a missing email appointment time", () => {
     const { unmount } = renderCard();
     expect(

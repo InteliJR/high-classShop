@@ -630,6 +630,18 @@ export class AppointmentsService {
           'Não é possível cancelar uma reunião cujo processo já avançou',
         );
       }
+
+      if (
+        current.product_type === null &&
+        current.product_id === null &&
+        current.notes?.trim() &&
+        dto.notes !== undefined &&
+        (typeof dto.notes !== 'string' || dto.notes.trim() !== current.notes.trim())
+      ) {
+        throw new BadRequestException(
+          'O motivo da consultoria não pode ser alterado ao atualizar o status. Registre o atendimento nas observações do processo.',
+        );
+      }
     };
 
     const appointment = await this.prisma.appointment.findUnique({
@@ -1110,6 +1122,10 @@ export class AppointmentsService {
       );
     }
     const isConsultancy = dto.product_id == null;
+    const consultancyReason = typeof dto.notes === 'string' ? dto.notes.trim() : '';
+    if (isConsultancy && (!consultancyReason || consultancyReason.length > 500)) {
+      throw new BadRequestException('Informe o motivo da consultoria com até 500 caracteres');
+    }
     const hasDate =
       dto.appointment_datetime !== undefined &&
       dto.appointment_datetime !== null;
@@ -1272,7 +1288,7 @@ export class AppointmentsService {
             status: StatusAgendamento.PENDING,
             scheduling_method: schedulingMethod,
             notes:
-              dto.notes ||
+              (isConsultancy ? consultancyReason : dto.notes) ||
               (schedulingMethod === AppointmentSchedulingMethod.EMAIL
                 ? 'Cliente solicitou reunião por e-mail'
                 : 'Cliente acessou link do Calendly'),
