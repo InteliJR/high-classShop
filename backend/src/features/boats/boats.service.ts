@@ -225,10 +225,14 @@ export class BoatsService {
           image_url: await this.s3Service.getSignedUrl(image.image_url),
         })),
       );
-      return { ...boat, images: imagesWithUrls };
+      return {
+        ...boat,
+        valor: boat.valor.toNumber(),
+        images: imagesWithUrls,
+      };
     }
 
-    return { ...boat };
+    return { ...boat, valor: boat.valor.toNumber() };
   }
 
   async update(id: string, updateBoatDto: UpdateBoatDto) {
