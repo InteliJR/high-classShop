@@ -39,6 +39,7 @@ import { useAuth } from "../../store/authStateManager";
 import { useCheckAppointment } from "../../hooks/useCheckAppointment";
 import { useCalendlyScheduling } from "../../hooks/useCalendlyScheduling";
 import type { Product } from "../../types/types";
+import { canManageProductImages } from "../../lib/product-images";
 
 function appointmentSnapshot(
   appointment: PendingAppointmentCreated,
@@ -450,7 +451,7 @@ export default function ProductPage() {
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
       <PageHeader showBack title={`${product.marca} ${product.modelo}`} />
       <Card className="p-4 md:p-6 mb-6">
-        <ProductDetails product={product} />
+        <ProductDetails product={product} showImageErrors={canManageProductImages(product, user)} />
       </Card>
       {specialist && (
         <Card className="p-4 md:p-6">

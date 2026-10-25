@@ -1,6 +1,10 @@
 import { useState } from "react";
 import type { Product } from "../../types/types";
 import { formatCurrency } from "../../lib/currency";
+import { canManageProductImages, getProductImageUrls } from "../../lib/product-images";
+import { useProductImages } from "../../hooks/useProductImages";
+import { useAuth } from "../../store/authStateManager";
+import ProductImagePlaceholder from "./ProductImagePlaceholder";
 
 export default function ProductCard({
   imageUrl,
@@ -10,12 +14,17 @@ export default function ProductCard({
   valor,
   currency,
   images,
-}: Product & { images?: any[] }) {
+  specialist_id,
+}: Product) {
   const [rotateX, setRotateX] = useState(0);
   const [rotateY, setRotateY] = useState(0);
 
-  // Pega a URL da imagem principal ou a primeira imagem do array
-  const primaryImageUrl = images?.find((img: any) => img.is_primary)?.image_url || images?.[0]?.image_url || imageUrl;
+  const { user } = useAuth();
+  const { imageUrls, failedUrls, markFailed } = useProductImages(
+    getProductImageUrls({ images, imageUrl }),
+    canManageProductImages({ specialist_id }, user),
+  );
+  const primaryImageUrl = imageUrls[0];
 
   const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
     const card = e.currentTarget;
@@ -49,15 +58,16 @@ export default function ProductCard({
       }}
     >
       <div className="flex justify-center">
-        {primaryImageUrl && (
-          <div className="w-full max-w-md aspect-square sm:aspect-video overflow-hidden rounded-lg">
+        <div className="w-full max-w-md aspect-square sm:aspect-video overflow-hidden rounded-lg">
+          {primaryImageUrl && !failedUrls.has(primaryImageUrl) ? (
             <img
               src={primaryImageUrl}
               alt={`Imagem do produto ${marca} ${modelo}`}
               className="w-full h-full object-cover"
+              onError={() => markFailed(primaryImageUrl)}
             />
-          </div>
-        )}
+          ) : <ProductImagePlaceholder failed={!!primaryImageUrl} />}
+        </div>
       </div>
 
       <div className="flex flex-col text-sm sm:text-xl gap-2 justify-between items-center h-full">
