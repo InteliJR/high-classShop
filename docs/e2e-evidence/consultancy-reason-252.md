@@ -52,3 +52,15 @@ Chromium real, frontend local e API inteiramente interceptada com dados fictíci
 ![Recebimento confirmado em Meus Processos](consultancy-received-252-desktop.png)
 
 O Calendly real não foi acionado por essa revisão visual; a sincronização, seus estados e a preservação do preenchimento automático são cobertos nos testes automatizados com serviços simulados.
+
+## Integração com #255
+
+A aplicação da implementação #252 (`bca6550`) sobre o commit #255 (`d4767fc`) ocorreu sem conflitos textuais em checkout temporário. Nenhuma mudança foi integrada em `develop`.
+
+- Frontend completo combinado: **57 arquivos, 507 testes aprovados**.
+- Backend unitário combinado: **70 suítes, 1.110 testes aprovados**, com o mesmo comando que exclui `*.postgres.spec.ts`.
+- Builds frontend e backend combinados aprovados; permanece o aviso de tamanho do bundle.
+- Chromium combinado: **nove cenários aprovados**, incluindo formulário e recebimento desktop/mobile, falha de criação sem sucesso, contato confirmado, telefone ausente, rejeição, cancelamento, outro cliente e conclusão. Recarga de contato e ausência de transbordamento conferidas. Sem erros de JavaScript.
+- API inteiramente simulada no navegador; nenhum dado remoto alterado.
+
+As duas branches continuam independentes, originadas do mesmo commit de `develop`.
