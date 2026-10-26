@@ -315,6 +315,11 @@ export class DocuSignWebhookService {
       // ===== ETAPA 7: ATUALIZAR CONTRATO E SINCRONIZAR PROCESSO =====
 
       const updated = await this.prismaService.$transaction(async (tx) => {
+        // Serializa com exclusão lógica e operações de contrato no mesmo processo.
+        const lockKey = `contract-process:${contract.process_id}`;
+        await tx.$queryRaw`
+          SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
+        `;
         // 7.1 Claim CAS: somente uma entrega concorrente produz efeitos.
         const claim = await tx.contract.updateMany({
           where: {
@@ -340,7 +345,7 @@ export class DocuSignWebhookService {
         // 7.2 Buscar processo relacionado
         const process = await tx.process.findUnique({
           where: { id: contract.process_id },
-          select: { id: true, status: true, active_contract_id: true },
+          select: { id: true, status: true, active_contract_id: true, removed_at: true },
         });
 
         if (!process) {
@@ -350,9 +355,27 @@ export class DocuSignWebhookService {
           return updatedContract;
         }
 
+        // O evento ainda atualiza o contrato para auditoria, mas não pode
+        // reabrir ou concluir um processo retirado das jornadas comuns.
+        if (process.removed_at) {
+          return updatedContract;
+        }
+
+        // O contrato mantém seu próprio estado, mas somente o contrato ativo
+        // pode dirigir a máquina de estados do processo. Eventos atrasados de
+        // envelopes substituídos não podem reativar nem concluir a venda.
+        if (process.active_contract_id !== contract.id) {
+          this.logger.log(
+            `[SYNC] Webhook do contrato não ativo ${contract.id}; processo ${process.id} preservado`,
+          );
+          return updatedContract;
+        }
+
         // 7.3 Sincronizar status do processo com base no status do contrato
         const processStatusUpdate: any = {};
         let updateProcessActiveContract = false;
+        let historyStatus: ProcessStatus | null = null;
+        let historyReason: ProcessCompletionReason | null = null;
 
         if (
           providerStatus === 'SENT' &&
@@ -372,14 +395,8 @@ export class DocuSignWebhookService {
           this.logger.log(
             `[SYNC] Processo ${process.id}: → COMPLETED (contrato assinado)`,
           );
-          // Registrar razão de conclusão
-          await tx.processStatusHistory.create({
-            data: {
-              processId: process.id,
-              status: ProcessStatus.COMPLETED,
-              reason: ProcessCompletionReason.CONTRACT_SIGNED,
-            },
-          });
+          historyStatus = ProcessStatus.COMPLETED;
+          historyReason = ProcessCompletionReason.CONTRACT_SIGNED;
         } else if (
           ['DECLINED', 'VOIDED', 'TIMEDOUT'].includes(providerStatus)
         ) {
@@ -397,13 +414,8 @@ export class DocuSignWebhookService {
           } else if (providerStatus === 'TIMEDOUT') {
             completionReason = ProcessCompletionReason.CONTRACT_TIMEDOUT;
           }
-          await tx.processStatusHistory.create({
-            data: {
-              processId: process.id,
-              status: ProcessStatus.REJECTED,
-              reason: completionReason,
-            },
-          });
+          historyStatus = ProcessStatus.REJECTED;
+          historyReason = completionReason;
         } else if (process.active_contract_id === contract.id) {
           // Se este é o contrato ativo, manter status como está
           updateProcessActiveContract = true;
@@ -421,10 +433,23 @@ export class DocuSignWebhookService {
             processStatusUpdate.active_contract_id = contract.id;
           }
 
-          await tx.process.update({
-            where: { id: process.id },
+          const processClaim = await tx.process.updateMany({
+            where: { id: process.id, removed_at: null },
             data: processStatusUpdate,
           });
+
+          if (processClaim.count !== 1) {
+            return updatedContract;
+          }
+          if (historyStatus && historyReason) {
+            await tx.processStatusHistory.create({
+              data: {
+                processId: process.id,
+                status: historyStatus,
+                reason: historyReason,
+              },
+            });
+          }
 
           this.logger.log(`[SYNC] Processo atualizado:`, {
             processId: process.id,
@@ -501,6 +526,7 @@ export class DocuSignWebhookService {
           vehicle_price: true,
           process: {
             select: {
+              removed_at: true,
               client: { select: { email: true, name: true, surname: true } },
               specialist: {
                 select: { email: true, name: true, surname: true },
@@ -510,7 +536,7 @@ export class DocuSignWebhookService {
         },
       });
 
-      if (contractWithDetails) {
+      if (contractWithDetails && !contractWithDetails.process?.removed_at) {
         const buyerEmail = contractWithDetails.process?.client?.email;
         const buyerName =
           contractWithDetails.buyer_name ||

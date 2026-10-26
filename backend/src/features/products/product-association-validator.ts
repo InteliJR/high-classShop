@@ -35,7 +35,7 @@ export async function validateSpecialistProductAssociation(
 
   const specialist = await client.user.findUnique({
     where: { id: input.specialistId },
-    select: { id: true, role: true, speciality: true },
+    select: { id: true, role: true, speciality: true, is_active: true },
   });
   if (!specialist) {
     throw new NotFoundException('Especialista não encontrado');
@@ -43,9 +43,11 @@ export async function validateSpecialistProductAssociation(
   if (specialist.role !== UserRole.SPECIALIST) {
     throw new BadRequestException('Usuário informado não é especialista');
   }
+  if (specialist.is_active === false) {
+    throw new ForbiddenException('Especialista inativo');
+  }
   if (
     input.productType &&
-    specialist.speciality &&
     specialist.speciality !== input.productType
   ) {
     throw new BadRequestException(

@@ -44,7 +44,7 @@ describe('assertProductMonetaryFieldsUnlocked', () => {
         'Valor e moeda não podem ser alterados enquanto o produto estiver em negociação.',
     });
     expect(prisma.process.findFirst).toHaveBeenCalledWith({
-      where: { car_id: 'car-1', status: ProcessStatus.NEGOTIATION },
+      where: { car_id: 'car-1', status: ProcessStatus.NEGOTIATION, removed_at: null },
       select: { id: true },
     });
   });
@@ -89,6 +89,7 @@ describe('assertProductMonetaryFieldsUnlocked', () => {
       where: {
         [foreignKey]: 'car-1',
         status: ProcessStatus.NEGOTIATION,
+        removed_at: null,
       },
       select: { id: true },
     });

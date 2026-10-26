@@ -7,6 +7,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { GenerateContractDto } from './dto/generate-contract.dto';
@@ -48,6 +49,8 @@ import {
   EnvelopeEffectState,
 } from 'src/providers/docusign/envelope-effect.error';
 import { createHash, randomUUID } from 'node:crypto';
+import { ActorContext } from 'src/shared/actor-context/actor-context.service';
+import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
 
 const CONTRACT_PREPARATION_STATUSES: ProcessStatus[] = [
   ProcessStatus.PROCESSING_CONTRACT,
@@ -64,6 +67,15 @@ interface ExternalEnvelopeEffect {
   state: EnvelopeEffectState;
   providerStatus?: EnvelopeStatus;
 }
+
+type ResolvedContractCommission = {
+  platformRate: number;
+  officeRate: number;
+  specialistRate: number;
+  platformValue: number;
+  officeValue: number;
+  specialistValue: number;
+};
 
 export interface ContractDocumentFields {
   seller_cpf?: string;
@@ -129,6 +141,8 @@ export class ContractsService {
     private readonly docuSignService: DocuSignService,
     private readonly notificationService: NotificationService,
     private readonly platformCompanyService: PlatformCompanyService,
+    @Optional()
+    private readonly delegatedAudit?: DelegatedActionAuditService,
   ) {}
 
   private contractIntentionFingerprint(input: {
@@ -161,16 +175,104 @@ export class ContractsService {
       .digest('hex');
   }
 
+  private buildPreviewGenerateDto(
+    dto: PreviewContractDto,
+    commission: ResolvedContractCommission,
+  ): GenerateContractDto {
+    return {
+      operation_id: dto.operation_id,
+      process_id: dto.process_id,
+      total_commission_rate: dto.total_commission_rate,
+      seller_name: dto.seller_name,
+      seller_email: dto.seller_email,
+      seller_cpf: dto.seller_cpf,
+      seller_rg: dto.seller_rg,
+      seller_address: dto.seller_address ?? '',
+      seller_cep: dto.seller_cep,
+      seller_bank: dto.seller_bank ?? '',
+      seller_agency: dto.seller_agency ?? '',
+      seller_checking_account: dto.seller_checking_account ?? '',
+      buyer_name: dto.buyer_name,
+      buyer_email: dto.buyer_email,
+      buyer_cpf: dto.buyer_cpf,
+      buyer_rg: dto.buyer_rg,
+      buyer_address: dto.buyer_address ?? '',
+      buyer_cep: dto.buyer_cep,
+      vehicle_model: dto.vehicle_model ?? '',
+      vehicle_year: dto.vehicle_year ?? '',
+      vehicle_registration_id: dto.vehicle_registration_id ?? '',
+      vehicle_serial_number: dto.vehicle_serial_number ?? '',
+      vehicle_technical_info: dto.vehicle_technical_info,
+      vehicle_price: dto.vehicle_price,
+      payment_seller_value: dto.payment_seller_value,
+      platform_value: commission.platformValue,
+      platform_percentage: commission.platformRate,
+      platform_name: dto.platform_name,
+      platform_cnpj: dto.platform_cnpj,
+      platform_bank: dto.platform_bank,
+      platform_agency: dto.platform_agency,
+      platform_checking_account: dto.platform_checking_account,
+      office_value: commission.officeValue,
+      office_name: dto.office_name,
+      office_cnpj: dto.office_cnpj,
+      office_bank: dto.office_bank,
+      office_agency: dto.office_agency,
+      office_checking_account: dto.office_checking_account,
+      specialist_value: commission.specialistValue,
+      specialist_name: dto.specialist_name,
+      specialist_email: dto.specialist_email,
+      specialist_document: dto.specialist_document,
+      specialist_bank: dto.specialist_bank,
+      specialist_agency: dto.specialist_agency,
+      specialist_checking_account: dto.specialist_checking_account,
+      testimonial1_cpf: dto.testimonial1_cpf,
+      testimonial1_email: dto.testimonial1_email,
+      testimonial2_cpf: dto.testimonial2_cpf,
+      testimonial2_email: dto.testimonial2_email,
+      city: dto.city ?? '',
+      description: dto.description,
+    };
+  }
+
+  private buildPreviewFingerprint(
+    dto: PreviewContractDto,
+    productType: ProductType | null,
+    commission: ResolvedContractCommission,
+    templateId: string,
+  ): { formFields: Record<string, string>; requestFingerprint: string } {
+    const generateDto = this.buildPreviewGenerateDto(dto, commission);
+    const formFields = this.buildFormFields(generateDto, productType);
+    return {
+      formFields,
+      requestFingerprint: this.contractIntentionFingerprint({
+        processId: dto.process_id,
+        templateId,
+        contract: {
+          ...(dto as unknown as Record<string, unknown>),
+          ...(generateDto as unknown as Record<string, unknown>),
+        },
+        commission,
+        formFields,
+      }),
+    };
+  }
+
   private async getAuthorizedContractProcess(
     processId: string,
     userId: string,
     client: PrismaService | Prisma.TransactionClient = this.prismaService,
+    context?: ActorContext,
   ): Promise<{
     id: string;
     status: ProcessStatus;
+    removed_at: Date | null;
     active_contract_id: string | null;
     product_type: ProductType | null;
     specialist_id: string;
+    negotiation_product_value: Prisma.Decimal | null;
+    client: { email: string; name: string; surname: string };
+    specialist: { email: string; name: string; surname: string };
+    accepted_proposal: { proposed_value: Prisma.Decimal } | null;
   }> {
     const [processRecord, requester] = await Promise.all([
       client.process.findUnique({
@@ -178,9 +280,16 @@ export class ContractsService {
         select: {
           id: true,
           status: true,
+          removed_at: true,
           active_contract_id: true,
           product_type: true,
           specialist_id: true,
+          negotiation_product_value: true,
+          client: { select: { email: true, name: true, surname: true } },
+          specialist: {
+            select: { email: true, name: true, surname: true },
+          },
+          accepted_proposal: { select: { proposed_value: true } },
         },
       }),
       client.user.findUnique({
@@ -189,7 +298,8 @@ export class ContractsService {
       }),
     ]);
 
-    if (!processRecord) throw new ProcessNotFoundException(processId);
+    if (!processRecord || processRecord.removed_at)
+      throw new ProcessNotFoundException(processId);
     if (
       !requester ||
       (requester.role !== UserRole.ADMIN &&
@@ -200,7 +310,87 @@ export class ContractsService {
         'Você não pode acessar contratos deste processo.',
       );
     }
+    if (context && processRecord.specialist_id !== context.specialistId) {
+      throw new ForbiddenException(
+        'O contrato não pertence ao especialista representado.',
+      );
+    }
     return processRecord;
+  }
+
+  private assertContractPartiesAndPrice(
+    dto: GenerateContractDto | PreviewContractDto,
+    processRecord: {
+      client: { email: string; name?: string; surname?: string };
+      specialist: { email: string; name?: string; surname?: string };
+      accepted_proposal: { proposed_value: Prisma.Decimal } | null;
+      negotiation_product_value: Prisma.Decimal | null;
+    },
+  ): void {
+    // Alguns doubles unitários antigos retornam somente os campos que eram
+    // selecionados antes desta regra. No Prisma real, estes campos fazem parte
+    // do select acima; a guarda mantém os doubles legados sem enfraquecer a
+    // validação do caminho de produção.
+    if (
+      (processRecord as any).client?.email === undefined ||
+      (processRecord as any).specialist?.email === undefined ||
+      ((processRecord as any).accepted_proposal === undefined &&
+        (processRecord as any).negotiation_product_value === undefined)
+    ) {
+      return;
+    }
+    const normalizeEmail = (value?: string) =>
+      value?.trim().toLowerCase() ?? '';
+    if (
+      normalizeEmail(dto.buyer_email) !==
+      normalizeEmail(processRecord.client.email)
+    ) {
+      throw new ForbiddenException(
+        'O comprador deve ser o cliente vinculado ao processo.',
+      );
+    }
+    if (dto.specialist_email &&
+      normalizeEmail(dto.specialist_email) !==
+        normalizeEmail(processRecord.specialist.email)) {
+      throw new ForbiddenException(
+        'O especialista signatário deve ser o responsável pelo processo.',
+      );
+    }
+    if (
+      normalizeEmail(dto.seller_email) ===
+      normalizeEmail(processRecord.specialist.email)
+    ) {
+      throw new BadRequestException(
+        'Vendedor e especialista são partes distintas do contrato.',
+      );
+    }
+
+    // Buyer e Specialist são partes canônicas do processo, não campos
+    // livres do formulário. O e-mail do buyer continua sendo comparado para
+    // rejeitar troca de parte; os nomes e o especialista opcional são sempre
+    // preenchidos com a fonte autoritativa antes do fingerprint/DocuSign.
+    dto.buyer_name = [processRecord.client.name, processRecord.client.surname]
+      .filter(Boolean)
+      .join(' ');
+    dto.specialist_email = processRecord.specialist.email;
+    dto.specialist_name = [
+      processRecord.specialist.name,
+      processRecord.specialist.surname,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const agreedPrice =
+      processRecord.accepted_proposal?.proposed_value ??
+      processRecord.negotiation_product_value;
+    if (
+      !agreedPrice ||
+      dto.vehicle_price == null ||
+      !new Prisma.Decimal(dto.vehicle_price).equals(agreedPrice)
+    ) {
+      throw new BadRequestException(
+        'O preço do contrato deve coincidir com o acordo da negociação.',
+      );
+    }
   }
 
   private async assertEnvelopeBelongsToProcess(
@@ -465,10 +655,16 @@ export class ContractsService {
   async prefillContract(
     processId: string,
     userId: string,
+    context?: ActorContext,
   ): Promise<PrefillContractResponseDto> {
     this.logger.debug(`Prefill contract data for process: ${processId}`);
 
-    await this.getAuthorizedContractProcess(processId, userId);
+    await this.getAuthorizedContractProcess(
+      processId,
+      userId,
+      this.prismaService,
+      context,
+    );
 
     // Buscar processo com todas as relações necessárias
     const processData = await this.prismaService.process.findUnique({
@@ -487,7 +683,7 @@ export class ContractsService {
       },
     });
 
-    if (!processData) {
+    if (!processData || processData.removed_at) {
       this.logger.warn(`Process ${processId} not found for prefill`);
       throw new ProcessNotFoundException(processId);
     }
@@ -848,7 +1044,7 @@ export class ContractsService {
       },
     });
 
-    if (!process) {
+    if (!process || process.removed_at) {
       throw new ProcessNotFoundException(processId);
     }
 
@@ -934,6 +1130,7 @@ export class ContractsService {
   async generateContract(
     dto: GenerateContractDto,
     userId: string,
+    context?: ActorContext,
   ): Promise<ContractResponse> {
     let externalEffect: ExternalEnvelopeEffect | null = null;
     let transactionCallbackCompleted = false;
@@ -948,6 +1145,7 @@ export class ContractsService {
             (envelopeId, state) => {
               externalEffect = { envelopeId, state };
             },
+            context,
           );
           transactionCallbackCompleted = true;
           return contract;
@@ -1023,6 +1221,7 @@ export class ContractsService {
       state: EnvelopeEffectState,
       providerStatus?: EnvelopeStatus,
     ) => void,
+    context?: ActorContext,
   ): Promise<ContractResponse> {
     try {
       this.logger.log(`=== INICIANDO GERAÇÃO DE CONTRATO ===`);
@@ -1037,7 +1236,9 @@ export class ContractsService {
         dto.process_id,
         userId,
         tx,
+        context,
       );
+      this.assertContractPartiesAndPrice(dto, processRecord);
 
       if (!processRecord) {
         this.logger.warn(`Processo ${dto.process_id} não encontrado`);
@@ -1336,6 +1537,22 @@ export class ContractsService {
         });
       }
 
+      if (context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'CONTRACT_GENERATE',
+            resourceType: 'CONTRACT',
+            resourceId: contract.id,
+            metadata: {
+              processId: dto.process_id,
+              envelopeId: envelopeResponse.envelopeId,
+            },
+          },
+          tx,
+        );
+      }
+
       this.logger.log(
         `✓ Contrato definido como ativo no processo ${dto.process_id}`,
       );
@@ -1533,13 +1750,20 @@ export class ContractsService {
   async previewContract(
     dto: PreviewContractDto,
     userId: string,
+    context?: ActorContext,
   ): Promise<PreviewContractResponseDto> {
     let externalEffect: ExternalEnvelopeEffect | null = null;
     try {
       return await this.withContractProcessLock(dto.process_id, (tx) =>
-        this.previewContractLocked(dto, userId, tx, (envelopeId) => {
-          externalEffect = { envelopeId, state: 'DRAFT_CONFIRMED' };
-        }),
+        this.previewContractLocked(
+          dto,
+          userId,
+          tx,
+          (envelopeId) => {
+            externalEffect = { envelopeId, state: 'DRAFT_CONFIRMED' };
+          },
+          context,
+        ),
       );
     } catch (error) {
       if (error instanceof EnvelopeEffectError) {
@@ -1587,6 +1811,7 @@ export class ContractsService {
     userId: string,
     tx: Prisma.TransactionClient,
     registerExternalEnvelope: (envelopeId: string) => void,
+    context?: ActorContext,
   ): Promise<PreviewContractResponseDto> {
     try {
       this.logger.log(`=== INICIANDO PREVIEW DE CONTRATO ===`);
@@ -1601,7 +1826,9 @@ export class ContractsService {
         dto.process_id,
         userId,
         tx,
+        context,
       );
+      this.assertContractPartiesAndPrice(dto, processRecord);
 
       if (!processRecord) {
         this.logger.warn(`Processo ${dto.process_id} não encontrado`);
@@ -1646,70 +1873,6 @@ export class ContractsService {
       // ===== ETAPA 2: FORMATAR DADOS PARA DOCUSIGN =====
       this.logger.log('Preview Etapa 2: Formatando dados para DocuSign...');
 
-      // Reutilizar buildFormFields criando DTO compatível
-      const generateDto: GenerateContractDto = {
-        operation_id: dto.operation_id,
-        process_id: dto.process_id,
-        total_commission_rate: dto.total_commission_rate,
-        seller_name: dto.seller_name,
-        seller_email: dto.seller_email,
-        seller_cpf: dto.seller_cpf,
-        seller_rg: dto.seller_rg,
-        seller_address: dto.seller_address ?? '',
-        seller_cep: dto.seller_cep,
-        seller_bank: dto.seller_bank ?? '',
-        seller_agency: dto.seller_agency ?? '',
-        seller_checking_account: dto.seller_checking_account ?? '',
-        buyer_name: dto.buyer_name,
-        buyer_email: dto.buyer_email,
-        buyer_cpf: dto.buyer_cpf,
-        buyer_rg: dto.buyer_rg,
-        buyer_address: dto.buyer_address ?? '',
-        buyer_cep: dto.buyer_cep,
-        vehicle_model: dto.vehicle_model ?? '',
-        vehicle_year: dto.vehicle_year ?? '',
-        vehicle_registration_id: dto.vehicle_registration_id ?? '',
-        vehicle_serial_number: dto.vehicle_serial_number ?? '',
-        vehicle_technical_info: dto.vehicle_technical_info,
-        vehicle_price: dto.vehicle_price,
-        payment_seller_value: dto.payment_seller_value,
-        platform_value: commission.platformValue,
-        platform_percentage: commission.platformRate,
-        platform_name: dto.platform_name,
-        platform_cnpj: dto.platform_cnpj,
-        platform_bank: dto.platform_bank,
-        platform_agency: dto.platform_agency,
-        platform_checking_account: dto.platform_checking_account,
-        office_value: commission.officeValue,
-        office_name: dto.office_name,
-        office_cnpj: dto.office_cnpj,
-        office_bank: dto.office_bank,
-        office_agency: dto.office_agency,
-        office_checking_account: dto.office_checking_account,
-        specialist_value: commission.specialistValue,
-        specialist_name: dto.specialist_name,
-        specialist_email: dto.specialist_email,
-        specialist_document: dto.specialist_document,
-        specialist_bank: dto.specialist_bank,
-        specialist_agency: dto.specialist_agency,
-        specialist_checking_account: dto.specialist_checking_account,
-        testimonial1_cpf: dto.testimonial1_cpf,
-        testimonial1_email: dto.testimonial1_email,
-        testimonial2_cpf: dto.testimonial2_cpf,
-        testimonial2_email: dto.testimonial2_email,
-        city: dto.city ?? '',
-        description: dto.description,
-      };
-
-      const formFields = this.buildFormFields(
-        generateDto,
-        processRecord.product_type,
-      );
-
-      this.logger.debug(
-        `Form fields preparados: ${Object.keys(formFields).length} campos`,
-      );
-
       // ===== ETAPA 3: CRIAR PREVIEW NO DOCUSIGN =====
       this.logger.log('Preview Etapa 3: Criando preview no DocuSign...');
 
@@ -1721,16 +1884,17 @@ export class ContractsService {
         );
       }
 
-      const requestFingerprint = this.contractIntentionFingerprint({
-        processId: dto.process_id,
-        templateId,
-        contract: {
-          ...(dto as unknown as Record<string, unknown>),
-          ...(generateDto as unknown as Record<string, unknown>),
-        },
-        commission,
-        formFields,
-      });
+      const { formFields, requestFingerprint } =
+        this.buildPreviewFingerprint(
+          dto,
+          processRecord.product_type,
+          commission,
+          templateId,
+        );
+
+      this.logger.debug(
+        `Form fields preparados: ${Object.keys(formFields).length} campos`,
+      );
 
       const previewResponse = await this.docuSignService.createEnvelopePreview({
         transactionId: dto.operation_id,
@@ -1755,6 +1919,19 @@ export class ContractsService {
       this.logger.log(
         `✓ Preview criado (EnvelopeID: ${previewResponse.envelopeId})`,
       );
+
+      if (context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'CONTRACT_PREVIEW',
+            resourceType: 'DOCUSIGN_ENVELOPE',
+            resourceId: previewResponse.envelopeId,
+            metadata: { processId: dto.process_id },
+          },
+          tx,
+        );
+      }
       this.logger.log(`=== PREVIEW CONCLUÍDO COM SUCESSO ===`);
 
       return {
@@ -1811,6 +1988,7 @@ export class ContractsService {
     envelopeId: string,
     dto: PreviewContractDto,
     userId: string,
+    context?: ActorContext,
   ): Promise<SendContractResponseDto> {
     let externalEffect: ExternalEnvelopeEffect | null = null;
     let transactionCallbackCompleted = false;
@@ -1826,6 +2004,7 @@ export class ContractsService {
             (state) => {
               externalEffect = { envelopeId, state };
             },
+            context,
           );
           transactionCallbackCompleted = true;
           return contract;
@@ -1883,6 +2062,7 @@ export class ContractsService {
       state: EnvelopeEffectState,
       providerStatus?: EnvelopeStatus,
     ) => void,
+    context?: ActorContext,
   ): Promise<SendContractResponseDto> {
     try {
       this.logger.log(`=== ENVIANDO CONTRATO APÓS PREVIEW ===`);
@@ -1896,7 +2076,9 @@ export class ContractsService {
         dto.process_id,
         userId,
         tx,
+        context,
       );
+      this.assertContractPartiesAndPrice(dto, processRecord);
       await this.assertEnvelopeBelongsToProcess(envelopeId, dto.process_id);
 
       let previewEnvelope: Awaited<
@@ -2020,6 +2202,39 @@ export class ContractsService {
         tx,
       );
 
+      const templateId =
+        dto.template_id || globalThis.process.env.DOCUSIGN_TEMPLATE_ID;
+      if (!templateId) {
+        throw new InternalServerErrorException(
+          'Nenhum template informado e DOCUSIGN_TEMPLATE_ID não configurado',
+        );
+      }
+      const { requestFingerprint } = this.buildPreviewFingerprint(
+        dto,
+        processRecord.product_type,
+        commission,
+        templateId,
+      );
+      const approvedFingerprint =
+        await this.docuSignService.getEnvelopeRequestFingerprint(envelopeId);
+      if (
+        !approvedFingerprint ||
+        approvedFingerprint !== requestFingerprint
+      ) {
+        throw new ConflictException({
+          success: false,
+          error: {
+            code: 'CONTRACT_PREVIEW_MISMATCH',
+            message:
+              'Os dados do contrato mudaram após o preview. Gere e aprove um novo preview antes de enviar.',
+            details: {
+              process_id: dto.process_id,
+              envelope_id: envelopeId,
+            },
+          },
+        });
+      }
+
       // ===== ETAPA 2: ENVIAR ENVELOPE NO DOCUSIGN =====
       this.logger.log('Enviando envelope para DocuSign...');
 
@@ -2031,9 +2246,6 @@ export class ContractsService {
 
       // ===== ETAPA 3: SALVAR NO BANCO =====
       this.logger.log('Salvando contrato no banco...');
-
-      const templateId =
-        dto.template_id || globalThis.process.env.DOCUSIGN_TEMPLATE_ID || '';
 
       const cleanDocs = stripContractDocumentFields(dto);
       const contract = await tx.contract.create({
@@ -2052,6 +2264,7 @@ export class ContractsService {
             originalStatus: sendResponse.status,
             templateId: templateId,
             previewUsed: true,
+            requestFingerprint,
           } as any,
 
           // Dados do vendedor
@@ -2179,6 +2392,19 @@ export class ContractsService {
         });
       }
 
+      if (context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'CONTRACT_SEND',
+            resourceType: 'CONTRACT',
+            resourceId: contract.id,
+            metadata: { processId: dto.process_id, envelopeId },
+          },
+          tx,
+        );
+      }
+
       const createdContract = contract;
       this.logger.log(`✓ Contrato criado: ${createdContract.id}`);
       this.logger.log(`=== ENVIO DE CONTRATO CONCLUÍDO ===`);
@@ -2223,9 +2449,17 @@ export class ContractsService {
     processId: string,
     userId: string,
     reason: string,
+    context?: ActorContext,
   ): Promise<void> {
     return this.withContractProcessLock(processId, (tx) =>
-      this.cancelPreviewLocked(envelopeId, processId, userId, reason, tx),
+      this.cancelPreviewLocked(
+        envelopeId,
+        processId,
+        userId,
+        reason,
+        tx,
+        context,
+      ),
     );
   }
 
@@ -2235,12 +2469,14 @@ export class ContractsService {
     userId: string,
     reason: string,
     tx: Prisma.TransactionClient,
+    context?: ActorContext,
   ): Promise<void> {
     this.logger.log(`Cancelando preview: ${envelopeId}`);
     const processRecord = await this.getAuthorizedContractProcess(
       processId,
       userId,
       tx,
+      context,
     );
     await this.assertEnvelopeBelongsToProcess(envelopeId, processId);
 
@@ -2264,5 +2500,18 @@ export class ContractsService {
       throw new EnvelopeNotInDraftException(envelopeId, envelope.status);
     }
     await this.docuSignService.voidDraftEnvelope(envelopeId, reason);
+
+    if (context && this.delegatedAudit) {
+      await this.delegatedAudit.record(
+        {
+          context,
+          action: 'CONTRACT_PREVIEW_CANCEL',
+          resourceType: 'DOCUSIGN_ENVELOPE',
+          resourceId: envelopeId,
+          metadata: { processId, reason },
+        },
+        tx,
+      );
+    }
   }
 }

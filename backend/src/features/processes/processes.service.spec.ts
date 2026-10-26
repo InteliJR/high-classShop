@@ -792,6 +792,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       expect.objectContaining({
         where: {
           id: 'process-1',
+          removed_at: null,
           status: ProcessStatus.SCHEDULING,
           updated_at: new Date('2026-01-01T00:00:00.000Z'),
         },
@@ -935,6 +936,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       expect.objectContaining({
         where: {
           id: 'process-1',
+          removed_at: null,
           status: ProcessStatus.NEGOTIATION,
           updated_at: new Date('2026-01-01T00:00:00.000Z'),
         },
@@ -1145,6 +1147,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       expect.objectContaining({
         where: {
           id: 'process-1',
+          removed_at: null,
           status: ProcessStatus.SCHEDULING,
           product_type: null,
           car_id: null,
@@ -1355,6 +1358,7 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
       expect.objectContaining({
         where: {
           id: 'process-1',
+          removed_at: null,
           status: ProcessStatus.SCHEDULING,
           updated_at: new Date('2026-01-01T00:00:00.000Z'),
           specialist_id: specialistId,
@@ -1770,6 +1774,7 @@ describe('ProcessesService — telefone da contraparte após confirmação', () 
     const processDelegate = (service as any).prismaService.process;
     const expectedWhere = {
       client_id: clientId,
+      removed_at: null,
       specialist_id: specialistId,
     };
     expect(processDelegate.findMany).toHaveBeenCalledWith(
@@ -1793,6 +1798,7 @@ describe('ProcessesService — telefone da contraparte após confirmação', () 
     const processDelegate = (service as any).prismaService.process;
     const expectedWhere = {
       client_id: clientId,
+      removed_at: null,
       client: {
         role: UserRole.CUSTOMER,
         consultant_id: 'consultant-1',
@@ -3049,7 +3055,7 @@ describe('ProcessesService.cancelAppointment — serialização canônica', () =
       `appointment-schedule:${specialistId}`,
     );
     expect(tx.process.findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: process.id } }),
+      expect.objectContaining({ where: { id: process.id, removed_at: null } }),
     );
     expect(historyDelete).toHaveBeenCalledWith({
       where: { processId: process.id },
@@ -3057,6 +3063,7 @@ describe('ProcessesService.cancelAppointment — serialização canônica', () =
     expect(processClaim).toHaveBeenCalledWith({
       where: {
         id: process.id,
+        removed_at: null,
         status: ProcessStatus.SCHEDULING,
         updated_at: process.updated_at,
       },

@@ -1,5 +1,9 @@
 import axios from "axios";
 import { useAuth } from "../store/authStateManager";
+import {
+  attachAdminSpecialistTarget,
+  readAdminSpecialistTarget,
+} from "../lib/admin-specialist-journey";
 
 // Instanciar a origem das rquisições para a api
 const api = axios.create({
@@ -8,7 +12,8 @@ const api = axios.create({
 
 // Adiciona token de acesso no header das requisições
 api.interceptors.request.use((config) => {
-  const token = useAuth.getState().accessToken;
+  const auth = useAuth.getState();
+  const token = auth.accessToken;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -16,7 +21,11 @@ api.interceptors.request.use((config) => {
   // Sempre incluir cookies nas requisições
   config.withCredentials = true;
 
-  return config;
+  return attachAdminSpecialistTarget(
+    config,
+    auth.user?.role,
+    readAdminSpecialistTarget(),
+  );
 });
 
 // Renova token em 401; converte erros HTTP em mensagens amigáveis

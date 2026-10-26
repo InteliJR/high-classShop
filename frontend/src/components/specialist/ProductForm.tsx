@@ -36,6 +36,8 @@ import {
 import { Dialog, DialogContent } from "../../components/ui/dialog";
 import type { ProductCurrency, SpecialityType, UserRole } from "../../types/types";
 import { getProductSaveErrorMessage } from "../../lib/product-error-message";
+import { useAdminSpecialistJourney } from "../../contexts/AdminSpecialistJourneyContext";
+import { adminJourneyRoute } from "../../lib/admin-specialist-journey";
 
 type ProductType = "CAR" | "BOAT" | "AIRCRAFT";
 
@@ -68,7 +70,9 @@ export default function ProductForm({
 }: ProductFormProps) {
   const navigate = useNavigate();
   const user = useAuth((state) => state.user);
-  const userSpeciality = user?.speciality as SpecialityType;
+  const adminJourney = useAdminSpecialistJourney();
+  const userSpeciality = (adminJourney?.specialist.speciality ??
+    user?.speciality) as SpecialityType;
   const userRole = user?.role as UserRole;
 
   // Define o tipo de produto baseado na especialidade do usuário
@@ -82,13 +86,15 @@ export default function ProductForm({
   // Validação de autorização: ADMIN pode criar qualquer tipo, SPECIALIST só do seu tipo
   const canCreateProductType = useCallback(
     (type: ProductType): boolean => {
-      if (userRole === "ADMIN") return true;
+      if (userRole === "ADMIN") {
+        return Boolean(adminJourney) && userSpeciality === type;
+      }
       if (userRole === "SPECIALIST") {
         return userSpeciality === type;
       }
       return false;
     },
-    [userRole, userSpeciality],
+    [adminJourney, userRole, userSpeciality],
   );
 
   // Verificar se o usuário pode criar o tipo de produto selecionado
@@ -215,8 +221,12 @@ export default function ProductForm({
       };
 
       // Vincula o produto ao especialista logado (quando aplicável)
-      if (user?.role === "SPECIALIST" && user.id) {
-        formattedData.specialist_id = user.id;
+      if (mode === "create") {
+        if (user?.role === "SPECIALIST" && user.id) {
+          formattedData.specialist_id = user.id;
+        } else if (user?.role === "ADMIN" && adminJourney) {
+          formattedData.specialist_id = adminJourney.targetSpecialistId;
+        }
       }
 
       // Adiciona campos específicos de cada tipo de produto (apenas se preenchidos)
@@ -272,14 +282,20 @@ export default function ProductForm({
           try {
             await assignProductToProcess(processId, productType, createdId);
             window.alert("Produto criado e vinculado ao processo com sucesso!");
-            navigate(`/processes/${processId}/negotiation`);
+            navigate(
+              adminJourney
+                ? adminJourneyRoute("negotiation", processId)
+                : `/processes/${processId}/negotiation`,
+            );
             return;
           } catch (assignError: any) {
             console.error("Erro ao vincular produto ao processo:", assignError);
             window.alert(
               "Produto criado, mas não foi possível vinculá-lo automaticamente ao processo. Use a tela de seleção de produto para vinculá-lo manualmente.",
             );
-            navigate("/specialist/products");
+            navigate(
+              adminJourney ? adminJourneyRoute("products") : "/specialist/products",
+            );
             return;
           }
         }
@@ -301,7 +317,9 @@ export default function ProductForm({
       }
 
       // Navega para a lista de produtos
-      navigate("/specialist/products");
+      navigate(
+        adminJourney ? adminJourneyRoute("products") : "/specialist/products",
+      );
     } catch (error: any) {
       console.error("Erro ao salvar produto:", error);
 
@@ -333,7 +351,7 @@ export default function ProductForm({
       )}
 
       {/* Seletor de Tipo de Produto (apenas no modo criar e se for ADMIN sem especialidade) */}
-      {mode === "create" && userRole === "ADMIN" && (
+      {mode === "create" && userRole === "ADMIN" && !adminJourney && (
         <div className="flex flex-col gap-2">
           <label
             htmlFor="productType"
@@ -367,7 +385,7 @@ export default function ProductForm({
       )}
 
       {/* Botao para abrir modal de importacao XLSX - apenas no modo criar */}
-      {mode === "create" && (
+      {mode === "create" && !adminJourney && (
         <div className="border-t pt-6">
           <div className="flex items-center gap-4">
             <h3 className="text-lg font-semibold text-text-primary">
@@ -449,7 +467,11 @@ export default function ProductForm({
       <div className="flex gap-4 justify-end border-t pt-6">
         <button
           type="button"
-          onClick={() => navigate("/specialist/products")}
+          onClick={() =>
+            navigate(
+              adminJourney ? adminJourneyRoute("products") : "/specialist/products",
+            )
+          }
           className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition"
           disabled={isSubmitting}
         >

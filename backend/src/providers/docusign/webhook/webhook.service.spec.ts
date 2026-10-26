@@ -48,6 +48,7 @@ describe('DocuSignWebhookService monotonic convergence', () => {
     let providerStatus = ProviderStatus.SENT;
     const historyCreate = jest.fn().mockResolvedValue({});
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
       contract: {
         updateMany: jest.fn().mockImplementation(async ({ where, data }) => {
           if (providerStatus !== where.provider_status) return { count: 0 };
@@ -68,7 +69,7 @@ describe('DocuSignWebhookService monotonic convergence', () => {
           status: ProcessStatus.DOCUMENTATION,
           active_contract_id: 'contract-1',
         }),
-        update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       processStatusHistory: { create: historyCreate },
     };
@@ -116,6 +117,7 @@ describe('DocuSignWebhookService monotonic convergence', () => {
     });
     const historyCreate = jest.fn().mockResolvedValue({});
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
       contract: {
         updateMany: jest.fn().mockImplementation(async ({ where, data }) => {
           if (data.provider_status === ProviderStatus.COMPLETED) {
@@ -144,9 +146,9 @@ describe('DocuSignWebhookService monotonic convergence', () => {
           status: processStatus,
           active_contract_id: 'contract-1',
         })),
-        update: jest.fn().mockImplementation(async ({ data }) => {
+        updateMany: jest.fn().mockImplementation(async ({ data }) => {
           if (data.status) processStatus = data.status;
-          return {};
+          return { count: 1 };
         }),
       },
       processStatusHistory: { create: historyCreate },
@@ -200,6 +202,7 @@ describe('DocuSignWebhookService monotonic convergence', () => {
       signed_at: null,
     };
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
       contract: {
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
@@ -223,5 +226,55 @@ describe('DocuSignWebhookService monotonic convergence', () => {
       },
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+  });
+
+  it('preserva contrato, mas não altera processo removido em webhook atrasado', async () => {
+    const contractUpdate = jest.fn().mockResolvedValue({ count: 1 });
+    const processUpdate = jest.fn();
+    const historyCreate = jest.fn();
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      contract: {
+        updateMany: contractUpdate,
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'contract-1' }),
+      },
+      process: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'process-1',
+          status: ProcessStatus.COMPLETED,
+          active_contract_id: 'contract-1',
+          removed_at: new Date(),
+        }),
+        updateMany: processUpdate,
+      },
+      processStatusHistory: { create: historyCreate },
+    };
+    const prisma = {
+      contract: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'contract-1',
+          process_id: 'process-1',
+          provider_status: ProviderStatus.DELIVERED,
+          status: 'PENDING',
+          provider_meta: {},
+          signed_at: null,
+        }),
+        findUnique: jest.fn().mockResolvedValue({
+          process: { removed_at: new Date() },
+        }),
+      },
+      $transaction: jest
+        .fn()
+        .mockImplementation(async (callback) => callback(tx)),
+    } as any;
+
+    await new DocuSignWebhookService(
+      prisma,
+      {} as any,
+    ).handleEnvelopeStatusChanged(completedPayload);
+
+    expect(contractUpdate).toHaveBeenCalledTimes(1);
+    expect(processUpdate).not.toHaveBeenCalled();
+    expect(historyCreate).not.toHaveBeenCalled();
   });
 });

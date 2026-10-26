@@ -82,7 +82,7 @@ function processFixture(overrides: Record<string, any> = {}) {
       id: 'client-1',
       name: 'Cliente',
       surname: 'Teste',
-      email: 'cliente@example.com',
+      email: 'buyer@example.test',
       cpf: null,
       rg: null,
       address: null,
@@ -93,7 +93,7 @@ function processFixture(overrides: Record<string, any> = {}) {
       id: 'specialist-1',
       name: 'Especialista',
       surname: 'Teste',
-      email: 'especialista@example.com',
+      email: 'specialist@example.test',
       cpf: null,
       company_id: null,
       commission_rate: 0,
@@ -745,6 +745,14 @@ describe('ContractsService — locked transaction and compensation', () => {
 describe('ContractsService — send after preview integrity', () => {
   function makeSendHarness(processOverrides: Record<string, any> = {}) {
     const process = processFixture(processOverrides);
+    const commission = {
+      platformValue: 1000,
+      platformRate: 1,
+      officeValue: 0,
+      officeRate: 0,
+      specialistValue: 9000,
+      specialistRate: 9,
+    };
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
       process: {
@@ -778,6 +786,7 @@ describe('ContractsService — send after preview integrity', () => {
     });
     const docusign = {
       getEnvelopeProcessId: jest.fn().mockResolvedValue('process-1'),
+      getEnvelopeRequestFingerprint: jest.fn(),
       getEnvelopeStatus: jest.fn().mockResolvedValue({
         envelopeId: 'envelope-1',
         status: EnvelopeStatus.CREATED,
@@ -796,14 +805,9 @@ describe('ContractsService — send after preview integrity', () => {
       } as any,
       mkPlatformCompanyService(10),
     );
-    jest.spyOn(service as any, 'resolveCommissionFromTotal').mockResolvedValue({
-      platformValue: 1000,
-      platformRate: 1,
-      officeValue: 0,
-      officeRate: 0,
-      specialistValue: 9000,
-      specialistRate: 9,
-    });
+    jest
+      .spyOn(service as any, 'resolveCommissionFromTotal')
+      .mockResolvedValue(commission);
     const dto = {
       operation_id: '11111111-1111-4111-8111-111111111111',
       process_id: 'process-1',
@@ -822,6 +826,14 @@ describe('ContractsService — send after preview integrity', () => {
       specialist_email: 'specialist@example.test',
       city: 'Sao Paulo',
     } as any;
+    docusign.getEnvelopeRequestFingerprint.mockImplementation(async () =>
+      (service as any).buildPreviewFingerprint(
+        dto,
+        process.product_type,
+        commission,
+        dto.template_id,
+      ).requestFingerprint,
+    );
     return { service, docusign, tx, dto };
   }
 
@@ -1018,6 +1030,60 @@ describe('ContractsService — send after preview integrity', () => {
 });
 
 describe('ContractsService — provider operation id', () => {
+  it('canonicalizes buyer and an omitted specialist from the process', () => {
+    const service = mkSvc(mkPrisma(), mkPlatformCompanyService(10));
+    const dto = {
+      buyer_name: 'Untrusted buyer label',
+      buyer_email: 'buyer@example.test',
+      seller_email: 'seller@example.test',
+      vehicle_price: 100000,
+    } as any;
+
+    (service as any).assertContractPartiesAndPrice(dto, processFixture());
+
+    expect(dto).toMatchObject({
+      buyer_name: 'Cliente Teste',
+      specialist_name: 'Especialista Teste',
+      specialist_email: 'specialist@example.test',
+    });
+  });
+
+  it.each([
+    [
+      'comprador diferente do cliente',
+      { buyer_email: 'intruder@example.test' },
+      ForbiddenException,
+    ],
+    [
+      'especialista signatário diferente do responsável',
+      { specialist_email: 'other-specialist@example.test' },
+      ForbiddenException,
+    ],
+    [
+      'vendedor igual ao especialista',
+      { seller_email: 'specialist@example.test' },
+      BadRequestException,
+    ],
+    [
+      'preço diferente da negociação',
+      { vehicle_price: 99999 },
+      BadRequestException,
+    ],
+  ])('bloqueia %s', (_label, override, exceptionType) => {
+    const service = mkSvc(mkPrisma(), mkPlatformCompanyService(10));
+    const dto = {
+      buyer_email: 'buyer@example.test',
+      specialist_email: 'specialist@example.test',
+      seller_email: 'seller@example.test',
+      vehicle_price: 100000,
+      ...override,
+    } as any;
+
+    expect(() =>
+      (service as any).assertContractPartiesAndPrice(dto, processFixture()),
+    ).toThrow(exceptionType);
+  });
+
   it('passes the same public operation_id through to DocuSign preview retries', async () => {
     const process = processFixture();
     const tx = {
@@ -1063,6 +1129,8 @@ describe('ContractsService — provider operation id', () => {
       seller_email: 'seller@example.test',
       buyer_name: 'Buyer',
       buyer_email: 'buyer@example.test',
+      specialist_email: 'specialist@example.test',
+      vehicle_price: 100000,
       total_commission_rate: 10,
       city: 'Sao Paulo',
       return_url: 'https://app.example.test/return',
@@ -1133,6 +1201,8 @@ describe('ContractsService — provider operation id', () => {
       seller_email: 'seller@example.test',
       buyer_name: 'Buyer',
       buyer_email: 'buyer@example.test',
+      specialist_email: 'specialist@example.test',
+      vehicle_price: 100000,
       total_commission_rate: 10,
       city: 'Sao Paulo',
       description: 'Intent A',
@@ -1233,6 +1303,8 @@ describe('ContractsService — provider operation id', () => {
       seller_email: 'seller@example.test',
       buyer_name: 'Buyer',
       buyer_email: 'buyer@example.test',
+      specialist_email: 'specialist@example.test',
+      vehicle_price: 100000,
       total_commission_rate: 10,
       city: 'Sao Paulo',
       description: 'Same legal description',

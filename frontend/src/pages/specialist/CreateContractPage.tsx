@@ -44,6 +44,8 @@ import {
   cancelPreviewBeforeDiscard,
   expirePreviewBeforeDiscard,
 } from "../../lib/contract-preview-cancellation";
+import { useAdminSpecialistJourney } from "../../contexts/AdminSpecialistJourneyContext";
+import { adminJourneyRoute } from "../../lib/admin-specialist-journey";
 
 interface ContractFormData {
   // Vendedor
@@ -130,6 +132,7 @@ function extractBackendMessage(error: any): string {
 }
 
 export default function CreateContractPage() {
+  const adminJourney = useAdminSpecialistJourney();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -512,7 +515,11 @@ export default function CreateContractPage() {
 
       const previewPayload: PreviewContractData = {
         ...contractData,
-        return_url: `${window.location.origin}/specialist/contracts/preview-callback`,
+        return_url: `${window.location.origin}${
+          adminJourney
+            ? "/admin/journey/contracts/preview-callback"
+            : "/specialist/contracts/preview-callback"
+        }`,
       };
 
       const result = await previewContract(previewPayload);
@@ -582,7 +589,9 @@ export default function CreateContractPage() {
       });
 
       setTimeout(() => {
-        navigate("/specialist/processes");
+        navigate(
+          adminJourney ? adminJourneyRoute("processes") : "/specialist/processes",
+        );
       }, 2000);
     } catch (error: any) {
       console.error("Erro ao enviar contrato");
@@ -735,7 +744,15 @@ export default function CreateContractPage() {
           <p className="text-status-bad font-semibold mb-4">
             Nenhum processo selecionado
           </p>
-          <Button onClick={() => navigate("/specialist/processes")}>
+          <Button
+            onClick={() =>
+              navigate(
+                adminJourney
+                  ? adminJourneyRoute("processes")
+                  : "/specialist/processes",
+              )
+            }
+          >
             Voltar ao Dashboard
           </Button>
         </div>

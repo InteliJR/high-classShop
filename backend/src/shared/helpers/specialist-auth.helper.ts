@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { SpecialityType } from 'src/auth/dto/auth';
@@ -89,4 +89,14 @@ export function assertSpecialistOwnsProduct(
   throw new ForbiddenException(
     'Apenas ADMIN e SPECIALIST podem modificar produtos.',
   );
+}
+
+export function assertNoProductOwnerMutation(
+  dto: Record<string, unknown>,
+): void {
+  if (Object.prototype.hasOwnProperty.call(dto, 'specialist_id')) {
+    throw new BadRequestException(
+      'O responsável pelo produto é imutável nesta rota. Use um comando de transferência dedicado.',
+    );
+  }
 }

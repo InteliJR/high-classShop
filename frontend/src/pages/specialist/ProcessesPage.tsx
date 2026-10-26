@@ -20,6 +20,9 @@ import {
 } from "../../services/processes.service";
 import type { Process } from "../../services/processes.service";
 import { useAuth } from "../../store/authStateManager.ts";
+import { useAdminSpecialistJourney } from "../../contexts/AdminSpecialistJourneyContext";
+import { adminJourneyRoute } from "../../lib/admin-specialist-journey";
+import AdminCreateProcessDialog from "../../components/admin/AdminCreateProcessDialog";
 
 // Status labels for filter dropdown
 const STATUS_OPTIONS = [
@@ -46,9 +49,12 @@ interface ProcessWithProduct extends Process {
 export default function ProcessesPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const adminJourney = useAdminSpecialistJourney();
+  const effectiveSpecialistId = adminJourney?.targetSpecialistId ?? user?.id;
+  const effectiveSpeciality = adminJourney?.specialist.speciality ?? user?.speciality;
 
   // Validate user is logged in
-  if (!user?.id) {
+  if (!effectiveSpecialistId) {
     return (
       <div className="min-h-screen bg-border-soft flex items-center justify-center">
         <div className="text-center">
@@ -83,6 +89,7 @@ export default function ProcessesPage() {
     useState(false);
   const [selectedProcessForProduct, setSelectedProcessForProduct] =
     useState<ProcessWithProduct | null>(null);
+  const [showAdminCreateProcess, setShowAdminCreateProcess] = useState(false);
 
   const itemsPerPage = 10;
 
@@ -115,7 +122,7 @@ export default function ProcessesPage() {
         }
 
         const processes = await getProcessesBySpecialist(
-          user.id,
+          effectiveSpecialistId,
           page,
           itemsPerPage,
           filters,
@@ -136,19 +143,19 @@ export default function ProcessesPage() {
         setIsLoading(false);
       }
     },
-    [user.id, statusFilter, searchQuery, itemsPerPage],
+    [effectiveSpecialistId, statusFilter, searchQuery, itemsPerPage],
   );
 
   // Load processes on mount or when user changes
   useEffect(() => {
-    if (user?.id) {
+    if (effectiveSpecialistId) {
       loadProcesses(1);
     }
-  }, [user?.id, loadProcesses]);
+  }, [effectiveSpecialistId, loadProcesses]);
 
   // Reload processes when filters change
   useEffect(() => {
-    if (user?.id) {
+    if (effectiveSpecialistId) {
       loadProcesses(1);
     }
   }, [statusFilter, searchQuery]);
@@ -165,7 +172,7 @@ export default function ProcessesPage() {
   // Smart Polling: Only poll if there are processes in NEGOTIATION or DOCUMENTATION
   // AND user is not editing/in modal. Interval: 30 seconds
   useEffect(() => {
-    if (!user?.id) return;
+    if (!effectiveSpecialistId) return;
 
     // Check if polling should be active
     const shouldPoll =
@@ -178,7 +185,7 @@ export default function ProcessesPage() {
     }, 30000); // Poll every 30 seconds
 
     return () => clearInterval(pollingInterval);
-  }, [user?.id, currentPage, isEditing, expandedProcessId, processes]);
+  }, [effectiveSpecialistId, currentPage, isEditing, expandedProcessId, processes]);
 
   // Handle pagination
   const handleNextPage = () => {
@@ -205,7 +212,11 @@ export default function ProcessesPage() {
   // Handle upload documents button
   const handleUploadDocuments = (processId: string) => {
     setIsEditing(true); // Pause polling when navigating to upload
-    navigate(`/specialist/contracts/new?processId=${processId}`);
+    navigate(
+      adminJourney
+        ? adminJourneyRoute("contract", processId)
+        : `/specialist/contracts/new?processId=${processId}`,
+    );
   };
 
   // Handle opening product selector for consultancy processes
@@ -244,9 +255,14 @@ export default function ProcessesPage() {
     <div className="min-h-screen bg-border-soft">
       <div className="max-w-7xl mx-auto px-3 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
         <PageHeader
-          title="Dashboard de Processos"
+          title={adminJourney ? "Processos do especialista" : "Dashboard de Processos"}
           actions={
             <>
+              {adminJourney && (
+                <Button type="button" onClick={() => setShowAdminCreateProcess(true)}>
+                  <Plus size={16} /> Novo processo
+                </Button>
+              )}
               <Button
                 type="button"
                 variant={showFilters || hasActiveFilters ? "solid" : "light"}
@@ -439,7 +455,8 @@ export default function ProcessesPage() {
                 onUploadDocuments={() => handleUploadDocuments(process.id)}
                 onStatusUpdated={() => handleStatusUpdated()}
                 onSelectProduct={() => handleSelectProduct(process)}
-                specialistSpeciality={user?.speciality}
+                specialistSpeciality={effectiveSpeciality}
+                adminJourney={Boolean(adminJourney)}
               />
             ))}
           </div>
@@ -481,7 +498,7 @@ export default function ProcessesPage() {
       </div>
 
       {/* Product Selector Modal for Consultancy Processes */}
-      {selectedProcessForProduct && user?.speciality && (
+      {selectedProcessForProduct && effectiveSpeciality && (
         <ProductSelectorModal
           isOpen={showProductSelectorModal}
           onClose={() => {
@@ -491,8 +508,15 @@ export default function ProcessesPage() {
           }}
           onSuccess={handleProductAssigned}
           process={selectedProcessForProduct}
-          specialistId={user.id}
-          specialistSpeciality={user.speciality}
+          specialistId={effectiveSpecialistId}
+          specialistSpeciality={effectiveSpeciality}
+        />
+      )}
+      {adminJourney && (
+        <AdminCreateProcessDialog
+          open={showAdminCreateProcess}
+          onClose={() => setShowAdminCreateProcess(false)}
+          onCreated={() => void loadProcesses(1)}
         />
       )}
     </div>

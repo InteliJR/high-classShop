@@ -27,27 +27,92 @@ import { UserEntity } from 'src/auth/entities/user.entity';
 import {
   assertSpecialistCanCreate,
   assertSpecialistCanModify,
+  assertNoProductOwnerMutation,
   assertSpecialistOwnsProduct,
 } from 'src/shared/helpers/specialist-auth.helper';
 import { Public } from 'src/shared/decorators/public.decorator';
 import { ProductImportJobsService } from '../product-import-jobs/product-import-jobs.service';
+import { ActorContextService } from 'src/shared/actor-context/actor-context.service';
+import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
+import { ProductCsvImportDto } from '../product-import-jobs/dto/product-csv-import.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { randomUUID } from 'node:crypto';
 
 @Controller('aircrafts')
 export class AircraftsController {
   constructor(
     private readonly aircraftsService: AircraftsService,
     private readonly productImportJobsService: ProductImportJobsService,
+    private readonly actorContextService: ActorContextService,
+    private readonly delegatedAudit: DelegatedActionAuditService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
-  create(
+  async create(
     @Body() createAircraftDto: CreateAircraftDto,
     @CurrentUser() user: UserEntity,
   ) {
-    assertSpecialistCanCreate('AIRCRAFT', user);
-    createAircraftDto.specialist_id = user.id;
-    return this.aircraftsService.create(createAircraftDto);
+    const context = await this.actorContextService.resolve(
+      user,
+      createAircraftDto.specialist_id,
+      ProductType.AIRCRAFT,
+    );
+    createAircraftDto.specialist_id = context.specialistId;
+    const productId = randomUUID();
+    const preparedImages = await this.aircraftsService.prepareProductImages(
+      productId,
+      createAircraftDto.images,
+    );
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const aircraft = await this.aircraftsService.create(
+          createAircraftDto,
+          tx,
+          { productId, images: preparedImages },
+        );
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'PRODUCT_CREATE',
+            resourceType: 'AIRCRAFT',
+            resourceId: aircraft.id,
+          },
+          tx,
+        );
+        return aircraft;
+      });
+    } catch (error) {
+      await this.aircraftsService.cleanupPreparedImages(preparedImages);
+      throw error;
+    }
+  }
+
+  @Post('import-csv/preview')
+  @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }),
+  )
+  async previewCsvImport(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: UserEntity,
+    @Body() options: ProductCsvImportDto = new ProductCsvImportDto(),
+  ) {
+    const context = await this.actorContextService.resolve(
+      user,
+      options.specialist_id,
+      ProductType.AIRCRAFT,
+    );
+    if (!file?.originalname?.toLowerCase().endsWith('.csv')) {
+      throw new BadRequestException('Arquivo CSV é obrigatório.');
+    }
+    return this.productImportJobsService.previewCsvImport(
+      file.buffer,
+      ProductType.AIRCRAFT,
+      context.specialistId,
+      options.mode,
+    );
   }
 
   @Post('import-csv')
@@ -58,8 +123,13 @@ export class AircraftsController {
   async importCsv(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: UserEntity,
+    @Body() options: ProductCsvImportDto = new ProductCsvImportDto(),
   ) {
-    assertSpecialistCanCreate('AIRCRAFT', user);
+    const context = await this.actorContextService.resolve(
+      user,
+      options.specialist_id,
+      ProductType.AIRCRAFT,
+    );
 
     if (!file) {
       throw new BadRequestException('Arquivo CSV é obrigatório.');
@@ -78,6 +148,12 @@ export class AircraftsController {
       file.buffer,
       user,
       ProductType.AIRCRAFT,
+      {
+        context,
+        mode: options.mode,
+        confirmSynchronize: options.confirm_synchronize,
+        synchronizePreviewToken: options.synchronize_preview_token,
+      },
     );
   }
 
@@ -138,6 +214,45 @@ export class AircraftsController {
     };
   }
 
+  @Get('admin/all')
+  @Roles(UserRole.ADMIN)
+  async getAllAircraftsForAdmin(
+    @Query() query: any,
+    @CurrentUser() user: UserEntity,
+  ) {
+    let { page, perPage, target_specialist_id, ...rawFilters } = query;
+    page = Number(page) || 1;
+    perPage = Number(perPage) || 20;
+    const context = await this.actorContextService.resolve(
+      user,
+      target_specialist_id,
+      ProductType.AIRCRAFT,
+    );
+    rawFilters.specialist_id = context.specialistId;
+    const { data, count, filters = {} } =
+      await this.aircraftsService.getAllAircrafts(
+        { page, perPage, appliedFilters: rawFilters },
+        true,
+      );
+    const skip = (page - 1) * perPage;
+    return {
+      success: true,
+      message: 'Catálogo administrativo de aeronaves listado com sucesso',
+      data,
+      meta: {
+        pagination: {
+          current_page: page,
+          total_pages: Math.ceil(count / perPage),
+          has_next: skip + perPage < count,
+          has_prev: skip > 0,
+          total: count,
+          per_page: perPage,
+        },
+        filters: { applied_filters: filters, total_without_filters: count },
+      },
+    };
+  }
+
   @Get(':id')
   @Public()
   findOne(@Param('id') id: string) {
@@ -150,19 +265,77 @@ export class AircraftsController {
     @Param('id') id: string,
     @Body() updateAircraftDto: UpdateAircraftDto,
     @CurrentUser() user: UserEntity,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ) {
-    assertSpecialistCanModify('AIRCRAFT', user);
+    assertNoProductOwnerMutation(updateAircraftDto as Record<string, unknown>);
+    const context = await this.actorContextService.resolve(
+      user,
+      targetSpecialistId,
+      ProductType.AIRCRAFT,
+    );
     const existing = await this.aircraftsService.findOne(id);
-    assertSpecialistOwnsProduct(user, existing?.specialist_id);
-    return this.aircraftsService.update(id, updateAircraftDto);
+    this.actorContextService.assertResourceSpecialist(
+      context,
+      existing?.specialist_id,
+    );
+    const preparedImages = await this.aircraftsService.prepareProductImages(
+      id,
+      updateAircraftDto.images,
+    );
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const aircraft = await this.aircraftsService.update(
+          id,
+          updateAircraftDto,
+          tx,
+          { images: preparedImages },
+        );
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'PRODUCT_UPDATE',
+            resourceType: 'AIRCRAFT',
+            resourceId: id,
+          },
+          tx,
+        );
+        return aircraft;
+      });
+    } catch (error) {
+      await this.aircraftsService.cleanupPreparedImages(preparedImages);
+      throw error;
+    }
   }
 
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
-  async remove(@Param('id') id: string, @CurrentUser() user: UserEntity) {
-    assertSpecialistCanModify('AIRCRAFT', user);
+  async remove(
+    @Param('id') id: string,
+    @CurrentUser() user: UserEntity,
+    @Query('target_specialist_id') targetSpecialistId?: string,
+  ) {
+    const context = await this.actorContextService.resolve(
+      user,
+      targetSpecialistId,
+      ProductType.AIRCRAFT,
+    );
     const existing = await this.aircraftsService.findOne(id);
-    assertSpecialistOwnsProduct(user, existing?.specialist_id);
-    return this.aircraftsService.remove(id);
+    this.actorContextService.assertResourceSpecialist(
+      context,
+      existing?.specialist_id,
+    );
+    return this.prisma.$transaction(async (tx) => {
+      const result = await this.aircraftsService.remove(id, tx);
+      await this.delegatedAudit.record(
+        {
+          context,
+          action: 'PRODUCT_DEACTIVATE',
+          resourceType: 'AIRCRAFT',
+          resourceId: id,
+        },
+        tx,
+      );
+      return result;
+    });
   }
 }

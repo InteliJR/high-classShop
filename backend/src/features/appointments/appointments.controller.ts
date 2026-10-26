@@ -12,6 +12,8 @@ import {
   Request,
   HttpStatus,
   ForbiddenException,
+  BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
 import {
@@ -27,7 +29,11 @@ import { AuthGuard } from 'src/auth/auth.guard';
 import { AppointmentResponseEntity } from './entities/appointment.response';
 import { UserEntity } from 'src/auth/entities/user.entity';
 import { ConfirmProcessAppointmentDto } from 'src/features/processes/dto/confirm-process-appointment.dto';
-import { UserRole } from '@prisma/client';
+import { StatusAgendamento, UserRole } from '@prisma/client';
+import {
+  ActorContext,
+  ActorContextService,
+} from 'src/shared/actor-context/actor-context.service';
 
 /**
  * AppointmentsController
@@ -51,7 +57,23 @@ import { UserRole } from '@prisma/client';
 @Controller('appointments')
 @UseGuards(AuthGuard)
 export class AppointmentsController {
-  constructor(private appointmentsService: AppointmentsService) {}
+  constructor(
+    private appointmentsService: AppointmentsService,
+    @Optional() private readonly actorContextService?: ActorContextService,
+  ) {}
+
+  private async resolveSpecialistContext(
+    user: UserEntity,
+    targetSpecialistId?: string,
+  ): Promise<ActorContext | undefined> {
+    if (
+      !this.actorContextService ||
+      (user.role !== UserRole.ADMIN && user.role !== UserRole.SPECIALIST)
+    ) {
+      return undefined;
+    }
+    return this.actorContextService.resolve(user, targetSpecialistId);
+  }
 
   /**
    * GET /api/appointments
@@ -297,16 +319,31 @@ export class AppointmentsController {
     @Param('id') id: string,
     @Body() updateAppointmentStatusDto: UpdateAppointmentStatusDto,
     @Request() req: any,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ) {
     // userId e userRole vêm do AuthGuard
     const userId = req.user.id;
     const userRole = req.user.role;
 
+    if (
+      userRole === UserRole.ADMIN &&
+      updateAppointmentStatusDto.status === StatusAgendamento.CANCELLED &&
+      !updateAppointmentStatusDto.notes?.trim()
+    ) {
+      throw new BadRequestException(
+        'Motivo é obrigatório para cancelamento administrativo.',
+      );
+    }
+    const context = await this.resolveSpecialistContext(
+      req.user,
+      targetSpecialistId,
+    );
     const appointment = await this.appointmentsService.updateStatus(
       id,
       updateAppointmentStatusDto,
       userId,
       userRole,
+      context,
     );
 
     return {
@@ -321,11 +358,17 @@ export class AppointmentsController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: RescheduleAppointmentDto,
     @Request() req: any,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ) {
+    const context = await this.resolveSpecialistContext(
+      req.user,
+      targetSpecialistId,
+    );
     const appointment = await this.appointmentsService.reschedule(
       id,
       dto.appointment_datetime,
       req.user.id,
+      context,
     );
 
     return {
@@ -398,13 +441,19 @@ export class AppointmentsController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() body: ConfirmProcessAppointmentDto,
     @Request() req: any,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ) {
     const userId = req.user.id;
 
+    const context = await this.resolveSpecialistContext(
+      req.user,
+      targetSpecialistId,
+    );
     const appointment = await this.appointmentsService.confirmPending(
       id,
       userId,
       body.appointment_datetime,
+      context,
     );
 
     return {
@@ -421,10 +470,30 @@ export class AppointmentsController {
    * Cliente ou especialista podem cancelar
    */
   @Post('pending/:id/cancel')
-  async cancelPending(@Param('id') id: string, @Request() req: any) {
+  async cancelPending(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Body('reason') reason?: string,
+    @Query('target_specialist_id') targetSpecialistId?: string,
+  ) {
     const userId = req.user.id;
 
-    const result = await this.appointmentsService.cancelPending(id, userId);
+    if (req.user.role === UserRole.ADMIN && !reason?.trim()) {
+      throw new BadRequestException(
+        'Motivo é obrigatório para cancelamento administrativo.',
+      );
+    }
+    const context = await this.resolveSpecialistContext(
+      req.user,
+      targetSpecialistId,
+    );
+
+    const result = await this.appointmentsService.cancelPending(
+      id,
+      userId,
+      context,
+      reason,
+    );
 
     return result;
   }
