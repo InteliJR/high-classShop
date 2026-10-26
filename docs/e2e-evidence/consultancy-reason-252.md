@@ -27,7 +27,7 @@ Executada em 25/10/2026, com serviços e persistência simulados nos testes:
 | Comando | Resultado |
 | --- | --- |
 | Frontend: `npm test -- --maxWorkers=2` | 55 arquivos e **484 testes aprovados** |
-| Backend: `env -u POSTGRES_CONCURRENCY_TEST_URL npm test -- --runInBand --silent '--testPathIgnorePatterns=\.postgres\.spec\.ts$'` | 69 suítes e **1.083 testes aprovados** |
+| Backend: `env -u POSTGRES_CONCURRENCY_TEST_URL npm test -- --runInBand --silent '--testPathIgnorePatterns=\.postgres\.spec\.ts$'` | 69 suítes e **1.098 testes aprovados**, incluindo a correção das notas automáticas |
 | Frontend: `npm run build` | Aprovado; aviso existente sobre tamanho do bundle |
 | Backend: `npm run build` | Aprovado |
 | Frontend: `npm run lint -- --quiet` | Zero erros |
@@ -44,6 +44,11 @@ A cobertura inclui motivo vazio/inválido/limite, normalização, envio único, 
 - Após revisão, merge e deploy, conferir o fluxo publicado com um cliente e especialista de teste, pelos métodos EMAIL e CALENDLY, antes de encerrar a task.
 
 ## Revisão no navegador
+
+- [Fluxo individual, com os prints e legendas](consultancy-reason-252-flow/fluxo.md).
+- [Comparação antes e depois, lado a lado](consultancy-reason-252-flow/antes-e-depois.md).
+
+Esses arquivos Markdown documentam a execução independente da #252, com o antes capturado na `develop` original e o depois na branch desta task. Dados e respostas da API simulados.
 
 Chromium real, frontend local e API inteiramente interceptada com dados fictícios: **três cenários aprovados**, sem erros de JavaScript. O fluxo EMAIL foi conferido em desktop (1280 × 960) e celular (390 × 844), incluindo abertura sem criar pedido, bloqueio de somente espaços, limite de 500 caracteres, envio do motivo e confirmação em Meus Processos. O pedido pendente não mostra o card completo de contato. Uma falha simulada de criação mantém a página de consultoria, apresenta o erro e não exibe sucesso.
 
@@ -75,5 +80,6 @@ Foram adicionadas regressões para os pedidos legados, os fallbacks de EMAIL/CAL
 
 - Antes da correção, as novas regressões reproduziram **12 falhas**.
 - Após a correção: **4 suítes e 328 testes aprovados** (helper, projeções, processos e agendamentos).
+- Verificação final da suíte unitária completa após a correção: **69 suítes e 1.098 testes aprovados**, excluindo `*.postgres.spec.ts`.
 - Build do backend, ESLint nos arquivos TypeScript alterados e `git diff --check` aprovados.
 - Validação com persistência simulada, sem PostgreSQL ou Calendly reais e sem alterações de produção.
