@@ -265,6 +265,7 @@ export class ContractsService {
   ): Promise<{
     id: string;
     status: ProcessStatus;
+    removed_at: Date | null;
     active_contract_id: string | null;
     product_type: ProductType | null;
     specialist_id: string;
@@ -279,6 +280,7 @@ export class ContractsService {
         select: {
           id: true,
           status: true,
+          removed_at: true,
           active_contract_id: true,
           product_type: true,
           specialist_id: true,
@@ -296,7 +298,8 @@ export class ContractsService {
       }),
     ]);
 
-    if (!processRecord) throw new ProcessNotFoundException(processId);
+    if (!processRecord || processRecord.removed_at)
+      throw new ProcessNotFoundException(processId);
     if (
       !requester ||
       (requester.role !== UserRole.ADMIN &&
@@ -680,7 +683,7 @@ export class ContractsService {
       },
     });
 
-    if (!processData) {
+    if (!processData || processData.removed_at) {
       this.logger.warn(`Process ${processId} not found for prefill`);
       throw new ProcessNotFoundException(processId);
     }
@@ -1041,7 +1044,7 @@ export class ContractsService {
       },
     });
 
-    if (!process) {
+    if (!process || process.removed_at) {
       throw new ProcessNotFoundException(processId);
     }
 

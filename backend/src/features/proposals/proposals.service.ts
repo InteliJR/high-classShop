@@ -145,7 +145,7 @@ export class ProposalsService {
           },
         });
 
-        if (!process) {
+        if (!process || process.removed_at) {
           this.logger.warn(
             `[create] Processo ${dto.process_id} não encontrado`,
           );
@@ -530,7 +530,7 @@ export class ProposalsService {
       },
     });
 
-    if (!process) {
+    if (!process || process.removed_at) {
       throw new NotFoundException({
         success: false,
         error: {
@@ -701,7 +701,7 @@ export class ProposalsService {
         where: {
           id: proposalId,
           status: ProposalStatus.PENDING,
-          process: { status: ProcessStatus.NEGOTIATION },
+          process: { status: ProcessStatus.NEGOTIATION, removed_at: null },
         },
         data: { status: ProposalStatus.ACCEPTED },
       });
@@ -714,6 +714,7 @@ export class ProposalsService {
         where: {
           id: proposal.process_id,
           status: ProcessStatus.NEGOTIATION,
+          removed_at: null,
           accepted_proposal_id: null,
         },
         data: {
@@ -873,7 +874,7 @@ export class ProposalsService {
         where: {
           id: proposalId,
           status: ProposalStatus.PENDING,
-          process: { status: ProcessStatus.NEGOTIATION },
+          process: { status: ProcessStatus.NEGOTIATION, removed_at: null },
         },
         data: {
           status: ProposalStatus.REJECTED,
@@ -961,6 +962,7 @@ export class ProposalsService {
           select: {
             client_id: true,
             specialist_id: true,
+            removed_at: true,
             client: { select: { consultant_id: true } },
           },
         },
@@ -973,7 +975,7 @@ export class ProposalsService {
       },
     });
 
-    if (!proposal) {
+    if (!proposal || proposal.process.removed_at) {
       throw new NotFoundException({
         success: false,
         error: {
@@ -1020,6 +1022,7 @@ export class ProposalsService {
         process: {
           select: {
             status: true,
+            removed_at: true,
             client_id: true,
             specialist_id: true,
             product_type: true,
@@ -1040,7 +1043,7 @@ export class ProposalsService {
       },
     });
 
-    if (!proposal) {
+    if (!proposal || proposal.process.removed_at) {
       throw new NotFoundException({
         success: false,
         error: {

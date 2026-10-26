@@ -73,6 +73,7 @@ export type ChangeSpecialistDetailsPayload = ChangeSpecialityPayload & {
 
 export type RecordRowMeta = {
   id: string;
+  removed_at?: string | null;
   role?: UserRoleCode;
   speciality?: SpecialityCode | null;
   commission_rate?: number | null;

@@ -775,7 +775,11 @@ describe('MeetingsService.markConversationDone — snapshot da negociação', ()
     expect(txProcessUpdate).not.toHaveBeenCalled();
     expect(txProcessUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'proc-1', status: ProcessStatus.SCHEDULING },
+        where: {
+          id: 'proc-1',
+          status: ProcessStatus.SCHEDULING,
+          removed_at: null,
+        },
         data: expect.objectContaining({
           status: ProcessStatus.NEGOTIATION,
           negotiation_currency: ProductCurrency.USD,
@@ -888,7 +892,11 @@ describe('MeetingsService.markConversationDone — snapshot da negociação', ()
       if (expectsClaim) {
         expect(processUpdateMany).toHaveBeenCalledWith(
           expect.objectContaining({
-            where: { id: 'proc-1', status: ProcessStatus.SCHEDULING },
+            where: {
+              id: 'proc-1',
+              status: ProcessStatus.SCHEDULING,
+              removed_at: null,
+            },
           }),
         );
       } else {

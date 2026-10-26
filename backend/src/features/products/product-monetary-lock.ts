@@ -106,7 +106,11 @@ export async function assertProductMonetaryFieldsUnlocked(
 
   const foreignKey = PROCESS_FOREIGN_KEY_BY_TYPE[input.productType];
   const activeProcess = await prisma.process.findFirst({
-    where: { [foreignKey]: input.productId, status: ProcessStatus.NEGOTIATION },
+    where: {
+      [foreignKey]: input.productId,
+      status: ProcessStatus.NEGOTIATION,
+      removed_at: null,
+    },
     select: { id: true },
   });
 

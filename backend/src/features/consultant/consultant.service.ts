@@ -243,7 +243,7 @@ export class ConsultantService {
     }
 
     return this.prismaService.process.findMany({
-      where: { client_id: clientId },
+      where: { client_id: clientId, removed_at: null },
       include: {
         specialist: {
           select: { id: true, name: true, surname: true, speciality: true },
@@ -268,7 +268,7 @@ export class ConsultantService {
     const clientIds = clients.map((c) => c.id);
     const clientMap = new Map(clients.map((c) => [c.id, c]));
 
-    const where: any = { client_id: { in: clientIds } };
+    const where: any = { client_id: { in: clientIds }, removed_at: null };
     if (filters.status) where.status = filters.status;
     if (filters.clientId) {
       if (!clientIds.includes(filters.clientId)) return [];

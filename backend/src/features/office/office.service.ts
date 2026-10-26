@@ -134,6 +134,7 @@ export class OfficeService {
       this.prisma.process.count({
         where: {
           status: { notIn: [ProcessStatus.COMPLETED, ProcessStatus.REJECTED] },
+          removed_at: null,
           client: {
             OR: [
               { consultant: { company_id: companyId } },
@@ -252,6 +253,7 @@ export class OfficeService {
       where: {
         client: { consultant_id: consultantId },
         status: { notIn: [ProcessStatus.COMPLETED, ProcessStatus.REJECTED] },
+        removed_at: null,
       },
     });
     if (activeProcesses > 0) {

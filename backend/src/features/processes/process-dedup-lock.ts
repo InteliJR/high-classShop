@@ -58,12 +58,14 @@ export async function assertNoActiveProcess(
         client_id: scope.clientId,
         specialist_id: scope.specialistId,
         product_type: null,
+        removed_at: null,
         status: { in: ACTIVE_PROCESS_STATUSES },
       }
     : {
         client_id: scope.clientId,
         specialist_id: scope.specialistId,
         [PRODUCT_FIELD[scope.productType!]]: scope.productId,
+        removed_at: null,
         status: { in: ACTIVE_PROCESS_STATUSES },
       };
   if (excludeProcessId) where.id = { not: excludeProcessId };

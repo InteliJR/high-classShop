@@ -67,6 +67,7 @@ type ProcessAccessAction = 'read' | 'update-status' | 'reject';
 type ProcessAccessRecord = {
   client_id: string;
   specialist_id: string;
+  removed_at?: Date | null;
   client?: {
     consultant_id?: string | null;
     company_id?: string | null;
@@ -123,7 +124,9 @@ export class ProcessesService {
           ? {
               OR: [
                 { name: { contains: normalizedSearch, mode: 'insensitive' } },
-                { surname: { contains: normalizedSearch, mode: 'insensitive' } },
+                {
+                  surname: { contains: normalizedSearch, mode: 'insensitive' },
+                },
                 { email: { contains: normalizedSearch, mode: 'insensitive' } },
               ],
             }
@@ -155,6 +158,12 @@ export class ProcessesService {
     requester: ProcessesRequester,
     action: ProcessAccessAction,
   ): void {
+    if (
+      process.removed_at &&
+      (action !== 'read' || requester.role !== UserRole.ADMIN)
+    ) {
+      throw new NotFoundException('Processo não encontrado');
+    }
     const isAssignedSpecialist =
       requester.role === UserRole.SPECIALIST &&
       process.specialist_id === requester.id;
@@ -907,7 +916,7 @@ export class ProcessesService {
     // O status fica de fora daqui de propósito: o sumário existe para mostrar
     // quantos processos há em CADA status, então filtrar por um deles zeraria
     // os demais e o contador das abas iria a zero ao selecionar uma.
-    const scopedWhere: any = {};
+    const scopedWhere: any = { removed_at: null };
 
     // Filtro de visibilidade por papel. Vai em AND porque a busca textual
     // abaixo ocupa o OR do nível raiz — se o escopo fosse escrito ali, a busca
@@ -1061,7 +1070,10 @@ export class ProcessesService {
   ): Promise<ProcessResponse> {
     try {
       const process = await this.prismaService.process.findUniqueOrThrow({
-        where: { id: processId },
+        where: {
+          id: processId,
+          ...(userRole === UserRole.ADMIN ? {} : { removed_at: null }),
+        },
         include: {
           client: {
             include: {
@@ -1132,7 +1144,10 @@ export class ProcessesService {
         notes: process.notes,
       };
     } catch (err) {
-      if (err instanceof ForbiddenException) {
+      if (
+        err instanceof ForbiddenException ||
+        err instanceof NotFoundException
+      ) {
         throw err;
       }
       if (err.code === 'P2025') {
@@ -1166,6 +1181,7 @@ export class ProcessesService {
       this.prismaService.process.findMany({
         where: {
           specialist_id: specialistId, // CRUCIAL FILTER
+          removed_at: null,
         },
         include: {
           client: true,
@@ -1190,6 +1206,7 @@ export class ProcessesService {
       this.prismaService.process.count({
         where: {
           specialist_id: specialistId,
+          removed_at: null,
         },
       }),
     ]);
@@ -1259,6 +1276,7 @@ export class ProcessesService {
     // Build where clause
     const where: any = {
       specialist_id: specialistId,
+      removed_at: null,
     };
 
     // Add status filter
@@ -1536,6 +1554,7 @@ export class ProcessesService {
             },
             where: {
               id: processId,
+              removed_at: null,
               status: existingProcess.status,
               updated_at: existingProcess.updated_at,
             },
@@ -1637,7 +1656,7 @@ export class ProcessesService {
 
     // 1. Buscar processo
     const process = await this.prismaService.process.findUnique({
-      where: { id: processId },
+      where: { id: processId, removed_at: null },
       include: {
         client: true,
         specialist: true,
@@ -1733,7 +1752,7 @@ export class ProcessesService {
       });
 
       const processForAssignment = await tx.process.findUniqueOrThrow({
-        where: { id: processId },
+        where: { id: processId, removed_at: null },
         include: {
           client: true,
           specialist: true,
@@ -1892,6 +1911,7 @@ export class ProcessesService {
       const claim = await tx.process.updateMany({
         where: {
           id: processId,
+          removed_at: null,
           status: processForAssignment.status,
           product_type: null,
           car_id: null,
@@ -2023,6 +2043,7 @@ export class ProcessesService {
         id: true,
         client_id: true,
         specialist_id: true,
+        removed_at: true,
         client: {
           select: {
             consultant_id: true,
@@ -2033,7 +2054,7 @@ export class ProcessesService {
       },
     });
 
-    if (!process) {
+    if (!process || (process.removed_at && requester.role !== UserRole.ADMIN)) {
       throw new NotFoundException(
         `Processo com id ${processId} não encontrado`,
       );
@@ -2076,7 +2097,7 @@ export class ProcessesService {
       },
     });
 
-    if (!process) {
+    if (!process || (process.removed_at && requester.role !== UserRole.ADMIN)) {
       throw new NotFoundException(
         `Processo com id ${processId} não encontrado`,
       );
@@ -2143,7 +2164,10 @@ export class ProcessesService {
     };
     if (!userId || !userRole) deny();
 
-    const where: Prisma.ProcessWhereInput = { client_id: clientId };
+    const where: Prisma.ProcessWhereInput = {
+      client_id: clientId,
+      removed_at: null,
+    };
     switch (userRole) {
       case UserRole.ADMIN:
         break;
@@ -2282,6 +2306,7 @@ export class ProcessesService {
               id: true,
               client_id: true,
               specialist_id: true,
+              removed_at: true,
               client: {
                 select: {
                   consultant_id: true,
@@ -2449,6 +2474,7 @@ export class ProcessesService {
             },
             where: {
               id: processId,
+              removed_at: null,
               client_id: existingProcess.client_id,
               specialist_id: existingProcess.specialist_id,
               status: existingProcess.status,
@@ -2512,13 +2538,14 @@ export class ProcessesService {
             where: { processId },
           });
 
-          const changedByName = context?.delegated && context.actor
-            ? `${context.actor.name} ${context.actor.surname}`.trim()
-            : rejectedById === existingProcess.client?.id
-              ? `${existingProcess.client?.name || ''} ${existingProcess.client?.surname || ''}`.trim()
-              : rejectedById === existingProcess.specialist?.id
-                ? `${existingProcess.specialist?.name || ''} ${existingProcess.specialist?.surname || ''}`.trim()
-                : undefined;
+          const changedByName =
+            context?.delegated && context.actor
+              ? `${context.actor.name} ${context.actor.surname}`.trim()
+              : rejectedById === existingProcess.client?.id
+                ? `${existingProcess.client?.name || ''} ${existingProcess.client?.surname || ''}`.trim()
+                : rejectedById === existingProcess.specialist?.id
+                  ? `${existingProcess.specialist?.name || ''} ${existingProcess.specialist?.surname || ''}`.trim()
+                  : undefined;
 
           this.notifyProcessStatusChange({
             processId,
@@ -2580,7 +2607,7 @@ export class ProcessesService {
 
     // A leitura inicial identifica apenas o especialista para o lock.
     const process = await this.prismaService.process.findUnique({
-      where: { id: processId },
+      where: { id: processId, removed_at: null },
       select: { id: true, specialist_id: true },
     });
 
@@ -2601,7 +2628,7 @@ export class ProcessesService {
       await acquireSpecialistScheduleLock(tx, process.specialist_id);
 
       const lockedProcess = await tx.process.findUnique({
-        where: { id: processId },
+        where: { id: processId, removed_at: null },
         include: {
           appointment: true,
           client: {
@@ -2618,10 +2645,7 @@ export class ProcessesService {
       if (!lockedProcess) {
         throw new NotFoundException('Processo não encontrado');
       }
-      this.assertRepresentedSpecialist(
-        context,
-        lockedProcess.specialist_id,
-      );
+      this.assertRepresentedSpecialist(context, lockedProcess.specialist_id);
       if (lockedProcess.specialist_id !== representedSpecialistId) {
         throw new ForbiddenException(
           'Apenas o especialista pode confirmar o agendamento',
@@ -2705,6 +2729,7 @@ export class ProcessesService {
       const processClaim = await tx.process.updateMany({
         where: {
           id: processId,
+          removed_at: null,
           status: ProcessStatus.SCHEDULING,
           updated_at: lockedProcess.updated_at,
           specialist_id: lockedProcess.specialist_id,
@@ -2814,7 +2839,7 @@ export class ProcessesService {
     );
 
     const candidate = await this.prismaService.process.findUnique({
-      where: { id: processId },
+      where: { id: processId, removed_at: null },
       select: { id: true, client_id: true, specialist_id: true },
     });
 
@@ -2837,7 +2862,7 @@ export class ProcessesService {
     const process = await this.prismaService.$transaction(async (tx) => {
       await acquireSpecialistScheduleLock(tx, candidate.specialist_id);
       const lockedProcess = await tx.process.findUnique({
-        where: { id: processId },
+        where: { id: processId, removed_at: null },
         include: {
           appointment: true,
           client: {
@@ -2862,10 +2887,7 @@ export class ProcessesService {
           'Sem permissão para cancelar este agendamento',
         );
       }
-      this.assertRepresentedSpecialist(
-        context,
-        lockedProcess.specialist_id,
-      );
+      this.assertRepresentedSpecialist(context, lockedProcess.specialist_id);
       if (lockedProcess.status !== ProcessStatus.SCHEDULING) {
         throw new BadRequestException(
           'Apenas processos em status SCHEDULING podem ter o agendamento cancelado',
@@ -2897,6 +2919,7 @@ export class ProcessesService {
       const processClaim = await tx.process.updateMany({
         where: {
           id: processId,
+          removed_at: null,
           status: ProcessStatus.SCHEDULING,
           updated_at: lockedProcess.updated_at,
         },

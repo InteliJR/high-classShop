@@ -145,6 +145,9 @@ export class MeetingsService {
   }
 
   private assertMeetingCanStart(process: any, userId: string): void {
+    if (process.removed_at) {
+      throw new NotFoundException('Processo não encontrado');
+    }
     if (process.specialist_id !== userId) {
       throw new ForbiddenException(
         'Apenas o especialista pode iniciar a reunião',
@@ -224,7 +227,7 @@ export class MeetingsService {
       },
     });
 
-    if (!process) {
+    if (!process || process.removed_at) {
       throw new NotFoundException('Processo não encontrado');
     }
 
@@ -290,6 +293,7 @@ export class MeetingsService {
       select: {
         id: true,
         status: true,
+        removed_at: true,
         notes: true,
         product_type: true,
         car_id: true,
@@ -315,7 +319,7 @@ export class MeetingsService {
       },
     });
 
-    if (!process) {
+    if (!process || process.removed_at) {
       throw new NotFoundException('Processo não encontrado');
     }
 
@@ -327,8 +331,8 @@ export class MeetingsService {
     const previousStatus = process.status as ProcessStatus;
 
     if (!hasProduct) {
-      await this.prismaService.process.update({
-        where: { id: processId },
+      await this.prismaService.process.updateMany({
+        where: { id: processId, removed_at: null },
         data: {
           notes: process.notes
             ? `${process.notes}\n\nConversa concluída com cliente (${new Date().toISOString()}). Aguardando seleção de produto.`
@@ -366,6 +370,9 @@ export class MeetingsService {
           aircraft: { select: { valor: true, currency: true } },
         },
       });
+      if (processForTransition.removed_at) {
+        throw new NotFoundException('Processo não encontrado');
+      }
       if (processForTransition.status !== ProcessStatus.SCHEDULING) {
         return {
           advanced: false,
@@ -374,7 +381,7 @@ export class MeetingsService {
       }
       const snapshotData = buildNegotiationSnapshotUpdate(processForTransition);
       const claim = await tx.process.updateMany({
-        where: { id: processId, status: ProcessStatus.SCHEDULING },
+        where: { id: processId, status: ProcessStatus.SCHEDULING, removed_at: null },
         data: {
           status: ProcessStatus.NEGOTIATION,
           notes: processForTransition.notes
@@ -520,9 +527,9 @@ export class MeetingsService {
       async (tx) => {
         const candidate = await tx.process.findUnique({
           where: { id: processId },
-          select: { id: true, specialist_id: true },
+          select: { id: true, specialist_id: true, removed_at: true },
         });
-        if (!candidate) {
+        if (!candidate || candidate.removed_at) {
           throw new NotFoundException('Processo não encontrado');
         }
         if (candidate.specialist_id !== representedSpecialistId) {
@@ -710,9 +717,9 @@ export class MeetingsService {
       async (tx) => {
         const candidate = await tx.process.findUnique({
           where: { id: processId },
-          select: { id: true, specialist_id: true },
+          select: { id: true, specialist_id: true, removed_at: true },
         });
-        if (!candidate) {
+        if (!candidate || candidate.removed_at) {
           throw new NotFoundException('Processo não encontrado');
         }
         if (candidate.specialist_id !== representedSpecialistId) {

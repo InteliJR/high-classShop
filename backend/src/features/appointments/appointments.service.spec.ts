@@ -127,6 +127,49 @@ describe('GetAppointmentsQueryDto — limite de paginação', () => {
   });
 });
 
+describe('AppointmentsService — processo removido', () => {
+  it('exclui agendamentos vinculados da lista, contagem e resumo', async () => {
+    const prisma = {
+      appointment: {
+        count: jest.fn().mockResolvedValue(0),
+        findMany: jest.fn().mockResolvedValue([]),
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await service.getAppointments(
+      {} as GetAppointmentsQueryDto,
+      'specialist-1',
+      UserRole.SPECIALIST,
+    );
+
+    const expectedWhere = {
+      OR: [
+        { process: { is: null } },
+        { process: { is: { removed_at: null } } },
+      ],
+      AND: [
+        {
+          OR: [
+            { specialist_id: 'specialist-1' },
+            { client_id: 'specialist-1' },
+          ],
+        },
+      ],
+    };
+    expect(prisma.appointment.count).toHaveBeenCalledWith({
+      where: expectedWhere,
+    });
+    expect(prisma.appointment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere }),
+    );
+    expect(prisma.appointment.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere }),
+    );
+  });
+});
+
 describe('AppointmentsService.createPending — associação e atomicidade', () => {
   const client = {
     id: 'client-1',
@@ -181,7 +224,11 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
     });
     const processCreate = jest.fn(async ({ data }) => {
       if (options.processFailure) throw options.processFailure;
-      const process = { id: `process-${storedProcesses.length + 1}`, ...data };
+      const process = {
+        id: `process-${storedProcesses.length + 1}`,
+        removed_at: null,
+        ...data,
+      };
       storedProcesses.push(process);
       return process;
     });
@@ -878,6 +925,7 @@ describe('AppointmentsService.findExistingAppointment — own minimal projection
               specialist_id: 'specialist-1',
               product_type: ProductType.CAR,
               car_id: 'car-1',
+              removed_at: null,
               status: {
                 in: [
                   ProcessStatus.SCHEDULING,

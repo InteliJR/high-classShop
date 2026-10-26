@@ -605,6 +605,7 @@ describe('ProposalsService — snapshot e mínimo dinâmico', () => {
       ).toEqual({
         select: {
           status: true,
+          removed_at: true,
           client_id: true,
           specialist_id: true,
           product_type: true,
