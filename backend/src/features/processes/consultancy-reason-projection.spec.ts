@@ -97,6 +97,61 @@ describe('persisted consultancy reason in private process responses', () => {
     expect(response.processes[0].consultancy_reason).toBe(reason);
   });
 
+  it.each([
+    ['legacy customer request', 'Consultoria solicitada pelo cliente'],
+    ['legacy email fallback', 'Cliente solicitou reunião por e-mail'],
+    ['legacy Calendly fallback', 'Cliente acessou link do Calendly'],
+    [
+      'consultant request',
+      'Consultoria criada pelo consultor em nome do cliente (2026-10-25T12:00:00.000Z)',
+    ],
+    [
+      'office request',
+      'Consultoria criada pelo gerente do escritório em nome do cliente (2026-10-25T12:00:00.000Z)',
+    ],
+  ])(
+    'omits automatic notes from all private projections for %s',
+    async (_source, notes) => {
+      for (const status of [
+        StatusAgendamento.PENDING,
+        StatusAgendamento.SCHEDULED,
+        StatusAgendamento.COMPLETED,
+      ]) {
+        const record = {
+          ...process,
+          appointment: { ...process.appointment, status, notes },
+        };
+        const { service } = setup(record);
+        const detail = await service.getById(
+          process.id,
+          process.specialist_id,
+          UserRole.SPECIALIST,
+        );
+        const specialistList = await service.getBySpecialistIdWithFilters(
+          process.specialist_id,
+          {},
+          { id: process.specialist_id, role: UserRole.SPECIALIST },
+        );
+        const customerList = await service.getByClientId(
+          process.client_id,
+          { page: 1, perPage: 20 },
+          process.client_id,
+          UserRole.CUSTOMER,
+        );
+
+        for (const response of [
+          detail,
+          specialistList.processes[0],
+          customerList.processes[0],
+        ]) {
+          expect(response.consultancy_reason).toBeNull();
+          expect(response.notes).toBe(process.notes);
+        }
+        expect(record.appointment.notes).toBe(notes);
+      }
+    },
+  );
+
   it('does not allow another customer to read the private reason', async () => {
     const { service } = setup();
     await expect(

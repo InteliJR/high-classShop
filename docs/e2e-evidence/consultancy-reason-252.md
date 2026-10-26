@@ -64,3 +64,16 @@ A aplicação da implementação #252 (`bca6550`) sobre o commit #255 (`d4767fc`
 - API inteiramente simulada no navegador; nenhum dado remoto alterado.
 
 As duas branches continuam independentes, originadas do mesmo commit de `develop`.
+
+## Correção da revisão — notas automáticas
+
+A revisão identificou que notas automáticas antigas eram expostas como se fossem o motivo informado pelo cliente. O helper agora retorna `consultancy_reason: null` para os textos padrão de solicitação e para as mensagens completas de criação por consultor ou gerente do escritório, com o timestamp gerado pelo sistema. O texto persistido permanece intacto.
+
+A comparação reconhece os formatos automáticos completos, preservando motivos reais que apenas contêm palavras semelhantes. Não houve migração nem alteração de registros existentes.
+
+Foram adicionadas regressões para os pedidos legados, os fallbacks de EMAIL/CALENDLY e o fluxo real de criação em nome do cliente por consultor/escritório. As projeções de detalhe, lista do especialista e lista do cliente foram verificadas com agendamento pendente, confirmado e concluído, inclusive após vincular um produto à consultoria.
+
+- Antes da correção, as novas regressões reproduziram **12 falhas**.
+- Após a correção: **4 suítes e 328 testes aprovados** (helper, projeções, processos e agendamentos).
+- Build do backend, ESLint nos arquivos TypeScript alterados e `git diff --check` aprovados.
+- Validação com persistência simulada, sem PostgreSQL ou Calendly reais e sem alterações de produção.

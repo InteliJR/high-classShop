@@ -17,6 +17,7 @@ import { validate } from 'class-validator';
 import { CreateProcessDTO } from './dto/create-process.dto';
 import { AssignProductToProcessDto } from './dto/assign-product.dto';
 import { ProcessesService } from './processes.service';
+import { getConsultancyReason } from './consultancy-reason';
 
 const productId = '11111111-1111-4111-8111-111111111111';
 const clientId = '22222222-2222-4222-8222-222222222222';
@@ -389,6 +390,27 @@ describe('ProcessesService.createOnBehalfOfClient', () => {
     expect(data.product_type).toBeNull();
     expect(data.notes).toContain('Consultoria');
   });
+
+  it.each(['consultor', 'gerente do escritório'])(
+    'não apresenta a nota automática de uma consultoria criada por %s como motivo',
+    async (actorLabel) => {
+      const { service, appointmentCreate } = mkService();
+      await service.createOnBehalfOfClient({
+        ...base,
+        product_id: undefined,
+        actorLabel,
+      });
+
+      const data = appointmentCreate.mock.calls[0][0].data;
+      expect(data.notes).toMatch(
+        new RegExp(`^Consultoria criada pelo ${actorLabel} em nome do cliente \\(`),
+      );
+      // Prisma defaults the omitted product columns to null for consultancies.
+      expect(
+        getConsultancyReason({ product_type: null, product_id: null, ...data }),
+      ).toBeNull();
+    },
+  );
 
   it('rejeita consultoria em nome do cliente quando há processo ativo mesmo com appointment concluído', async () => {
     const { service, appointmentCreate, tx } = mkService();
