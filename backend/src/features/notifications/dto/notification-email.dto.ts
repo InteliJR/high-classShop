@@ -130,8 +130,8 @@ export interface ProcessStatusChangedEmailDto {
 export interface ContractSignedEmailDto {
   buyerEmail: string;
   buyerName: string;
-  sellerEmail: string;
-  sellerName: string;
+  sellerEmail?: string;
+  sellerName?: string;
   contractId: string;
   vehicleModel: string;
   finalPrice: number;
@@ -141,8 +141,8 @@ export interface ContractSignedEmailDto {
 export interface ContractGeneratedEmailDto {
   buyerEmail: string;
   buyerName: string;
-  sellerEmail: string;
-  sellerName: string;
+  sellerEmail?: string;
+  sellerName?: string;
   contractId: string;
   vehicleDetails: string;
   processId: string;
@@ -151,8 +151,8 @@ export interface ContractGeneratedEmailDto {
 export interface ContractSentEmailDto {
   buyerEmail: string;
   buyerName: string;
-  sellerEmail: string;
-  sellerName: string;
+  sellerEmail?: string;
+  sellerName?: string;
   docusignLink: string;
   contractId: string;
 }

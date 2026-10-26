@@ -49,7 +49,7 @@ async function openPreview() {
     screen.getByRole("button", { name: /Continuar para os dados do contrato/i }),
   );
   const previewButton = await screen.findByRole("button", {
-    name: /Pré-visualizar e Enviar Contrato/i,
+    name: /Pré-visualizar contrato/i,
   });
   await waitFor(() => expect((previewButton as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(previewButton);
@@ -108,6 +108,69 @@ describe("CreateContractPage preview lifecycle", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it("usa o especialista como vendedor quando o modelo exige Seller", async () => {
+    const prefill = await prefillContract(processId);
+    vi.mocked(prefillContract).mockResolvedValueOnce({
+      ...prefill,
+      seller: { ...prefill.seller, name: "", email: "" },
+    } as any);
+    vi.mocked(previewContract).mockResolvedValueOnce({
+      ...preview,
+      seller_signature_required: true,
+      seller_assigned_to_specialist: true,
+    });
+    const view = renderPage();
+    await screen.findByText("Gerar Contrato de Venda");
+    fireEvent.click(screen.getByRole("button", {
+      name: /Continuar para os dados do contrato/i,
+    }));
+    expect(Array.from(view.container.querySelectorAll("label"))
+      .map((label) => label.textContent)
+      .filter((text) => text?.includes("*"))).toEqual([]);
+    const previewButton = await screen.findByRole("button", {
+      name: /Pré-visualizar contrato/i,
+    });
+    await waitFor(() => expect((previewButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(previewButton);
+    await waitFor(() => expect(previewContract).toHaveBeenCalledWith(
+      expect.objectContaining({ seller_name: "", seller_email: "" }),
+    ));
+    await screen.findByTitle("DocuSign Contract Preview");
+    expect((screen.getByRole("button", { name: /Confirmar e Enviar/i }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByRole("note").textContent).toContain("aparece e assina como vendedor");
+    expect(screen.getByRole("note").textContent).toContain("também como Testemunha 1");
+    expect(sendContractAfterPreview).not.toHaveBeenCalled();
+  });
+
+  it("permite envio sem vendedor quando o modelo não tem Seller", async () => {
+    const prefill = await prefillContract(processId);
+    vi.mocked(prefillContract).mockResolvedValueOnce({
+      ...prefill,
+      seller: { ...prefill.seller, name: "", email: "" },
+    } as any);
+    vi.mocked(previewContract).mockResolvedValueOnce({
+      ...preview,
+      seller_signature_required: false,
+    });
+    vi.mocked(sendContractAfterPreview).mockResolvedValueOnce({
+      id: "contract-1",
+      envelope_id: "envelope-1",
+      process_id: processId,
+      status: "PENDING",
+      created_at: new Date().toISOString(),
+    });
+    await openPreview();
+
+    const confirm = screen.getByRole("button", { name: /Confirmar e Enviar/i }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(false);
+    expect(screen.getByRole("note").textContent).toContain("assina como Testemunha 1");
+    fireEvent.click(confirm);
+    await waitFor(() => expect(sendContractAfterPreview).toHaveBeenCalledWith(
+      "envelope-1",
+      expect.objectContaining({ seller_name: "", seller_email: "" }),
+    ));
   });
 
   it("retains the real modal and shows the safe message on reconciliation errors", async () => {
@@ -182,7 +245,7 @@ describe("CreateContractPage preview lifecycle", () => {
       }),
     );
     const previewButton = await screen.findByRole("button", {
-      name: /Pré-visualizar e Enviar Contrato/i,
+      name: /Pré-visualizar contrato/i,
     });
     await waitFor(() =>
       expect((previewButton as HTMLButtonElement).disabled).toBe(false),
@@ -228,7 +291,7 @@ describe("CreateContractPage preview lifecycle", () => {
       }),
     );
     const previewButton = await screen.findByRole("button", {
-      name: /Pré-visualizar e Enviar Contrato/i,
+      name: /Pré-visualizar contrato/i,
     });
     await waitFor(() => expect((previewButton as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(previewButton);
@@ -272,7 +335,7 @@ describe("CreateContractPage preview lifecycle", () => {
       }),
     );
     const previewButton = await screen.findByRole("button", {
-      name: /Pré-visualizar e Enviar Contrato/i,
+      name: /Pré-visualizar contrato/i,
     });
     await waitFor(() =>
       expect((previewButton as HTMLButtonElement).disabled).toBe(false),
@@ -302,7 +365,7 @@ describe("CreateContractPage preview lifecycle", () => {
       }),
     );
     const previewButton = await screen.findByRole("button", {
-      name: /Pré-visualizar e Enviar Contrato/i,
+      name: /Pré-visualizar contrato/i,
     });
     await waitFor(() =>
       expect((previewButton as HTMLButtonElement).disabled).toBe(false),

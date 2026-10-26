@@ -787,6 +787,7 @@ describe('ContractsService — send after preview integrity', () => {
     const docusign = {
       getEnvelopeProcessId: jest.fn().mockResolvedValue('process-1'),
       getEnvelopeRequestFingerprint: jest.fn(),
+      hasSellerRecipient: jest.fn().mockResolvedValue(true),
       getEnvelopeStatus: jest.fn().mockResolvedValue({
         envelopeId: 'envelope-1',
         status: EnvelopeStatus.CREATED,
@@ -836,6 +837,37 @@ describe('ContractsService — send after preview integrity', () => {
     );
     return { service, docusign, tx, dto };
   }
+
+  it.each([
+    { seller_name: '', seller_email: '' },
+    { seller_name: 'Seller', seller_email: '' },
+    { seller_name: '', seller_email: 'seller@example.test' },
+  ])('usa o especialista como vendedor no modelo com Seller (%j)', async (seller) => {
+    const { service, docusign, tx, dto } = makeSendHarness();
+    Object.assign(dto, seller);
+
+    await service.sendContractAfterPreview('envelope-1', dto, 'specialist-1');
+    expect(docusign.sendDraftEnvelope).toHaveBeenCalledWith('envelope-1');
+    expect(dto.seller_name).toBe('Especialista Teste');
+    expect(dto.seller_email).toBe('specialist@example.test');
+    expect(tx.contract.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ seller_name: 'Especialista Teste' }),
+    }));
+  });
+
+  it('envia sem vendedor quando o rascunho não tem papel Seller', async () => {
+    const { service, docusign, tx, dto } = makeSendHarness();
+    dto.seller_name = '';
+    dto.seller_email = '';
+    docusign.hasSellerRecipient.mockResolvedValue(false);
+
+    await service.sendContractAfterPreview('envelope-1', dto, 'specialist-1');
+
+    expect(docusign.sendDraftEnvelope).toHaveBeenCalledWith('envelope-1');
+    expect(tx.contract.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ seller_name: '' }),
+    }));
+  });
 
   it('voids a stale draft only after authorization, binding and provider inspection', async () => {
     const { service, docusign, tx, dto } = makeSendHarness({
@@ -1074,6 +1106,7 @@ describe('ContractsService — provider operation id', () => {
     const dto = {
       buyer_email: 'buyer@example.test',
       specialist_email: 'specialist@example.test',
+      seller_name: 'Seller',
       seller_email: 'seller@example.test',
       vehicle_price: 100000,
       ...override,
@@ -1099,6 +1132,7 @@ describe('ContractsService — provider operation id', () => {
       company: { findUnique: jest.fn() },
     };
     const docusign = {
+      templateHasSellerRole: jest.fn().mockResolvedValue(true),
       createEnvelopePreview: jest.fn().mockResolvedValue({
         envelopeId: 'envelope-1',
         previewUrl: 'https://demo.docusign.net/preview',
@@ -1125,8 +1159,8 @@ describe('ContractsService — provider operation id', () => {
       operation_id: '11111111-1111-4111-8111-111111111111',
       process_id: 'process-1',
       template_id: 'template-1',
-      seller_name: 'Seller',
-      seller_email: 'seller@example.test',
+      seller_name: '',
+      seller_email: '',
       buyer_name: 'Buyer',
       buyer_email: 'buyer@example.test',
       specialist_email: 'specialist@example.test',
@@ -1136,13 +1170,69 @@ describe('ContractsService — provider operation id', () => {
       return_url: 'https://app.example.test/return',
     } as any;
 
-    await service.previewContract(dto, 'specialist-1');
-    await service.previewContract(dto, 'specialist-1');
+    await service.previewContract({ ...dto }, 'specialist-1');
+    await service.previewContract({ ...dto }, 'specialist-1');
 
     expect(docusign.createEnvelopePreview).toHaveBeenCalledTimes(2);
     for (const [params] of docusign.createEnvelopePreview.mock.calls) {
       expect(params.transactionId).toBe(dto.operation_id);
+      expect(params.sellerEmail).toBe('specialist@example.test');
+      expect(params.sellerName).toBe('Especialista Teste');
     }
+  });
+
+  it('does not mix the specialist signature with another seller identity', () => {
+    const service = mkSvc(mkPrisma(), mkPlatformCompanyService(10));
+    const dto = {
+      seller_name: '',
+      seller_email: '',
+      seller_cpf: '10987654321',
+      specialist_name: 'Especialista Teste',
+      specialist_email: 'specialist@example.test',
+    } as any;
+
+    expect(() => (service as any).assignSpecialistToSellerRole(dto)).toThrow(
+      BadRequestException,
+    );
+    expect(dto.seller_name).toBe('');
+    expect(dto.seller_cpf).toBe('10987654321');
+  });
+
+  it('accepts a partial seller email for the authorized specialist fallback', () => {
+    const service = mkSvc(mkPrisma(), mkPlatformCompanyService(10));
+    const dto = {
+      buyer_email: 'buyer@example.test',
+      seller_name: '',
+      seller_email: 'specialist@example.test',
+      vehicle_price: 100000,
+    } as any;
+
+    expect(() => (service as any).assertContractPartiesAndPrice(dto, processFixture()))
+      .not.toThrow();
+    expect((service as any).assignSpecialistToSellerRole(dto)).toBe(true);
+    expect(dto.seller_name).toBe('Especialista Teste');
+  });
+
+  it('keeps unrelated seller document and bank fields empty in a fallback', () => {
+    const service = mkSvc(mkPrisma(), mkPlatformCompanyService(10));
+    const dto = {
+      seller_name: '',
+      seller_email: '',
+      specialist_name: 'Especialista Teste',
+      specialist_email: 'specialist@example.test',
+      specialist_document: '12345678000199',
+      specialist_bank: 'Banco Teste',
+      specialist_agency: '1234',
+      specialist_checking_account: '5678',
+    } as any;
+
+    expect((service as any).assignSpecialistToSellerRole(dto)).toBe(true);
+    expect(dto).toMatchObject({
+      seller_name: 'Especialista Teste',
+      seller_email: 'specialist@example.test',
+    });
+    expect(dto.seller_cpf).toBeUndefined();
+    expect(dto.seller_bank).toBeUndefined();
   });
 
   it('derives the recovery fingerprint from description and authoritative commission split', async () => {
@@ -1160,6 +1250,7 @@ describe('ContractsService — provider operation id', () => {
       company: { findUnique: jest.fn() },
     };
     const docusign = {
+      templateHasSellerRole: jest.fn().mockResolvedValue(true),
       createEnvelopePreview: jest.fn().mockResolvedValue({
         envelopeId: 'envelope-1',
         previewUrl: 'https://demo.docusign.net/preview',
@@ -1247,6 +1338,12 @@ describe('ContractsService — provider operation id', () => {
     };
     let createdRequest: any = null;
     const providerClient = {
+      getTemplateRecipients: jest.fn().mockResolvedValue({
+        signers: [{ roleName: 'Buyer' }, { roleName: 'Seller' }],
+      }),
+      getEnvelopeRecipients: jest.fn().mockResolvedValue({
+        signers: [{ roleName: 'Buyer' }, { roleName: 'Seller' }],
+      }),
       findEnvelopesByTransactionId: jest.fn().mockImplementation(async () =>
         createdRequest
           ? [{ envelopeId: 'envelope-1', status: EnvelopeStatus.CREATED }]

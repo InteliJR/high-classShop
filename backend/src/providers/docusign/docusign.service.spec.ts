@@ -1,5 +1,152 @@
 import { DocuSignService } from './docusign.service';
 
+describe('DocuSignService — prévia com vendedor pendente', () => {
+  it('cria somente um rascunho e desabilita o envio direto no Sender View', async () => {
+    const client = {
+      getEnvelopeRecipients: jest.fn().mockResolvedValue({
+        signers: [{ roleName: 'Buyer' }, { roleName: 'Seller' }],
+      }),
+      getEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({ docGenFormFields: [] }),
+      updateEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({}),
+      createSenderView: jest.fn().mockResolvedValue({ url: 'https://demo.docusign.net/view' }),
+    } as any;
+    const service = new DocuSignService(client);
+    const createDraft = jest.spyOn(service as any, 'createOrRecoverTemplateEnvelope')
+      .mockResolvedValue({ envelopeId: 'draft-1', status: 'created' });
+
+    const preview = await service.createEnvelopePreview({
+      transactionId: 'operation-1',
+      templateId: 'template-1',
+      buyerName: 'Comprador',
+      buyerEmail: 'buyer@example.test',
+      sellerName: '',
+      sellerEmail: '',
+      formFields: {},
+      processId: 'process-1',
+      requestFingerprint: 'fingerprint-1',
+      returnUrl: 'https://app.example.test/callback',
+    });
+
+    const roles = createDraft.mock.calls[0][0].templateRoles;
+    expect(roles).toEqual(expect.arrayContaining([
+      expect.objectContaining({ roleName: 'Buyer' }),
+    ]));
+    expect(roles.some((role: { roleName: string }) => role.roleName === 'Seller')).toBe(false);
+    expect(roles.some((role: { roleName: string }) => role.roleName === 'Testimonial1')).toBe(false);
+    expect(preview.sellerSignatureRequired).toBe(true);
+    expect(client.createSenderView).toHaveBeenCalledWith(
+      'draft-1',
+      'https://app.example.test/callback',
+      expect.objectContaining({ sendButtonAction: 'redirect' }),
+    );
+  });
+
+  it('aceita o modelo futuro sem Seller mesmo quando o formulário tem vendedor', async () => {
+    const client = {
+      getTemplateRecipients: jest.fn().mockResolvedValue({ signers: [{ roleName: 'Buyer' }] }),
+      getEnvelopeRecipients: jest.fn().mockResolvedValue({ signers: [{ roleName: 'Buyer' }] }),
+      getEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({ docGenFormFields: [] }),
+      updateEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({}),
+      createSenderView: jest.fn().mockResolvedValue({ url: 'https://demo.docusign.net/view' }),
+    } as any;
+    const service = new DocuSignService(client);
+    const createDraft = jest.spyOn(service as any, 'createOrRecoverTemplateEnvelope')
+      .mockResolvedValue({ envelopeId: 'draft-2', status: 'created' });
+
+    const preview = await service.createEnvelopePreview({
+      transactionId: 'operation-2',
+      templateId: 'template-2',
+      buyerName: 'Comprador',
+      buyerEmail: 'buyer@example.test',
+      sellerName: 'Vendedor',
+      sellerEmail: 'seller@example.test',
+      formFields: {},
+      processId: 'process-2',
+      requestFingerprint: 'fingerprint-2',
+      returnUrl: 'https://app.example.test/callback',
+    });
+
+    expect(createDraft.mock.calls[0][0].templateRoles.some(
+      (role: { roleName: string }) => role.roleName === 'Seller',
+    )).toBe(false);
+    expect(preview.sellerSignatureRequired).toBe(false);
+  });
+
+  it('atribui Seller, Specialist e Testimonial1 ao especialista quando o vendedor está vazio', async () => {
+    const client = {
+      getEnvelopeRecipients: jest.fn().mockResolvedValue({
+        signers: [{ roleName: 'Buyer' }, { roleName: 'Seller' }, { roleName: 'Specialist' }, { roleName: 'Testimonial1' }],
+      }),
+      getEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({ docGenFormFields: [] }),
+      updateEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({}),
+      createSenderView: jest.fn().mockResolvedValue({ url: 'https://demo.docusign.net/view' }),
+    } as any;
+    const service = new DocuSignService(client);
+    const createDraft = jest.spyOn(service as any, 'createOrRecoverTemplateEnvelope')
+      .mockResolvedValue({ envelopeId: 'draft-3', status: 'created' });
+
+    await service.createEnvelopePreview({
+      transactionId: 'operation-3',
+      templateId: 'template-3',
+      templateHasSellerRole: true,
+      buyerName: 'Comprador',
+      buyerEmail: 'buyer@example.test',
+      sellerName: 'Especialista',
+      sellerEmail: 'specialist@example.test',
+      specialistName: 'Especialista',
+      specialistEmail: 'specialist@example.test',
+      formFields: {},
+      processId: 'process-3',
+      requestFingerprint: 'fingerprint-3',
+      returnUrl: 'https://app.example.test/callback',
+    });
+
+    const roles = createDraft.mock.calls[0][0].templateRoles;
+    expect(roles.filter((role: { email: string }) => role.email === 'specialist@example.test'))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ roleName: 'Seller', name: 'Especialista' }),
+        expect.objectContaining({ roleName: 'Specialist', name: 'Especialista' }),
+        expect.objectContaining({ roleName: 'Testimonial1', name: 'Especialista' }),
+      ]));
+  });
+
+  it('usa o especialista como Testimonial1 quando o modelo não tem Seller', async () => {
+    const client = {
+      getEnvelopeRecipients: jest.fn().mockResolvedValue({
+        signers: [{ roleName: 'Buyer' }, { roleName: 'Testimonial1' }],
+      }),
+      getEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({ docGenFormFields: [] }),
+      updateEnvelopeDocGenFormFields: jest.fn().mockResolvedValue({}),
+      createSenderView: jest.fn().mockResolvedValue({ url: 'https://demo.docusign.net/view' }),
+    } as any;
+    const service = new DocuSignService(client);
+    const createDraft = jest.spyOn(service as any, 'createOrRecoverTemplateEnvelope')
+      .mockResolvedValue({ envelopeId: 'draft-4', status: 'created' });
+
+    await service.createEnvelopePreview({
+      transactionId: 'operation-4',
+      templateId: 'template-4',
+      templateHasSellerRole: false,
+      buyerName: 'Comprador',
+      buyerEmail: 'buyer@example.test',
+      sellerName: '',
+      sellerEmail: '',
+      specialistName: 'Especialista',
+      specialistEmail: 'specialist@example.test',
+      formFields: {},
+      processId: 'process-4',
+      requestFingerprint: 'fingerprint-4',
+      returnUrl: 'https://app.example.test/callback',
+    });
+
+    const roles = createDraft.mock.calls[0][0].templateRoles;
+    expect(roles).toContainEqual(expect.objectContaining({
+      roleName: 'Testimonial1', name: 'Especialista', email: 'specialist@example.test',
+    }));
+    expect(roles.some((role: { roleName: string }) => role.roleName === 'Seller')).toBe(false);
+  });
+});
+
 describe('DocuSignService — listTemplates', () => {
   it('mapeia envelopeTemplates do client para {templateId, name}', async () => {
     const client = {
