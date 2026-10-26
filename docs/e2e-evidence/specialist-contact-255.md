@@ -55,6 +55,11 @@ Os testes usam mocks dos serviços de persistência e da API; não comprovam dep
 
 ## Revisão no navegador
 
+- [Fluxo individual, com os prints e legendas](specialist-contact-255-flow/fluxo.md).
+- [Comparação antes e depois, lado a lado](specialist-contact-255-flow/antes-e-depois.md).
+
+Esses arquivos Markdown documentam a execução independente da #255, com o antes capturado na `develop` original e o depois na branch desta task. O cenário usa um processo de produto existente; não depende do fluxo novo da #252. Dados e respostas da API simulados.
+
 Chromium real, frontend local e API totalmente interceptada com dados fictícios: **seis cenários aprovados**, sem erros de JavaScript. Foram verificados contato confirmado, telefone ausente, processo rejeitado, agendamento cancelado, outro cliente e processo concluído. Os cenários com contato também foram conferidos após recarregar a página, em viewport de 390 × 844, sem transbordamento horizontal.
 
 ![Contato confirmado no celular, com dados fictícios](specialist-contact-255-mobile.png)
