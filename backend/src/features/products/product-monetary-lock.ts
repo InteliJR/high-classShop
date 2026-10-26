@@ -106,7 +106,11 @@ export async function assertProductMonetaryFieldsUnlocked(
 
   const foreignKey = PROCESS_FOREIGN_KEY_BY_TYPE[input.productType];
   const activeProcess = await prisma.process.findFirst({
-    where: { [foreignKey]: input.productId, status: ProcessStatus.NEGOTIATION },
+    where: {
+      [foreignKey]: input.productId,
+      status: ProcessStatus.NEGOTIATION,
+      removed_at: null,
+    },
     select: { id: true },
   });
 
@@ -120,10 +124,10 @@ export async function assertProductMonetaryFieldsUnlocked(
 }
 
 export async function updateProductWithMonetaryLock(
-  prisma: PrismaService,
+  prisma: PrismaService | Prisma.TransactionClient,
   input: ProductMonetaryUpdateInput,
 ): Promise<unknown> {
-  return prisma.$transaction(async (tx) => {
+  const update = async (tx: Prisma.TransactionClient) => {
     await acquireProductMonetaryLock(tx, input);
 
     const delegateName = PRODUCT_DELEGATE_BY_TYPE[input.productType];
@@ -152,5 +156,10 @@ export async function updateProductWithMonetaryLock(
       where: { id: input.productId },
       data: input.data,
     });
-  });
+  };
+
+  if ('$transaction' in prisma) {
+    return prisma.$transaction(update);
+  }
+  return update(prisma);
 }

@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import {
+  HttpException,
+  Injectable,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { Prisma, ProductType } from '@prisma/client';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
@@ -11,10 +16,16 @@ import {
   FiltersBoatMeta,
   RangeBoatFilters,
 } from 'src/shared/dto/filters.dto';
-import { Boat } from './entity/boat.entity';
-import { UserEntity } from 'src/auth/entities/user.entity';
 import { BOAT_COLUMNS } from 'src/shared/constants/product-columns';
 import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
+import { publicBoatSelect } from 'src/shared/selects/public-catalog.select';
+import { randomUUID } from 'node:crypto';
+import {
+  cleanupPreparedProductImages,
+  prepareProductImages,
+  PreparedProductImage,
+  ProductImageInput,
+} from '../products/product-image-preparation';
 
 @Injectable()
 export class BoatsService {
@@ -28,54 +39,62 @@ export class BoatsService {
     private s3Service: S3Service,
   ) {}
 
-  async create(createBoatDto: CreateBoatDto) {
+  prepareProductImages(productId: string, images?: ProductImageInput[]) {
+    return prepareProductImages(this.s3Service, 'boats', productId, images);
+  }
+
+  cleanupPreparedImages(images: PreparedProductImage[]) {
+    return cleanupPreparedProductImages(this.s3Service, images);
+  }
+
+  async create(
+    createBoatDto: CreateBoatDto,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
+    preparedWrite?: {
+      productId: string;
+      images: PreparedProductImage[];
+    },
+  ) {
     this.logger.log('[create] Iniciando criação de novo barco');
     const { images, ...boatData } = createBoatDto;
+    const productId = preparedWrite?.productId ?? randomUUID();
+    const ownsPreparedImages = !preparedWrite;
+    const preparedImages =
+      preparedWrite?.images ??
+      (await this.prepareProductImages(productId, images));
 
     try {
       // 1. Criar o barco
       this.logger.debug(
         `[create] Criando barco: ${boatData.marca} ${boatData.modelo}`,
       );
-      const boat = await this.prismaService.boat.create({ data: boatData });
+      const boat = await client.boat.create({
+        data: { ...boatData, id: productId },
+      });
       this.logger.log(`[create] Barco criado com sucesso - ID: ${boat.id}`);
 
-      // 2. Processar e fazer upload das imagens, se existirem
-      if (images && images.length > 0) {
+      // 2. Persistir somente referências já preparadas fora da transação
+      if (preparedImages.length > 0) {
         this.logger.log(
-          `[create] Processando ${images.length} imagens para o barco ${boat.id}`,
+          `[create] Persistindo ${preparedImages.length} imagens para o barco ${boat.id}`,
         );
-        for (let i = 0; i < images.length; i++) {
-          const image = images[i];
-
-          const timestamp = Date.now();
-          const key = `boats/${boat.id}/${timestamp}-${i}.jpg`;
-
-          this.logger.debug(
-            `[create] Fazendo upload da imagem ${i + 1}/${images.length} para S3`,
-          );
-          const imageKey = await this.s3Service.uploadBase64Image(
-            image.data,
-            key,
-          );
-
-          await this.prismaService.boat_image.create({
+        for (const image of preparedImages) {
+          await client.boat_image.create({
             data: {
               boat_id: boat.id,
-              image_url: imageKey,
+              image_url: image.image_url,
               is_primary: image.is_primary,
               product_type: 'BOAT',
             },
           });
-          this.logger.debug(`[create] Imagem ${i + 1} salva com sucesso`);
         }
         this.logger.log(
-          `[create] Todas as ${images.length} imagens processadas com sucesso`,
+          `[create] Todas as ${preparedImages.length} imagens persistidas com sucesso`,
         );
       }
 
       // 3. Retornar o barco com as imagens
-      const boatWithImages = await this.prismaService.boat.findUnique({
+      const boatWithImages = await client.boat.findUnique({
         where: { id: boat.id },
         include: { images: true },
       });
@@ -87,7 +106,13 @@ export class BoatsService {
       );
       return boatWithImages;
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (ownsPreparedImages) {
+        await this.cleanupPreparedImages(preparedImages);
+      }
+      if (
+        error instanceof HttpException ||
+        error instanceof Prisma.PrismaClientKnownRequestError
+      ) {
         throw error;
       }
       this.logger.error(
@@ -102,14 +127,14 @@ export class BoatsService {
     page,
     perPage,
     appliedFilters,
-  }: QueryDto<FiltersBoatMeta>) {
+  }: QueryDto<FiltersBoatMeta>, includeInactive = false) {
     // Cálculo das variáveis que serão utilizadas na requisição ao banco de dados
     const take = perPage;
     const skip = page && take ? (page - 1) * take : 0;
 
     //Exact
     const where: any = {};
-    where.is_active = true;
+    if (!includeInactive) where.is_active = true;
     const exacts: ExactBoatFilters = {
       estado: appliedFilters?.estado,
       tipo_embarcacao: appliedFilters?.tipo_embarcacao,
@@ -171,16 +196,13 @@ export class BoatsService {
         skip: skip,
         take: take,
         where: where,
-        include: {
-          images: true,
-          specialist: true,
-        },
+        select: publicBoatSelect,
       }),
       this.prismaService.boat.count({ where }),
     ]);
 
     // Converter as keys do S3 em URLs assinadas para cada barco
-    const boatEntities: Boat[] = await Promise.all(
+    const boatEntities = await Promise.all(
       boats.map(async (boat) => {
         let imagesWithUrls: any[] = [];
         if (boat.images && boat.images.length > 0) {
@@ -197,9 +219,7 @@ export class BoatsService {
           descricao: boat.descricao_completa,
           valor: boat.valor.toNumber(),
           images: imagesWithUrls,
-          specialist: boat.specialist
-            ? UserEntity.fromPrisma(boat.specialist)
-            : null,
+          specialist: boat.specialist,
         };
       }),
     );
@@ -215,7 +235,7 @@ export class BoatsService {
     this.logger.log(`[findOne] Buscando barco - ID: ${id}`);
     const boat = await this.prismaService.boat.findUnique({
       where: { id },
-      include: { images: true },
+      select: publicBoatSelect,
     });
     if (!boat) {
       this.logger.warn(`[findOne] Barco não encontrado - ID: ${id}`);
@@ -237,42 +257,40 @@ export class BoatsService {
     return { ...boat };
   }
 
-  async update(id: string, updateBoatDto: UpdateBoatDto) {
+  async update(
+    id: string,
+    updateBoatDto: UpdateBoatDto,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
+    preparedWrite?: { images: PreparedProductImage[] },
+  ) {
     const { images, ...boatData } = updateBoatDto;
-
-    await updateProductWithMonetaryLock(this.prismaService, {
-      productType: ProductType.BOAT,
-      productId: id,
-      nextValue: updateBoatDto.valor,
-      nextCurrency: updateBoatDto.currency,
-      data: boatData,
-      notFoundMessage: 'Boat not found',
-    });
+    const ownsPreparedImages = !preparedWrite;
+    const preparedImages =
+      preparedWrite?.images ?? (await this.prepareProductImages(id, images));
 
     try {
+      await updateProductWithMonetaryLock(client, {
+        productType: ProductType.BOAT,
+        productId: id,
+        nextValue: updateBoatDto.valor,
+        nextCurrency: updateBoatDto.currency,
+        data: boatData,
+        notFoundMessage: 'Boat not found',
+      });
+
       // 1. Se houver novas imagens, processar
       if (images && images.length > 0) {
         // Remover imagens antigas
-        await this.prismaService.boat_image.deleteMany({
+        await client.boat_image.deleteMany({
           where: { boat_id: id },
         });
 
-        // Adicionar novas imagens
-        for (let i = 0; i < images.length; i++) {
-          const image = images[i];
-
-          const timestamp = Date.now();
-          const key = `boats/${id}/${timestamp}-${i}.jpg`;
-
-          const imageKey = await this.s3Service.uploadBase64Image(
-            image.data,
-            key,
-          );
-
-          await this.prismaService.boat_image.create({
+        // Adicionar referências das imagens já preparadas
+        for (const image of preparedImages) {
+          await client.boat_image.create({
             data: {
               boat_id: id,
-              image_url: imageKey,
+              image_url: image.image_url,
               is_primary: image.is_primary,
               product_type: 'BOAT',
             },
@@ -281,21 +299,30 @@ export class BoatsService {
       }
 
       // 2. Retornar o barco atualizado com imagens
-      return await this.prismaService.boat.findUnique({
+      return await client.boat.findUnique({
         where: { id },
         include: { images: true },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (ownsPreparedImages) {
+        await this.cleanupPreparedImages(preparedImages);
+      }
+      if (
+        error instanceof HttpException ||
+        error instanceof Prisma.PrismaClientKnownRequestError
+      ) {
         throw error;
       }
       throw new Error(`Erro ao atualizar lancha: ${error.message}`);
     }
   }
 
-  async remove(id: string) {
+  async remove(
+    id: string,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService,
+  ) {
     try {
-      await updateProductWithMonetaryLock(this.prismaService, {
+      await updateProductWithMonetaryLock(client, {
         productType: ProductType.BOAT,
         productId: id,
         data: {

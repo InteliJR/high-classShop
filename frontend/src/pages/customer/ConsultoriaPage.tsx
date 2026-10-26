@@ -4,7 +4,7 @@ import { Car, Ship, Plane, Calendar, UserCircle2, Loader2 } from "lucide-react";
 import { PopupModal } from "react-calendly";
 import {
   getSpecialistsGroupedByCategory,
-  type Specialist,
+  type PublicSpecialistProfile,
   type GroupedSpecialists,
 } from "../../services/specialists.service";
 import { createConsultancyAppointment } from "../../services/appointments.service";
@@ -24,7 +24,7 @@ interface SpecialistGroup {
   type: SpecialityType;
   label: string;
   icon: React.ReactNode;
-  specialists: Specialist[];
+  specialists: PublicSpecialistProfile[];
 }
 
 const specialityConfig: Record<
@@ -52,6 +52,7 @@ export default function ConsultoriaPage() {
   const {
     isModalOpen: isCalendlyModalOpen,
     modalUrl: calendlyModalUrl,
+    modalKey: calendlyModalKey,
     syncState,
     syncMessage,
     openPopup,
@@ -110,24 +111,26 @@ export default function ConsultoriaPage() {
     setIsTypeModalOpen(false);
   };
 
-  const handleRequestMeeting = async (specialist: Specialist) => {
+  const handleRequestMeeting = async (specialist: PublicSpecialistProfile) => {
     if (!user || requestingSpecialistId) return;
 
     setRequestingSpecialistId(specialist.id);
     setErrorMessage("");
 
     try {
+      const hasCalendly = specialist.calendly_scheduling_available;
+      const rawCalendlyUrl = specialist.calendly_url?.trim() || "";
+      if (hasCalendly && !rawCalendlyUrl) {
+        throw new Error("O link do Calendly não está disponível. Tente novamente.");
+      }
       const pendingAppointment = await createConsultancyAppointment({
         client_id: user.id,
         specialist_id: specialist.id,
-        scheduling_method: specialist.calendly_url?.trim()
-          ? "CALENDLY"
-          : "EMAIL",
+        scheduling_method: hasCalendly ? "CALENDLY" : "EMAIL",
         notes: `Consultoria solicitada pelo cliente`,
       });
 
-      const rawCalendlyUrl = specialist.calendly_url?.trim();
-      if (!rawCalendlyUrl) {
+      if (!hasCalendly) {
         navigate("/customer/processes", {
           state: {
             message:
@@ -249,6 +252,7 @@ export default function ConsultoriaPage() {
 
       {calendlyModalUrl && isCalendlyModalOpen && (
         <PopupModal
+          key={calendlyModalKey}
           url={calendlyModalUrl}
           open={isCalendlyModalOpen}
           onModalClose={closePopup}
@@ -276,8 +280,8 @@ export default function ConsultoriaPage() {
 }
 
 interface SpecialistCardProps {
-  specialist: Specialist;
-  onRequestMeeting: (specialist: Specialist) => Promise<void>;
+  specialist: PublicSpecialistProfile;
+  onRequestMeeting: (specialist: PublicSpecialistProfile) => Promise<void>;
   isRequesting: boolean;
 }
 
@@ -296,7 +300,6 @@ function SpecialistCard({
           <h3 className="text-lg font-semibold text-ink">
             {specialist.name} {specialist.surname}
           </h3>
-          <p className="text-sm text-muted">{specialist.email}</p>
         </div>
         <Button
           onClick={() => onRequestMeeting(specialist)}

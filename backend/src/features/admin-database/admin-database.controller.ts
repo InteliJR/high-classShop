@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -18,6 +19,8 @@ import { AdminUserManagementService } from './admin-user-management.service';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { ChangeSpecialityDto } from './dto/change-speciality.dto';
 import { ChangeSpecialistDetailsDto } from './dto/change-specialist-details.dto';
+import { AdminProcessRemovalService } from './admin-process-removal.service';
+import { RemoveProcessDto } from './dto/remove-process.dto';
 
 // Navegador read-only da base de dados — só ADMIN.
 @Controller('admin/database')
@@ -25,6 +28,7 @@ export class AdminDatabaseController {
   constructor(
     private readonly service: AdminDatabaseService,
     private readonly management: AdminUserManagementService,
+    private readonly processRemoval: AdminProcessRemovalService,
   ) {}
 
   @Get('entities')
@@ -56,6 +60,18 @@ export class AdminDatabaseController {
       throw new UnauthorizedException('Usuário autenticado não identificado');
     }
     return this.management.deleteUser(id, actor.id);
+  }
+  @Delete('processes/:id')
+  @Roles(UserRole.ADMIN)
+  deleteProcess(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: RemoveProcessDto,
+    @Req() req: { user?: UserEntity },
+  ) {
+    if (!req.user) {
+      throw new UnauthorizedException('Usuário autenticado não identificado');
+    }
+    return this.processRemoval.remove(id, req.user.id, dto.reason);
   }
 
   @Post('users/:id/role-change/validate')

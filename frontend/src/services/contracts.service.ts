@@ -188,6 +188,8 @@ export interface PreviewContractResponse {
   envelope_id: string;
   expires_at: string;
   process_id: string;
+  seller_signature_required?: boolean;
+  seller_assigned_to_specialist?: boolean;
 }
 
 export interface SendContractResponse {

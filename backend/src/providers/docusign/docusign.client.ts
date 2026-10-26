@@ -486,6 +486,22 @@ export class DocuSignClient {
     );
   }
 
+  async getTemplateRecipients(templateId: string): Promise<any> {
+    const token = await this.getAccessToken();
+    return this.get(
+      `/v2.1/accounts/${this.accountId}/templates/${templateId}/recipients`,
+      token,
+    );
+  }
+
+  async getEnvelopeRecipients(envelopeId: string): Promise<any> {
+    const token = await this.getAccessToken();
+    return this.get(
+      `/v2.1/accounts/${this.accountId}/envelopes/${envelopeId}/recipients`,
+      token,
+    );
+  }
+
   /**
    * Atualiza os campos DocGen de um envelope
    *

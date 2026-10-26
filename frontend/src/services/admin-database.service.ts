@@ -34,3 +34,9 @@ export async function getRecords(
   });
   return data;
 }
+
+export async function deleteProcess(id: string, reason: string): Promise<void> {
+  await api.delete(`admin/database/processes/${id}`, {
+    data: { reason },
+  });
+}

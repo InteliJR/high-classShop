@@ -16,6 +16,41 @@ import { jwtConstants } from 'src/auth/constants';
 import { NotificationService } from '../notifications/notification.service';
 import { SpecialistInvitePayload } from '../../auth/types/specialist-invite-payload';
 import { isValidCommissionRate } from '../../shared/validators/commission-rate.validator';
+import { isCalendlySchedulingAvailable } from '../../shared/utils/calendly-scheduling-capability';
+
+const publicSpecialistSelect = {
+  id: true,
+  name: true,
+  surname: true,
+  speciality: true,
+  calendly_url: true,
+  calendly_connection: { select: { is_active: true } },
+} satisfies Prisma.UserSelect;
+
+type PublicSpecialistRecord = Prisma.UserGetPayload<{
+  select: typeof publicSpecialistSelect;
+}>;
+
+export type PublicSpecialistProfile = Pick<
+  PublicSpecialistRecord,
+  'id' | 'name' | 'surname' | 'speciality' | 'calendly_url'
+> & { calendly_scheduling_available: boolean };
+
+function toPublicProfile(
+  specialist: PublicSpecialistRecord,
+): PublicSpecialistProfile {
+  return {
+    id: specialist.id,
+    name: specialist.name,
+    surname: specialist.surname,
+    speciality: specialist.speciality,
+    calendly_url: specialist.calendly_url,
+    calendly_scheduling_available: isCalendlySchedulingAvailable({
+      calendlyUrl: specialist.calendly_url,
+      connectionActive: specialist.calendly_connection?.is_active ?? false,
+    }),
+  };
+}
 
 @Injectable()
 export class SpecialistsService {
@@ -78,6 +113,17 @@ export class SpecialistsService {
       include: { company: true },
     });
     return specialists.map((specialist) => this.toResponse(specialist));
+  }
+
+  async findPublicProfile(id: string): Promise<PublicSpecialistProfile> {
+    const specialist = await this.prisma.user.findUnique({
+      where: { id, role: 'SPECIALIST' },
+      select: publicSpecialistSelect,
+    });
+    if (!specialist) {
+      throw new NotFoundException('Especialista não encontrado');
+    }
+    return toPublicProfile(specialist);
   }
 
   // Cria um novo especialista na base de dados.
@@ -278,24 +324,16 @@ export class SpecialistsService {
   async findAllGroupedByCategory() {
     const specialists = await this.prisma.user.findMany({
       where: { role: 'SPECIALIST' },
-      select: {
-        id: true,
-        name: true,
-        surname: true,
-        email: true,
-        cpf: true,
-        rg: true,
-        speciality: true,
-        company_id: true,
-        calendly_url: true,
-      },
+      select: publicSpecialistSelect,
     });
+
+    const profiles = specialists.map(toPublicProfile);
 
     // Agrupa os especialistas por categoria
     const grouped = {
-      CAR: specialists.filter((s) => s.speciality === 'CAR'),
-      BOAT: specialists.filter((s) => s.speciality === 'BOAT'),
-      AIRCRAFT: specialists.filter((s) => s.speciality === 'AIRCRAFT'),
+      CAR: profiles.filter((s) => s.speciality === 'CAR'),
+      BOAT: profiles.filter((s) => s.speciality === 'BOAT'),
+      AIRCRAFT: profiles.filter((s) => s.speciality === 'AIRCRAFT'),
     };
 
     return grouped;

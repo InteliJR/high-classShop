@@ -12,6 +12,8 @@ interface DocuSignPreviewModalProps {
   isLoading?: boolean;
   isCancelling?: boolean;
   cancellationError?: string | null;
+  sendBlockedReason?: string | null;
+  sellerIdentityNotice?: string | null;
 }
 
 /**
@@ -33,6 +35,8 @@ export default function DocuSignPreviewModal({
   isLoading = false,
   isCancelling = false,
   cancellationError = null,
+  sendBlockedReason = null,
+  sellerIdentityNotice = null,
 }: DocuSignPreviewModalProps) {
   const [timeRemaining, setTimeRemaining] = useState<string>("");
   const [isExpired, setIsExpired] = useState(false);
@@ -115,7 +119,7 @@ export default function DocuSignPreviewModal({
       const data = event.data;
       if (typeof data === "string") {
         // Mensagem de texto simples
-        if (data === "send" || data === "signing_complete") {
+        if ((data === "send" || data === "signing_complete") && !sendBlockedReason) {
           onConfirm();
         } else if (data === "cancel" || data === "decline") {
           onCancel();
@@ -123,7 +127,7 @@ export default function DocuSignPreviewModal({
       } else if (typeof data === "object" && data !== null) {
         // Mensagem estruturada
         const eventType = data.event || data.type || data.action;
-        if (eventType === "send" || eventType === "signing_complete") {
+        if ((eventType === "send" || eventType === "signing_complete") && !sendBlockedReason) {
           onConfirm();
         } else if (
           eventType === "cancel" ||
@@ -135,7 +139,7 @@ export default function DocuSignPreviewModal({
         // 'unknown', 'save' e 'error' são apenas logados, sem ação automática
       }
     },
-    [isBusy, onConfirm, onCancel, previewUrl],
+    [isBusy, onConfirm, onCancel, previewUrl, sendBlockedReason],
   );
 
   useEffect(() => {
@@ -269,16 +273,22 @@ export default function DocuSignPreviewModal({
             </div>
           )}
 
+          {sellerIdentityNotice && (
+            <div role="note" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+              {sellerIdentityNotice}
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <div className="text-sm text-slate-500">
-              <p>
-                Revise o contrato acima. Você pode editar os campos antes de
-                enviar.
-              </p>
-              <p className="text-xs mt-1">
-                Use o botão "Enviar" acima ou confirme abaixo quando estiver
-                pronto.
-              </p>
+              {sendBlockedReason ? (
+                <p role="status" className="text-amber-700">{sendBlockedReason}</p>
+              ) : (
+                <>
+                  <p>Revise o contrato acima. Você pode editar os campos antes de enviar.</p>
+                  <p className="text-xs mt-1">Use o botão "Enviar" acima ou confirme abaixo quando estiver pronto.</p>
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-3">
@@ -296,7 +306,7 @@ export default function DocuSignPreviewModal({
               </button>
               <button
                 onClick={onConfirm}
-                disabled={isBusy || isExpired}
+                disabled={isBusy || isExpired || Boolean(sendBlockedReason)}
                 className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (

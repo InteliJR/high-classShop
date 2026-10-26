@@ -1,5 +1,9 @@
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ForbiddenException } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 
 const userId = '11111111-1111-4111-8111-111111111111';
 
@@ -81,4 +85,69 @@ describe('UsersService — telefone no perfil', () => {
     await semCampo.service.update(userId, { name: 'Novo' } as UpdateUserDto);
     expect(semCampo.update.mock.calls[0][0].data).not.toHaveProperty('phone');
   });
+});
+
+describe('UsersService — Calendly no perfil', () => {
+  it.each([
+    UserRole.CUSTOMER,
+    UserRole.CONSULTANT,
+    UserRole.OFFICE,
+    UserRole.ADMIN,
+  ])(
+    'rejects non-null Calendly URLs for target role %s before writing',
+    async (role) => {
+      const { service, findUnique, update } = mkService();
+      findUnique.mockResolvedValue({ id: userId, role });
+      await expect(
+        service.update(userId, { calendly_url: 'https://calendly.com/ana' }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(update).not.toHaveBeenCalled();
+      expect(findUnique).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('saves a specialist URL and preserves the private response projection', async () => {
+    const { service, findUnique, update } = mkService();
+    findUnique.mockResolvedValue({ id: userId, role: UserRole.SPECIALIST });
+    await service.update(userId, {
+      calendly_url: ' https://calendly.com/ana ',
+    });
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          calendly_url: 'https://calendly.com/ana',
+        }),
+        select: expect.objectContaining({ phone: true, calendly_url: true }),
+      }),
+    );
+  });
+
+  it.each([null, '', '   '])(
+    'clears a specialist URL with %p',
+    async (calendly_url) => {
+      const { service, findUnique, update } = mkService();
+      findUnique.mockResolvedValue({ id: userId, role: UserRole.SPECIALIST });
+      await service.update(userId, { calendly_url });
+      expect(update.mock.calls[0][0].data.calendly_url).toBeNull();
+    },
+  );
+
+  it('allows explicit null removal for a non-specialist but leaves absent URLs untouched', async () => {
+    const removal = mkService();
+    await removal.service.update(userId, { calendly_url: null });
+    expect(removal.update.mock.calls[0][0].data.calendly_url).toBeNull();
+    const unchanged = mkService();
+    await unchanged.service.update(userId, { name: 'Novo' });
+    expect(unchanged.update.mock.calls[0][0].data).not.toHaveProperty(
+      'calendly_url',
+    );
+  });
+
+  it.each([null, 'https://calendly.com/ana'])(
+    'DTO accepts Calendly value %p',
+    async (calendly_url) => {
+      const dto = plainToInstance(UpdateUserDto, { calendly_url });
+      expect(await validate(dto)).toEqual([]);
+    },
+  );
 });

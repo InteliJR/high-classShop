@@ -12,6 +12,7 @@ export type Specialist = {
   rg: string;
   password_hash: string;
   speciality: "CAR" | "BOAT" | "AIRCRAFT";
+  is_active?: boolean;
   company_id?: string | null;
   commission_rate?: number | null;
   bank?: string | null;
@@ -22,10 +23,29 @@ export type Specialist = {
 
 // Tipo para especialistas agrupados por categoria
 export type GroupedSpecialists = {
-  CAR: Specialist[];
-  BOAT: Specialist[];
-  AIRCRAFT: Specialist[];
+  CAR: PublicSpecialistProfile[];
+  BOAT: PublicSpecialistProfile[];
+  AIRCRAFT: PublicSpecialistProfile[];
 };
+
+// Projeção pública de contato comercial; não contém documentos ou dados OAuth.
+export type PublicSpecialistProfile = {
+  id: string;
+  name: string;
+  surname: string;
+  speciality: "CAR" | "BOAT" | "AIRCRAFT" | null;
+  calendly_url: string | null;
+  calendly_scheduling_available: boolean;
+};
+
+export async function getPublicSpecialistById(
+  id: string,
+): Promise<PublicSpecialistProfile> {
+  const { data } = await api.get<PublicSpecialistProfile>(
+    `/specialists/${id}/public-profile`,
+  );
+  return data;
+}
 
 // Tipo auxiliar para criação (DTO)
 export type CreateSpecialistData = {

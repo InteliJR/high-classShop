@@ -1,6 +1,36 @@
 import { ConflictException } from '@nestjs/common';
-import { StatusAgendamento } from '@prisma/client';
-import { formatToISO, suggestNextAvailableSlots } from 'src/shared/utils/date.utils';
+import {
+  AppointmentSchedulingMethod,
+  CalendlySyncStatus,
+  Prisma,
+  StatusAgendamento,
+} from '@prisma/client';
+import { suggestNextAvailableSlots } from 'src/shared/utils/date.utils';
+
+export function buildOccupiedScheduleWhere(
+  specialistId: string,
+  appointmentDateTime: Date,
+  excludeAppointmentId?: string,
+): Prisma.AppointmentWhereInput {
+  const hour = 60 * 60 * 1000;
+  return {
+    specialist_id: specialistId,
+    ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {}),
+    appointment_datetime: {
+      gte: new Date(appointmentDateTime.getTime() - hour),
+      lte: new Date(appointmentDateTime.getTime() + hour),
+    },
+    OR: [
+      { status: StatusAgendamento.SCHEDULED },
+      {
+        status: StatusAgendamento.PENDING,
+        scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+        calendly_sync_status: CalendlySyncStatus.SYNCED,
+      },
+      { status: StatusAgendamento.PENDING, scheduling_method: null },
+    ],
+  };
+}
 
 export async function acquireSpecialistScheduleLock(
   tx: any,
@@ -19,17 +49,13 @@ export async function assertSpecialistScheduleAvailable(
   excludeAppointmentId?: string,
 ): Promise<void> {
   if (!appointmentDateTime) return;
-  const conflictStart = new Date(appointmentDateTime.getTime() - 60 * 60 * 1000);
-  const conflictEnd = new Date(appointmentDateTime.getTime() + 60 * 60 * 1000);
   const existing = await tx.appointment.findFirst({
-    where: {
-      specialist_id: specialistId,
-      ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {}),
-      appointment_datetime: { gte: conflictStart, lte: conflictEnd },
-      status: {
-        in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
-      },
-    },
+    where: buildOccupiedScheduleWhere(
+      specialistId,
+      appointmentDateTime,
+      excludeAppointmentId,
+    ),
+    select: { id: true },
   });
   if (!existing) return;
 
@@ -39,13 +65,6 @@ export async function assertSpecialistScheduleAvailable(
       code: 409,
       message: 'Especialista já possui agendamento neste horário',
       details: {
-        conflicting_appointment: {
-          id: existing.id,
-          appointment_datetime: existing.appointment_datetime
-            ? formatToISO(existing.appointment_datetime)
-            : null,
-          client_id: existing.client_id,
-        },
         suggested_times: suggestNextAvailableSlots(appointmentDateTime, 3),
       },
     },

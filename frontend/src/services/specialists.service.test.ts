@@ -1,8 +1,41 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import api from "./api";
+import * as specialistService from "./specialists.service";
 import type {
   CreateSpecialistData,
   UpdateSpecialistData,
 } from "./specialists.service";
+
+vi.mock("./api", () => ({ default: { get: vi.fn() } }));
+
+afterEach(() => vi.clearAllMocks());
+
+describe("public specialist profile", () => {
+  it("loads the raw public projection through its dedicated endpoint", async () => {
+    const profile = {
+      id: "specialist-1",
+      name: "Ana",
+      surname: "Silva",
+      email: "ana@example.com",
+      speciality: "CAR",
+      calendly_url: null,
+      calendly_scheduling_available: false,
+    };
+    vi.mocked(api.get).mockResolvedValue({ data: profile });
+    const getProfile = specialistService.getPublicSpecialistById;
+    await expect(getProfile(profile.id)).resolves.toEqual(profile);
+    expect(api.get).toHaveBeenCalledWith(
+      "/specialists/specialist-1/public-profile",
+    );
+  });
+
+  it("propagates public-profile errors instead of falling back to a private endpoint", async () => {
+    const error = new Error("Perfil indisponível");
+    vi.mocked(api.get).mockRejectedValueOnce(error);
+    await expect(specialistService.getPublicSpecialistById("specialist-1")).rejects.toBe(error);
+    expect(api.get).toHaveBeenCalledExactlyOnceWith("/specialists/specialist-1/public-profile");
+  });
+});
 
 const createBase = {
   name: "Ana",
@@ -24,8 +57,10 @@ const createWithoutCommission: CreateSpecialistData = createBase;
 
 const partialUpdate: UpdateSpecialistData = { commission_rate: 0 };
 
-// @ts-expect-error Edições não podem introduzir comissão nula.
-const updateWithNullCommission: UpdateSpecialistData = { commission_rate: null };
+const updateWithNullCommission: UpdateSpecialistData = {
+  // @ts-expect-error Edições não podem introduzir comissão nula.
+  commission_rate: null,
+};
 
 describe("specialists service type contracts", () => {
   it("mantém comissão obrigatória na criação e opcional no update", () => {

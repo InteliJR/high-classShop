@@ -25,4 +25,3 @@ Nenhum novo tratamento é necessário. Ao remover a consulta global, falhas no e
 - Alterar OAuth, webhooks ou sincronização do Calendly.
 - Alterar agendamentos ou a página de perfil.
 - Alterar autorização, validação ou persistência de produtos no backend.
-

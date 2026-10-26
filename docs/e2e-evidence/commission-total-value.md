@@ -20,4 +20,3 @@ Ao informar `10%` sobre uma venda de `R$ 100.000,00`, a mesma seção exibe:
 ![Etapa de comissão mostrando o total e o ganho estimado](./commission-after.jpg)
 
 O DOM foi verificado pelos rótulos e valores exatos, e o console do navegador não registrou erros nem avisos durante o fluxo.
-

@@ -43,6 +43,9 @@ import OfficeClientsPage from "../pages/office/OfficeClientsPage";
 import OfficeProcessesPage from "../pages/office/OfficeProcessesPage";
 import OfficeCompanySettingsPage from "../pages/office/OfficeCompanySettingsPage";
 import WhitelabelPage from "../pages/whitelabel/WhitelabelPage";
+import AdminSpecialistJourneyShell from "../components/admin/AdminSpecialistJourneyShell";
+import SpecialistJourneyOverviewPage from "../pages/admin/SpecialistJourneyOverviewPage";
+import SpecialistJourneyProductsPage from "../pages/admin/SpecialistJourneyProductsPage";
 
 export default function RouterApp() {
   const routerApp = createBrowserRouter([
@@ -317,6 +320,106 @@ export default function RouterApp() {
           </ProtectedRoute>
         </MainLayout>
       ),
+    },
+    {
+      path: "/admin/journey",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <AdminSpecialistJourneyShell>
+              <SpecialistJourneyOverviewPage />
+            </AdminSpecialistJourneyShell>
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/admin/journey/products",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <AdminSpecialistJourneyShell>
+              <SpecialistJourneyProductsPage />
+            </AdminSpecialistJourneyShell>
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/admin/journey/products/new",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <AdminSpecialistJourneyShell>
+              <ProductFormPage />
+            </AdminSpecialistJourneyShell>
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/admin/journey/products/edit/:productType/:id",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <AdminSpecialistJourneyShell>
+              <ProductFormPage />
+            </AdminSpecialistJourneyShell>
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/admin/journey/processes",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <AdminSpecialistJourneyShell>
+              <ProcessesPage />
+            </AdminSpecialistJourneyShell>
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/admin/journey/processes/:processId/negotiation",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <AdminSpecialistJourneyShell>
+              <NegotiationPage />
+            </AdminSpecialistJourneyShell>
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/admin/journey/processes/:processId/meeting",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <AdminSpecialistJourneyShell>
+              <MeetingRoomPage />
+            </AdminSpecialistJourneyShell>
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/admin/journey/contracts/new",
+      element: (
+        <MainLayout>
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <AdminSpecialistJourneyShell>
+              <CreateContractPage />
+            </AdminSpecialistJourneyShell>
+          </ProtectedRoute>
+        </MainLayout>
+      ),
+    },
+    {
+      path: "/admin/journey/contracts/preview-callback",
+      element: <ContractPreviewCallback />,
     },
     {
       path: "/specialist/products",

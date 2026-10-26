@@ -22,6 +22,34 @@ describe('NotificationService proposal emails', () => {
       .mockResolvedValue(undefined);
   });
 
+  it('notifica só o comprador quando não há vendedor no contrato', async () => {
+    const parties = { buyerEmail: 'buyer@example.test', buyerName: 'Comprador' };
+    await service.sendContractGeneratedEmail({
+      ...parties,
+      contractId: 'contract-1',
+      vehicleDetails: 'Carro 2026',
+      processId: 'process-1',
+    });
+    await service.sendContractSentEmail({
+      ...parties,
+      contractId: 'contract-1',
+      docusignLink: 'https://demo.docusign.net/view',
+    });
+    await service.sendContractSignedEmail({
+      ...parties,
+      contractId: 'contract-1',
+      vehicleModel: 'Carro',
+      finalPrice: 100000,
+    });
+
+    expect(sendEmailSafely).toHaveBeenCalledTimes(3);
+    for (const [, recipient, , html, plainText] of sendEmailSafely.mock.calls) {
+      expect(recipient).toBe('buyer@example.test');
+      expect(html).not.toContain('<strong>Vendedor:</strong>');
+      expect(plainText).not.toContain('Vendedor:');
+    }
+  });
+
   it('uses USD in the received proposal HTML and plain-text bodies', async () => {
     await service.sendProposalReceivedEmail({
       recipientEmail: 'buyer@example.com',
@@ -171,6 +199,26 @@ describe('NotificationService proposal emails', () => {
     expect(htmlBody).toContain('&lt;b&gt;Specialist&lt;/b&gt;');
     expect(htmlBody).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(htmlBody).not.toContain('<img src=x');
+    expect(htmlBody).not.toContain('<script>alert(1)</script>');
+  });
+
+  it('escapes user-controlled fields in process status HTML', async () => {
+    await service.sendProcessStatusChangedEmail({
+      recipientEmail: 'client@example.com',
+      recipientName: '<img src=x onerror=alert(1)>',
+      processId: 'process-1',
+      previousStatus: 'SCHEDULING',
+      currentStatus: 'REJECTED',
+      changedByName: '<b>Actor</b>',
+      productDetails: '<i>Product</i>',
+      reason: '<script>alert(1)</script>',
+    });
+
+    const htmlBody = sendEmailSafely.mock.calls[0][3];
+    expect(htmlBody).toContain('&lt;img');
+    expect(htmlBody).toContain('&lt;b&gt;Actor&lt;/b&gt;');
+    expect(htmlBody).toContain('&lt;i&gt;Product&lt;/i&gt;');
+    expect(htmlBody).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(htmlBody).not.toContain('<script>alert(1)</script>');
   });
 });

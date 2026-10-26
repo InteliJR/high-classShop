@@ -15,7 +15,7 @@ import {
   Mail,
   Phone,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Process } from "../../services/processes.service";
 import type { Product, SpecialityType } from "../../types/types";
@@ -23,11 +23,12 @@ import React from "react";
 import UpdateProcessStatusModal from "./UpdateProcessStatusModal";
 import CopyableContact from "./CopyableContact";
 import AppointmentDateTimeModal from "../appointments/AppointmentDateTimeModal";
-import { applyPhoneMask } from "../../utils/mask";
+import { buildWhatsAppHref } from "../../lib/whatsapp";
 import { getContextualStatusMessage } from "../../utils/processStatusMessages";
 import {
   getProcessCompletionReason,
   getProcessWithActiveContract,
+  getAdminProcessTimeline,
   confirmAppointment,
   cancelAppointment,
   getMeetingByProcess,
@@ -35,8 +36,10 @@ import {
   startMeeting,
   updateProcessStatus,
   type MeetingSession,
+  type DelegatedProcessTimelineEvent,
 } from "../../services/processes.service";
 import { rescheduleAppointment } from "../../services/appointments.service";
+import { adminJourneyRoute } from "../../lib/admin-specialist-journey";
 
 function getActionErrorMessage(error: unknown, fallback: string): string {
   if (typeof error === "object" && error !== null) {
@@ -80,6 +83,7 @@ interface ProcessCardProps {
   isClientView?: boolean; // Se true, remove botões de ação (apenas visualização)
   onSelectProduct?: () => void; // Callback para abrir seleção de produto em consultoria
   specialistSpeciality?: SpecialityType; // Especialidade do especialista para filtrar produtos
+  adminJourney?: boolean;
 }
 
 /**
@@ -95,11 +99,16 @@ export default function ProcessCard({
   onStatusUpdated,
   isClientView = false,
   onSelectProduct,
+  adminJourney = false,
 }: ProcessCardProps) {
   const navigate = useNavigate();
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
   const [completionReason, setCompletionReason] = useState<string | null>(null);
   const [activeContract, setActiveContract] = useState<any>(null);
+  const [delegatedTimeline, setDelegatedTimeline] = useState<
+    DelegatedProcessTimelineEvent[]
+  >([]);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [meetingSession, setMeetingSession] = useState<MeetingSession | null>(
@@ -107,6 +116,11 @@ export default function ProcessCard({
   );
   const [isStartingMeeting, setIsStartingMeeting] = useState(false);
   const [isLoadingMeeting, setIsLoadingMeeting] = useState(false);
+  const [meetingLookupState, setMeetingLookupState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [meetingVerifiedProcess, setMeetingVerifiedProcess] =
+    useState<Process | null>(null);
   const [isConversationDoneLoading, setIsConversationDoneLoading] =
     useState(false);
   const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false);
@@ -119,9 +133,19 @@ export default function ProcessCard({
     null,
   );
   const [isRescheduling, setIsRescheduling] = useState(false);
+  const confirmationInFlight = useRef(false);
+  const dateTimeTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const rejectionTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   // Verifica se é um processo de consultoria (sem produto atribuído)
   const isConsultancy = !process.product_type || !process.product_id;
+  const canManuallyAdvanceProcess =
+    !isClientView && process.status === "NEGOTIATION" && !isConsultancy;
+  const canPrepareContract =
+    !activeContract ||
+    ["DECLINED", "VOIDED", "TIMEDOUT"].includes(
+      String(activeContract.provider_status ?? "").toUpperCase(),
+    );
 
   // Contraparte do processo: quem esta olhando quer o contato do outro lado.
   // Nao ha fallback entre os dois — se o dado da contraparte nao veio, a
@@ -130,6 +154,7 @@ export default function ProcessCard({
   const counterpartLabel = isClientView ? "especialista" : "cliente";
   const counterpartEmail = counterpart?.email?.trim() || null;
   const counterpartPhone = counterpart?.phone?.trim() || null;
+  const whatsAppHref = counterpartPhone ? buildWhatsAppHref(counterpartPhone) : null;
   const isAppointmentConfirmed =
     process.appointment_status === "SCHEDULED" ||
     process.appointment_status === "COMPLETED";
@@ -143,6 +168,22 @@ export default function ProcessCard({
   // Cliente só vê botão se reunião já foi iniciada pelo especialista
   const canStartOrJoinMeeting =
     isAppointmentConfirmed && process.status === "SCHEDULING";
+  const hasActiveAppointment =
+    process.appointment_status === "PENDING" ||
+    process.appointment_status === "SCHEDULED";
+  const hasActiveMeeting = Boolean(
+    meetingSession && !meetingSession.ended_at && meetingSession.is_active !== false,
+  );
+  const isNonTerminalProcess =
+    process.status !== "COMPLETED" && process.status !== "REJECTED";
+  const shouldLookupMeeting =
+    canStartOrJoinMeeting || (isNonTerminalProcess && !hasActiveAppointment);
+  const canRejectProcess =
+    isNonTerminalProcess &&
+    !hasActiveAppointment &&
+    !hasActiveMeeting &&
+    meetingLookupState === "ready" &&
+    meetingVerifiedProcess === process;
   const canSpecialistReschedule =
     !isClientView &&
     process.status === "SCHEDULING" &&
@@ -167,36 +208,86 @@ export default function ProcessCard({
       })
     : null;
 
-  // Load completion reason and active contract on mount and when process changes
+  // These projections are independent: a failure in one must not suppress the
+  // others (especially the meeting gate used by rejection).
   useEffect(() => {
-    const loadDetails = async () => {
-      try {
-        setIsLoadingMeeting(true);
-        const [reason, processData] = await Promise.all([
-          getProcessCompletionReason(process.id),
-          getProcessWithActiveContract(process.id),
-        ]);
-        setCompletionReason(reason);
-        setActiveContract(processData.activeContract);
-        console.log(processData);
+    let current = true;
 
-        const shouldCheckMeeting = canStartOrJoinMeeting;
+    void getProcessCompletionReason(process.id)
+      .then((reason) => {
+        if (current) setCompletionReason(reason);
+      })
+      .catch((error) => console.error("Error loading completion reason:", error));
 
-        if (shouldCheckMeeting) {
-          const meeting = await getMeetingByProcess(process.id);
-          setMeetingSession(meeting);
-        } else {
-          setMeetingSession(null);
-        }
-      } catch (error) {
-        console.error("Error loading process details:", error);
-      } finally {
-        setIsLoadingMeeting(false);
-      }
+    void getProcessWithActiveContract(process.id)
+      .then((processData) => {
+        if (current) setActiveContract(processData.activeContract);
+      })
+      .catch((error) => console.error("Error loading active contract:", error));
+
+    return () => {
+      current = false;
     };
+  }, [process]);
 
-    loadDetails();
-  }, [process, canStartOrJoinMeeting]);
+  useEffect(() => {
+    let current = true;
+    if (!adminJourney || !isExpanded) {
+      setDelegatedTimeline([]);
+      return () => {
+        current = false;
+      };
+    }
+    void getAdminProcessTimeline(process.id)
+      .then((events) => {
+        if (current) setDelegatedTimeline(events);
+      })
+      .catch((error) => console.error("Error loading delegated timeline:", error));
+    return () => {
+      current = false;
+    };
+  }, [adminJourney, isExpanded, process.id]);
+
+  useEffect(() => {
+    let current = true;
+
+    if (!shouldLookupMeeting) {
+      setMeetingSession(null);
+      setMeetingLookupState("idle");
+      setMeetingVerifiedProcess(null);
+      setIsLoadingMeeting(false);
+      return () => {
+        current = false;
+      };
+    }
+
+    setMeetingSession(null);
+    setMeetingLookupState("loading");
+    setMeetingVerifiedProcess(null);
+    setIsLoadingMeeting(true);
+
+    void getMeetingByProcess(process.id)
+      .then((meeting) => {
+        if (!current) return;
+        setMeetingSession(meeting);
+        setMeetingLookupState("ready");
+        setMeetingVerifiedProcess(process);
+      })
+      .catch((error) => {
+        if (!current) return;
+        setMeetingSession(null);
+        setMeetingLookupState("error");
+        setMeetingVerifiedProcess(null);
+        console.error("Error loading meeting:", error);
+      })
+      .finally(() => {
+        if (current) setIsLoadingMeeting(false);
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [process, shouldLookupMeeting]);
 
   const handleStartMeeting = async () => {
     if (isStartingMeeting) return;
@@ -205,7 +296,11 @@ export default function ProcessCard({
       setIsStartingMeeting(true);
       await startMeeting(process.id);
       onStatusUpdated?.();
-      navigate(`/processes/${process.id}/meeting`);
+      navigate(
+        adminJourney
+          ? adminJourneyRoute("meeting", process.id)
+          : `/processes/${process.id}/meeting`,
+      );
     } catch (error) {
       console.error("Error starting meeting:", error);
       alert(
@@ -220,7 +315,11 @@ export default function ProcessCard({
   };
 
   const handleJoinMeeting = () => {
-    navigate(`/processes/${process.id}/meeting`);
+    navigate(
+      adminJourney
+        ? adminJourneyRoute("meeting", process.id)
+        : `/processes/${process.id}/meeting`,
+    );
   };
 
   const handleConversationDone = async () => {
@@ -250,7 +349,9 @@ export default function ProcessCard({
 
   // Handle confirm appointment
   const handleConfirmAppointment = async (appointmentDatetime: string) => {
-    if (isConfirming) return;
+    if (confirmationInFlight.current || isCancelling ||
+      process.appointment_status !== "PENDING" || !process.appointment_id) return;
+    confirmationInFlight.current = true;
 
     try {
       setIsConfirming(true);
@@ -259,18 +360,17 @@ export default function ProcessCard({
       setDateTimeAction(null);
       onStatusUpdated?.();
     } catch (error) {
-      console.error("Error confirming appointment:", error);
       const message = getActionErrorMessage(
         error,
         "Erro ao confirmar agendamento. Tente novamente.",
       );
-      if (dateTimeAction === "confirm") {
-        setDateTimeActionError(message);
-      } else {
-        alert(message);
+      setDateTimeActionError(message);
+      if ((error as { response?: { status?: number } })?.response?.status === 409) {
+        setDateTimeAction("confirm");
       }
     } finally {
       setIsConfirming(false);
+      confirmationInFlight.current = false;
     }
   };
 
@@ -307,9 +407,18 @@ export default function ProcessCard({
 
     if (!confirmed) return;
 
+    const administrativeReason = adminJourney
+      ? window.prompt("Informe o motivo do cancelamento administrativo:")
+      : undefined;
+    if (adminJourney && !administrativeReason?.trim()) return;
+
     try {
       setIsCancelling(true);
-      await cancelAppointment(process.id);
+      if (adminJourney) {
+        await cancelAppointment(process.id, administrativeReason!.trim());
+      } else {
+        await cancelAppointment(process.id);
+      }
     } catch (error) {
       console.error("Error cancelling appointment:", error);
       alert(
@@ -370,7 +479,13 @@ export default function ProcessCard({
       {process.status === "NEGOTIATION" && !isConsultancy && !isExpanded && (
         <div className="hidden md:block absolute top-6 right-6 z-20">
           <button
-            onClick={() => navigate(`/processes/${process.id}/negotiation`)}
+            onClick={() =>
+              navigate(
+                adminJourney
+                  ? adminJourneyRoute("negotiation", process.id)
+                  : `/processes/${process.id}/negotiation`,
+              )
+            }
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs md:text-sm font-medium rounded-lg shadow-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
           >
             <MessageSquare size={16} />
@@ -381,6 +496,7 @@ export default function ProcessCard({
       {/* Upload Contract Button: For DOCUMENTATION status (hidden in client view) */}
       {process.status === "DOCUMENTATION" &&
         onUploadDocuments &&
+        canPrepareContract &&
         !isExpanded &&
         !isClientView && (
           <div className="hidden md:block absolute top-6 right-6 z-20">
@@ -422,10 +538,21 @@ export default function ProcessCard({
               {counterpartPhone && (
                 <CopyableContact
                   icon={<Phone size={12} />}
-                  label={applyPhoneMask(counterpartPhone)}
+                  label={counterpartPhone}
                   value={counterpartPhone}
                   description={`telefone do ${counterpartLabel}`}
                 />
+              )}
+              {whatsAppHref && (
+                <a
+                  href={whatsAppHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-green-700 hover:underline"
+                >
+                  <MessageSquare size={12} />
+                  WhatsApp do {counterpartLabel}
+                </a>
               )}
             </div>
           )}
@@ -438,13 +565,24 @@ export default function ProcessCard({
             </p>
           )}
         </div>
-        {!isClientView && (
+        {canManuallyAdvanceProcess && (
           <button
             onClick={() => setShowUpdateModal(true)}
             className="p-1 hover:bg-gray-100 rounded transition shrink-0"
             aria-label="Alterar status"
           >
             <Edit2 size={18} />
+          </button>
+        )}
+        {canRejectProcess && (
+          <button
+            ref={rejectionTriggerRef}
+            type="button"
+            onClick={() => setShowRejectModal(true)}
+            className="inline-flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs font-medium text-red-700 transition hover:bg-red-50"
+          >
+            <XCircle size={16} />
+            Recusar processo
           </button>
         )}
         {onToggleExpand && (
@@ -490,7 +628,9 @@ export default function ProcessCard({
               <strong>{formattedAppointmentTime}</strong>
               {isAppointmentConfirmed
                 ? "."
-                : " (aguardando confirmação do especialista)."}
+                : process.appointment_scheduling_method === "CALENDLY"
+                  ? " (aguardando sincronização do Calendly)."
+                  : " (aguardando confirmação do especialista)."}
             </p>
           )}
           {process.specialist_rescheduled_at && (
@@ -501,18 +641,23 @@ export default function ProcessCard({
         </div>
 
         {/* Appointment Confirmation Buttons - SCHEDULING Status (before appointment confirmation) */}
-        {process.status === "SCHEDULING" && !isAppointmentConfirmed && (
+        {process.status === "SCHEDULING" && process.appointment_status === "PENDING" && process.appointment_id && (
           <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-amber-900 mb-2">
                 {isClientView
-                  ? "Aguardando confirmação do especialista"
+                  ? process.appointment_scheduling_method === "CALENDLY"
+                    ? "Aguardando sincronização do Calendly"
+                    : "Aguardando confirmação do especialista"
                   : "Solicitação de agendamento"}
               </p>
+              {dateTimeActionError && dateTimeAction === null && (
+                <p role="alert" className="text-sm text-red-700">{dateTimeActionError}</p>
+              )}
 
               {!isClientView ? (
                 // Specialist view - Confirm or Reject buttons
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={handleCancelAppointment}
                     disabled={isCancelling || isConfirming}
@@ -530,31 +675,34 @@ export default function ProcessCard({
                   {hasValidScheduledMeetingDate ||
                   process.appointment_scheduling_method === "EMAIL" ||
                   process.appointment_scheduling_method == null ? (
-                    <button
-                      onClick={() => {
-                        if (hasValidScheduledMeetingDate && scheduledMeetingDate) {
-                          void handleConfirmAppointment(
-                            scheduledMeetingDate.toISOString(),
-                          );
-                        } else {
+                    <>
+                      {hasValidScheduledMeetingDate && (
+                        <button
+                          onClick={(event) => {
+                            dateTimeTriggerRef.current = event.currentTarget;
+                            void handleConfirmAppointment(process.appointment_datetime!);
+                          }}
+                          disabled={isConfirming || isCancelling}
+                          aria-busy={isConfirming}
+                          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50"
+                        >
+                          {isConfirming ? <Loader2 className="animate-spin h-4 w-4" /> : <CheckCircle size={16} />}
+                          Confirmar horário
+                        </button>
+                      )}
+                      <button
+                        onClick={(event) => {
+                          dateTimeTriggerRef.current = event.currentTarget;
                           setDateTimeActionError(null);
                           setDateTimeAction("confirm");
-                        }
-                      }}
-                      disabled={isConfirming || isCancelling}
-                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50"
-                    >
-                      {isConfirming ? (
-                        <Loader2 className="animate-spin h-4 w-4 text-white" />
-                      ) : (
-                        <>
-                          <CheckCircle size={16} />
-                          {hasValidScheduledMeetingDate
-                            ? "Confirmar"
-                            : "Definir data e hora"}
-                        </>
-                      )}
-                    </button>
+                        }}
+                        disabled={isConfirming || isCancelling}
+                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-white border border-green-600 text-green-700 rounded-lg font-medium hover:bg-green-50 transition disabled:opacity-50"
+                      >
+                        <Clock size={16} />
+                        Alterar e confirmar
+                      </button>
+                    </>
                   ) : (
                     <p className="flex-1 self-center text-center text-xs text-amber-800">
                       Aguardando sincronização do Calendly
@@ -599,7 +747,8 @@ export default function ProcessCard({
                   {canSpecialistReschedule && (
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={(event) => {
+                        dateTimeTriggerRef.current = event.currentTarget;
                         setDateTimeActionError(null);
                         setDateTimeAction("reschedule");
                       }}
@@ -684,7 +833,13 @@ export default function ProcessCard({
         {process.status === "NEGOTIATION" && !isConsultancy && !isExpanded && (
           <div className="md:hidden w-full mb-2 flex flex-col gap-2">
             <button
-              onClick={() => navigate(`/processes/${process.id}/negotiation`)}
+              onClick={() =>
+                navigate(
+                  adminJourney
+                    ? adminJourneyRoute("negotiation", process.id)
+                    : `/processes/${process.id}/negotiation`,
+                )
+              }
               className="w-full px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-blue-700 transition-colors inline-flex items-center justify-center gap-1"
             >
               <MessageSquare size={14} />
@@ -696,6 +851,7 @@ export default function ProcessCard({
         {/* Mobile: botão para enviar contrato em DOCUMENTATION */}
         {process.status === "DOCUMENTATION" &&
           onUploadDocuments &&
+          canPrepareContract &&
           !isExpanded &&
           !isClientView && (
             <div className="md:hidden w-full mb-2 flex flex-col gap-2">
@@ -759,6 +915,9 @@ export default function ProcessCard({
                   <span>Contrato recusado ou cancelado</span>
                 </div>
               )}
+              <p className="mt-2 text-xs text-blue-800">
+                Estado externo: {activeContract.provider_status || activeContract.status}
+              </p>
             </div>
           )}
 
@@ -895,6 +1054,27 @@ export default function ProcessCard({
       {/* Expandable Details Section */}
       {isExpanded && (
         <div className="px-3 py-4 md:px-6 md:py-4 bg-gray-50 border-t border-gray-100">
+          {adminJourney && (
+            <div className="mb-4 rounded-lg border border-border bg-surface p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Última ação delegada
+              </p>
+              {delegatedTimeline[0] ? (
+                <p className="mt-1 text-sm text-ink">
+                  {delegatedTimeline[0].action} por{" "}
+                  <strong>
+                    {delegatedTimeline[0].actor.name || delegatedTimeline[0].actor.id}
+                  </strong>{" "}
+                  ({delegatedTimeline[0].actor.role}), em nome do especialista,
+                  em {new Date(delegatedTimeline[0].createdAt).toLocaleString("pt-BR")}.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-muted">
+                  Nenhuma ação administrativa registrada neste processo.
+                </p>
+              )}
+            </div>
+          )}
           {product && (
             <div className="space-y-3 mb-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
@@ -944,19 +1124,27 @@ export default function ProcessCard({
 
           {/* Action Buttons */}
           <div className="flex flex-col-reverse sm:flex-row gap-2 pt-3 border-t border-gray-200">
-            {/* Update Status Button */}
-            <button
-              onClick={() => setShowUpdateModal(true)}
-              className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 border border-slate-700 text-slate-700 text-xs md:text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              <Edit2 size={16} />
-              Alterar Status
-            </button>
+            {/* A única transição manual aceita pelo backend. */}
+            {canManuallyAdvanceProcess && (
+              <button
+                onClick={() => setShowUpdateModal(true)}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 border border-slate-700 text-slate-700 text-xs md:text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                <Edit2 size={16} />
+                Alterar Status
+              </button>
+            )}
 
             {/* Negotiation Button: Only show if status is NEGOTIATION and process has product */}
             {process.status === "NEGOTIATION" && !isConsultancy && (
               <button
-                onClick={() => navigate(`/processes/${process.id}/negotiation`)}
+                onClick={() =>
+                  navigate(
+                    adminJourney
+                      ? adminJourneyRoute("negotiation", process.id)
+                      : `/processes/${process.id}/negotiation`,
+                  )
+                }
                 className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 bg-blue-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
               >
                 <MessageSquare size={16} />
@@ -965,7 +1153,9 @@ export default function ProcessCard({
             )}
 
             {/* Upload Contract Button: Only show if status is DOCUMENTATION */}
-            {process.status === "DOCUMENTATION" && onUploadDocuments && (
+            {process.status === "DOCUMENTATION" &&
+              onUploadDocuments &&
+              canPrepareContract && (
               <button
                 onClick={onUploadDocuments}
                 className="flex-1 px-3 py-2 md:px-4 md:py-2 bg-orange-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors whitespace-nowrap"
@@ -976,7 +1166,7 @@ export default function ProcessCard({
           </div>
 
           {/* Advance process — specialist only, NEGOTIATION, low prominence */}
-          {process.status === "NEGOTIATION" && !isClientView && (
+          {canManuallyAdvanceProcess && (
             <div className="flex items-center justify-end gap-2 mt-2">
               {!showAdvanceConfirm ? (
                 <button
@@ -1025,21 +1215,30 @@ export default function ProcessCard({
 
       {/* Update Status Modal */}
       <UpdateProcessStatusModal
-        isOpen={showUpdateModal}
-        onClose={() => setShowUpdateModal(false)}
+        isOpen={showUpdateModal || showRejectModal}
+        action={showRejectModal ? "reject" : "status"}
+        returnFocusRef={rejectionTriggerRef}
+        onClose={() => {
+          setShowUpdateModal(false);
+          setShowRejectModal(false);
+        }}
         onSuccess={() => {
           setShowUpdateModal(false);
+          setShowRejectModal(false);
           onStatusUpdated?.();
         }}
         process={process}
+        reasonRequired={adminJourney}
       />
 
       <AppointmentDateTimeModal
         open={dateTimeAction !== null}
+        initialValue={process.appointment_datetime || undefined}
+        returnFocusRef={dateTimeTriggerRef}
         title={
           dateTimeAction === "reschedule"
             ? "Alterar horário"
-            : "Definir data e hora"
+            : "Alterar e confirmar"
         }
         description={
           dateTimeAction === "reschedule"

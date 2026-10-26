@@ -31,6 +31,12 @@ export class PreviewContractResponseDto {
    * @example "550e8400-e29b-41d4-a716-446655440000"
    */
   process_id: string;
+
+  /** True quando o rascunho ainda possui um signatário Seller. */
+  seller_signature_required: boolean;
+
+  /** True quando o especialista ocupa o papel Seller deste rascunho. */
+  seller_assigned_to_specialist: boolean;
 }
 
 /**
