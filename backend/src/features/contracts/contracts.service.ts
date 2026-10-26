@@ -183,8 +183,8 @@ export class ContractsService {
       operation_id: dto.operation_id,
       process_id: dto.process_id,
       total_commission_rate: dto.total_commission_rate,
-      seller_name: dto.seller_name,
-      seller_email: dto.seller_email,
+      seller_name: dto.seller_name ?? '',
+      seller_email: dto.seller_email ?? '',
       seller_cpf: dto.seller_cpf,
       seller_rg: dto.seller_rg,
       seller_address: dto.seller_address ?? '',
@@ -232,6 +232,40 @@ export class ContractsService {
       city: dto.city ?? '',
       description: dto.description,
     };
+  }
+
+  private normalizePreviewSeller(dto: PreviewContractDto): void {
+    const sellerName = dto.seller_name?.trim() ?? '';
+    const sellerEmail = dto.seller_email?.trim() ?? '';
+    dto.seller_name = sellerName;
+    dto.seller_email = sellerEmail;
+  }
+
+  private assignSpecialistToSellerRole(dto: PreviewContractDto): boolean {
+    if (dto.seller_name && dto.seller_email) return false;
+    if (!dto.specialist_name || !dto.specialist_email) {
+      throw new BadRequestException(
+        'Não foi possível identificar o especialista para o papel de vendedor.',
+      );
+    }
+    const sellerDetails = [
+      dto.seller_cpf,
+      dto.seller_rg,
+      dto.seller_address,
+      dto.seller_cep,
+      dto.seller_bank,
+      dto.seller_agency,
+      dto.seller_checking_account,
+    ];
+    if (sellerDetails.some((value) => value?.trim())) {
+      throw new BadRequestException(
+        'Para o especialista assinar como vendedor, limpe os dados pessoais e bancários do vendedor. Para manter esses dados, informe nome e e-mail do vendedor.',
+      );
+    }
+    // Nunca misturar nome de uma pessoa com e-mail de outra.
+    dto.seller_name = dto.specialist_name;
+    dto.seller_email = dto.specialist_email;
+    return true;
   }
 
   private buildPreviewFingerprint(
@@ -357,6 +391,7 @@ export class ContractsService {
       );
     }
     if (
+      dto.seller_name?.trim() &&
       normalizeEmail(dto.seller_email) ===
       normalizeEmail(processRecord.specialist.email)
     ) {
@@ -621,13 +656,15 @@ export class ContractsService {
     contractId: string,
     method: 'generateContract' | 'sendContractAfterPreview',
   ): void {
+    const sellerEmail = dto.seller_email;
+    const sellerName = dto.seller_name;
     setImmediate(() => {
       this.notificationService
         .sendContractGeneratedEmail({
           buyerEmail: dto.buyer_email,
           buyerName: dto.buyer_name,
-          sellerEmail: dto.seller_email,
-          sellerName: dto.seller_name,
+          sellerEmail,
+          sellerName,
           contractId,
           vehicleDetails: `${dto.vehicle_model} ${dto.vehicle_year}`,
           processId: dto.process_id,
@@ -1409,6 +1446,7 @@ export class ContractsService {
             sentAt: new Date().toISOString(),
             originalStatus: envelopeResponse.status,
             templateId: templateId,
+            sellerEmail: dto.seller_email || null,
           } as any,
 
           // Dados do vendedor
@@ -1820,6 +1858,7 @@ export class ContractsService {
 
       // ===== ETAPA 1: VALIDAÇÕES DE INTEGRIDADE =====
       this.logger.log('Preview Etapa 1: Validando integridade de negócio...');
+      this.normalizePreviewSeller(dto);
 
       // 1.1 Verificar se processo existe
       const processRecord = await this.getAuthorizedContractProcess(
@@ -1884,6 +1923,11 @@ export class ContractsService {
         );
       }
 
+      const templateHasSellerRole =
+        await this.docuSignService.templateHasSellerRole(templateId);
+      const sellerAssignedToSpecialist = templateHasSellerRole &&
+        this.assignSpecialistToSellerRole(dto);
+
       const { formFields, requestFingerprint } =
         this.buildPreviewFingerprint(
           dto,
@@ -1899,10 +1943,11 @@ export class ContractsService {
       const previewResponse = await this.docuSignService.createEnvelopePreview({
         transactionId: dto.operation_id,
         templateId,
+        templateHasSellerRole,
         buyerEmail: dto.buyer_email,
         buyerName: dto.buyer_name,
-        sellerEmail: dto.seller_email,
-        sellerName: dto.seller_name,
+        sellerEmail: dto.seller_email ?? '',
+        sellerName: dto.seller_name ?? '',
         specialistEmail: dto.specialist_email,
         specialistName: dto.specialist_name,
         formFields,
@@ -1939,6 +1984,8 @@ export class ContractsService {
         envelope_id: previewResponse.envelopeId,
         expires_at: previewResponse.expiresAt,
         process_id: dto.process_id,
+        seller_signature_required: previewResponse.sellerSignatureRequired,
+        seller_assigned_to_specialist: sellerAssignedToSpecialist,
       };
     } catch (error) {
       if (
@@ -2072,6 +2119,7 @@ export class ContractsService {
 
       // ===== ETAPA 1: RE-VALIDAR INTEGRIDADE =====
       // (usuário pode ter aguardado muito tempo após preview)
+      this.normalizePreviewSeller(dto);
       const processRecord = await this.getAuthorizedContractProcess(
         dto.process_id,
         userId,
@@ -2080,6 +2128,11 @@ export class ContractsService {
       );
       this.assertContractPartiesAndPrice(dto, processRecord);
       await this.assertEnvelopeBelongsToProcess(envelopeId, dto.process_id);
+      if (!dto.seller_name || !dto.seller_email) {
+        if (await this.docuSignService.hasSellerRecipient(envelopeId)) {
+          this.assignSpecialistToSellerRole(dto);
+        }
+      }
 
       let previewEnvelope: Awaited<
         ReturnType<DocuSignService['getEnvelopeStatus']>
@@ -2263,6 +2316,7 @@ export class ContractsService {
             sentAt: new Date().toISOString(),
             originalStatus: sendResponse.status,
             templateId: templateId,
+            sellerEmail: dto.seller_email || null,
             previewUsed: true,
             requestFingerprint,
           } as any,

@@ -570,6 +570,16 @@ export default function CreateContractPage() {
   const handleConfirmSend = useCallback(async () => {
     if (!previewData || !previewFormData || previewActionInFlightRef.current)
       return;
+    if (
+      previewData.seller_signature_required !== false &&
+      !previewData.seller_assigned_to_specialist &&
+      (!previewFormData.seller_name?.trim() || !previewFormData.seller_email?.trim())
+    ) {
+      setPreviewCancellationError(
+        "Preencha nome e e-mail do vendedor no formulário e gere uma nova prévia para enviar à assinatura.",
+      );
+      return;
+    }
 
     previewActionInFlightRef.current = true;
     setPreviewCancellationError(null);
@@ -945,13 +955,11 @@ export default function CreateContractPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Nome Completo *
+                      Nome Completo
                     </label>
                     <input
                       type="text"
-                      {...register("seller_name", {
-                        required: "Nome é obrigatório",
-                      })}
+                      {...register("seller_name")}
                       className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-focus-ring focus:border-transparent bg-surface"
                     />
                     {errors.seller_name && (
@@ -963,12 +971,11 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      E-mail *
+                      E-mail
                     </label>
                     <input
                       type="email"
                       {...register("seller_email", {
-                        required: "E-mail é obrigatório",
                         pattern: {
                           value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
                           message: "E-mail inválido",
@@ -983,9 +990,17 @@ export default function CreateContractPage() {
                     )}
                   </div>
 
+                  <p className="md:col-span-2 text-xs text-subtle">
+                    Nome e e-mail do vendedor podem ficar em branco. Se o modelo
+                    exigir Seller, o especialista aparecerá e assinará como vendedor.
+                    Nesse caso, deixe também os dados pessoais e bancários do
+                    vendedor em branco; o documento usará o nome do especialista.
+                    Sem uma Testemunha 1 informada, ele também assinará como testemunha.
+                  </p>
+
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      CPF *
+                      CPF
                     </label>
                     <Controller
                       name="seller_cpf"
@@ -1032,7 +1047,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      CEP *
+                      CEP
                     </label>
                     <Controller
                       name="seller_cep"
@@ -1059,7 +1074,7 @@ export default function CreateContractPage() {
 
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Endereço Completo *
+                      Endereço Completo
                     </label>
                     <input
                       type="text"
@@ -1082,7 +1097,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Banco *
+                      Banco
                     </label>
                     <input
                       type="text"
@@ -1099,7 +1114,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Agência *
+                      Agência
                     </label>
                     <input
                       type="text"
@@ -1115,7 +1130,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Conta Corrente *
+                      Conta Corrente
                     </label>
                     <input
                       type="text"
@@ -1145,7 +1160,7 @@ export default function CreateContractPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Nome Completo *
+                      Nome Completo
                     </label>
                     <input
                       type="text"
@@ -1163,7 +1178,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      E-mail *
+                      E-mail
                     </label>
                     <input
                       type="email"
@@ -1181,7 +1196,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      CPF *
+                      CPF
                     </label>
                     <Controller
                       name="buyer_cpf"
@@ -1228,7 +1243,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      CEP *
+                      CEP
                     </label>
                     <input
                       type="text"
@@ -1245,7 +1260,7 @@ export default function CreateContractPage() {
 
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Endereço Completo *
+                      Endereço Completo
                     </label>
                     <input
                       type="text"
@@ -1284,7 +1299,7 @@ export default function CreateContractPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Marca e Modelo *
+                      Marca e Modelo
                     </label>
                     <input
                       type="text"
@@ -1300,7 +1315,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Ano *
+                      Ano
                     </label>
                     <input
                       type="text"
@@ -1316,7 +1331,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      {getRegistrationLabel(prefillData?.product_type)} *
+                      {getRegistrationLabel(prefillData?.product_type)}
                     </label>
                     <input
                       type="text"
@@ -1339,7 +1354,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      {getSerialLabel(prefillData?.product_type)} *
+                      {getSerialLabel(prefillData?.product_type)}
                     </label>
                     <input
                       type="text"
@@ -1437,7 +1452,7 @@ export default function CreateContractPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Razão Social *
+                      Razão Social
                     </label>
                     <input
                       type="text"
@@ -1454,7 +1469,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      CNPJ *
+                      CNPJ
                     </label>
                     <input
                       type="text"
@@ -1471,7 +1486,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Banco *
+                      Banco
                     </label>
                     <input
                       type="text"
@@ -1488,7 +1503,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Agência *
+                      Agência
                     </label>
                     <input
                       type="text"
@@ -1505,7 +1520,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Conta Corrente *
+                      Conta Corrente
                     </label>
                     <input
                       type="text"
@@ -1535,7 +1550,7 @@ export default function CreateContractPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Razão Social *
+                      Razão Social
                     </label>
                     <input
                       type="text"
@@ -1552,7 +1567,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      CNPJ *
+                      CNPJ
                     </label>
                     <input
                       type="text"
@@ -1618,7 +1633,7 @@ export default function CreateContractPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Nome *
+                      Nome
                     </label>
                     <input
                       type="text"
@@ -1635,7 +1650,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      E-mail *
+                      E-mail
                     </label>
                     <input
                       type="email"
@@ -1652,7 +1667,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      CNPJ *
+                      CNPJ
                     </label>
                     <input
                       type="text"
@@ -1675,7 +1690,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Banco *
+                      Banco
                     </label>
                     <input
                       type="text"
@@ -1692,7 +1707,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Agência *
+                      Agência
                     </label>
                     <input
                       type="text"
@@ -1709,7 +1724,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Conta Corrente *
+                      Conta Corrente
                     </label>
                     <input
                       type="text"
@@ -1726,7 +1741,7 @@ export default function CreateContractPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
-                      Valor da Comissão *
+                      Valor da Comissão
                     </label>
                     <div>
                       <input
@@ -1867,7 +1882,7 @@ export default function CreateContractPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-ink-soft mb-1">
-                    Cidade de Assinatura *
+                    Cidade de Assinatura
                   </label>
                   <input
                     type="text"
@@ -1955,7 +1970,7 @@ export default function CreateContractPage() {
                   ) : (
                     <span className="flex items-center justify-center gap-2">
                       <Eye className="w-5 h-5" />
-                      Pré-visualizar e Enviar Contrato
+                      Pré-visualizar contrato
                     </span>
                   )}
                 </Button>
@@ -1992,6 +2007,21 @@ export default function CreateContractPage() {
           onConfirm={handleConfirmSend}
           onCancel={handleCancelPreview}
           onExpired={handlePreviewExpired}
+          sendBlockedReason={
+            previewData.seller_signature_required !== false &&
+            !previewData.seller_assigned_to_specialist &&
+            (!previewFormData?.seller_name?.trim() ||
+              !previewFormData?.seller_email?.trim())
+              ? "Preencha nome e e-mail do vendedor no formulário e gere uma nova prévia para enviar à assinatura."
+              : null
+          }
+          sellerIdentityNotice={
+            previewData.seller_assigned_to_specialist
+              ? `O especialista ${prefillData?.specialist?.name || "responsável"} (${prefillData?.specialist?.email || "e-mail cadastrado"}) aparece e assina como vendedor neste contrato${previewFormData?.testimonial1_email ? "." : " e também como Testemunha 1."}`
+              : !previewFormData?.testimonial1_email && !previewFormData?.seller_email
+                ? `O especialista ${prefillData?.specialist?.name || "responsável"} (${prefillData?.specialist?.email || "e-mail cadastrado"}) assina como Testemunha 1 neste contrato.`
+              : null
+          }
           isLoading={isSendingAfterPreview}
           isCancelling={isCancellingPreview}
           cancellationError={previewCancellationError}

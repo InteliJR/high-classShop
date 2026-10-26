@@ -521,6 +521,7 @@ export class DocuSignWebhookService {
           id: true,
           buyer_name: true,
           seller_name: true,
+          provider_meta: true,
           vehicle_model: true,
           vehicle_year: true,
           vehicle_price: true,
@@ -541,16 +542,22 @@ export class DocuSignWebhookService {
         const buyerName =
           contractWithDetails.buyer_name ||
           `${contractWithDetails.process?.client?.name || ''} ${contractWithDetails.process?.client?.surname || ''}`.trim();
-        const sellerEmail = contractWithDetails.process?.specialist?.email;
-        const sellerName =
-          contractWithDetails.seller_name ||
-          `${contractWithDetails.process?.specialist?.name || ''} ${contractWithDetails.process?.specialist?.surname || ''}`.trim();
+        const metadata = contractWithDetails.provider_meta;
+        const specialistEmail = contractWithDetails.process?.specialist?.email;
+        const sellerEmail = metadata && typeof metadata === 'object' &&
+          !Array.isArray(metadata) && 'sellerEmail' in metadata
+            ? typeof metadata.sellerEmail === 'string'
+              ? metadata.sellerEmail
+              : undefined
+            : specialistEmail; // Contratos antigos não registravam sellerEmail.
+        const sellerName = contractWithDetails.seller_name || undefined;
+        const specialistName = `${contractWithDetails.process?.specialist?.name || ''} ${contractWithDetails.process?.specialist?.surname || ''}`.trim();
         const vehicleDetails =
           `${contractWithDetails.vehicle_model || ''} ${contractWithDetails.vehicle_year || ''}`.trim();
 
         setImmediate(() => {
           // Notificar baseado no status
-          if (providerStatus === 'SENT' && buyerEmail && sellerEmail) {
+          if (providerStatus === 'SENT' && buyerEmail) {
             this.notificationService
               .sendContractSentEmail({
                 buyerEmail,
@@ -571,7 +578,7 @@ export class DocuSignWebhookService {
           } else if (
             providerStatus === 'COMPLETED' &&
             buyerEmail &&
-            sellerEmail
+            buyerEmail
           ) {
             this.notificationService
               .sendContractSignedEmail({
@@ -591,11 +598,11 @@ export class DocuSignWebhookService {
                   errorType: err instanceof Error ? err.name : typeof err,
                 });
               });
-          } else if (providerStatus === 'DECLINED' && sellerEmail) {
+          } else if (providerStatus === 'DECLINED' && specialistEmail) {
             this.notificationService
               .sendContractDeclinedEmail({
-                specialistEmail: sellerEmail,
-                specialistName: sellerName,
+                specialistEmail,
+                specialistName,
                 clientEmail: buyerEmail || '',
                 clientName: buyerName,
                 contractId: contract.id,
@@ -609,11 +616,11 @@ export class DocuSignWebhookService {
                   errorType: err instanceof Error ? err.name : typeof err,
                 });
               });
-          } else if (providerStatus === 'VOIDED' && sellerEmail) {
+          } else if (providerStatus === 'VOIDED' && specialistEmail) {
             this.notificationService
               .sendContractVoidedEmail({
-                specialistEmail: sellerEmail,
-                specialistName: sellerName,
+                specialistEmail,
+                specialistName,
                 clientEmail: buyerEmail || '',
                 clientName: buyerName,
                 contractId: contract.id,
@@ -627,11 +634,11 @@ export class DocuSignWebhookService {
                   errorType: err instanceof Error ? err.name : typeof err,
                 });
               });
-          } else if (providerStatus === 'TIMEDOUT' && sellerEmail) {
+          } else if (providerStatus === 'TIMEDOUT' && specialistEmail) {
             this.notificationService
               .sendContractTimeoutEmail({
-                specialistEmail: sellerEmail,
-                specialistName: sellerName,
+                specialistEmail,
+                specialistName,
                 clientEmail: buyerEmail || '',
                 clientName: buyerName,
                 contractId: contract.id,

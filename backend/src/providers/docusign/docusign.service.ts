@@ -769,10 +769,12 @@ export class DocuSignService {
     testimonial2Name?: string;
     testimonial2Email?: string;
     onEnvelopeCreated?: (envelopeId: string) => void;
+    templateHasSellerRole?: boolean;
   }): Promise<{
     envelopeId: string;
     previewUrl: string;
     expiresAt: string;
+    sellerSignatureRequired: boolean;
   }> {
     const {
       templateId,
@@ -792,6 +794,7 @@ export class DocuSignService {
       testimonial2Name,
       testimonial2Email,
       onEnvelopeCreated,
+      templateHasSellerRole: knownTemplateHasSellerRole,
     } = params;
 
     let createdEnvelopeId: string | null = null;
@@ -808,12 +811,6 @@ export class DocuSignService {
         );
       }
 
-      if (!sellerEmail || sellerEmail.trim().length === 0) {
-        throw new EnvelopeCreationFailedException(
-          'Email do vendedor é obrigatório',
-        );
-      }
-
       this.logger.log(`=== INICIANDO FLUXO DE PREVIEW (3 ETAPAS) ===`);
       this.logger.debug(`Template ID: ${templateId}`);
       this.logger.debug(`Process ID: ${processId}`);
@@ -821,43 +818,50 @@ export class DocuSignService {
       // ===== ETAPA 1: CRIAR ENVELOPE COMO DRAFT =====
       this.logger.log('PREVIEW ETAPA 1: Criando envelope como DRAFT...');
 
+      // Um template futuro pode dispensar o papel Seller. Nesse caso, não
+      // anexar um destinatário que já não existe no template.
+      const templateHasSellerRole = knownTemplateHasSellerRole ?? (
+        sellerName && sellerEmail
+          ? await this.templateHasSellerRole(templateId)
+          : false
+      );
+
+      const templateRoles: CreateTemplateEnvelopeDto['templateRoles'] = [
+        { roleName: 'Buyer', name: buyerName, email: buyerEmail },
+      ];
+      if (templateHasSellerRole && sellerName && sellerEmail) {
+        templateRoles.push({ roleName: 'Seller', name: sellerName, email: sellerEmail });
+      }
+      if (specialistEmail && specialistName) {
+        templateRoles.push({
+          roleName: 'Specialist', name: specialistName, email: specialistEmail,
+        });
+      }
+      // Sem testemunha informada, o especialista assume Testemunha 1.
+      // Com vendedor real, preservamos o fallback anterior ao vendedor.
+      const witness1Email = testimonial1Email || sellerEmail || specialistEmail;
+      if (witness1Email) {
+        templateRoles.push({
+          roleName: 'Testimonial1',
+          name: testimonial1Name ||
+            (!testimonial1Email && (!sellerEmail || sellerEmail === specialistEmail)
+              ? specialistName || 'Testemunha 1'
+              : 'Testemunha 1'),
+          email: witness1Email,
+        });
+      }
+      templateRoles.push({
+        roleName: 'Testimonial2',
+        name: testimonial2Name || 'Testemunha 2',
+        email: testimonial2Email || buyerEmail,
+      });
+
       const createEnvelopeDto: CreateTemplateEnvelopeDto = {
         transactionId,
         templateId,
         status: 'created', // DRAFT - não envia
         emailSubject: 'Contrato de Compra e Venda - Assinatura Digital',
-        templateRoles: [
-          {
-            roleName: 'Buyer',
-            name: buyerName,
-            email: buyerEmail,
-          },
-          {
-            roleName: 'Seller',
-            name: sellerName,
-            email: sellerEmail,
-          },
-          ...(specialistEmail && specialistName
-            ? [
-                {
-                  roleName: 'Specialist',
-                  name: specialistName,
-                  email: specialistEmail,
-                },
-              ]
-            : []),
-          // Testemunhas são obrigatórias no template — se não fornecidas, usar placeholder
-          {
-            roleName: 'Testimonial1',
-            name: testimonial1Name || 'Testemunha 1',
-            email: testimonial1Email || sellerEmail,
-          },
-          {
-            roleName: 'Testimonial2',
-            name: testimonial2Name || 'Testemunha 2',
-            email: testimonial2Email || buyerEmail,
-          },
-        ],
+        templateRoles,
         customFields: {
           textCustomFields: [
             {
@@ -890,6 +894,12 @@ export class DocuSignService {
       }
 
       this.logger.log(`✓ Envelope DRAFT criado. ID: ${envelopeId}`);
+
+      // O envelope é a fonte de verdade: ele preserva os papéis do template
+      // mesmo quando templateRoles não preenche um destinatário.
+      const sellerSignatureRequired = this.hasSellerRole(
+        await this.client.getEnvelopeRecipients(envelopeId),
+      );
 
       // ===== ETAPA 2: BUSCAR E ATUALIZAR CAMPOS DOCGEN =====
       this.logger.log('PREVIEW ETAPA 2: Preenchendo campos DocGen...');
@@ -924,7 +934,7 @@ export class DocuSignService {
           showEditRecipients: 'false',
           showEditDocuments: 'true',
           showDiscardAction: 'false',
-          sendButtonAction: 'send',
+          sendButtonAction: 'redirect',
         },
       );
 
@@ -938,6 +948,7 @@ export class DocuSignService {
         envelopeId,
         previewUrl: senderViewResponse.url,
         expiresAt,
+        sellerSignatureRequired,
       };
     } catch (error) {
       if (
@@ -1153,6 +1164,25 @@ export class DocuSignService {
         docGenFormFieldList,
       };
     });
+  }
+
+  private hasSellerRole(recipients: { signers?: Array<{ roleName?: string }> }): boolean {
+    if (!Array.isArray(recipients?.signers)) {
+      throw new EnvelopeCreationFailedException(
+        'Não foi possível verificar os signatários do contrato.',
+      );
+    }
+    return recipients.signers.some(
+      (recipient) => recipient.roleName?.trim().toLowerCase() === 'seller',
+    );
+  }
+
+  async hasSellerRecipient(envelopeId: string): Promise<boolean> {
+    return this.hasSellerRole(await this.client.getEnvelopeRecipients(envelopeId));
+  }
+
+  async templateHasSellerRole(templateId: string): Promise<boolean> {
+    return this.hasSellerRole(await this.client.getTemplateRecipients(templateId));
   }
 
   /**

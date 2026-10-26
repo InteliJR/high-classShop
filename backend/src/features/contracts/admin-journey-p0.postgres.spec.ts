@@ -233,6 +233,7 @@ describeWithPostgres('admin journey P0 — PostgreSQL + simulated DocuSign', () 
     const envelopeId = `p0-preview-${suffix}`;
     let previewFingerprint = '';
     const docusign = {
+      templateHasSellerRole: jest.fn().mockResolvedValue(true),
       createEnvelopePreview: jest.fn().mockImplementation(async (params) => {
         previewFingerprint = params.requestFingerprint;
         params.onEnvelopeCreated?.(envelopeId);
