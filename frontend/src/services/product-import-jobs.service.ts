@@ -75,6 +75,9 @@ export async function waitImportJobCompletion(
     const status = await getImportJobStatus(jobId);
 
     if (status.done) {
+      if (status.status === "FAILED" && status.errorMessage) {
+        throw new Error(status.errorMessage);
+      }
       return status.result;
     }
 

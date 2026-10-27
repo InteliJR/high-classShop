@@ -268,6 +268,7 @@ export const ENTITIES: Record<string, EntityConfig> = {
     select: {
       id: true, product_type: true, status: true, notes: true,
       active_contract_id: true, created_at: true,
+      removed_at: true, removed_by: true, removal_reason: true,
       client: { select: { name: true, surname: true } },
       specialist: { select: { name: true, surname: true } },
       car: { select: { marca: true, modelo: true } },
@@ -289,6 +290,9 @@ export const ENTITIES: Record<string, EntityConfig> = {
       { label: 'Contrato', get: (r) => r.active_contract_id != null, format: f.bool },
       { label: 'Observações', get: (r) => r.notes, wide: true },
       { label: 'Criado em', get: (r) => r.created_at, format: f.date },
+      { label: 'Excluído em', get: (r) => r.removed_at, format: f.datetime },
+      { label: 'Excluído por', get: (r) => r.removed_by },
+      { label: 'Motivo da exclusão', get: (r) => r.removal_reason, wide: true },
     ],
   },
   contracts: {

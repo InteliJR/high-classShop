@@ -3,6 +3,13 @@ import { StatusAgendamento, UserRole } from '@prisma/client';
 import { AppointmentsService } from './appointments.service';
 
 describe('AppointmentsService.getAppointments — escopo de visibilidade', () => {
+  const visibleProcessScope = {
+    OR: [
+      { process: { is: null } },
+      { process: { is: { removed_at: null } } },
+    ],
+  };
+
   function harness(companyId: string | null = 'company-a') {
     const count = jest.fn().mockResolvedValue(3);
     const findMany = jest.fn().mockResolvedValue([]);
@@ -52,6 +59,7 @@ describe('AppointmentsService.getAppointments — escopo de visibilidade', () =>
         },
       };
       const expectedWhere = {
+        ...visibleProcessScope,
         AND: [tenantScope],
         client_id: 'requested-client',
       };
@@ -137,13 +145,17 @@ describe('AppointmentsService.getAppointments — escopo de visibilidade', () =>
 
     await service.getAppointments({}, userId, role as UserRole);
 
+    const filteredWhere =
+      'OR' in expectedWhere
+        ? { ...visibleProcessScope, AND: [expectedWhere] }
+        : { ...visibleProcessScope, ...expectedWhere };
     expect(userFindUnique).not.toHaveBeenCalled();
-    expect(count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(count).toHaveBeenCalledWith({ where: filteredWhere });
     expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expectedWhere }),
+      expect.objectContaining({ where: filteredWhere }),
     );
     expect(groupBy).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expectedWhere }),
+      expect.objectContaining({ where: filteredWhere }),
     );
   });
 
@@ -157,12 +169,16 @@ describe('AppointmentsService.getAppointments — escopo de visibilidade', () =>
     );
 
     expect(userFindUnique).not.toHaveBeenCalled();
-    expect(count).toHaveBeenCalledWith({ where: {} });
+    expect(count).toHaveBeenCalledWith({ where: visibleProcessScope });
     expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: {}, skip: 0, take: 20 }),
+      expect.objectContaining({
+        where: visibleProcessScope,
+        skip: 0,
+        take: 20,
+      }),
     );
     expect(groupBy).toHaveBeenCalledWith(
-      expect.objectContaining({ where: {} }),
+      expect.objectContaining({ where: visibleProcessScope }),
     );
     expect(result.meta.pagination).toEqual({
       current_page: 1,

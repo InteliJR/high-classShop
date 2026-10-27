@@ -867,6 +867,9 @@ model Process {
   negotiation_product_value Decimal?         @db.Decimal(15, 2)
   created_at         DateTime      @default(now())
   updated_at         DateTime      @updatedAt
+  removed_at         DateTime?
+  removed_by         String?       @db.Uuid
+  removal_reason     String?       @db.VarChar(1000)
 
   car      Car?      @relation(fields: [car_id], references: [id])
   boat     Boat?     @relation(fields: [boat_id], references: [id])
@@ -902,6 +905,7 @@ model Process {
   @@index([product_id])
   @@index([created_at])
   @@index([status, updated_at])
+  @@index([removed_at])
 }
 
 // MeetingSession: sessão de videoconferência criada na plataforma para um processo
@@ -956,6 +960,26 @@ model ProcessRejection {
   @@index([process_id])
   @@index([rejected_by_id])
   @@index([rejected_at])
+}
+
+// Trilha aditiva de ações executadas por um ator em nome de um especialista.
+// IDs são intencionalmente mantidos sem FK/onDelete para preservar a prova
+// mesmo quando o recurso operacional for removido por regras legadas.
+model DelegatedActionAudit {
+  id                        String   @id @default(uuid()) @db.Uuid
+  actor_id                  String   @db.Uuid
+  actor_role                UserRole
+  represented_specialist_id String   @db.Uuid
+  action                    String   @db.VarChar(80)
+  resource_type             String   @db.VarChar(80)
+  resource_id               String   @db.VarChar(128)
+  metadata                  Json?
+  created_at                DateTime @default(now())
+
+  @@index([actor_id, created_at])
+  @@index([represented_specialist_id, created_at])
+  @@index([resource_type, resource_id])
+  @@index([action, created_at])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1318,6 +1342,10 @@ model ProductImportJob {
   id                      String                 @id @default(uuid()) @db.Uuid
   product_type            ProductType
   specialist_id           String                 @db.Uuid
+  created_by_id           String?                @db.Uuid
+  mode                    String                 @default("ADDITIVE") @db.VarChar(20)
+  sync_confirmed          Boolean                @default(false)
+  sync_preview_snapshot   Json?
   status                  ProductImportJobStatus @default(PENDING)
   total_items             Int                    @default(0)
   processed_items         Int                    @default(0)
@@ -1330,6 +1358,8 @@ model ProductImportJob {
   started_at              DateTime?
   finished_at             DateTime?
   error_message           String?
+  processing_lease_token  String?                @db.Uuid
+  processing_lease_expires_at DateTime?
   created_at              DateTime               @default(now())
   updated_at              DateTime               @updatedAt
 
@@ -1337,7 +1367,9 @@ model ProductImportJob {
   items      ProductImportJobItem[]
 
   @@index([specialist_id])
+  @@index([created_by_id])
   @@index([status])
+  @@index([status, processing_lease_expires_at])
   @@index([product_type])
   @@index([created_at])
 }

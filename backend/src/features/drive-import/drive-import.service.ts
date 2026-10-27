@@ -5,8 +5,13 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ProductType, UserRole } from '@prisma/client';
+import {
+  ProductImportJobStatus,
+  ProductType,
+  UserRole,
+} from '@prisma/client';
 import axios from 'axios';
+import { randomUUID } from 'node:crypto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { S3Service } from 'src/aws/s3.service';
 import { ImportDriveImagesDto } from './dto/import-drive-images.dto';
@@ -58,6 +63,8 @@ export class DriveImportService {
     product_type: ProductType;
     product_id: string;
     max_files?: number;
+    assert_active?: () => Promise<void>;
+    import_job_fence?: { job_id: string; lease_token: string };
   }): Promise<DirectProductFolderImportResult> {
     const apiKey = this.configService.get<string>('GOOGLE_DRIVE_API_KEY');
 
@@ -69,13 +76,17 @@ export class DriveImportService {
 
     const folderId = this.extractFolderId(params.folder_url);
     const maxFiles = params.max_files ?? 500;
+    const assertActive = params.assert_active ?? (async () => {});
 
     let files: DriveFile[];
     const warnings: string[] = [];
 
     try {
+      await assertActive();
       files = await this.listPublicFolderImages(folderId, apiKey, maxFiles);
+      await assertActive();
     } catch (listError: any) {
+      await assertActive();
       return {
         folder_id: folderId,
         found: 0,
@@ -99,47 +110,79 @@ export class DriveImportService {
       };
     }
 
-    // Substituir imagens existentes: apagar do S3 e do banco antes de importar
-    await this.deleteAllProductImages(params.product_type, params.product_id);
-
-    let hasPrimary: boolean = false;
     let uploaded = 0;
     const skipped = 0;
     let failed = 0;
+    const preparedImages: Array<{ key: string; isPrimary: boolean }> = [];
+    const operationNamespace =
+      params.import_job_fence?.lease_token ?? randomUUID();
+    let imagesCommitted = false;
 
-    for (const file of files) {
-      try {
-        const downloaded = await this.downloadDriveFile(file.id, apiKey);
-        const objectKey = this.buildS3ObjectKey(
-          params.product_type,
-          params.product_id,
-          file.name,
-        );
+    try {
+      for (const file of files) {
+        await assertActive();
+        let uploadedKey: string | null = null;
+        try {
+          const downloaded = await this.downloadDriveFile(file.id, apiKey);
+          await assertActive();
+          const objectKey = this.buildS3ObjectKey(
+            params.product_type,
+            params.product_id,
+            file.name,
+            operationNamespace,
+          );
 
-        const s3Key = await this.s3Service.uploadBuffer(
-          downloaded.buffer,
-          objectKey,
-          downloaded.contentType,
-        );
+          uploadedKey = await this.s3Service.uploadBuffer(
+            downloaded.buffer,
+            objectKey,
+            downloaded.contentType,
+          );
+          await assertActive();
+          preparedImages.push({
+            key: uploadedKey,
+            isPrimary: preparedImages.length === 0,
+          });
+          uploaded += 1;
+        } catch (error) {
+          if (uploadedKey) {
+            await this.s3Service.deleteObjects([uploadedKey]);
+          }
+          // Se o fencing foi perdido, a nova verificação propaga o erro em
+          // vez de convertê-lo em um simples aviso de imagem.
+          await assertActive();
+          failed += 1;
+          warnings.push(
+            `Falha ao importar ${file.name}: ${error?.message || 'erro desconhecido'}`,
+          );
+        }
 
-        const isPrimary: boolean = !hasPrimary;
-        await this.createImageRecord({
-          productType: params.product_type,
-          productId: params.product_id,
-          imageKey: s3Key,
-          isPrimary,
-        });
-
-        hasPrimary = hasPrimary || isPrimary;
-        uploaded += 1;
-      } catch (error) {
-        failed += 1;
-        warnings.push(
-          `Falha ao importar ${file.name}: ${error?.message || 'erro desconhecido'}`,
-        );
+        await this.sleepBetweenDownloads();
+        await assertActive();
       }
 
-      await this.sleepBetweenDownloads();
+      if (preparedImages.length > 0) {
+        await assertActive();
+        const oldKeys = await this.replaceProductImages(
+          params.product_type,
+          params.product_id,
+          preparedImages,
+          params.import_job_fence,
+        );
+        imagesCommitted = true;
+        if (oldKeys.length > 0) {
+          // Copy-on-write: só remove as chaves antigas depois que o swap
+          // fenced das referências foi commitado. Chaves novas incluem o
+          // lease, portanto um worker antigo nunca apaga as do atual.
+          await this.s3Service.deleteObjects(oldKeys);
+        }
+      }
+    } catch (error) {
+      if (!imagesCommitted && preparedImages.length > 0) {
+        await this.s3Service.deleteObjects(
+          preparedImages.map((image) => image.key),
+        );
+      }
+      throw error;
     }
 
     return {
@@ -604,42 +647,75 @@ export class DriveImportService {
     return Boolean(record);
   }
 
-  private async deleteAllProductImages(
+  private async replaceProductImages(
     type: ProductType,
     productId: string,
-  ): Promise<void> {
-    let keys: string[] = [];
+    images: Array<{ key: string; isPrimary: boolean }>,
+    fence?: { job_id: string; lease_token: string },
+  ): Promise<string[]> {
+    return this.prisma.$transaction(async (tx) => {
+      if (fence) {
+        const owned = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT "id"
+          FROM "ProductImportJob"
+          WHERE "id" = ${fence.job_id}::uuid
+            AND "processing_lease_token" = ${fence.lease_token}::uuid
+            AND "status" = ${ProductImportJobStatus.PROCESSING}::"ProductImportJobStatus"
+            AND "processing_lease_expires_at" > NOW()
+          FOR UPDATE
+        `;
+        if (owned.length !== 1) {
+          throw new Error('Lease do job de importação perdido durante o swap de imagens.');
+        }
+      }
 
-    if (type === ProductType.CAR) {
-      const records = await this.prisma.car_image.findMany({
-        where: { car_id: productId },
-        select: { image_url: true },
-      });
-      keys = records.map((r) => r.image_url);
-      await this.prisma.car_image.deleteMany({ where: { car_id: productId } });
-    } else if (type === ProductType.BOAT) {
-      const records = await this.prisma.boat_image.findMany({
-        where: { boat_id: productId },
-        select: { image_url: true },
-      });
-      keys = records.map((r) => r.image_url);
-      await this.prisma.boat_image.deleteMany({
-        where: { boat_id: productId },
-      });
-    } else {
-      const records = await this.prisma.aircraft_image.findMany({
+      if (type === ProductType.CAR) {
+        const old = await tx.car_image.findMany({
+          where: { car_id: productId },
+          select: { image_url: true },
+        });
+        await tx.car_image.deleteMany({ where: { car_id: productId } });
+        await tx.car_image.createMany({
+          data: images.map((image) => ({
+            car_id: productId,
+            image_url: image.key,
+            is_primary: image.isPrimary,
+            product_type: ProductType.CAR,
+          })),
+        });
+        return old.map((image) => image.image_url);
+      }
+      if (type === ProductType.BOAT) {
+        const old = await tx.boat_image.findMany({
+          where: { boat_id: productId },
+          select: { image_url: true },
+        });
+        await tx.boat_image.deleteMany({ where: { boat_id: productId } });
+        await tx.boat_image.createMany({
+          data: images.map((image) => ({
+            boat_id: productId,
+            image_url: image.key,
+            is_primary: image.isPrimary,
+            product_type: ProductType.BOAT,
+          })),
+        });
+        return old.map((image) => image.image_url);
+      }
+      const old = await tx.aircraft_image.findMany({
         where: { aircraft_id: productId },
         select: { image_url: true },
       });
-      keys = records.map((r) => r.image_url);
-      await this.prisma.aircraft_image.deleteMany({
-        where: { aircraft_id: productId },
+      await tx.aircraft_image.deleteMany({ where: { aircraft_id: productId } });
+      await tx.aircraft_image.createMany({
+        data: images.map((image) => ({
+          aircraft_id: productId,
+          image_url: image.key,
+          is_primary: image.isPrimary,
+          product_type: ProductType.AIRCRAFT,
+        })),
       });
-    }
-
-    if (keys.length > 0) {
-      await this.s3Service.deleteObjects(keys);
-    }
+      return old.map((image) => image.image_url);
+    });
   }
 
   private parseProductFromFileName(fileName: string): {
@@ -696,8 +772,13 @@ export class DriveImportService {
     type: ProductType,
     productId: string,
     originalName: string,
+    operationNamespace?: string,
   ): string {
     const safeFileName = this.sanitizeS3FileName(originalName);
+    if (operationNamespace) {
+      const safeNamespace = this.sanitizeS3FileName(operationNamespace);
+      return `drive-import/${type.toLowerCase()}/${productId}/${safeNamespace}/${randomUUID()}-${safeFileName}`;
+    }
     return `drive-import/${type.toLowerCase()}/${productId}/${safeFileName}`;
   }
 

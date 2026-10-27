@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
   ServiceUnavailableException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
@@ -23,6 +24,8 @@ import {
   MEETING_INITIALIZATION_PREFIX,
   parseReadyMeetingClaim,
 } from './meeting-initialization-claim';
+import { ActorContext } from 'src/shared/actor-context/actor-context.service';
+import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
 
 const MEETING_PROVIDER_TIMEOUT_MS = 10_000;
 
@@ -40,6 +43,8 @@ export class MeetingsService {
     private readonly configService: ConfigService,
     private readonly notificationService: NotificationService,
     private readonly googleMeetOAuthService: GoogleMeetOAuthService,
+    @Optional()
+    private readonly delegatedAudit?: DelegatedActionAuditService,
   ) {
     const accessType = this.configService
       .get<string>('GOOGLE_MEET_ACCESS_TYPE', 'OPEN')
@@ -140,6 +145,9 @@ export class MeetingsService {
   }
 
   private assertMeetingCanStart(process: any, userId: string): void {
+    if (process.removed_at) {
+      throw new NotFoundException('Processo não encontrado');
+    }
     if (process.specialist_id !== userId) {
       throw new ForbiddenException(
         'Apenas o especialista pode iniciar a reunião',
@@ -191,7 +199,11 @@ export class MeetingsService {
     });
   }
 
-  private async getAuthorizedProcess(processId: string, userId: string) {
+  private async getAuthorizedProcess(
+    processId: string,
+    userId: string,
+    context?: ActorContext,
+  ) {
     const process = await this.prismaService.process.findUnique({
       where: { id: processId },
       include: {
@@ -215,12 +227,13 @@ export class MeetingsService {
       },
     });
 
-    if (!process) {
+    if (!process || process.removed_at) {
       throw new NotFoundException('Processo não encontrado');
     }
 
     const isClient = process.client_id === userId;
-    const isSpecialist = process.specialist_id === userId;
+    const representedSpecialistId = context?.specialistId ?? userId;
+    const isSpecialist = process.specialist_id === representedSpecialistId;
     // Consultor que gerencia o cliente também pode acompanhar a reunião
     const isConsultant = process.client?.consultant_id === userId;
 
@@ -267,6 +280,7 @@ export class MeetingsService {
   private async advanceProcessAfterConversation(
     processId: string,
     userId: string,
+    context?: ActorContext,
   ): Promise<{
     advanced: boolean;
     previous_status: ProcessStatus;
@@ -279,6 +293,7 @@ export class MeetingsService {
       select: {
         id: true,
         status: true,
+        removed_at: true,
         notes: true,
         product_type: true,
         car_id: true,
@@ -304,7 +319,7 @@ export class MeetingsService {
       },
     });
 
-    if (!process) {
+    if (!process || process.removed_at) {
       throw new NotFoundException('Processo não encontrado');
     }
 
@@ -316,8 +331,8 @@ export class MeetingsService {
     const previousStatus = process.status as ProcessStatus;
 
     if (!hasProduct) {
-      await this.prismaService.process.update({
-        where: { id: processId },
+      await this.prismaService.process.updateMany({
+        where: { id: processId, removed_at: null },
         data: {
           notes: process.notes
             ? `${process.notes}\n\nConversa concluída com cliente (${new Date().toISOString()}). Aguardando seleção de produto.`
@@ -355,6 +370,9 @@ export class MeetingsService {
           aircraft: { select: { valor: true, currency: true } },
         },
       });
+      if (processForTransition.removed_at) {
+        throw new NotFoundException('Processo não encontrado');
+      }
       if (processForTransition.status !== ProcessStatus.SCHEDULING) {
         return {
           advanced: false,
@@ -363,7 +381,7 @@ export class MeetingsService {
       }
       const snapshotData = buildNegotiationSnapshotUpdate(processForTransition);
       const claim = await tx.process.updateMany({
-        where: { id: processId, status: ProcessStatus.SCHEDULING },
+        where: { id: processId, status: ProcessStatus.SCHEDULING, removed_at: null },
         data: {
           status: ProcessStatus.NEGOTIATION,
           notes: processForTransition.notes
@@ -392,6 +410,22 @@ export class MeetingsService {
           changed_by: userId,
         },
       });
+
+      if (context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'MEETING_CONVERSATION_DONE',
+            resourceType: 'PROCESS',
+            resourceId: processId,
+            metadata: {
+              from: ProcessStatus.SCHEDULING,
+              to: ProcessStatus.NEGOTIATION,
+            },
+          },
+          tx,
+        );
+      }
 
       return { advanced: true, status: ProcessStatus.NEGOTIATION };
     });
@@ -427,7 +461,9 @@ export class MeetingsService {
             previousStatus: ProcessStatus.SCHEDULING,
             currentStatus: ProcessStatus.NEGOTIATION,
             changedByName:
-              `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+              context?.delegated && context.actor
+                ? `${context.actor.name} ${context.actor.surname}`.trim()
+                : `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
             reason: 'Conversa concluída e processo avançado para negociação.',
             productDetails: this.getProductDetails(process),
           }),
@@ -450,8 +486,16 @@ export class MeetingsService {
     };
   }
 
-  async getMeetingByProcess(processId: string, userId: string) {
-    const { process } = await this.getAuthorizedProcess(processId, userId);
+  async getMeetingByProcess(
+    processId: string,
+    userId: string,
+    context?: ActorContext,
+  ) {
+    const { process } = await this.getAuthorizedProcess(
+      processId,
+      userId,
+      context,
+    );
 
     return process.meeting_session &&
       !isMeetingInitializationClaim(process.meeting_session) &&
@@ -464,8 +508,14 @@ export class MeetingsService {
     processId: string,
     userId: string,
     isAdvanced?: boolean,
+    context?: ActorContext,
   ) {
-    const { isSpecialist } = await this.getAuthorizedProcess(processId, userId);
+    const { isSpecialist } = await this.getAuthorizedProcess(
+      processId,
+      userId,
+      context,
+    );
+    const representedSpecialistId = context?.specialistId ?? userId;
 
     if (!isSpecialist) {
       throw new ForbiddenException(
@@ -477,12 +527,12 @@ export class MeetingsService {
       async (tx) => {
         const candidate = await tx.process.findUnique({
           where: { id: processId },
-          select: { id: true, specialist_id: true },
+          select: { id: true, specialist_id: true, removed_at: true },
         });
-        if (!candidate) {
+        if (!candidate || candidate.removed_at) {
           throw new NotFoundException('Processo não encontrado');
         }
-        if (candidate.specialist_id !== userId) {
+        if (candidate.specialist_id !== representedSpecialistId) {
           throw new ForbiddenException(
             'Apenas o especialista pode iniciar a reunião',
           );
@@ -515,7 +565,7 @@ export class MeetingsService {
         if (!process) {
           throw new NotFoundException('Processo não encontrado');
         }
-        this.assertMeetingCanStart(process, userId);
+        this.assertMeetingCanStart(process, representedSpecialistId);
         if (process.meeting_session) {
           const ready = parseReadyMeetingClaim(process.meeting_session);
           if (ready) {
@@ -604,7 +654,7 @@ export class MeetingsService {
             try {
               await this.removeInitializationClaim(
                 processId,
-                userId,
+                representedSpecialistId,
                 claimCalendarEventId,
               );
             } catch (cleanupError) {
@@ -667,12 +717,12 @@ export class MeetingsService {
       async (tx) => {
         const candidate = await tx.process.findUnique({
           where: { id: processId },
-          select: { id: true, specialist_id: true },
+          select: { id: true, specialist_id: true, removed_at: true },
         });
-        if (!candidate) {
+        if (!candidate || candidate.removed_at) {
           throw new NotFoundException('Processo não encontrado');
         }
-        if (candidate.specialist_id !== userId) {
+        if (candidate.specialist_id !== representedSpecialistId) {
           throw new ForbiddenException(
             'Apenas o especialista pode iniciar a reunião',
           );
@@ -704,7 +754,7 @@ export class MeetingsService {
           throw new NotFoundException('Processo não encontrado');
         }
         try {
-          this.assertMeetingCanStart(process, userId);
+          this.assertMeetingCanStart(process, representedSpecialistId);
         } catch (error) {
           const invalidReady = parseReadyMeetingClaim(process.meeting_session);
           if (invalidReady?.claimId === readyClaim.claimId) {
@@ -764,6 +814,19 @@ export class MeetingsService {
           }
           throw new ConflictException(
             'A reunião mudou durante a finalização. Tente novamente.',
+          );
+        }
+
+        if (context && this.delegatedAudit) {
+          await this.delegatedAudit.record(
+            {
+              context,
+              action: 'MEETING_START',
+              resourceType: 'MEETING',
+              resourceId: currentMeeting.id,
+              metadata: { processId },
+            },
+            tx,
           );
         }
 
@@ -834,10 +897,15 @@ export class MeetingsService {
     return this.buildMeetingResponse(meeting);
   }
 
-  async endMeetingForProcess(processId: string, userId: string) {
+  async endMeetingForProcess(
+    processId: string,
+    userId: string,
+    context?: ActorContext,
+  ) {
     const { process, isSpecialist } = await this.getAuthorizedProcess(
       processId,
       userId,
+      context,
     );
 
     if (!isSpecialist) {
@@ -867,26 +935,58 @@ export class MeetingsService {
       };
     }
 
-    const meeting = await this.prismaService.meetingSession.update({
-      where: { id: process.meeting_session.id },
-      data: {
-        ended_at: new Date(),
-        ended_by_id: userId,
-      },
+    const meetingId = process.meeting_session.id;
+    const endClaim = await this.prismaService.$transaction(async (tx) => {
+      await acquireSpecialistScheduleLock(tx, process.specialist_id);
+      const endedAt = new Date();
+      const claim = await tx.meetingSession.updateMany({
+        where: { id: meetingId, ended_at: null },
+        data: { ended_at: endedAt, ended_by_id: userId },
+      });
+      const meeting = await tx.meetingSession.findUnique({
+        where: { id: meetingId },
+      });
+      if (!meeting) {
+        throw new NotFoundException('Reunião não encontrada para este processo');
+      }
+      if (claim.count === 1 && context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'MEETING_END',
+            resourceType: 'MEETING',
+            resourceId: meeting.id,
+            metadata: { processId },
+          },
+          tx,
+        );
+      }
+      return { meeting, claimed: claim.count === 1 };
     });
 
     return {
-      meeting: this.buildMeetingResponse(meeting),
-      alreadyEnded: false,
-      message: 'Reunião encerrada com sucesso.',
+      meeting: this.buildMeetingResponse(endClaim.meeting),
+      alreadyEnded: !endClaim.claimed,
+      message: endClaim.claimed
+        ? 'Reunião encerrada com sucesso.'
+        : 'Reunião já estava encerrada.',
     };
   }
 
-  async markConversationDone(processId: string, userId: string) {
-    const endResult = await this.endMeetingForProcess(processId, userId);
+  async markConversationDone(
+    processId: string,
+    userId: string,
+    context?: ActorContext,
+  ) {
+    const endResult = await this.endMeetingForProcess(
+      processId,
+      userId,
+      context,
+    );
     const transition = await this.advanceProcessAfterConversation(
       processId,
       userId,
+      context,
     );
 
     return {

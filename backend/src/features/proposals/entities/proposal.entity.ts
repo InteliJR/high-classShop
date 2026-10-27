@@ -29,6 +29,11 @@ export class ProposalResponseEntity {
     surname: string;
     role: UserRole;
   };
+  executed_by?: {
+    id: string;
+    role: UserRole;
+    name: string | null;
+  };
 }
 
 /**

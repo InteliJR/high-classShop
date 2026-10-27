@@ -66,6 +66,7 @@ export class MeetingReminderService implements OnModuleInit, OnModuleDestroy {
         process: {
           is: {
             status: ProcessStatus.SCHEDULING,
+            removed_at: null,
           },
         },
       },

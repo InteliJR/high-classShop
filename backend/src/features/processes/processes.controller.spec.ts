@@ -76,7 +76,6 @@ describe('ProcessesController.confirmAppointment', () => {
   });
 
   it.each([
-    UserRole.ADMIN,
     UserRole.CUSTOMER,
     UserRole.OFFICE,
     UserRole.CONSULTANT,
@@ -104,5 +103,40 @@ describe('ProcessesController.confirmAppointment', () => {
       controller.confirmAppointment('process-1', {}, {}),
     ).rejects.toThrow(ForbiddenException);
     expect(service.confirmAppointment).not.toHaveBeenCalled();
+  });
+
+  it('permite ADMIN confirmar como o especialista-alvo sem trocar o ator', async () => {
+    const service = {
+      confirmAppointment: jest.fn().mockResolvedValue({ processId: 'process-1' }),
+    } as any;
+    const context = {
+      actorId: 'admin-1',
+      actorRole: UserRole.ADMIN,
+      specialistId: 'specialist-1',
+      delegated: true,
+      specialist: {},
+    };
+    const actorContext = {
+      resolve: jest.fn().mockResolvedValue(context),
+    } as any;
+    const controller = new ProcessesController(service, actorContext);
+
+    await controller.confirmAppointment(
+      'process-1',
+      { appointment_datetime: '2099-01-01T13:00:00.000Z' },
+      { user: { id: 'admin-1', role: UserRole.ADMIN } },
+      'specialist-1',
+    );
+
+    expect(actorContext.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'admin-1', role: UserRole.ADMIN }),
+      'specialist-1',
+    );
+    expect(service.confirmAppointment).toHaveBeenCalledWith(
+      'process-1',
+      'admin-1',
+      '2099-01-01T13:00:00.000Z',
+      context,
+    );
   });
 });
