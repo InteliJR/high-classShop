@@ -7,7 +7,7 @@ import { Logger } from '@nestjs/common';
 describe('product image preparation', () => {
   it('remove somente uploads concluídos se um upload posterior falhar', async () => {
     const s3 = {
-      uploadBase64Image: jest
+      uploadImageAuto: jest
         .fn()
         .mockResolvedValueOnce('cars/product/new-0.jpg')
         .mockRejectedValueOnce(new Error('upload unavailable')),
@@ -37,7 +37,7 @@ describe('product image preparation', () => {
   it('não mascara a falha original se a limpeza compensatória também falhar', async () => {
     const logSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
     const s3 = {
-      uploadBase64Image: jest
+      uploadImageAuto: jest
         .fn()
         .mockResolvedValueOnce('cars/product/new-0.jpg')
         .mockRejectedValueOnce(new Error('upload unavailable')),
@@ -57,7 +57,7 @@ describe('product image preparation', () => {
     const dateSpy = jest.spyOn(Date, 'now').mockReturnValue(123456789);
     const uploadedKeys: string[] = [];
     const s3 = {
-      uploadBase64Image: jest.fn(async (_data: string, key: string) => {
+      uploadImageAuto: jest.fn(async (_data: string, key: string) => {
         uploadedKeys.push(key);
         return key;
       }),

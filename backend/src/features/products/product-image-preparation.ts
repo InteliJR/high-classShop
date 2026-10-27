@@ -24,7 +24,8 @@ export async function prepareProductImages(
   try {
     for (let index = 0; index < images.length; index += 1) {
       const key = `${prefix}/${productId}/${randomUUID()}-${index}.jpg`;
-      const imageUrl = await s3Service.uploadBase64Image(
+      // O formulário pode enviar base64 ou uma URL assinada existente.
+      const imageUrl = await s3Service.uploadImageAuto(
         images[index].data,
         key,
       );
