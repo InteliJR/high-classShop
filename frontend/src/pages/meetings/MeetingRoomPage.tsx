@@ -11,6 +11,7 @@ import {
 } from "../../services/processes.service";
 import { BackButton } from "../../components/patterns/BackButton";
 import Button from "../../components/ui/button";
+import { useAdminSpecialistJourney } from "../../contexts/AdminSpecialistJourneyContext";
 
 function isJitsiLink(url?: string | null): boolean {
   if (!url) return false;
@@ -51,6 +52,7 @@ export default function MeetingRoomPage() {
   const { processId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const adminJourney = useAdminSpecialistJourney();
 
   const [meeting, setMeeting] = useState<MeetingSession | null>(null);
   const [scheduledAt, setScheduledAt] = useState<string | null>(null);
@@ -62,7 +64,7 @@ export default function MeetingRoomPage() {
     useState(false);
   const [copied, setCopied] = useState(false);
 
-  const isSpecialist = user?.role === "SPECIALIST";
+  const isSpecialist = user?.role === "SPECIALIST" || Boolean(adminJourney);
 
   useEffect(() => {
     const loadMeeting = async () => {
@@ -358,7 +360,9 @@ export default function MeetingRoomPage() {
           <div className="mt-6 pt-4 border-t border-border-soft">
             <Link
               to={
-                user?.role === "SPECIALIST"
+                adminJourney
+                  ? "/admin/journey/processes"
+                  : user?.role === "SPECIALIST"
                   ? "/specialist/processes"
                   : user?.role === "CONSULTANT"
                     ? "/consultant/processes"

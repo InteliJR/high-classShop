@@ -16,6 +16,7 @@ interface UpdateProcessStatusModalProps {
   process: Process;
   action?: "status" | "reject";
   returnFocusRef?: RefObject<HTMLElement | null>;
+  reasonRequired?: boolean;
 }
 
 interface UpdateProcessFormData {
@@ -53,6 +54,7 @@ export default function UpdateProcessStatusModal({
   process,
   action = "status",
   returnFocusRef,
+  reasonRequired = false,
 }: UpdateProcessStatusModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +105,11 @@ export default function UpdateProcessStatusModal({
       setIsSubmitting(true);
       setError(null);
 
-      await rejectProcess(process.id, rejectionReason || undefined);
+      if (reasonRequired && !rejectionReason.trim()) {
+        setError("Informe o motivo da rejeição administrativa.");
+        return;
+      }
+      await rejectProcess(process.id, rejectionReason.trim() || undefined);
 
       setRejectionReason("");
       reset();
@@ -164,7 +170,9 @@ export default function UpdateProcessStatusModal({
                 className="block text-sm font-medium text-gray-700 mb-2"
               >
                 Motivo da Rejeição{" "}
-                <span className="text-gray-400">(opcional)</span>
+                <span className="text-gray-400">
+                  {reasonRequired ? "(obrigatório para administrador)" : "(opcional)"}
+                </span>
               </label>
               <textarea
                 id="process-rejection-reason"
@@ -173,7 +181,7 @@ export default function UpdateProcessStatusModal({
                 placeholder="Informe o motivo da rejeição..."
                 rows={3}
                 maxLength={1000}
-                disabled={isSubmitting}
+                disabled={isSubmitting || (reasonRequired && !rejectionReason.trim())}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
               />
               <p className="text-xs text-gray-500 mt-1">

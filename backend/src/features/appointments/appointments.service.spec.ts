@@ -127,6 +127,49 @@ describe('GetAppointmentsQueryDto — limite de paginação', () => {
   });
 });
 
+describe('AppointmentsService — processo removido', () => {
+  it('exclui agendamentos vinculados da lista, contagem e resumo', async () => {
+    const prisma = {
+      appointment: {
+        count: jest.fn().mockResolvedValue(0),
+        findMany: jest.fn().mockResolvedValue([]),
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await service.getAppointments(
+      {} as GetAppointmentsQueryDto,
+      'specialist-1',
+      UserRole.SPECIALIST,
+    );
+
+    const expectedWhere = {
+      OR: [
+        { process: { is: null } },
+        { process: { is: { removed_at: null } } },
+      ],
+      AND: [
+        {
+          OR: [
+            { specialist_id: 'specialist-1' },
+            { client_id: 'specialist-1' },
+          ],
+        },
+      ],
+    };
+    expect(prisma.appointment.count).toHaveBeenCalledWith({
+      where: expectedWhere,
+    });
+    expect(prisma.appointment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere }),
+    );
+    expect(prisma.appointment.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere }),
+    );
+  });
+});
+
 describe('AppointmentsService.createPending — associação e atomicidade', () => {
   const client = {
     id: 'client-1',
@@ -181,7 +224,11 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
     });
     const processCreate = jest.fn(async ({ data }) => {
       if (options.processFailure) throw options.processFailure;
-      const process = { id: `process-${storedProcesses.length + 1}`, ...data };
+      const process = {
+        id: `process-${storedProcesses.length + 1}`,
+        removed_at: null,
+        ...data,
+      };
       storedProcesses.push(process);
       return process;
     });
@@ -264,6 +311,46 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
       storedProcesses,
     };
   }
+
+  it.each([undefined, null, '', '  \n\t ', 123, 'a'.repeat(501)])(
+    'rejects invalid consultancy reason %p before any database access',
+    async (notes) => {
+      const { service, prisma, appointmentCreate, processCreate } = harness({});
+      await expect(service.createPending({
+        client_id: client.id,
+        specialist_id: specialist.id,
+        scheduling_method: AppointmentSchedulingMethod.EMAIL,
+        notes: notes as string,
+      }, client.id, UserRole.CUSTOMER)).rejects.toThrow(BadRequestException);
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+      expect(appointmentCreate).not.toHaveBeenCalled();
+      expect(processCreate).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([AppointmentSchedulingMethod.EMAIL, AppointmentSchedulingMethod.CALENDLY])(
+    'persists the trimmed consultancy reason for %s separately from technical process notes',
+    async (scheduling_method) => {
+      const { service, storedAppointments, storedProcesses } = harness({
+        calendlyUrl: 'https://calendly.com/specialist/meeting',
+        connectionActive: true,
+      });
+      const reason = 'a'.repeat(500);
+      await service.createPending({ client_id: client.id, specialist_id: specialist.id,
+        scheduling_method, notes: ` ${reason} ` }, client.id, UserRole.CUSTOMER);
+      expect(storedAppointments[0].notes).toBe(reason);
+      expect(storedProcesses[0].notes).toContain('Criado via agendamento PENDING');
+      expect(storedProcesses[0].notes).not.toContain(reason);
+    },
+  );
+
+  it('keeps the legacy direct creation endpoint closed for consultancies', async () => {
+    const { service, appointmentCreate, processCreate } = harness({});
+    await expect(service.create({ client_id: client.id, specialist_id: specialist.id } as never,
+      client.id, UserRole.CUSTOMER)).rejects.toThrow(ForbiddenException);
+    expect(appointmentCreate).not.toHaveBeenCalled();
+    expect(processCreate).not.toHaveBeenCalled();
+  });
 
   it.each([
     ['inativo', { ...activeProduct, is_active: false }, BadRequestException],
@@ -619,6 +706,7 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
         {
           client_id: client.id,
           specialist_id: specialist.id,
+          notes: 'Quero orientação para escolher meu próximo carro',
           scheduling_method: AppointmentSchedulingMethod.EMAIL,
         },
         client.id,
@@ -648,6 +736,7 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
         {
           client_id: client.id,
           specialist_id: specialist.id,
+          notes: 'Quero orientação para escolher meu próximo carro',
           scheduling_method: AppointmentSchedulingMethod.EMAIL,
           appointment_datetime: datetime,
         },
@@ -698,6 +787,7 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
           {
             client_id: client.id,
             specialist_id: specialist.id,
+            notes: 'Quero orientação para escolher meu próximo carro',
             scheduling_method: AppointmentSchedulingMethod.EMAIL,
           },
           client.id,
@@ -727,6 +817,7 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
             {
               client_id: client.id,
               specialist_id: specialist.id,
+              notes: 'Quero orientação para escolher meu próximo carro',
               scheduling_method: AppointmentSchedulingMethod.EMAIL,
               appointment_datetime: datetime,
             },
@@ -878,6 +969,7 @@ describe('AppointmentsService.findExistingAppointment — own minimal projection
               specialist_id: 'specialist-1',
               product_type: ProductType.CAR,
               car_id: 'car-1',
+              removed_at: null,
               status: {
                 in: [
                   ProcessStatus.SCHEDULING,
@@ -1066,6 +1158,7 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
           {
             client_id: client.id,
             specialist_id: specialist.id,
+            notes: 'Quero orientação para escolher meu próximo carro',
             scheduling_method: inputMethod,
           } as CreatePendingAppointmentDto,
           client.id,
@@ -1133,7 +1226,7 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
 
       await expect(
         service.createPending(
-          { client_id: client.id, specialist_id: specialist.id },
+          { client_id: client.id, specialist_id: specialist.id, notes: 'Quero orientação para escolher um carro' },
           client.id,
           UserRole.CUSTOMER,
         ),
@@ -1145,6 +1238,53 @@ describe('AppointmentsService.createPending — integridade das partes', () => {
 });
 
 describe('AppointmentsService.updateStatus — snapshot da negociação', () => {
+  it.each([
+    { label: 'sem notes', notes: undefined, product: false },
+    { label: 'mesmo motivo', notes: 'Quero orientação para escolher um carro', product: false },
+    { label: 'mesmo motivo com espaços', notes: ' Quero orientação para escolher um carro ', product: false },
+    { label: 'anotações de produto', notes: 'Resumo do atendimento', product: true },
+  ])('permite concluir normalmente com $label', async ({ notes, product }) => {
+    const originalReason = 'Quero orientação para escolher um carro';
+    const appointment = {
+      id: 'appointment-1', client_id: 'client-1', specialist_id: 'specialist-1',
+      product_type: product ? ProductType.CAR : null, product_id: product ? 'car-1' : null,
+      notes: originalReason, status: StatusAgendamento.SCHEDULED,
+      appointment_datetime: new Date('2099-01-01T10:00:00Z'),
+      created_at: new Date('2026-10-25T12:00:00Z'), updated_at: new Date('2026-10-25T12:00:00Z'),
+      client: { id: 'client-1', name: 'Cliente', surname: 'Teste' },
+      specialist: { id: 'specialist-1', name: 'Especialista', surname: 'Teste' }, process: { id: 'process-1', status: ProcessStatus.NEGOTIATION, meeting_session: { ended_at: new Date('2099-01-01T11:00:00Z') } },
+    };
+    const updated = { ...appointment, status: StatusAgendamento.COMPLETED, notes: notes || originalReason };
+    const tx = { $queryRaw: jest.fn().mockResolvedValue([]), appointment: {
+      findUnique: jest.fn().mockResolvedValue(appointment), updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      findUniqueOrThrow: jest.fn().mockResolvedValue(updated),
+    } };
+    const prisma = { appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      car: { findUnique: jest.fn().mockResolvedValue({ id: 'car-1', marca: 'Marca', modelo: 'Modelo', valor: 100000, currency: 'BRL' }) },
+      $transaction: jest.fn(async callback => callback(tx)),
+    };
+    const service = new AppointmentsService(prisma as never, {} as never, {} as never);
+    const response = await service.updateStatus(appointment.id, { status: StatusAgendamento.COMPLETED, notes }, appointment.specialist_id, UserRole.SPECIALIST);
+    expect(response.status).toBe(StatusAgendamento.COMPLETED);
+    expect(response.notes?.trim()).toBe(product ? notes : originalReason);
+    expect(tx.appointment.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ notes: notes || originalReason }) }));
+  });
+
+  it('preserves the original consultancy reason instead of replacing it with completion notes', async () => {
+    const appointment = {
+      id: 'appointment-1', client_id: 'client-1', specialist_id: 'specialist-1',
+      product_type: null, product_id: null, notes: 'Quero orientação para escolher um carro',
+      status: StatusAgendamento.SCHEDULED, appointment_datetime: new Date('2099-01-01T10:00:00Z'),
+      process: { id: 'process-1', status: ProcessStatus.SCHEDULING, meeting_session: { ended_at: new Date('2099-01-01T11:00:00Z') } },
+    };
+    const prisma = { appointment: { findUnique: jest.fn().mockResolvedValue(appointment) }, $transaction: jest.fn() };
+    const service = new AppointmentsService(prisma as never, {} as never, {} as never);
+    await expect(service.updateStatus(appointment.id, { status: StatusAgendamento.COMPLETED, notes: 'Resumo do atendimento' },
+      appointment.specialist_id, UserRole.SPECIALIST)).rejects.toThrow('O motivo da consultoria não pode ser alterado');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(appointment.notes).toBe('Quero orientação para escolher um carro');
+  });
+
   it.each([ProcessStatus.NEGOTIATION, ProcessStatus.DOCUMENTATION])(
     'rejeita cancelamento quando o Process já avançou para %s antes de iniciar a transação',
     async (processStatus) => {
@@ -1285,7 +1425,10 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
       updated_at: new Date('2099-01-01T00:00:00.000Z'),
       client: { id: 'client-1' },
       specialist: { id: 'specialist-1' },
-      process: null,
+      process: {
+        id: 'process-1',
+        meeting_session: { ended_at: new Date('2099-01-01T11:00:00.000Z') },
+      },
     };
     const appointmentUpdate = jest.fn().mockResolvedValue({
       ...appointment,
@@ -1345,6 +1488,36 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('impede a rota genérica de concluir sem reunião encerrada', async () => {
+    const appointment = {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      specialist_id: 'specialist-1',
+      status: StatusAgendamento.SCHEDULED,
+      appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+      process: {
+        id: 'process-1',
+        status: ProcessStatus.SCHEDULING,
+        meeting_session: null,
+      },
+    };
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appointment) },
+      $transaction: jest.fn(),
+    } as any;
+    const service = new AppointmentsService(prisma, {} as any, {} as any);
+
+    await expect(
+      service.updateStatus(
+        appointment.id,
+        { status: StatusAgendamento.COMPLETED },
+        appointment.specialist_id,
+        UserRole.SPECIALIST,
+      ),
+    ).rejects.toThrow('Conclua a reunião pelo fluxo de conversa');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('impede que a rota genérica confirme ou reabra um agendamento', async () => {
     const appointment = {
       id: 'appointment-1',
@@ -1396,6 +1569,7 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
     };
     const process = {
       id: 'process-1',
+      meeting_session: { ended_at: new Date('2026-01-01T11:00:00.000Z') },
       status: ProcessStatus.SCHEDULING,
       notes: null,
       product_type: ProductType.CAR,
@@ -1542,6 +1716,7 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
       };
       const process = {
         id: 'process-1',
+        meeting_session: { ended_at: new Date('2026-01-01T11:00:00.000Z') },
         status: ProcessStatus.SCHEDULING,
         notes: null,
         product_type: ProductType.CAR,

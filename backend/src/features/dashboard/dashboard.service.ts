@@ -35,7 +35,7 @@ export class DashboardService {
     ] = await Promise.all([
       this.prisma.company.count(),
       this.prisma.process.count({
-        where: { status: { in: ['SCHEDULING', 'NEGOTIATION'] } },
+        where: { status: { in: ['SCHEDULING', 'NEGOTIATION'] }, removed_at: null },
       }),
       this.prisma.user.count({ where: { role: 'CUSTOMER' } }),
       this.prisma.user.count({ where: { role: 'SPECIALIST' } }),
@@ -148,16 +148,17 @@ export class DashboardService {
         where: {
           specialist_id: specialistId,
           status: { in: ['SCHEDULING', 'NEGOTIATION'] },
+          removed_at: null,
         },
       }),
       this.prisma.process.count({
-        where: { specialist_id: specialistId, status: 'COMPLETED' },
+        where: { specialist_id: specialistId, status: 'COMPLETED', removed_at: null },
       }),
-      this.prisma.process.count({ where: { specialist_id: specialistId } }),
+      this.prisma.process.count({ where: { specialist_id: specialistId, removed_at: null } }),
       this.buildMonthlySalesData({ specialist_id: specialistId }),
       this.prisma.process.groupBy({
         by: ['status'],
-        where: { specialist_id: specialistId },
+        where: { specialist_id: specialistId, removed_at: null },
         _count: { status: true },
       }),
     ]);
@@ -220,6 +221,7 @@ export class DashboardService {
           this.prisma.process.count({
             where: {
               ...baseWhere,
+              removed_at: null,
               status: 'COMPLETED',
               updated_at: { gte: date, lt: nextMonth },
             },
@@ -227,6 +229,7 @@ export class DashboardService {
           this.prisma.process.count({
             where: {
               ...baseWhere,
+              removed_at: null,
               status: { not: 'COMPLETED' },
               created_at: { gte: date, lt: nextMonth },
             },
@@ -255,6 +258,7 @@ export class DashboardService {
         const completedSales = await this.prisma.process.count({
           where: {
             status: 'COMPLETED',
+            removed_at: null,
             client: { consultant_id: consultant.id },
           },
         });

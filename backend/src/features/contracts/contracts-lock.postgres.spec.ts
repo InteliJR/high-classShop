@@ -269,6 +269,7 @@ describeWithPostgres('contract process lock — PostgreSQL concurrency', () => {
     });
     const docusign = {
       getEnvelopeProcessId: jest.fn().mockResolvedValue(sendProcessId),
+      getEnvelopeRequestFingerprint: jest.fn(),
       getEnvelopeStatus: jest.fn().mockResolvedValue({
         envelopeId: 'send-envelope',
         status: EnvelopeStatus.CREATED,
@@ -292,6 +293,21 @@ describeWithPostgres('contract process lock — PostgreSQL concurrency', () => {
       platformCompany,
     );
     const dto = contractDto(sendProcessId, suffix);
+    docusign.getEnvelopeRequestFingerprint.mockResolvedValue(
+      (serviceA as any).buildPreviewFingerprint(
+        dto,
+        null,
+        {
+          platformValue: 10000,
+          platformRate: 10,
+          officeValue: 0,
+          officeRate: 0,
+          specialistValue: 0,
+          specialistRate: 0,
+        },
+        dto.template_id,
+      ).requestFingerprint,
+    );
 
     const outcomesPromise = Promise.allSettled([
       serviceA.sendContractAfterPreview('send-envelope', dto, specialistId),
@@ -319,6 +335,7 @@ describeWithPostgres('contract process lock — PostgreSQL concurrency', () => {
     });
     const docusign = {
       getEnvelopeProcessId: jest.fn().mockResolvedValue(ambiguousCommitProcessId),
+      getEnvelopeRequestFingerprint: jest.fn(),
       getEnvelopeStatus: jest.fn().mockResolvedValue({
         envelopeId: 'ambiguous-envelope',
         status: EnvelopeStatus.SENT,
@@ -342,6 +359,21 @@ describeWithPostgres('contract process lock — PostgreSQL concurrency', () => {
       platformCompany,
     );
     const dto = contractDto(ambiguousCommitProcessId, suffix);
+    docusign.getEnvelopeRequestFingerprint.mockResolvedValue(
+      (firstAttempt as any).buildPreviewFingerprint(
+        dto,
+        null,
+        {
+          platformValue: 10000,
+          platformRate: 10,
+          officeValue: 0,
+          officeRate: 0,
+          specialistValue: 0,
+          specialistRate: 0,
+        },
+        dto.template_id,
+      ).requestFingerprint,
+    );
 
     const firstResult = firstAttempt.sendContractAfterPreview(
       'ambiguous-envelope',

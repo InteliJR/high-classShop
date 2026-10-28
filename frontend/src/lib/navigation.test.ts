@@ -49,8 +49,9 @@ describe("getSidebarLinks", () => {
     [
       "ADMIN",
       [
-        { to: "/admin/dashboard", label: "Dashboard" },
-        { to: "/admin/companies", label: "Escritórios" },
+      { to: "/admin/dashboard", label: "Dashboard" },
+      { to: "/admin/journey", label: "Jornada por especialista" },
+      { to: "/admin/companies", label: "Escritórios" },
         { to: "/office/consultants", label: "Consultores" },
         { to: "/admin/specialists", label: "Especialistas" },
         { to: "/admin/commissions", label: "Comissões" },

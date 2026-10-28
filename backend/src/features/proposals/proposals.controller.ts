@@ -9,10 +9,14 @@ import {
   Request,
   HttpStatus,
   Logger,
+  Query,
+  Optional,
 } from '@nestjs/common';
 import { ProposalsService } from './proposals.service';
 import { CreateProposalDto, RespondProposalDto } from './dto';
 import { AuthGuard } from 'src/auth/auth.guard';
+import { UserRole } from '@prisma/client';
+import { ActorContextService } from 'src/shared/actor-context/actor-context.service';
 
 /**
  * ProposalsController
@@ -33,7 +37,20 @@ import { AuthGuard } from 'src/auth/auth.guard';
 export class ProposalsController {
   private readonly logger = new Logger(ProposalsController.name);
 
-  constructor(private proposalsService: ProposalsService) {}
+  constructor(
+    private proposalsService: ProposalsService,
+    @Optional() private readonly actorContextService?: ActorContextService,
+  ) {}
+
+  private async resolveContext(user: any, targetSpecialistId?: string) {
+    if (
+      !this.actorContextService ||
+      (user?.role !== UserRole.ADMIN && user?.role !== UserRole.SPECIALIST)
+    ) {
+      return undefined;
+    }
+    return this.actorContextService.resolve(user, targetSpecialistId);
+  }
 
   /**
    * POST /api/proposals
@@ -55,13 +72,18 @@ export class ProposalsController {
    * - 404 Not Found: Processo não encontrado
    */
   @Post()
-  async create(@Body() dto: CreateProposalDto, @Request() req: any) {
+  async create(
+    @Body() dto: CreateProposalDto,
+    @Request() req: any,
+    @Query('target_specialist_id') targetSpecialistId?: string,
+  ) {
     const userId = req.user.id;
     this.logger.log(
       `[POST /proposals] Criando proposta para processo ${dto.process_id}`,
     );
 
-    const proposal = await this.proposalsService.create(dto, userId);
+    const context = await this.resolveContext(req.user, targetSpecialistId);
+    const proposal = await this.proposalsService.create(dto, userId, context);
 
     return {
       success: true,
@@ -85,13 +107,19 @@ export class ProposalsController {
   async getByProcess(
     @Param('processId') processId: string,
     @Request() req: any,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ) {
     const userId = req.user.id;
     this.logger.log(
       `[GET /processes/${processId}/proposals] Listando propostas`,
     );
 
-    const result = await this.proposalsService.getByProcess(processId, userId);
+    const context = await this.resolveContext(req.user, targetSpecialistId);
+    const result = await this.proposalsService.getByProcess(
+      processId,
+      userId,
+      context,
+    );
 
     return {
       success: true,
@@ -113,11 +141,16 @@ export class ProposalsController {
    * - 404 Not Found: Proposta não encontrada
    */
   @Get(':id')
-  async getById(@Param('id') id: string, @Request() req: any) {
+  async getById(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Query('target_specialist_id') targetSpecialistId?: string,
+  ) {
     const userId = req.user.id;
     this.logger.log(`[GET /proposals/${id}] Buscando proposta`);
 
-    const proposal = await this.proposalsService.getById(id, userId);
+    const context = await this.resolveContext(req.user, targetSpecialistId);
+    const proposal = await this.proposalsService.getById(id, userId, context);
 
     return {
       success: true,
@@ -146,11 +179,18 @@ export class ProposalsController {
     @Param('id') id: string,
     @Body() dto: RespondProposalDto,
     @Request() req: any,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ) {
     const userId = req.user.id;
     this.logger.log(`[PATCH /proposals/${id}/accept] Aceitando proposta`);
 
-    const proposal = await this.proposalsService.accept(id, userId, dto);
+    const context = await this.resolveContext(req.user, targetSpecialistId);
+    const proposal = await this.proposalsService.accept(
+      id,
+      userId,
+      dto,
+      context,
+    );
 
     return {
       success: true,
@@ -180,11 +220,18 @@ export class ProposalsController {
     @Param('id') id: string,
     @Body() dto: RespondProposalDto,
     @Request() req: any,
+    @Query('target_specialist_id') targetSpecialistId?: string,
   ) {
     const userId = req.user.id;
     this.logger.log(`[PATCH /proposals/${id}/reject] Rejeitando proposta`);
 
-    const proposal = await this.proposalsService.reject(id, userId, dto);
+    const context = await this.resolveContext(req.user, targetSpecialistId);
+    const proposal = await this.proposalsService.reject(
+      id,
+      userId,
+      dto,
+      context,
+    );
 
     return {
       success: true,

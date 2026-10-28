@@ -531,6 +531,7 @@ export class CalendlyIntegrationService {
             },
           },
       take: 2,
+      include: { process: { select: { removed_at: true } } },
     });
     if (appointments.length > 1) {
       throw new ConflictException(
@@ -539,7 +540,7 @@ export class CalendlyIntegrationService {
     }
     const appointment = appointments[0];
 
-    if (!appointment) {
+    if (!appointment || appointment.process?.removed_at) {
       return {
         processed: false,
         message: 'Nenhum agendamento correspondente encontrado',
@@ -574,8 +575,9 @@ export class CalendlyIntegrationService {
         await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
         const lockedAppointment = await tx.appointment.findUnique({
           where: { id: appointment.id },
+          include: { process: { select: { removed_at: true } } },
         });
-        if (!lockedAppointment) {
+        if (!lockedAppointment || lockedAppointment.process?.removed_at) {
           throw new NotFoundException('Agendamento não encontrado');
         }
 
@@ -646,9 +648,11 @@ export class CalendlyIntegrationService {
         await acquireSpecialistScheduleLock(tx, appointment.specialist_id);
         const lockedAppointment = await tx.appointment.findUnique({
           where: { id: appointment.id },
+          include: { process: { select: { removed_at: true } } },
         });
         if (
           !lockedAppointment ||
+          lockedAppointment.process?.removed_at ||
           (lockedAppointment.scheduling_method &&
             lockedAppointment.scheduling_method !==
               AppointmentSchedulingMethod.CALENDLY) ||

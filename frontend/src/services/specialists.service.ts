@@ -12,6 +12,7 @@ export type Specialist = {
   rg: string;
   password_hash: string;
   speciality: "CAR" | "BOAT" | "AIRCRAFT";
+  is_active?: boolean;
   company_id?: string | null;
   commission_rate?: number | null;
   bank?: string | null;

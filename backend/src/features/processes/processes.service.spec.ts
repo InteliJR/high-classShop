@@ -17,6 +17,7 @@ import { validate } from 'class-validator';
 import { CreateProcessDTO } from './dto/create-process.dto';
 import { AssignProductToProcessDto } from './dto/assign-product.dto';
 import { ProcessesService } from './processes.service';
+import { getConsultancyReason } from './consultancy-reason';
 
 const productId = '11111111-1111-4111-8111-111111111111';
 const clientId = '22222222-2222-4222-8222-222222222222';
@@ -389,6 +390,27 @@ describe('ProcessesService.createOnBehalfOfClient', () => {
     expect(data.product_type).toBeNull();
     expect(data.notes).toContain('Consultoria');
   });
+
+  it.each(['consultor', 'gerente do escritório'])(
+    'não apresenta a nota automática de uma consultoria criada por %s como motivo',
+    async (actorLabel) => {
+      const { service, appointmentCreate } = mkService();
+      await service.createOnBehalfOfClient({
+        ...base,
+        product_id: undefined,
+        actorLabel,
+      });
+
+      const data = appointmentCreate.mock.calls[0][0].data;
+      expect(data.notes).toMatch(
+        new RegExp(`^Consultoria criada pelo ${actorLabel} em nome do cliente \\(`),
+      );
+      // Prisma defaults the omitted product columns to null for consultancies.
+      expect(
+        getConsultancyReason({ product_type: null, product_id: null, ...data }),
+      ).toBeNull();
+    },
+  );
 
   it('rejeita consultoria em nome do cliente quando há processo ativo mesmo com appointment concluído', async () => {
     const { service, appointmentCreate, tx } = mkService();
@@ -792,6 +814,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       expect.objectContaining({
         where: {
           id: 'process-1',
+          removed_at: null,
           status: ProcessStatus.SCHEDULING,
           updated_at: new Date('2026-01-01T00:00:00.000Z'),
         },
@@ -935,6 +958,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       expect.objectContaining({
         where: {
           id: 'process-1',
+          removed_at: null,
           status: ProcessStatus.NEGOTIATION,
           updated_at: new Date('2026-01-01T00:00:00.000Z'),
         },
@@ -1145,6 +1169,7 @@ describe('ProcessesService — snapshot de entrada na negociação', () => {
       expect.objectContaining({
         where: {
           id: 'process-1',
+          removed_at: null,
           status: ProcessStatus.SCHEDULING,
           product_type: null,
           car_id: null,
@@ -1355,6 +1380,7 @@ describe('ProcessesService.confirmAppointment — horário acordado', () => {
       expect.objectContaining({
         where: {
           id: 'process-1',
+          removed_at: null,
           status: ProcessStatus.SCHEDULING,
           updated_at: new Date('2026-01-01T00:00:00.000Z'),
           specialist_id: specialistId,
@@ -1770,6 +1796,7 @@ describe('ProcessesService — telefone da contraparte após confirmação', () 
     const processDelegate = (service as any).prismaService.process;
     const expectedWhere = {
       client_id: clientId,
+      removed_at: null,
       specialist_id: specialistId,
     };
     expect(processDelegate.findMany).toHaveBeenCalledWith(
@@ -1793,6 +1820,7 @@ describe('ProcessesService — telefone da contraparte após confirmação', () 
     const processDelegate = (service as any).prismaService.process;
     const expectedWhere = {
       client_id: clientId,
+      removed_at: null,
       client: {
         role: UserRole.CUSTOMER,
         consultant_id: 'consultant-1',
@@ -3049,7 +3077,7 @@ describe('ProcessesService.cancelAppointment — serialização canônica', () =
       `appointment-schedule:${specialistId}`,
     );
     expect(tx.process.findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: process.id } }),
+      expect.objectContaining({ where: { id: process.id, removed_at: null } }),
     );
     expect(historyDelete).toHaveBeenCalledWith({
       where: { processId: process.id },
@@ -3057,6 +3085,7 @@ describe('ProcessesService.cancelAppointment — serialização canônica', () =
     expect(processClaim).toHaveBeenCalledWith({
       where: {
         id: process.id,
+        removed_at: null,
         status: ProcessStatus.SCHEDULING,
         updated_at: process.updated_at,
       },

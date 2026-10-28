@@ -75,7 +75,7 @@ export default function ContractCommissionStep({
               htmlFor="total_commission_rate"
               className="block text-sm font-medium text-ink-soft mb-1"
             >
-              Comissão total da venda (%) *
+              Comissão total da venda (%)
             </label>
             <input
               id="total_commission_rate"

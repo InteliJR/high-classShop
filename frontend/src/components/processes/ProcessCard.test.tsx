@@ -56,6 +56,7 @@ function renderCard(
     isClientView?: boolean;
     isExpanded?: boolean;
     onStatusUpdated?: () => void;
+    onUploadDocuments?: () => void;
   } = {},
 ) {
   return render(
@@ -94,6 +95,21 @@ describe("ProcessCard appointment time actions", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it("shows the persisted consultancy reason to the specialist even after product assignment", async () => {
+    const reason = "Quero um carro para viagens em família";
+    const process = { ...baseProcess, consultancy_reason: reason, notes: "Nota técnica" };
+    const { unmount } = renderCard(process);
+    expect(screen.getByRole("region", { name: "Motivo da consultoria" }).textContent).toContain(reason);
+    unmount();
+    renderCard(process, { isClientView: true });
+    expect(screen.queryByRole("region", { name: "Motivo da consultoria" })).toBeNull();
+  });
+
+  it("keeps legacy processes without a reason readable", () => {
+    renderCard(baseProcess);
+    expect(screen.queryByRole("region", { name: "Motivo da consultoria" })).toBeNull();
   });
 
   it("lets only the specialist define a missing email appointment time", () => {
@@ -753,5 +769,32 @@ describe("ProcessCard appointment time actions", () => {
     await act(async () => resolve({ processId: baseProcess.id, status: "SCHEDULING", appointment_status: "SCHEDULED" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(rescheduleAppointment).not.toHaveBeenCalled();
+  });
+
+  it("hides send contract after an active envelope was sent", async () => {
+    vi.mocked(getProcessWithActiveContract).mockResolvedValue({
+      activeContract: { id: "contract-1", provider_status: "sent" },
+    } as never);
+    renderCard(
+      { ...baseProcess, status: "DOCUMENTATION" },
+      { onUploadDocuments: vi.fn() },
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/Estado externo:/)).toBeTruthy();
+      expect(screen.queryAllByRole("button", { name: "Enviar Contrato" })).toHaveLength(0);
+    });
+  });
+
+  it("offers a new contract after the previous envelope was voided", async () => {
+    vi.mocked(getProcessWithActiveContract).mockResolvedValue({
+      activeContract: { id: "contract-1", provider_status: "VOIDED" },
+    } as never);
+    renderCard(
+      { ...baseProcess, status: "DOCUMENTATION" },
+      { onUploadDocuments: vi.fn() },
+    );
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: "Enviar Contrato" }).length).toBeGreaterThan(0),
+    );
   });
 });

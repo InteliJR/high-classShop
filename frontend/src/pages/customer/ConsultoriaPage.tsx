@@ -17,6 +17,7 @@ import ProductTypePreferenceModal, {
   type PreferredProductType,
 } from "../../components/product/ProductTypePreferenceModal";
 import { useCalendlyScheduling } from "../../hooks/useCalendlyScheduling";
+import ConsultancyRequestModal from "../../components/appointments/ConsultancyRequestModal";
 
 type SpecialityType = "CAR" | "BOAT" | "AIRCRAFT";
 
@@ -46,8 +47,8 @@ export default function ConsultoriaPage() {
   const [requestingSpecialistId, setRequestingSpecialistId] = useState<
     string | null
   >(null);
-  const [errorMessage, setErrorMessage] = useState<string>("");
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
+  const [selectedSpecialist, setSelectedSpecialist] = useState<PublicSpecialistProfile | null>(null);
 
   const {
     isModalOpen: isCalendlyModalOpen,
@@ -60,6 +61,7 @@ export default function ConsultoriaPage() {
   } = useCalendlyScheduling({
     successRedirectMessage:
       "Solicitação de consultoria registrada com sucesso! Verifique seus processos.",
+    getSuccessRedirectState: (status) => ({ consultancyAppointmentId: status.appointment_id }),
   });
 
   const typeFromUrl = searchParams.get("type") as PreferredProductType | null;
@@ -111,11 +113,10 @@ export default function ConsultoriaPage() {
     setIsTypeModalOpen(false);
   };
 
-  const handleRequestMeeting = async (specialist: PublicSpecialistProfile) => {
+  const handleRequestMeeting = async (specialist: PublicSpecialistProfile, reason: string) => {
     if (!user || requestingSpecialistId) return;
 
     setRequestingSpecialistId(specialist.id);
-    setErrorMessage("");
 
     try {
       const hasCalendly = specialist.calendly_scheduling_available;
@@ -127,14 +128,14 @@ export default function ConsultoriaPage() {
         client_id: user.id,
         specialist_id: specialist.id,
         scheduling_method: hasCalendly ? "CALENDLY" : "EMAIL",
-        notes: `Consultoria solicitada pelo cliente`,
+        notes: reason,
       });
+      setSelectedSpecialist(null);
 
       if (!hasCalendly) {
         navigate("/customer/processes", {
           state: {
-            message:
-              "Solicitação enviada. O especialista entrará em contato para definir o horário.",
+            consultancyAppointmentId: pendingAppointment.id,
           },
         });
         return;
@@ -150,7 +151,7 @@ export default function ConsultoriaPage() {
         error?.response?.data?.error?.message ||
         error?.message ||
         "Erro ao solicitar agendamento. Tente novamente.";
-      setErrorMessage(message);
+      throw new Error(message);
     } finally {
       setRequestingSpecialistId(null);
     }
@@ -193,8 +194,6 @@ export default function ConsultoriaPage() {
             Trocar categoria
           </Button>
         </div>
-        {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
-
         {syncState !== "idle" && syncMessage && (
           <Alert
             variant={
@@ -235,7 +234,7 @@ export default function ConsultoriaPage() {
                   <SpecialistCard
                     key={specialist.id}
                     specialist={specialist}
-                    onRequestMeeting={handleRequestMeeting}
+                    onRequestMeeting={async (chosen) => setSelectedSpecialist(chosen)}
                     isRequesting={requestingSpecialistId === specialist.id}
                   />
                 ))}
@@ -249,6 +248,15 @@ export default function ConsultoriaPage() {
           </div>
         ))}
       </div>
+
+      {selectedSpecialist && (
+        <ConsultancyRequestModal
+          key={selectedSpecialist.id}
+          specialistName={`${selectedSpecialist.name} ${selectedSpecialist.surname}`.trim()}
+          onClose={() => setSelectedSpecialist(null)}
+          onSubmit={(reason) => handleRequestMeeting(selectedSpecialist, reason)}
+        />
+      )}
 
       {calendlyModalUrl && isCalendlyModalOpen && (
         <PopupModal

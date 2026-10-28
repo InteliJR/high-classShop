@@ -1,16 +1,15 @@
 import ProductCarousel from "./ProductCarousel";
 import type { Product } from "../../types/types";
 import { formatCurrency } from "../../lib/currency";
+import { getProductImageUrls } from "../../lib/product-images";
 
 interface ProductDetailsProps {
   product: Product;
+  showImageErrors?: boolean;
 }
 
-export default function ProductDetails({ product }: ProductDetailsProps) {
-  // Filtrar URLs vazias de imagens
-  const validImageUrls = (
-    product.images?.map((img: any) => img.image_url) || [product.imageUrl || ""]
-  ).filter((url) => url && url.trim() !== "");
+export default function ProductDetails({ product, showImageErrors = false }: ProductDetailsProps) {
+  const validImageUrls = getProductImageUrls(product);
 
   // Função auxiliar para formatar números
   const formatNumber = (value: number | undefined) => {
@@ -21,11 +20,9 @@ export default function ProductDetails({ product }: ProductDetailsProps) {
   return (
     <div className="space-y-8">
       {/* Carrossel de Imagens */}
-      {validImageUrls.length > 0 && (
-        <div className="rounded-lg overflow-hidden">
-          <ProductCarousel imageUrls={validImageUrls} />
-        </div>
-      )}
+      <div className="rounded-lg overflow-hidden">
+        <ProductCarousel key={product.id} imageUrls={validImageUrls} showImageErrors={showImageErrors} />
+      </div>
 
       {/* Informações Principais */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
