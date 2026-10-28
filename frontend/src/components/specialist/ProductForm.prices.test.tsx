@@ -12,9 +12,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ProductForm from "./ProductForm";
 import type { RawCar } from "../../services/cars.service";
 
-const { create, update } = vi.hoisted(() => ({
+const { create, update, authUser } = vi.hoisted(() => ({
   create: vi.fn().mockResolvedValue({ id: "product-248" }),
   update: vi.fn().mockResolvedValue({ id: "product-248" }),
+  // Especialista da categoria testada: o admin só cadastra pela jornada do especialista.
+  authUser: { id: "specialist-1", role: "SPECIALIST", speciality: "CAR" },
 }));
 vi.mock("../../services/cars.service", () => ({
   createCar: create,
@@ -30,7 +32,7 @@ vi.mock("../../services/aircrafts.service", () => ({
 }));
 vi.mock("../../store/authStateManager", () => ({
   useAuth: (selector: (state: unknown) => unknown) =>
-    selector({ user: { id: "admin-1", role: "ADMIN" } }),
+    selector({ user: authUser }),
 }));
 vi.mock("../../components/shared/XlsxImporter", () => ({
   XlsxImporter: () => null,
@@ -73,6 +75,10 @@ const baseProduct: RawCar = {
 describe.each(["CAR", "BOAT", "AIRCRAFT"] as const)(
   "%s price forms",
   (productType) => {
+    beforeEach(() => {
+      authUser.speciality = productType;
+    });
+
     it.each([
       [950000, "BRL"],
       ["950000.00", "USD"],

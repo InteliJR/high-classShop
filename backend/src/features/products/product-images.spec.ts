@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { CarsService } from '../cars/cars.service';
 import { BoatsService } from '../boats/boats.service';
 import { AircraftsService } from '../aircrafts/aircrafts.service';
@@ -14,6 +15,7 @@ describe.each([
         create: jest.fn().mockResolvedValue({ id: 'product-1' }),
         findUnique: jest.fn(async () => ({
           id: 'product-1',
+          valor: new Prisma.Decimal('1500000.50'),
           images: imageRecords,
         })),
       },
