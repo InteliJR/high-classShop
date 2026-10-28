@@ -22,6 +22,7 @@ import type { Product, SpecialityType } from "../../types/types";
 import React from "react";
 import UpdateProcessStatusModal from "./UpdateProcessStatusModal";
 import CopyableContact from "./CopyableContact";
+import SpecialistContactCard from "./SpecialistContactCard";
 import AppointmentDateTimeModal from "../appointments/AppointmentDateTimeModal";
 import { buildWhatsAppHref } from "../../lib/whatsapp";
 import { getContextualStatusMessage } from "../../utils/processStatusMessages";
@@ -520,12 +521,10 @@ export default function ProcessCard({
               ? "Aguardando produto"
               : product?.modelo || "Produto"}
           </h3>
-          {/* Contatos da contraparte: quem olha o card quer falar com o outro
-              lado. Cliente vê o especialista; especialista e demais papeis
-              veem o cliente. Cada linha so aparece se a API mandou o dado —
-              telefone do especialista, por exemplo, vem null enquanto o
-              agendamento nao esta confirmado. */}
-          {(counterpartEmail || counterpartPhone) && (
+          {/* O cliente encontra o especialista no card de contato abaixo.
+              Os demais perfis mantêm aqui os contatos do cliente que a API
+              autorizou para a contraparte deste processo. */}
+          {!isClientView && (counterpartEmail || counterpartPhone) && (
             <div className="mt-1 flex flex-col items-start gap-0.5">
               {counterpartEmail && (
                 <CopyableContact
@@ -600,6 +599,8 @@ export default function ProcessCard({
           </button>
         )}
       </div>
+
+      {isClientView && <SpecialistContactCard process={process} />}
 
       {/* Stepper/Timeline - Vertical on mobile, Horizontal on tablet+ */}
       <div className="px-3 py-4 md:px-6 md:py-6">

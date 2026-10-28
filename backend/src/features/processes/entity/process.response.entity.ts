@@ -20,7 +20,9 @@ export class ProcessResponse {
   specialist: {
     id: string;
     name: string;
+    surname?: string;
     especialidade: $Enums.ProductType | null;
+    email?: string | null;
     phone?: string | null;
   };
   product: Product | null;
