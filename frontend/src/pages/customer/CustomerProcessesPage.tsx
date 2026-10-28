@@ -49,7 +49,9 @@ interface ProcessClient {
   specialist?: {
     id: string;
     name?: string;
+    surname?: string;
     especialidade?: string;
+    email?: string | null;
     phone?: string | null;
   };
 }

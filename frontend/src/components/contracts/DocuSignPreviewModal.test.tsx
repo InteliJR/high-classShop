@@ -8,6 +8,42 @@ import DocuSignPreviewModal from "./DocuSignPreviewModal";
 afterEach(cleanup);
 
 describe("DocuSignPreviewModal cancellation state", () => {
+  it("blocks sending a draft whose seller is pending", () => {
+    const onConfirm = vi.fn();
+    render(
+      <DocuSignPreviewModal
+        previewUrl="https://demo.docusign.net/preview"
+        envelopeId="envelope-1"
+        expiresAt="2099-01-01T00:00:00.000Z"
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+        onExpired={vi.fn()}
+        sendBlockedReason="Preencha nome e e-mail do vendedor."
+      />,
+    );
+
+    expect(
+      screen
+        .getByRole("button", { name: "Confirmar e Enviar" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(screen.getByRole("status").textContent).toContain(
+      "Preencha nome e e-mail",
+    );
+    const iframe = screen.getByTitle(
+      "DocuSign Contract Preview",
+    ) as HTMLIFrameElement;
+    fireEvent(
+      window,
+      new MessageEvent("message", {
+        origin: "https://demo.docusign.net",
+        data: { event: "send" },
+        source: iframe.contentWindow,
+      }),
+    );
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
   it("keeps a cancellation failure visible inside the retained modal", () => {
     const html = renderToStaticMarkup(
       <DocuSignPreviewModal
@@ -63,16 +99,17 @@ describe("DocuSignPreviewModal cancellation state", () => {
       "DocuSign Contract Preview",
     ) as HTMLIFrameElement;
     const send = (origin: string, data: unknown, source: Window | null) =>
-      fireEvent(
-        window,
-        new MessageEvent("message", { origin, data, source }),
-      );
+      fireEvent(window, new MessageEvent("message", { origin, data, source }));
 
     send("https://demo.docusign.net", { event: "send" }, iframe.contentWindow);
     expect(onConfirm).toHaveBeenCalledTimes(1);
 
     send("https://demo.docusign.net", "cancel", window);
-    send("https://docusign.net.attacker.example", "cancel", iframe.contentWindow);
+    send(
+      "https://docusign.net.attacker.example",
+      "cancel",
+      iframe.contentWindow,
+    );
     send("https://evil-docusign.net", "cancel", iframe.contentWindow);
     send("https://evil.example.test", "cancel", iframe.contentWindow);
     expect(onCancel).not.toHaveBeenCalled();

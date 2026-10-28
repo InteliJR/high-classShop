@@ -17,6 +17,7 @@ export const publicCatalogImageSelect = {
 export const publicCarSelect = {
   id: true,
   specialist_id: true,
+  is_active: true,
   marca: true,
   modelo: true,
   identificador: true,
@@ -39,6 +40,7 @@ export const publicCarSelect = {
 export const publicBoatSelect = {
   id: true,
   specialist_id: true,
+  is_active: true,
   marca: true,
   modelo: true,
   identificador: true,
@@ -64,6 +66,7 @@ export const publicBoatSelect = {
 export const publicAircraftSelect = {
   id: true,
   specialist_id: true,
+  is_active: true,
   categoria: true,
   ano: true,
   marca: true,

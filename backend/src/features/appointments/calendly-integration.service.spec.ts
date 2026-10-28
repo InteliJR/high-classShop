@@ -911,6 +911,41 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('ignora webhook de agendamento cujo processo foi removido', async () => {
+    const prisma = {
+      appointment: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'appointment-1',
+            calendly_event_uri:
+              'https://api.calendly.com/scheduled_events/event-1',
+            process: { removed_at: new Date() },
+          },
+        ]),
+      },
+      $transaction: jest.fn(),
+    };
+    const service = new CalendlyIntegrationService(prisma as any);
+    jest
+      .spyOn(service as any, 'validateWebhookSignature')
+      .mockReturnValue(undefined);
+
+    const result = await service.processWebhook(
+      {
+        event: 'invitee.created',
+        payload: {
+          event: 'https://api.calendly.com/scheduled_events/event-1',
+          scheduled_event: { start_time: '2099-01-01T10:00:00.000Z' },
+        },
+      },
+      undefined,
+      undefined,
+    );
+
+    expect(result.processed).toBe(false);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('serializes and rechecks an invitee.created time before writing it', async () => {
     const appointment = {
       id: 'appointment-1',
@@ -975,11 +1010,13 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
         },
       },
       take: 2,
+      include: { process: { select: { removed_at: true } } },
     });
     expect(prisma.appointment.findFirst).not.toHaveBeenCalled();
     expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
     expect(tx.appointment.findUnique).toHaveBeenCalledWith({
       where: { id: appointment.id },
+      include: { process: { select: { removed_at: true } } },
     });
     expect(tx.appointment.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1189,6 +1226,7 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
         },
       },
       take: 2,
+      include: { process: { select: { removed_at: true } } },
     });
     expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
     expect(tx.appointment.updateMany).toHaveBeenCalledWith({
@@ -1253,6 +1291,7 @@ describe('CalendlyIntegrationService webhook schedule integrity', () => {
         },
       },
       take: 2,
+      include: { process: { select: { removed_at: true } } },
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });

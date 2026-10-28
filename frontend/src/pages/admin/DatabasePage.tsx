@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import {
+  deleteProcess,
   getEntities,
   getRecords,
   type Cell,
@@ -39,6 +40,14 @@ import {
 import { effectiveCommissionRate } from "../../lib/commission-rate";
 
 const PAGE_SIZE = 20;
+
+type ProcessToDelete = {
+  id: string;
+  client: string;
+  specialist: string;
+  product: string;
+  status: string;
+};
 
 type LoadedRecords = {
   origin: RecordsOrigin;
@@ -67,6 +76,10 @@ export default function DatabasePage() {
     label: string;
   } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [processToDelete, setProcessToDelete] = useState<ProcessToDelete | null>(null);
+  const [removalReason, setRemovalReason] = useState("");
+  const [processDeleteError, setProcessDeleteError] = useState<string | null>(null);
+  const [removingProcess, setRemovingProcess] = useState(false);
   const [dialogState, setDialogState] =
     useState<AdminUserManagementDialogState | null>(null);
   const recordsRequestGuard = useRef(createLatestRequestGuard());
@@ -132,6 +145,10 @@ export default function DatabasePage() {
     entities.find((e) => e.key === active)?.label ?? active ?? "";
   const headers = columns.map((c) => c.label);
   const exportRows = () => rows.map((r) => r.map(cellText));
+  const processCell = (row: Cell[], label: string) => {
+    const index = columns.findIndex((column) => column.label === label);
+    return index < 0 ? "Não informado" : cellText(row[index] ?? "");
+  };
 
   return (
     <div className="text-text-main w-full min-w-0">
@@ -219,7 +236,7 @@ export default function DatabasePage() {
             <table className="min-w-full text-sm">
               <thead className="bg-border-soft sticky top-0 z-10">
                 <tr>
-                  {active === "users" ? (
+                  {active === "users" || active === "processes" ? (
                     <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">
                       Ações
                     </th>
@@ -237,50 +254,70 @@ export default function DatabasePage() {
               <tbody>
                 {rows.map((row, i) => (
                   <tr key={i} className="border-t border-border-soft">
-                    {active === "users" ? (
+                    {active === "users" || active === "processes" ? (
                       <td className="px-3 py-2 whitespace-nowrap align-top">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="p-2"
-                          disabled={!rowMeta[i]?.id}
-                          aria-label="Editar usuário"
-                          title="Editar usuário"
-                          onClick={() => {
-                            const user = rowMeta[i];
-                            if (!user?.id) return;
-                            setSuccessMessage(null);
-                            setDialogState({
-                              userId: user.id,
-                              mode:
-                                user.role === "SPECIALIST"
-                                  ? "specialist"
-                                  : "role",
-                              speciality: user.speciality,
-                              commissionRate: user.commission_rate,
-                            });
-                          }}
-                        >
-                          <Pencil className="w-4 h-4" aria-hidden="true" />
-                        </Button>
+                        {active === "users" ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="p-2"
+                            disabled={!rowMeta[i]?.id}
+                            aria-label="Editar usuário"
+                            title="Editar usuário"
+                            onClick={() => {
+                              const user = rowMeta[i];
+                              if (!user?.id) return;
+                              setSuccessMessage(null);
+                              setDialogState({
+                                userId: user.id,
+                                mode:
+                                  user.role === "SPECIALIST"
+                                    ? "specialist"
+                                    : "role",
+                                speciality: user.speciality,
+                                commissionRate: user.commission_rate,
+                              });
+                            }}
+                          >
+                            <Pencil className="w-4 h-4" aria-hidden="true" />
+                          </Button>
+                        ) : null}
+                        {(active === "users" || rowMeta[i]?.removed_at == null) && (
                         <Button
                           type="button"
                           variant="ghost"
                           className="p-2 text-status-bad"
                           disabled={!rowMeta[i]?.id}
-                          aria-label="Excluir usuário"
-                          title="Excluir usuário"
+                          aria-label={
+                            active === "users" ? "Excluir usuário" : "Excluir processo"
+                          }
+                          title={
+                            active === "users" ? "Excluir usuário" : "Excluir processo"
+                          }
                           onClick={() => {
-                            const user = rowMeta[i];
-                            if (!user?.id) return;
+                            const record = rowMeta[i];
+                            if (!record?.id) return;
                             setSuccessMessage(null);
-                            // O nome vem da primeira coluna da aba Usuários.
-                            const nome = cellText(row[0] ?? "");
-                            setUserToDelete({ id: user.id, label: nome });
+                            if (active === "users") {
+                              // O nome vem da primeira coluna da aba Usuários.
+                              const nome = cellText(row[0] ?? "");
+                              setUserToDelete({ id: record.id, label: nome });
+                            } else {
+                              setRemovalReason("");
+                              setProcessDeleteError(null);
+                              setProcessToDelete({
+                                id: record.id,
+                                client: processCell(row, "Cliente"),
+                                specialist: processCell(row, "Especialista"),
+                                product: processCell(row, "Produto"),
+                                status: processCell(row, "Status"),
+                              });
+                            }
                           }}
                         >
                           <Trash2 className="w-4 h-4" aria-hidden="true" />
                         </Button>
+                        )}
                       </td>
                     ) : null}
                     {row.map((cell, j) => {
@@ -440,6 +477,93 @@ export default function DatabasePage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!processToDelete}
+        onOpenChange={(open) => {
+          if (!open && !removingProcess) setProcessToDelete(null);
+        }}
+      >
+        <DialogContent
+          open={!!processToDelete}
+          title="Excluir processo"
+          dismissible={!removingProcess}
+        >
+          <form
+            className="space-y-4"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              if (!processToDelete || !removalReason.trim() || removingProcess) return;
+              setRemovingProcess(true);
+              setProcessDeleteError(null);
+              try {
+                await deleteProcess(processToDelete.id, removalReason.trim());
+                setProcessToDelete(null);
+                setRemovalReason("");
+                setSuccessMessage("Processo excluído da jornada. O histórico permanece registrado.");
+                await loadRecords();
+              } catch (err) {
+                setProcessDeleteError(
+                  (err as { friendlyMessage?: string })?.friendlyMessage ??
+                    (err as Error)?.message ??
+                    "Não foi possível excluir o processo.",
+                );
+              } finally {
+                setRemovingProcess(false);
+              }
+            }}
+          >
+            <p className="text-sm text-ink-soft">
+              Confira o processo antes de excluir da jornada.
+            </p>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm text-ink-soft">
+              <dt className="font-semibold">Cliente</dt><dd>{processToDelete?.client}</dd>
+              <dt className="font-semibold">Especialista</dt><dd>{processToDelete?.specialist}</dd>
+              <dt className="font-semibold">Produto</dt><dd>{processToDelete?.product}</dd>
+              <dt className="font-semibold">Status</dt><dd>{processToDelete?.status}</dd>
+            </dl>
+            <Alert variant="warning">
+              O processo sai das listas de trabalho. Propostas, contratos e o histórico continuam registrados. Esta ação não pode ser desfeita.
+            </Alert>
+            <div>
+              <label htmlFor="process-removal-reason" className="block text-sm font-semibold mb-1">
+                Motivo da exclusão <span aria-hidden="true">*</span>
+              </label>
+              <textarea
+                id="process-removal-reason"
+                value={removalReason}
+                onChange={(event) => setRemovalReason(event.target.value)}
+                disabled={removingProcess}
+                required
+                maxLength={1000}
+                rows={3}
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-focus-ring"
+                placeholder="Explique por que este processo deve ser excluído"
+              />
+            </div>
+            {processDeleteError && <Alert variant="danger">{processDeleteError}</Alert>}
+            <div className="flex justify-end gap-3 pt-1">
+              <Button
+                type="button"
+                variant="light"
+                disabled={removingProcess}
+                onClick={() => setProcessToDelete(null)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" variant="danger" disabled={removingProcess || !removalReason.trim()}>
+                {removingProcess ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Excluindo...
+                  </span>
+                ) : (
+                  "Excluir processo"
+                )}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

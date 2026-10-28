@@ -8,6 +8,7 @@ import {
   Logger,
   ForbiddenException,
   HttpException,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProcessDTO } from './dto/create-process.dto';
@@ -23,6 +24,7 @@ import {
   ProcessStatus,
   ProductCurrency,
   ProductType,
+  ProviderStatus,
   StatusAgendamento,
   UserRole,
 } from '@prisma/client';
@@ -49,6 +51,8 @@ import {
   assertSpecialistScheduleAvailable,
 } from '../appointments/appointment-schedule-lock';
 import { isStaleMeetingInitializationClaim } from '../meetings/meeting-initialization-claim';
+import { ActorContext } from 'src/shared/actor-context/actor-context.service';
+import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
 
 /**
  * Quem está pedindo a operação. `companyId` só é usado por OFFICE.
@@ -64,6 +68,7 @@ type ProcessAccessAction = 'read' | 'update-status' | 'reject';
 type ProcessAccessRecord = {
   client_id: string;
   specialist_id: string;
+  removed_at?: Date | null;
   client?: {
     consultant_id?: string | null;
     company_id?: string | null;
@@ -106,7 +111,44 @@ export class ProcessesService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly notificationService: NotificationService,
+    @Optional()
+    private readonly delegatedAudit?: DelegatedActionAuditService,
   ) {}
+
+  async getAdminClientOptions(search?: string) {
+    const normalizedSearch = search?.trim();
+    return this.prismaService.user.findMany({
+      where: {
+        role: UserRole.CUSTOMER,
+        is_active: true,
+        ...(normalizedSearch
+          ? {
+              OR: [
+                { name: { contains: normalizedSearch, mode: 'insensitive' } },
+                {
+                  surname: { contains: normalizedSearch, mode: 'insensitive' },
+                },
+                { email: { contains: normalizedSearch, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      select: { id: true, name: true, surname: true, email: true },
+      orderBy: [{ name: 'asc' }, { surname: 'asc' }],
+      take: 50,
+    });
+  }
+
+  private assertRepresentedSpecialist(
+    context: ActorContext | undefined,
+    specialistId: string,
+  ): void {
+    if (context && context.specialistId !== specialistId) {
+      throw new ForbiddenException(
+        'O processo não pertence ao especialista representado.',
+      );
+    }
+  }
 
   /**
    * Política única de acesso a um processo. Todo papel desconhecido e toda
@@ -117,6 +159,12 @@ export class ProcessesService {
     requester: ProcessesRequester,
     action: ProcessAccessAction,
   ): void {
+    if (
+      process.removed_at &&
+      (action !== 'read' || requester.role !== UserRole.ADMIN)
+    ) {
+      throw new NotFoundException('Processo não encontrado');
+    }
     const isAssignedSpecialist =
       requester.role === UserRole.SPECIALIST &&
       process.specialist_id === requester.id;
@@ -200,6 +248,36 @@ export class ProcessesService {
     });
   }
 
+  private async assertNoPendingProposalBeforeDocumentation(
+    tx: Prisma.TransactionClient,
+    processId: string,
+  ): Promise<void> {
+    const lockKey = `proposal-process:${processId}`;
+    await tx.$queryRaw`
+      SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
+    `;
+    const pendingRows = await tx.$queryRaw<Array<{ id?: string }>>`
+      SELECT "id"::text AS "id"
+      FROM "NegotiationProposal"
+      WHERE "process_id" = ${processId}::uuid
+        AND "status" = 'PENDING'::"ProposalStatus"
+      LIMIT 1
+      FOR UPDATE
+    `;
+    const pending = pendingRows.find((row) => typeof row.id === 'string');
+    if (pending) {
+      throw new ConflictException({
+        success: false,
+        error: {
+          code: 'PENDING_PROPOSAL_BLOCKS_DOCUMENTATION',
+          message:
+            'Responda a proposta pendente antes de avançar para documentação.',
+          details: { proposal_id: pending.id },
+        },
+      });
+    }
+  }
+
   /**
    * Cria um objeto "product" de acordo com o processo enviado
    *
@@ -265,6 +343,38 @@ export class ProcessesService {
       status === StatusAgendamento.SCHEDULED ||
       status === StatusAgendamento.COMPLETED
     );
+  }
+
+  private projectSpecialistContacts(
+    process: {
+      client_id: string;
+      status: ProcessStatus;
+      appointment?: { status: StatusAgendamento } | null;
+      specialist: {
+        id: string;
+        name: string;
+        surname?: string;
+        speciality: ProductType | null;
+        email?: string | null;
+        phone?: string | null;
+      };
+    },
+    requester: { id?: string; role?: string },
+  ): ProcessResponse['specialist'] {
+    const visible =
+      requester.role === UserRole.CUSTOMER &&
+      requester.id === process.client_id &&
+      process.status !== ProcessStatus.REJECTED &&
+      this.isAppointmentContactVisible(process.appointment?.status);
+
+    return {
+      id: process.specialist.id,
+      name: process.specialist.name,
+      surname: process.specialist.surname,
+      especialidade: process.specialist.speciality,
+      email: visible ? (process.specialist.email?.trim() || null) : null,
+      phone: visible ? (process.specialist.phone?.trim() || null) : null,
+    };
   }
 
   private projectClientContacts(
@@ -461,12 +571,14 @@ export class ProcessesService {
   async create(
     createProcessDto: CreateProcessDTO,
     requester: ProcessesRequester,
+    context?: ActorContext,
   ): Promise<ProcessResponse> {
     this.logger.log(
       `[create] Iniciando criação de processo para cliente ${createProcessDto.client_id}`,
     );
 
     await this.assertCanCreateFor(requester, createProcessDto);
+    this.assertRepresentedSpecialist(context, createProcessDto.specialist_id);
 
     const { product_id, client_id, specialist_id, ...dataToSave } =
       createProcessDto;
@@ -524,8 +636,34 @@ export class ProcessesService {
         productId: hasProduct ? createProcessDto.product_id : null,
       });
 
+      let appointmentId: string | undefined;
+      if (context?.actorRole === UserRole.ADMIN) {
+        const pendingExpiresAt = new Date();
+        pendingExpiresAt.setDate(pendingExpiresAt.getDate() + 7);
+        const appointment = await tx.appointment.create({
+          data: {
+            client_id,
+            specialist_id,
+            product_type: hasProduct ? createProcessDto.product_type : null,
+            product_id: hasProduct ? createProcessDto.product_id : null,
+            status: StatusAgendamento.PENDING,
+            scheduling_method: AppointmentSchedulingMethod.EMAIL,
+            user_clicked_at: new Date(),
+            pending_expires_at: pendingExpiresAt,
+            notes: 'Criado por administrador em nome do especialista.',
+          },
+        });
+        appointmentId = appointment.id;
+      }
+
       const process = await tx.process.create({
-        data: { specialist_id, client_id, ...dataToSave, ...finalProduct },
+        data: {
+          specialist_id,
+          client_id,
+          ...dataToSave,
+          ...finalProduct,
+          ...(appointmentId ? { appointment_id: appointmentId } : {}),
+        },
         include,
       });
 
@@ -533,9 +671,23 @@ export class ProcessesService {
         data: {
           processId: process.id,
           status: process.status,
+          changed_by: requester.id,
           changed_at: new Date(),
         },
       });
+
+      if (context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'PROCESS_CREATE',
+            resourceType: 'PROCESS',
+            resourceId: process.id,
+            metadata: { appointmentId: appointmentId ?? null },
+          },
+          tx,
+        );
+      }
 
       return process;
     });
@@ -797,7 +949,7 @@ export class ProcessesService {
     // O status fica de fora daqui de propósito: o sumário existe para mostrar
     // quantos processos há em CADA status, então filtrar por um deles zeraria
     // os demais e o contador das abas iria a zero ao selecionar uma.
-    const scopedWhere: any = {};
+    const scopedWhere: any = { removed_at: null };
 
     // Filtro de visibilidade por papel. Vai em AND porque a busca textual
     // abaixo ocupa o OR do nível raiz — se o escopo fosse escrito ali, a busca
@@ -955,7 +1107,10 @@ export class ProcessesService {
   ): Promise<ProcessResponse> {
     try {
       const process = await this.prismaService.process.findUniqueOrThrow({
-        where: { id: processId },
+        where: {
+          id: processId,
+          ...(userRole === UserRole.ADMIN ? {} : { removed_at: null }),
+        },
         include: {
           client: {
             include: {
@@ -991,13 +1146,6 @@ export class ProcessesService {
         'read',
       );
 
-      const contactVisible = this.isAppointmentContactVisible(
-        process.appointment?.status,
-      );
-      const isClient = userId === process.client_id;
-      const canSeeSpecialistPhone =
-        userRole === UserRole.CUSTOMER && isClient && contactVisible;
-
       return {
         id: process.id,
         status: process.status,
@@ -1017,20 +1165,19 @@ export class ProcessesService {
           id: userId,
           role: userRole,
         }),
-        specialist: {
-          especialidade: process.specialist.speciality,
-          id: process.specialist.id,
-          name: process.specialist.name,
-          phone: canSeeSpecialistPhone
-            ? (process.specialist.phone ?? null)
-            : null,
-        },
+        specialist: this.projectSpecialistContacts(process, {
+          id: userId,
+          role: userRole,
+        }),
         product: this.buildProduct(process),
         created_at: process.created_at,
         notes: process.notes,
       };
     } catch (err) {
-      if (err instanceof ForbiddenException) {
+      if (
+        err instanceof ForbiddenException ||
+        err instanceof NotFoundException
+      ) {
         throw err;
       }
       if (err.code === 'P2025') {
@@ -1064,6 +1211,7 @@ export class ProcessesService {
       this.prismaService.process.findMany({
         where: {
           specialist_id: specialistId, // CRUCIAL FILTER
+          removed_at: null,
         },
         include: {
           client: true,
@@ -1091,6 +1239,7 @@ export class ProcessesService {
       this.prismaService.process.count({
         where: {
           specialist_id: specialistId,
+          removed_at: null,
         },
       }),
     ]);
@@ -1161,6 +1310,7 @@ export class ProcessesService {
     // Build where clause
     const where: any = {
       specialist_id: specialistId,
+      removed_at: null,
     };
 
     // Add status filter
@@ -1268,6 +1418,7 @@ export class ProcessesService {
     callerId?: string,
     callerRole?: UserRole,
     callerCompanyId?: string | null,
+    context?: ActorContext,
   ): Promise<ProcessWithHistory> {
     try {
       // Transction para atualizar o processo, adicionar mais uma linha sobre o histórico de status do processo, e obter o histórico atualizado
@@ -1305,6 +1456,10 @@ export class ProcessesService {
             },
             'update-status',
           );
+          this.assertRepresentedSpecialist(
+            context,
+            existingProcess.specialist_id,
+          );
 
           const lockedSpecialistId = existingProcess.specialist_id;
           await acquireSpecialistScheduleLock(tx, lockedSpecialistId);
@@ -1332,6 +1487,12 @@ export class ProcessesService {
           if (existingProcess.specialist_id !== lockedSpecialistId) {
             this.throwStatusTransitionConflict(processId);
           }
+          if (updateProcessDto.status === ProcessStatus.DOCUMENTATION) {
+            await this.assertNoPendingProposalBeforeDocumentation(
+              tx,
+              processId,
+            );
+          }
           this.assertProcessAccess(
             existingProcess,
             {
@@ -1340,6 +1501,10 @@ export class ProcessesService {
               companyId: callerCompanyId,
             },
             'update-status',
+          );
+          this.assertRepresentedSpecialist(
+            context,
+            existingProcess.specialist_id,
           );
 
           //Verificar se ele já está com o status atualizado
@@ -1427,6 +1592,7 @@ export class ProcessesService {
             },
             where: {
               id: processId,
+              removed_at: null,
               status: existingProcess.status,
               updated_at: existingProcess.updated_at,
             },
@@ -1443,9 +1609,25 @@ export class ProcessesService {
             data: {
               processId,
               status: updateProcessDto.status,
+              changed_by: callerId,
               changed_at: nextUpdatedAt,
             },
           });
+          if (context && this.delegatedAudit) {
+            await this.delegatedAudit.record(
+              {
+                context,
+                action: 'PROCESS_STATUS_UPDATE',
+                resourceType: 'PROCESS',
+                resourceId: processId,
+                metadata: {
+                  from: existingProcess.status,
+                  to: updateProcessDto.status,
+                },
+              },
+              tx,
+            );
+          }
           const statusHistory = await tx.processStatusHistory.findMany({
             where: { processId },
           });
@@ -1504,6 +1686,7 @@ export class ProcessesService {
     dto: { product_type: string; product_id: string },
     userId: string,
     userRole: string,
+    context?: ActorContext,
   ): Promise<ProcessResponse> {
     this.logger.log(
       `[assignProduct] Iniciando associação de produto ao processo ${processId}`,
@@ -1511,7 +1694,7 @@ export class ProcessesService {
 
     // 1. Buscar processo
     const process = await this.prismaService.process.findUnique({
-      where: { id: processId },
+      where: { id: processId, removed_at: null },
       include: {
         client: true,
         specialist: true,
@@ -1533,7 +1716,11 @@ export class ProcessesService {
     }
 
     // 2. Verificar permissão: apenas especialista do processo ou ADMIN
-    if (process.specialist_id !== userId && userRole !== 'ADMIN') {
+    const representedSpecialistId = context?.specialistId ?? userId;
+    if (
+      process.specialist_id !== representedSpecialistId ||
+      (userRole !== 'ADMIN' && process.specialist_id !== userId)
+    ) {
       throw new ForbiddenException({
         success: false,
         error: {
@@ -1603,7 +1790,7 @@ export class ProcessesService {
       });
 
       const processForAssignment = await tx.process.findUniqueOrThrow({
-        where: { id: processId },
+        where: { id: processId, removed_at: null },
         include: {
           client: true,
           specialist: true,
@@ -1612,6 +1799,10 @@ export class ProcessesService {
           aircraft: true,
         },
       });
+      this.assertRepresentedSpecialist(
+        context,
+        processForAssignment.specialist_id,
+      );
 
       const assignmentStateChanged =
         (processForAssignment.status !== ProcessStatus.SCHEDULING &&
@@ -1758,6 +1949,7 @@ export class ProcessesService {
       const claim = await tx.process.updateMany({
         where: {
           id: processId,
+          removed_at: null,
           status: processForAssignment.status,
           product_type: null,
           car_id: null,
@@ -1802,6 +1994,22 @@ export class ProcessesService {
         });
       }
 
+      if (context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'PROCESS_ASSIGN_PRODUCT',
+            resourceType: 'PROCESS',
+            resourceId: processId,
+            metadata: {
+              productType,
+              productId: dto.product_id,
+            },
+          },
+          tx,
+        );
+      }
+
       return tx.process.findUniqueOrThrow({
         where: { id: processId },
         include: {
@@ -1824,7 +2032,9 @@ export class ProcessesService {
         previousStatus: process.status,
         currentStatus: updatedProcess.status,
         changedByName:
-          `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
+          context?.delegated && context.actor
+            ? `${context.actor.name} ${context.actor.surname}`.trim()
+            : `${process.specialist.name} ${process.specialist.surname || ''}`.trim(),
         reason: 'Produto associado ao processo após confirmação da reunião',
         productDetails: this.getProductDetails(updatedProcess),
         client: process.client,
@@ -1871,6 +2081,7 @@ export class ProcessesService {
         id: true,
         client_id: true,
         specialist_id: true,
+        removed_at: true,
         client: {
           select: {
             consultant_id: true,
@@ -1881,7 +2092,7 @@ export class ProcessesService {
       },
     });
 
-    if (!process) {
+    if (!process || (process.removed_at && requester.role !== UserRole.ADMIN)) {
       throw new NotFoundException(
         `Processo com id ${processId} não encontrado`,
       );
@@ -1924,7 +2135,7 @@ export class ProcessesService {
       },
     });
 
-    if (!process) {
+    if (!process || (process.removed_at && requester.role !== UserRole.ADMIN)) {
       throw new NotFoundException(
         `Processo com id ${processId} não encontrado`,
       );
@@ -1991,7 +2202,10 @@ export class ProcessesService {
     };
     if (!userId || !userRole) deny();
 
-    const where: Prisma.ProcessWhereInput = { client_id: clientId };
+    const where: Prisma.ProcessWhereInput = {
+      client_id: clientId,
+      removed_at: null,
+    };
     switch (userRole) {
       case UserRole.ADMIN:
         break;
@@ -2027,9 +2241,6 @@ export class ProcessesService {
     const pageNum = Number(page) || 1;
     const perPageNum = Number(perPage) || 20;
     const skip = (pageNum - 1) * perPageNum;
-    const canSeeSpecialistPhone =
-      userRole === UserRole.CUSTOMER && userId === clientId;
-
     const [processes, count] = await Promise.all([
       this.prismaService.process.findMany({
         where,
@@ -2082,16 +2293,10 @@ export class ProcessesService {
         id: userId,
         role: userRole,
       }),
-      specialist: {
-        especialidade: process.specialist.speciality,
-        id: process.specialist.id,
-        name: process.specialist.name,
-        phone:
-          canSeeSpecialistPhone &&
-          this.isAppointmentContactVisible(process.appointment?.status)
-            ? (process.specialist.phone ?? null)
-            : null,
-      },
+      specialist: this.projectSpecialistContacts(process, {
+        id: userId,
+        role: userRole,
+      }),
       product: this.buildProduct(process),
       created_at: process.created_at,
       notes: process.notes,
@@ -2123,6 +2328,7 @@ export class ProcessesService {
     rejectionReason?: string,
     requesterRole?: UserRole,
     requesterCompanyId?: string | null,
+    context?: ActorContext,
   ): Promise<ProcessWithHistory> {
     try {
       const [updatedProcess, updatedStatusHistory] =
@@ -2133,6 +2339,7 @@ export class ProcessesService {
               id: true,
               client_id: true,
               specialist_id: true,
+              removed_at: true,
               client: {
                 select: {
                   consultant_id: true,
@@ -2151,6 +2358,7 @@ export class ProcessesService {
             },
             'reject',
           );
+          this.assertRepresentedSpecialist(context, candidate.specialist_id);
 
           // Mesma ordem de cancelamento/avanço: agenda do especialista,
           // releitura do processo e só então a reivindicação CAS.
@@ -2192,6 +2400,13 @@ export class ProcessesService {
                   ended_at: true,
                 },
               },
+              active_contract: {
+                select: {
+                  id: true,
+                  provider_id: true,
+                  provider_status: true,
+                },
+              },
             },
           });
 
@@ -2204,6 +2419,10 @@ export class ProcessesService {
             },
             'reject',
           );
+          this.assertRepresentedSpecialist(
+            context,
+            existingProcess.specialist_id,
+          );
 
           // Verificar se já está rejeitado
           if (existingProcess.status === 'REJECTED') {
@@ -2212,6 +2431,21 @@ export class ProcessesService {
           if (existingProcess.status === ProcessStatus.COMPLETED) {
             throw new BadRequestException(
               'Processo concluído não pode ser rejeitado',
+            );
+          }
+          if (
+            existingProcess.active_contract?.provider_id &&
+            !new Set<ProviderStatus>([
+              ProviderStatus.DECLINED,
+              ProviderStatus.VOIDED,
+              ProviderStatus.TIMEDOUT,
+              ProviderStatus.ERROR,
+            ]).has(
+              existingProcess.active_contract.provider_status as ProviderStatus,
+            )
+          ) {
+            throw new BadRequestException(
+              'O contrato ativo ainda possui um envelope DocuSign vigente. Anule e reconcilie o envelope antes de rejeitar o processo.',
             );
           }
           if (
@@ -2273,6 +2507,7 @@ export class ProcessesService {
             },
             where: {
               id: processId,
+              removed_at: null,
               client_id: existingProcess.client_id,
               specialist_id: existingProcess.specialist_id,
               status: existingProcess.status,
@@ -2315,6 +2550,21 @@ export class ProcessesService {
               },
             });
           }
+          if (context && this.delegatedAudit) {
+            await this.delegatedAudit.record(
+              {
+                context,
+                action: 'PROCESS_REJECT',
+                resourceType: 'PROCESS',
+                resourceId: processId,
+                metadata: {
+                  from: existingProcess.status,
+                  reason: rejectionReason ?? null,
+                },
+              },
+              tx,
+            );
+          }
 
           // Buscar histórico atualizado
           const statusHistory = await tx.processStatusHistory.findMany({
@@ -2322,11 +2572,13 @@ export class ProcessesService {
           });
 
           const changedByName =
-            rejectedById === existingProcess.client?.id
-              ? `${existingProcess.client?.name || ''} ${existingProcess.client?.surname || ''}`.trim()
-              : rejectedById === existingProcess.specialist?.id
-                ? `${existingProcess.specialist?.name || ''} ${existingProcess.specialist?.surname || ''}`.trim()
-                : undefined;
+            context?.delegated && context.actor
+              ? `${context.actor.name} ${context.actor.surname}`.trim()
+              : rejectedById === existingProcess.client?.id
+                ? `${existingProcess.client?.name || ''} ${existingProcess.client?.surname || ''}`.trim()
+                : rejectedById === existingProcess.specialist?.id
+                  ? `${existingProcess.specialist?.name || ''} ${existingProcess.specialist?.surname || ''}`.trim()
+                  : undefined;
 
           this.notifyProcessStatusChange({
             processId,
@@ -2380,6 +2632,7 @@ export class ProcessesService {
     processId: string,
     userId: string,
     appointmentDatetime?: string,
+    context?: ActorContext,
   ): Promise<any> {
     this.logger.log(
       `[confirmAppointment] Confirmando agendamento do processo ${processId}`,
@@ -2387,7 +2640,7 @@ export class ProcessesService {
 
     // A leitura inicial identifica apenas o especialista para o lock.
     const process = await this.prismaService.process.findUnique({
-      where: { id: processId },
+      where: { id: processId, removed_at: null },
       select: { id: true, specialist_id: true },
     });
 
@@ -2396,7 +2649,8 @@ export class ProcessesService {
     }
 
     // Verificar se o usuário é o especialista
-    if (process.specialist_id !== userId) {
+    const representedSpecialistId = context?.specialistId ?? userId;
+    if (process.specialist_id !== representedSpecialistId) {
       throw new ForbiddenException(
         'Apenas o especialista pode confirmar o agendamento',
       );
@@ -2407,7 +2661,7 @@ export class ProcessesService {
       await acquireSpecialistScheduleLock(tx, process.specialist_id);
 
       const lockedProcess = await tx.process.findUnique({
-        where: { id: processId },
+        where: { id: processId, removed_at: null },
         include: {
           appointment: true,
           client: {
@@ -2424,7 +2678,8 @@ export class ProcessesService {
       if (!lockedProcess) {
         throw new NotFoundException('Processo não encontrado');
       }
-      if (lockedProcess.specialist_id !== userId) {
+      this.assertRepresentedSpecialist(context, lockedProcess.specialist_id);
+      if (lockedProcess.specialist_id !== representedSpecialistId) {
         throw new ForbiddenException(
           'Apenas o especialista pode confirmar o agendamento',
         );
@@ -2507,6 +2762,7 @@ export class ProcessesService {
       const processClaim = await tx.process.updateMany({
         where: {
           id: processId,
+          removed_at: null,
           status: ProcessStatus.SCHEDULING,
           updated_at: lockedProcess.updated_at,
           specialist_id: lockedProcess.specialist_id,
@@ -2536,6 +2792,19 @@ export class ProcessesService {
           confirmed_by_id: userId,
         },
       });
+
+      if (context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'APPOINTMENT_CONFIRM',
+            resourceType: 'APPOINTMENT',
+            resourceId: appointment.id,
+            metadata: { processId, appointmentDatetime: lockedConfirmedDate },
+          },
+          tx,
+        );
+      }
 
       return {
         changed: true,
@@ -2592,13 +2861,18 @@ export class ProcessesService {
    * @throws {ForbiddenException} - Usuário não autorizado
    * @throws {BadRequestException} - Processo não está em status SCHEDULING
    */
-  async cancelAppointment(processId: string, userId: string): Promise<any> {
+  async cancelAppointment(
+    processId: string,
+    userId: string,
+    context?: ActorContext,
+    reason?: string,
+  ): Promise<any> {
     this.logger.log(
       `[cancelAppointment] Cancelando agendamento do processo ${processId}`,
     );
 
     const candidate = await this.prismaService.process.findUnique({
-      where: { id: processId },
+      where: { id: processId, removed_at: null },
       select: { id: true, client_id: true, specialist_id: true },
     });
 
@@ -2608,7 +2882,8 @@ export class ProcessesService {
 
     // Verificar se o usuário é o cliente ou especialista
     const isClient = candidate.client_id === userId;
-    const isSpecialist = candidate.specialist_id === userId;
+    const representedSpecialistId = context?.specialistId ?? userId;
+    const isSpecialist = candidate.specialist_id === representedSpecialistId;
 
     if (!isClient && !isSpecialist) {
       throw new ForbiddenException(
@@ -2620,7 +2895,7 @@ export class ProcessesService {
     const process = await this.prismaService.$transaction(async (tx) => {
       await acquireSpecialistScheduleLock(tx, candidate.specialist_id);
       const lockedProcess = await tx.process.findUnique({
-        where: { id: processId },
+        where: { id: processId, removed_at: null },
         include: {
           appointment: true,
           client: {
@@ -2639,12 +2914,13 @@ export class ProcessesService {
       }
       if (
         lockedProcess.client_id !== userId &&
-        lockedProcess.specialist_id !== userId
+        lockedProcess.specialist_id !== representedSpecialistId
       ) {
         throw new ForbiddenException(
           'Sem permissão para cancelar este agendamento',
         );
       }
+      this.assertRepresentedSpecialist(context, lockedProcess.specialist_id);
       if (lockedProcess.status !== ProcessStatus.SCHEDULING) {
         throw new BadRequestException(
           'Apenas processos em status SCHEDULING podem ter o agendamento cancelado',
@@ -2676,6 +2952,7 @@ export class ProcessesService {
       const processClaim = await tx.process.updateMany({
         where: {
           id: processId,
+          removed_at: null,
           status: ProcessStatus.SCHEDULING,
           updated_at: lockedProcess.updated_at,
         },
@@ -2684,6 +2961,19 @@ export class ProcessesService {
       if (processClaim.count !== 1) {
         throw new ConflictException(
           'O processo foi alterado enquanto o agendamento era cancelado',
+        );
+      }
+
+      if (context && this.delegatedAudit) {
+        await this.delegatedAudit.record(
+          {
+            context,
+            action: 'APPOINTMENT_CANCEL',
+            resourceType: 'APPOINTMENT',
+            resourceId: lockedProcess.appointment.id,
+            metadata: { processId, reason: reason ?? null },
+          },
+          tx,
         );
       }
 

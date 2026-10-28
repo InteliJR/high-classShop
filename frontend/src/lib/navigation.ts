@@ -94,6 +94,11 @@ const ROLE_SIDEBAR_LINKS: Record<
   ],
   ADMIN: [
     { to: "/admin/dashboard", label: "Dashboard", icon: "dashboard" },
+    {
+      to: "/admin/journey",
+      label: "Jornada por especialista",
+      icon: "clipboard-list",
+    },
     { to: "/admin/companies", label: "Escritórios", icon: "building" },
     { to: "/office/consultants", label: "Consultores", icon: "users" },
     {

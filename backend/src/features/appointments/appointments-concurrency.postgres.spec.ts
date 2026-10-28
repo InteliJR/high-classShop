@@ -730,7 +730,6 @@ describeWithPostgres(
           status: ProcessStatus.SCHEDULING,
         },
       });
-
       const completingAppointment = await holder.appointment.create({
         data: {
           client_id: clientIds[1],
@@ -742,7 +741,7 @@ describeWithPostgres(
           appointment_datetime: new Date('2099-01-01T08:00:00.000Z'),
         },
       });
-      await holder.process.create({
+      const completingProcess = await holder.process.create({
         data: {
           client_id: clientIds[1],
           specialist_id: specialistId,
@@ -750,6 +749,17 @@ describeWithPostgres(
           car_id: carIds[0],
           appointment_id: completingAppointment.id,
           status: ProcessStatus.SCHEDULING,
+        },
+      });
+      await holder.meetingSession.create({
+        data: {
+          process_id: completingProcess.id,
+          meet_link: 'https://meet.jit.si/appointment-lock-order',
+          calendar_event_id: `appointment-lock-order-${completingProcess.id}`,
+          started_by_id: specialistId,
+          ended_by_id: specialistId,
+          started_at: new Date('2099-01-01T08:00:00.000Z'),
+          ended_at: new Date('2099-01-01T09:00:00.000Z'),
         },
       });
 

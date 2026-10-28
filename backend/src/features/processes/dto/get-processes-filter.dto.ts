@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum, IsString, MaxLength } from 'class-validator';
+import { IsOptional, IsEnum, IsString, IsUUID, MaxLength } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ProcessStatus } from '@prisma/client';
 
@@ -7,6 +7,10 @@ import { ProcessStatus } from '@prisma/client';
  * Usado em GET /api/processes/specialist/:id
  */
 export class GetProcessesFilterDto {
+  @IsOptional()
+  @IsUUID()
+  target_specialist_id?: string;
+
   @IsOptional()
   @Type(() => Number)
   page?: number;

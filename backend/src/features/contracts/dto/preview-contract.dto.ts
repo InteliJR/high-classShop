@@ -9,7 +9,9 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 /**
  * DTO para pré-visualização de contrato via DocuSign Sender View
@@ -30,9 +32,10 @@ import {
  * Continuam obrigatórios apenas os que quebram o fluxo se faltarem:
  *
  * - `return_url`, `process_id` — encanamento, não são conteúdo do contrato.
- * - `seller_name`/`seller_email`, `buyer_name`/`buyer_email` — viram
- *   destinatários do envelope; o DocuSign recusa criar envelope sem eles, e
- *   `buyer_email` ainda é usado para localizar o usuário signatário.
+ * - `buyer_name`/`buyer_email` — viram destinatário do envelope; o DocuSign
+ *   recusa criar envelope sem eles, e `buyer_email` localiza o signatário.
+ * - `seller_name` e `seller_email` são opcionais. Se o template exigir Seller
+ *   e faltar um deles, o especialista do processo assume esse papel.
  * - `total_commission_rate` — base do cálculo de comissão. Sem ele o split
  *   vira NaN e é persistido assim; um erro de validação é preferível a um
  *   contrato com valores corrompidos.
@@ -74,14 +77,16 @@ export class PreviewContractDto {
 
   // === VENDEDOR (SELLER) ===
 
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @ValidateIf((_object, value) => value != null && value !== '')
   @IsString({ message: 'seller_name deve ser uma string' })
-  @IsNotEmpty({ message: 'seller_name é obrigatório' })
   @MaxLength(255, { message: 'seller_name deve ter no máximo 255 caracteres' })
-  seller_name: string;
+  seller_name?: string;
 
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @ValidateIf((_object, value) => value != null && value !== '')
   @IsEmail({}, { message: 'seller_email deve ser um email válido' })
-  @IsNotEmpty({ message: 'seller_email é obrigatório' })
-  seller_email: string;
+  seller_email?: string;
 
   @IsString({ message: 'seller_cpf deve ser uma string' })
   @IsOptional()

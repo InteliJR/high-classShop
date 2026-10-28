@@ -49,10 +49,11 @@ export interface Process {
   specialist?: {
     id: string;
     name?: string;
+    surname?: string;
     especialidade?: string;
-    email?: string;
-    // Backend oculta o telefone do especialista para o cliente enquanto o
-    // agendamento não está confirmado — aqui chega null nesse caso.
+    email?: string | null;
+    // A API libera e-mail e telefone ao cliente dono após a confirmação,
+    // enquanto o processo não estiver rejeitado.
     phone?: string | null;
   };
   // Flag para identificar consultoria (sem produto ainda)
@@ -78,6 +79,17 @@ export interface ConversationDoneResult {
     requires_product_selection: boolean;
     message: string;
   };
+}
+
+export interface DelegatedProcessTimelineEvent {
+  id: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  actor: { id: string; role: string; name: string | null };
+  representedSpecialistId: string;
 }
 
 export interface ApiResponse<T> {
@@ -183,8 +195,9 @@ export async function getProcessById(processId: string): Promise<Process> {
 export interface CreateProcessRequest {
   client_id: string;
   specialist_id: string | undefined;
-  product_type: "CAR" | "BOAT" | "AIRCRAFT";
-  product_id: string;
+  product_type?: "CAR" | "BOAT" | "AIRCRAFT";
+  product_id?: string;
+  notes?: string;
 }
 
 /**
@@ -278,6 +291,15 @@ export async function getProcessWithActiveContract(
   return response.data.data;
 }
 
+export async function getAdminProcessTimeline(
+  processId: string,
+): Promise<DelegatedProcessTimelineEvent[]> {
+  const response = await api.get<
+    ApiResponse<DelegatedProcessTimelineEvent[]>
+  >(`/processes/${processId}/admin-timeline`, { withCredentials: true });
+  return response.data.data;
+}
+
 /**
  * Get processes by client ID
  * @param clientId - ID of the client
@@ -345,10 +367,11 @@ export async function confirmAppointment(
  */
 export async function cancelAppointment(
   processId: string,
+  reason?: string,
 ): Promise<{ success: boolean; message: string }> {
   const response = await api.post<ApiResponse<any>>(
     `/processes/${processId}/cancel-appointment`,
-    {},
+    reason ? { reason } : {},
     { withCredentials: true },
   );
   return response.data.data;

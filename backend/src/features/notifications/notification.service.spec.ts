@@ -22,6 +22,34 @@ describe('NotificationService proposal emails', () => {
       .mockResolvedValue(undefined);
   });
 
+  it('notifica só o comprador quando não há vendedor no contrato', async () => {
+    const parties = { buyerEmail: 'buyer@example.test', buyerName: 'Comprador' };
+    await service.sendContractGeneratedEmail({
+      ...parties,
+      contractId: 'contract-1',
+      vehicleDetails: 'Carro 2026',
+      processId: 'process-1',
+    });
+    await service.sendContractSentEmail({
+      ...parties,
+      contractId: 'contract-1',
+      docusignLink: 'https://demo.docusign.net/view',
+    });
+    await service.sendContractSignedEmail({
+      ...parties,
+      contractId: 'contract-1',
+      vehicleModel: 'Carro',
+      finalPrice: 100000,
+    });
+
+    expect(sendEmailSafely).toHaveBeenCalledTimes(3);
+    for (const [, recipient, , html, plainText] of sendEmailSafely.mock.calls) {
+      expect(recipient).toBe('buyer@example.test');
+      expect(html).not.toContain('<strong>Vendedor:</strong>');
+      expect(plainText).not.toContain('Vendedor:');
+    }
+  });
+
   it('uses USD in the received proposal HTML and plain-text bodies', async () => {
     await service.sendProposalReceivedEmail({
       recipientEmail: 'buyer@example.com',

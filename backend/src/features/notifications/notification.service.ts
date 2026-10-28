@@ -679,7 +679,9 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para responde
     // Send to both parties - use Promise.allSettled to ensure one failure doesn't block the other
     await Promise.allSettled([
       this.sendContractSignedEmailToParty(data, 'buyer', subject),
-      this.sendContractSignedEmailToParty(data, 'seller', subject),
+      ...(data.sellerEmail && data.sellerName
+        ? [this.sendContractSignedEmailToParty(data, 'seller', subject)]
+        : []),
     ]);
   }
 
@@ -689,8 +691,8 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para responde
     subject: string,
   ): Promise<void> {
     const isBuyer = role === 'buyer';
-    const recipientName = isBuyer ? data.buyerName : data.sellerName;
-    const recipientEmail = isBuyer ? data.buyerEmail : data.sellerEmail;
+    const recipientName = isBuyer ? data.buyerName : data.sellerName!;
+    const recipientEmail = isBuyer ? data.buyerEmail : data.sellerEmail!;
     const otherPartyName = isBuyer ? data.sellerName : data.buyerName;
 
     const html = `
@@ -710,7 +712,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId}/negotiation para responde
           <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
             <p style="margin: 8px 0; color: #334155;"><strong>Veículo:</strong> ${data.vehicleModel}</p>
             <p style="margin: 8px 0; color: #334155;"><strong>Valor Final:</strong> R$ ${data.finalPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-            <p style="margin: 8px 0; color: #334155;"><strong>${isBuyer ? 'Vendedor' : 'Comprador'}:</strong> ${otherPartyName}</p>
+            ${otherPartyName ? `<p style="margin: 8px 0; color: #334155;"><strong>${isBuyer ? 'Vendedor' : 'Comprador'}:</strong> ${otherPartyName}</p>` : ''}
             <p style="margin: 8px 0; color: #334155;"><strong>Contrato ID:</strong> ${data.contractId}</p>
           </div>
           ${
@@ -751,7 +753,7 @@ O contrato foi assinado por todas as partes e a transação está concluída.
 
 Veículo: ${data.vehicleModel}
 Valor Final: R$ ${data.finalPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-${isBuyer ? 'Vendedor' : 'Comprador'}: ${otherPartyName}
+${otherPartyName ? `${isBuyer ? 'Vendedor' : 'Comprador'}: ${otherPartyName}` : ''}
 Contrato ID: ${data.contractId}
 
 ${data.signedPdfUrl ? `Baixar contrato: ${data.signedPdfUrl}` : ''}
@@ -1587,7 +1589,9 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
     // Send to both parties
     await Promise.allSettled([
       this.sendContractGeneratedToParty(data, 'buyer', subject),
-      this.sendContractGeneratedToParty(data, 'seller', subject),
+      ...(data.sellerEmail && data.sellerName
+        ? [this.sendContractGeneratedToParty(data, 'seller', subject)]
+        : []),
     ]);
   }
 
@@ -1597,8 +1601,8 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
     subject: string,
   ): Promise<void> {
     const isBuyer = role === 'buyer';
-    const recipientName = isBuyer ? data.buyerName : data.sellerName;
-    const recipientEmail = isBuyer ? data.buyerEmail : data.sellerEmail;
+    const recipientName = isBuyer ? data.buyerName : data.sellerName!;
+    const recipientEmail = isBuyer ? data.buyerEmail : data.sellerEmail!;
     const otherPartyName = isBuyer ? data.sellerName : data.buyerName;
 
     const html = `
@@ -1617,7 +1621,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
           </p>
           <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
             <p style="margin: 8px 0; color: #334155;"><strong>Veículo:</strong> ${data.vehicleDetails}</p>
-            <p style="margin: 8px 0; color: #334155;"><strong>${isBuyer ? 'Vendedor' : 'Comprador'}:</strong> ${otherPartyName}</p>
+            ${otherPartyName ? `<p style="margin: 8px 0; color: #334155;"><strong>${isBuyer ? 'Vendedor' : 'Comprador'}:</strong> ${otherPartyName}</p>` : ''}
             <p style="margin: 8px 0; color: #334155;"><strong>Contrato ID:</strong> ${data.contractId}</p>
           </div>
           <p style="font-size: 16px; color: #334155;">
@@ -1647,7 +1651,7 @@ Olá ${recipientName},
 O contrato de compra e venda foi gerado com sucesso!
 
 Veículo: ${data.vehicleDetails}
-${isBuyer ? 'Vendedor' : 'Comprador'}: ${otherPartyName}
+${otherPartyName ? `${isBuyer ? 'Vendedor' : 'Comprador'}: ${otherPartyName}` : ''}
 Contrato ID: ${data.contractId}
 
 Em breve você receberá um email do DocuSign com o link para assinatura eletrônica.
@@ -1683,7 +1687,9 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
     // Send to both parties
     await Promise.allSettled([
       this.sendContractSentToParty(data, 'buyer', subject),
-      this.sendContractSentToParty(data, 'seller', subject),
+      ...(data.sellerEmail && data.sellerName
+        ? [this.sendContractSentToParty(data, 'seller', subject)]
+        : []),
     ]);
   }
 
@@ -1693,8 +1699,8 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
     subject: string,
   ): Promise<void> {
     const isBuyer = role === 'buyer';
-    const recipientName = isBuyer ? data.buyerName : data.sellerName;
-    const recipientEmail = isBuyer ? data.buyerEmail : data.sellerEmail;
+    const recipientName = isBuyer ? data.buyerName : data.sellerName!;
+    const recipientEmail = isBuyer ? data.buyerEmail : data.sellerEmail!;
     const otherPartyName = isBuyer ? data.sellerName : data.buyerName;
 
     const html = `
@@ -1712,7 +1718,7 @@ Acesse ${this.frontendUrl}/processes/${data.processId} para acompanhar.
             O contrato está pronto e aguardando sua assinatura eletrônica via DocuSign.
           </p>
           <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 6px; margin: 25px 0;">
-            <p style="margin: 8px 0; color: #334155;"><strong>${isBuyer ? 'Vendedor' : 'Comprador'}:</strong> ${otherPartyName}</p>
+            ${otherPartyName ? `<p style="margin: 8px 0; color: #334155;"><strong>${isBuyer ? 'Vendedor' : 'Comprador'}:</strong> ${otherPartyName}</p>` : ''}
             <p style="margin: 8px 0; color: #334155;"><strong>Contrato ID:</strong> ${data.contractId}</p>
           </div>
           <p style="font-size: 16px; color: #334155;">
@@ -1744,7 +1750,7 @@ Olá ${recipientName},
 
 O contrato está pronto e aguardando sua assinatura eletrônica via DocuSign.
 
-${isBuyer ? 'Vendedor' : 'Comprador'}: ${otherPartyName}
+${otherPartyName ? `${isBuyer ? 'Vendedor' : 'Comprador'}: ${otherPartyName}` : ''}
 Contrato ID: ${data.contractId}
 
 Acesse o link abaixo para assinar:

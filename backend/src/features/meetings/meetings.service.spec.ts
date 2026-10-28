@@ -66,6 +66,8 @@ function mkPrisma(process: any) {
         (!where.process_id || where.process_id === storedMeeting.process_id) &&
         (!where.calendar_event_id ||
           where.calendar_event_id === storedMeeting.calendar_event_id) &&
+        (where.ended_at === undefined ||
+          where.ended_at === storedMeeting.ended_at) &&
         (where.meet_link === undefined ||
           where.meet_link === storedMeeting.meet_link)
       ) {
@@ -646,6 +648,39 @@ describe('MeetingsService.startMeetingForProcess — serialização canônica', 
   });
 });
 
+describe('MeetingsService.endMeetingForProcess — claim concorrente', () => {
+  it('grava um único encerramento quando duas chamadas disputam a reunião', async () => {
+    const process = mkProcess({
+      meeting_session: {
+        id: 'meeting-1',
+        process_id: 'proc-1',
+        calendar_event_id: 'spaces/meeting-1',
+        meet_link: 'https://meet.google.com/abc-defg-hij',
+        started_at: new Date('2026-01-01T10:00:00.000Z'),
+        ended_at: null,
+      },
+    });
+    const prisma = mkPrisma(process);
+    const service = new MeetingsService(
+      prisma,
+      mkConfig(),
+      notification,
+      {} as any,
+    );
+
+    const results = await Promise.all([
+      service.endMeetingForProcess('proc-1', 'spec-1'),
+      service.endMeetingForProcess('proc-1', 'spec-1'),
+    ]);
+
+    expect(results.map((result) => result.alreadyEnded).sort()).toEqual([
+      false,
+      true,
+    ]);
+    expect(prisma.meetingSession.updateMany).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('MeetingsService.markConversationDone — snapshot da negociação', () => {
   it('grava snapshot USD, status e histórico na mesma transação', async () => {
     const product = {
@@ -683,6 +718,14 @@ describe('MeetingsService.markConversationDone — snapshot da negociação', ()
     const historyCreate = jest.fn().mockResolvedValue({});
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+      meetingSession: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUnique: jest.fn().mockResolvedValue({
+          ...process.meeting_session,
+          ended_at: new Date('2026-01-01T11:00:00.000Z'),
+          ended_by_id: 'spec-1',
+        }),
+      },
       process: {
         findUniqueOrThrow: jest.fn().mockResolvedValue(process),
         update: txProcessUpdate,
@@ -714,9 +757,12 @@ describe('MeetingsService.markConversationDone — snapshot da negociação', ()
 
     await service.markConversationDone('proc-1', 'spec-1');
 
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
-    expect(tx.$queryRaw.mock.calls[0][1]).toBe('product-money:CAR:product-1');
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(tx.$queryRaw.mock.calls[0][1]).toBe(
+      'appointment-schedule:spec-1',
+    );
+    expect(tx.$queryRaw.mock.calls[1][1]).toBe('product-money:CAR:product-1');
     expect(tx.process.findUniqueOrThrow).toHaveBeenCalledWith({
       where: { id: 'proc-1' },
       include: {
@@ -729,7 +775,11 @@ describe('MeetingsService.markConversationDone — snapshot da negociação', ()
     expect(txProcessUpdate).not.toHaveBeenCalled();
     expect(txProcessUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'proc-1', status: ProcessStatus.SCHEDULING },
+        where: {
+          id: 'proc-1',
+          status: ProcessStatus.SCHEDULING,
+          removed_at: null,
+        },
         data: expect.objectContaining({
           status: ProcessStatus.NEGOTIATION,
           negotiation_currency: ProductCurrency.USD,
@@ -793,6 +843,14 @@ describe('MeetingsService.markConversationDone — snapshot da negociação', ()
       const historyCreate = jest.fn();
       const tx = {
         $queryRaw: jest.fn().mockResolvedValue([{ locked: null }]),
+        meetingSession: {
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          findUnique: jest.fn().mockResolvedValue({
+            ...process.meeting_session,
+            ended_at: new Date('2026-01-01T11:00:00.000Z'),
+            ended_by_id: 'spec-1',
+          }),
+        },
         process: {
           findUniqueOrThrow: jest
             .fn()
@@ -834,7 +892,11 @@ describe('MeetingsService.markConversationDone — snapshot da negociação', ()
       if (expectsClaim) {
         expect(processUpdateMany).toHaveBeenCalledWith(
           expect.objectContaining({
-            where: { id: 'proc-1', status: ProcessStatus.SCHEDULING },
+            where: {
+              id: 'proc-1',
+              status: ProcessStatus.SCHEDULING,
+              removed_at: null,
+            },
           }),
         );
       } else {

@@ -48,7 +48,7 @@ export class AdminDatabaseService {
           speciality: string | null;
           commission_rate: number | null;
         }
-      | { id: string }
+      | { id: string; removed_at?: string | null }
     )[];
     total: number;
     page: number;
@@ -96,7 +96,9 @@ export class AdminDatabaseService {
             commission_rate:
               row.commission_rate === null ? null : Number(row.commission_rate),
           }
-        : { id: row.id },
+        : entity === 'processes'
+          ? { id: row.id, removed_at: row.removed_at?.toISOString() ?? null }
+          : { id: row.id },
     );
 
     return { columns, data, rowMeta, total, page: currentPage, pageSize: take };

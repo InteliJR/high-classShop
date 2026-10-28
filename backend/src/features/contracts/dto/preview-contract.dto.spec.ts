@@ -65,8 +65,6 @@ describe('PreviewContractDto — preenchimento flexível', () => {
     'operation_id',
     'return_url',
     'process_id',
-    'seller_name',
-    'seller_email',
     'buyer_name',
     'buyer_email',
     'total_commission_rate',
@@ -76,6 +74,29 @@ describe('PreviewContractDto — preenchimento flexível', () => {
 
     const errs = await erros(PreviewContractDto, payload);
     expect(errs.some((e) => e.property === campo)).toBe(true);
+  });
+
+  it.each([
+    {},
+    { seller_name: '', seller_email: '' },
+    { seller_name: 'Vendedor' },
+    { seller_email: 'vendedor@example.com' },
+  ])('aceita vendedor incompleto na prévia (%j)', async (seller) => {
+    const payload = {
+      ...minimoPreview,
+      seller_name: undefined,
+      seller_email: undefined,
+      ...seller,
+    };
+    expect(await erros(PreviewContractDto, payload)).toHaveLength(0);
+  });
+
+  it('continua validando o e-mail preenchido', async () => {
+    const errs = await erros(PreviewContractDto, {
+      ...minimoPreview,
+      seller_email: 'inválido',
+    });
+    expect(errs.some((e) => e.property === 'seller_email')).toBe(true);
   });
 
   // Opcional não significa "aceita lixo": o tipo ainda é validado quando vem.
