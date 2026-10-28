@@ -26,6 +26,7 @@ export interface Process {
   specialist_id: string;
   product_id?: string | null;
   notes?: string;
+  consultancy_reason?: string | null;
   created_at: string;
   updated_at: string;
   rejection_reason?: string | null;

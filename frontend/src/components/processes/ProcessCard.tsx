@@ -40,6 +40,7 @@ import {
   type DelegatedProcessTimelineEvent,
 } from "../../services/processes.service";
 import { rescheduleAppointment } from "../../services/appointments.service";
+import ConsultancyReason from "./ConsultancyReason";
 import { adminJourneyRoute } from "../../lib/admin-specialist-journey";
 
 function getActionErrorMessage(error: unknown, fallback: string): string {
@@ -603,6 +604,7 @@ export default function ProcessCard({
       {isClientView && <SpecialistContactCard process={process} />}
 
       {/* Stepper/Timeline - Vertical on mobile, Horizontal on tablet+ */}
+      {!isClientView && <ConsultancyReason reason={process.consultancy_reason} />}
       <div className="px-3 py-4 md:px-6 md:py-6">
         {/* Contextual Status Message - No redundant badge */}
         <div className="mb-4">

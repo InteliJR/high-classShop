@@ -27,6 +27,7 @@ export class ProcessResponse {
   };
   product: Product | null;
   notes: string | null;
+  consultancy_reason?: string | null;
   document_count?: number;
   last_activity?: Date;
   created_at: Date;

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { ChevronLeft, ChevronRight, FileText, AlertCircle } from "lucide-react";
 import { useAuth } from "../../store/authStateManager";
 import Loading from "../../components/ui/Loading";
@@ -8,6 +9,8 @@ import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
 import { PageHeader } from "../../components/patterns/PageHeader";
 import { EmptyState } from "../../components/patterns/EmptyState";
+import ConsultancyRequestConfirmation from "../../components/appointments/ConsultancyRequestConfirmation";
+import type { AppointmentSchedulingMethod } from "../../services/appointments.service";
 
 interface ProcessClient {
   id: string;
@@ -25,6 +28,9 @@ interface ProcessClient {
     | "CANCELLED"
     | null;
   appointment_datetime?: string | null;
+  appointment_id?: string | null;
+  appointment_scheduling_method?: AppointmentSchedulingMethod | null;
+  consultancy_reason?: string | null;
   product_type: "CAR" | "BOAT" | "AIRCRAFT";
   notes?: string;
   created_at: string;
@@ -81,6 +87,7 @@ interface ApiResponse {
  */
 export default function CustomerProcessesPage() {
   const { user } = useAuth();
+  const location = useLocation();
   const [processes, setProcesses] = useState<ProcessClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +97,12 @@ export default function CustomerProcessesPage() {
   const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
   const itemsPerPage = 10;
+  const requestedAppointmentId = typeof location.state?.consultancyAppointmentId === "string"
+    ? location.state.consultancyAppointmentId
+    : null;
+  const requestedProcess = requestedAppointmentId
+    ? processes.find((process) => process.appointment_id === requestedAppointmentId && process.consultancy_reason?.trim())
+    : undefined;
 
   const hasMeetingRelevantProcesses = (list: ProcessClient[]): boolean => {
     return list.some(
@@ -170,6 +183,7 @@ export default function CustomerProcessesPage() {
   return (
     <div className="w-full">
       <PageHeader title="Meus Processos" />
+      {!error && <ConsultancyRequestConfirmation process={requestedProcess} />}
 
       {/* Error */}
       {error && (
