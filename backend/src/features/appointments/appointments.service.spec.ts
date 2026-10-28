@@ -1252,7 +1252,7 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
       appointment_datetime: new Date('2099-01-01T10:00:00Z'),
       created_at: new Date('2026-10-25T12:00:00Z'), updated_at: new Date('2026-10-25T12:00:00Z'),
       client: { id: 'client-1', name: 'Cliente', surname: 'Teste' },
-      specialist: { id: 'specialist-1', name: 'Especialista', surname: 'Teste' }, process: null,
+      specialist: { id: 'specialist-1', name: 'Especialista', surname: 'Teste' }, process: { id: 'process-1', status: ProcessStatus.NEGOTIATION, meeting_session: { ended_at: new Date('2099-01-01T11:00:00Z') } },
     };
     const updated = { ...appointment, status: StatusAgendamento.COMPLETED, notes: notes || originalReason };
     const tx = { $queryRaw: jest.fn().mockResolvedValue([]), appointment: {
@@ -1275,7 +1275,7 @@ describe('AppointmentsService.updateStatus — snapshot da negociação', () => 
       id: 'appointment-1', client_id: 'client-1', specialist_id: 'specialist-1',
       product_type: null, product_id: null, notes: 'Quero orientação para escolher um carro',
       status: StatusAgendamento.SCHEDULED, appointment_datetime: new Date('2099-01-01T10:00:00Z'),
-      process: { id: 'process-1', status: ProcessStatus.SCHEDULING },
+      process: { id: 'process-1', status: ProcessStatus.SCHEDULING, meeting_session: { ended_at: new Date('2099-01-01T11:00:00Z') } },
     };
     const prisma = { appointment: { findUnique: jest.fn().mockResolvedValue(appointment) }, $transaction: jest.fn() };
     const service = new AppointmentsService(prisma as never, {} as never, {} as never);
