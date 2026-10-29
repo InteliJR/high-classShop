@@ -62,8 +62,13 @@ describe("pending product request contracts", () => {
 
   it("preserves consultancy EMAIL without datetime", async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { data: { id: "appointment-1" } } });
-    await createConsultancyAppointment({ client_id: base.client_id, specialist_id: base.specialist_id, scheduling_method: "EMAIL" });
-    expect(api.post).toHaveBeenCalledWith("/appointments/pending", { client_id: base.client_id, specialist_id: base.specialist_id, scheduling_method: "EMAIL" }, { withCredentials: true });
+    await createConsultancyAppointment({ client_id: base.client_id, specialist_id: base.specialist_id, scheduling_method: "EMAIL", notes: " Meu motivo " });
+    expect(api.post).toHaveBeenCalledWith("/appointments/pending", { client_id: base.client_id, specialist_id: base.specialist_id, scheduling_method: "EMAIL", notes: "Meu motivo" }, { withCredentials: true });
+  });
+
+  it.each(["", " \n ", "a".repeat(501)])("rejects invalid consultancy reason before HTTP: %p", async notes => {
+    await expect(createConsultancyAppointment({ client_id: base.client_id, specialist_id: base.specialist_id, scheduling_method: "EMAIL", notes })).rejects.toThrow(/motivo/);
+    expect(api.post).not.toHaveBeenCalled();
   });
 });
 

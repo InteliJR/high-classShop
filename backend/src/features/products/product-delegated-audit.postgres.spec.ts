@@ -18,7 +18,7 @@ describeWithPostgres('delegated product mutation audit — PostgreSQL', () => {
   const adminId = randomUUID();
   const suffix = randomUUID().replaceAll('-', '');
   const s3 = {
-    uploadBase64Image: jest.fn(),
+    uploadImageAuto: jest.fn(),
     getSignedUrl: jest.fn(async (key) => key),
   } as any;
   const actorContext = {

@@ -1,3 +1,4 @@
+import { getConsultancyReason } from './consultancy-reason';
 import {
   BadRequestException,
   ConflictException,
@@ -342,6 +343,38 @@ export class ProcessesService {
       status === StatusAgendamento.SCHEDULED ||
       status === StatusAgendamento.COMPLETED
     );
+  }
+
+  private projectSpecialistContacts(
+    process: {
+      client_id: string;
+      status: ProcessStatus;
+      appointment?: { status: StatusAgendamento } | null;
+      specialist: {
+        id: string;
+        name: string;
+        surname?: string;
+        speciality: ProductType | null;
+        email?: string | null;
+        phone?: string | null;
+      };
+    },
+    requester: { id?: string; role?: string },
+  ): ProcessResponse['specialist'] {
+    const visible =
+      requester.role === UserRole.CUSTOMER &&
+      requester.id === process.client_id &&
+      process.status !== ProcessStatus.REJECTED &&
+      this.isAppointmentContactVisible(process.appointment?.status);
+
+    return {
+      id: process.specialist.id,
+      name: process.specialist.name,
+      surname: process.specialist.surname,
+      especialidade: process.specialist.speciality,
+      email: visible ? (process.specialist.email?.trim() || null) : null,
+      phone: visible ? (process.specialist.phone?.trim() || null) : null,
+    };
   }
 
   private projectClientContacts(
@@ -988,6 +1021,9 @@ export class ProcessesService {
             appointment: {
               select: {
                 status: true,
+                notes: true,
+                product_type: true,
+                product_id: true,
                 appointment_datetime: true,
                 scheduling_method: true,
                 specialist_rescheduled_at: true,
@@ -1027,6 +1063,7 @@ export class ProcessesService {
         status: process.status,
         appointment_id: process.appointment_id ?? null,
         appointment_status: process.appointment?.status ?? null,
+        consultancy_reason: getConsultancyReason(process.appointment),
         appointment_datetime: process.appointment?.appointment_datetime ?? null,
         appointment_scheduling_method:
           process.appointment?.scheduling_method ?? null,
@@ -1087,6 +1124,9 @@ export class ProcessesService {
           appointment: {
             select: {
               status: true,
+              notes: true,
+              product_type: true,
+              product_id: true,
               appointment_datetime: true,
               scheduling_method: true,
               specialist_rescheduled_at: true,
@@ -1106,18 +1146,12 @@ export class ProcessesService {
         'read',
       );
 
-      const contactVisible = this.isAppointmentContactVisible(
-        process.appointment?.status,
-      );
-      const isClient = userId === process.client_id;
-      const canSeeSpecialistPhone =
-        userRole === UserRole.CUSTOMER && isClient && contactVisible;
-
       return {
         id: process.id,
         status: process.status,
         appointment_id: process.appointment_id ?? null,
         appointment_status: process.appointment?.status ?? null,
+        consultancy_reason: getConsultancyReason(process.appointment),
         appointment_datetime: process.appointment?.appointment_datetime ?? null,
         appointment_scheduling_method:
           process.appointment?.scheduling_method ?? null,
@@ -1131,14 +1165,10 @@ export class ProcessesService {
           id: userId,
           role: userRole,
         }),
-        specialist: {
-          especialidade: process.specialist.speciality,
-          id: process.specialist.id,
-          name: process.specialist.name,
-          phone: canSeeSpecialistPhone
-            ? (process.specialist.phone ?? null)
-            : null,
-        },
+        specialist: this.projectSpecialistContacts(process, {
+          id: userId,
+          role: userRole,
+        }),
         product: this.buildProduct(process),
         created_at: process.created_at,
         notes: process.notes,
@@ -1192,6 +1222,9 @@ export class ProcessesService {
           appointment: {
             select: {
               status: true,
+              notes: true,
+              product_type: true,
+              product_id: true,
               appointment_datetime: true,
               scheduling_method: true,
               specialist_rescheduled_at: true,
@@ -1218,6 +1251,7 @@ export class ProcessesService {
         status: process.status,
         appointment_id: process.appointment_id ?? null,
         appointment_status: process.appointment?.status ?? null,
+        consultancy_reason: getConsultancyReason(process.appointment),
         appointment_datetime: process.appointment?.appointment_datetime ?? null,
         appointment_scheduling_method:
           process.appointment?.scheduling_method ?? null,
@@ -1316,6 +1350,9 @@ export class ProcessesService {
           appointment: {
             select: {
               status: true,
+              notes: true,
+              product_type: true,
+              product_id: true,
               appointment_datetime: true,
               scheduling_method: true,
               specialist_rescheduled_at: true,
@@ -1337,6 +1374,7 @@ export class ProcessesService {
         status: process.status,
         appointment_id: process.appointment_id ?? null,
         appointment_status: process.appointment?.status ?? null,
+        consultancy_reason: getConsultancyReason(process.appointment),
         appointment_datetime: process.appointment?.appointment_datetime ?? null,
         appointment_scheduling_method:
           process.appointment?.scheduling_method ?? null,
@@ -2203,9 +2241,6 @@ export class ProcessesService {
     const pageNum = Number(page) || 1;
     const perPageNum = Number(perPage) || 20;
     const skip = (pageNum - 1) * perPageNum;
-    const canSeeSpecialistPhone =
-      userRole === UserRole.CUSTOMER && userId === clientId;
-
     const [processes, count] = await Promise.all([
       this.prismaService.process.findMany({
         where,
@@ -2218,6 +2253,9 @@ export class ProcessesService {
           appointment: {
             select: {
               status: true,
+              notes: true,
+              product_type: true,
+              product_id: true,
               appointment_datetime: true,
               scheduling_method: true,
               specialist_rescheduled_at: true,
@@ -2241,6 +2279,7 @@ export class ProcessesService {
       status: process.status,
       appointment_id: process.appointment_id ?? null,
       appointment_status: process.appointment?.status ?? null,
+        consultancy_reason: getConsultancyReason(process.appointment),
       appointment_datetime: process.appointment?.appointment_datetime ?? null,
       appointment_scheduling_method:
         process.appointment?.scheduling_method ?? null,
@@ -2254,16 +2293,10 @@ export class ProcessesService {
         id: userId,
         role: userRole,
       }),
-      specialist: {
-        especialidade: process.specialist.speciality,
-        id: process.specialist.id,
-        name: process.specialist.name,
-        phone:
-          canSeeSpecialistPhone &&
-          this.isAppointmentContactVisible(process.appointment?.status)
-            ? (process.specialist.phone ?? null)
-            : null,
-      },
+      specialist: this.projectSpecialistContacts(process, {
+        id: userId,
+        role: userRole,
+      }),
       product: this.buildProduct(process),
       created_at: process.created_at,
       notes: process.notes,

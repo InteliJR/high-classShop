@@ -7,6 +7,8 @@ describe('CarsService — UUID do produto', () => {
     const carId = '11111111-1111-4111-8111-111111111111';
     const findUnique = jest.fn().mockResolvedValue({
       id: carId,
+      valor: new Prisma.Decimal('1500000.01'),
+      currency: ProductCurrency.BRL,
       images: [],
     });
     const service = new CarsService(
@@ -15,7 +17,10 @@ describe('CarsService — UUID do produto', () => {
       {} as any,
     );
 
-    await service.findOne(carId);
+    const result = await service.findOne(carId);
+
+    expect(result.valor).toBe(1500000.01);
+    expect(result.currency).toBe(ProductCurrency.BRL);
 
     expect(findUnique).toHaveBeenCalledWith({
       where: { id: carId },

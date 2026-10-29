@@ -24,6 +24,7 @@ export type CalendlySyncState =
 interface UseCalendlySchedulingOptions {
   successRedirectMessage: string;
   onSynced?: (status: CalendlySyncStatus) => void;
+  getSuccessRedirectState?: (status: CalendlySyncStatus) => Record<string, unknown>;
 }
 
 type PendingCalendlyAttempt = {
@@ -113,6 +114,7 @@ function resolveGraceWindow(attempt: PendingCalendlyAttempt) {
 export function useCalendlyScheduling({
   successRedirectMessage,
   onSynced,
+  getSuccessRedirectState,
 }: UseCalendlySchedulingOptions) {
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -229,7 +231,7 @@ export function useCalendlyScheduling({
         navigateTimerRef.current = setTimeout(() => {
           if (!mountedRef.current) return;
           navigate("/customer/processes", {
-            state: { message: successRedirectMessage },
+            state: { message: successRedirectMessage, ...getSuccessRedirectState?.(status) },
           });
         }, 900);
       } else if (isCalendlySyncTerminalFailure(status)) {
@@ -250,7 +252,7 @@ export function useCalendlyScheduling({
       console.error("Erro ao sincronizar evento do Calendly:", err);
       setSyncState("error");
       setSyncMessage(
-        "Agendamento confirmado no Calendly, mas houve falha ao sincronizar com a plataforma. Redirecionando para Meus Processos...",
+        "Não foi possível verificar o horário na plataforma. Confira Meus Processos antes de tentar novamente.",
       );
       setIsModalOpen(false);
       navigateTimerRef.current = setTimeout(() => {
@@ -258,7 +260,7 @@ export function useCalendlyScheduling({
         navigate("/customer/processes", {
           state: {
             message:
-              "Agendamento confirmado no Calendly! Se o horário não aparecer imediatamente em Meus Processos, atualize a página em instantes.",
+              "Não foi possível verificar o horário do Calendly. Confira seus processos antes de tentar novamente.",
           },
         });
       }, 1000);

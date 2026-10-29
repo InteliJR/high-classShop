@@ -1,4 +1,8 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   DeleteObjectCommand,
@@ -67,18 +71,22 @@ export class S3Service {
    */
   async uploadBase64Image(base64Data: string, key: string): Promise<string> {
     // Remove o prefixo "data:image/...;base64," se existir
-    const base64Match = base64Data.match(/^data:image\/(\w+);base64,(.+)$/);
-    let buffer: Buffer;
-    let contentType = 'image/jpeg'; // default
+    const base64Match = base64Data.match(
+      /^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i,
+    );
+    const contentType = base64Match?.[1].toLowerCase() ?? 'image/jpeg';
+    const payload = (base64Match?.[2] ?? base64Data).replace(/\s/g, '');
+    const buffer = Buffer.from(payload, 'base64');
 
-    if (base64Match) {
-      const imageType = base64Match[1]; // jpeg, png, etc
-      const base64Content = base64Match[2];
-      buffer = Buffer.from(base64Content, 'base64');
-      contentType = `image/${imageType}`;
-    } else {
-      // Assume que já é base64 puro
-      buffer = Buffer.from(base64Data, 'base64');
+    // Buffer.from ignora caracteres inválidos: uma URL ou data URI malformada
+    // virava um objeto corrompido, mas o upload parecia ter dado certo.
+    if (
+      !/^[a-z0-9+/]+={0,2}$/i.test(payload) ||
+      buffer.length === 0 ||
+      buffer.toString('base64').replace(/=+$/, '') !==
+        payload.replace(/=+$/, '')
+    ) {
+      throw new BadRequestException('Imagem base64 inválida.');
     }
 
     const command = new PutObjectCommand({

@@ -91,7 +91,8 @@ export class CreateAppointmentDto {
   appointment_datetime?: string | Date; // Será validado como DateTime no service
 
   /**
-   * Anotações opcionais sobre o agendamento
+   * Motivo obrigatório para novos pedidos de consultoria, validado no serviço.
+   * Anotações opcionais quando o agendamento está associado a um produto.
    * Máximo 500 caracteres
    * Exemplos: "Test drive do Ferrari F8", "Inspeção de barco", "Manutenção"
    */

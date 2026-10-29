@@ -26,6 +26,7 @@ export interface Process {
   specialist_id: string;
   product_id?: string | null;
   notes?: string;
+  consultancy_reason?: string | null;
   created_at: string;
   updated_at: string;
   rejection_reason?: string | null;
@@ -48,10 +49,11 @@ export interface Process {
   specialist?: {
     id: string;
     name?: string;
+    surname?: string;
     especialidade?: string;
-    email?: string;
-    // Backend oculta o telefone do especialista para o cliente enquanto o
-    // agendamento não está confirmado — aqui chega null nesse caso.
+    email?: string | null;
+    // A API libera e-mail e telefone ao cliente dono após a confirmação,
+    // enquanto o processo não estiver rejeitado.
     phone?: string | null;
   };
   // Flag para identificar consultoria (sem produto ainda)
