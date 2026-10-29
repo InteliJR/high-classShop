@@ -98,11 +98,12 @@ export default function ProductProcessTimeline({
         {steps.map((step, index) => {
           const isFinal = index === steps.length - 1;
           // Na rejeição, a etapa em que o processo parou também foi alcançada.
+          // Em PROCESSING_CONTRACT (1.5), Negociação segue como etapa atual, sem check.
           const done = isFinal
             ? isCompleted || isRejected
             : isRejected
               ? index <= reachedIndex
-              : index < reachedIndex;
+              : index < Math.floor(reachedIndex);
           const current =
             !isFinal && !isCompleted && !isRejected && index === Math.floor(reachedIndex);
           const date = lastChange(step.statuses);

@@ -34,6 +34,10 @@ describe("ProductProcessTimeline", () => {
   it("keeps PROCESSING_CONTRACT inside the negotiation step", () => {
     render(<ProductProcessTimeline process={{ ...base, status: "PROCESSING_CONTRACT" }} />);
     expect(steps().find((step) => step.current)?.label).toContain("Negociação");
+    const negotiation = screen.getAllByRole("listitem")[1];
+    // Etapa atual mostra o número, não o check de concluída.
+    expect(negotiation.querySelector("svg")).toBeNull();
+    expect(screen.getAllByRole("listitem")[0].querySelector("svg")).not.toBeNull();
     expect(screen.getByText("O contrato está sendo preparado.")).toBeTruthy();
   });
 
