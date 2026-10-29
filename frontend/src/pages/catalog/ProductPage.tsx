@@ -16,6 +16,7 @@ import {
   createPendingAppointment,
   getActiveProcessSnapshot,
   type ActiveProcessSnapshot,
+  type ProductProcessSummary,
   type ProductPendingAppointmentInput,
   type PendingAppointmentCreated,
 } from "../../services/appointments.service";
@@ -35,6 +36,7 @@ import StartProcessForClientModal from "../../components/processes/StartProcessF
 import AppointmentDateTimeModal from "../../components/appointments/AppointmentDateTimeModal";
 import NoCalendlySchedulingActions from "../../components/appointments/NoCalendlySchedulingActions";
 import EmailSchedulingSuccess from "../../components/appointments/EmailSchedulingSuccess";
+import ProductProcessTimeline from "../../components/processes/ProductProcessTimeline";
 import { useAuth } from "../../store/authStateManager";
 import { useCheckAppointment } from "../../hooks/useCheckAppointment";
 import { useCalendlyScheduling } from "../../hooks/useCalendlyScheduling";
@@ -122,6 +124,7 @@ export default function ProductPage() {
   const [isDateTimeModalOpen, setIsDateTimeModalOpen] = useState(false);
   const [dateTimeError, setDateTimeError] = useState<string | null>(null);
   const [creationNotice, setCreationNotice] = useState<string | null>(null);
+  const [isNewSchedulingOpen, setIsNewSchedulingOpen] = useState(false);
   const scopeKey = JSON.stringify([
     user?.id,
     user?.role,
@@ -154,6 +157,7 @@ export default function ProductPage() {
     setIsDateTimeModalOpen(false);
     setDateTimeError(null);
     setCreationNotice(null);
+    setIsNewSchedulingOpen(false);
   }, [scopeKey]);
 
   const {
@@ -199,6 +203,22 @@ export default function ProductPage() {
   const emailRequest = isPendingEmailRequest(currentRequest)
     ? currentRequest
     : null;
+  // Etapa do processo, separada do estado do agendamento. Um pedido recém-criado
+  // ainda não refletido pelo servidor começa em SCHEDULING.
+  const serverProcess = existingAppointment?.process ?? null;
+  const displayedProcess: ProductProcessSummary | null =
+    localRequest && !serverProcess?.is_active
+      ? {
+          id: localRequest.snapshot.process_id,
+          status: "SCHEDULING",
+          is_active: true,
+          status_history: [],
+        }
+      : serverProcess;
+  const closedProcess =
+    !currentRequest && serverProcess && !serverProcess.is_active
+      ? serverProcess
+      : null;
 
   const categoryMap: Record<string, string> = {
     car: "cars",
@@ -485,6 +505,9 @@ export default function ProductPage() {
                 {creationNotice || calendlySyncMessage}
               </Alert>
             )}
+          {user?.role === "CUSTOMER" && displayedProcess && (
+            <ProductProcessTimeline process={displayedProcess} />
+          )}
           {!user ? (
             <div className="space-y-4">
               <Alert variant="warning">
@@ -606,6 +629,21 @@ export default function ProductPage() {
                 Acompanhar processo
               </a>
             </div>
+          ) : closedProcess?.status === "COMPLETED" ? (
+            <a
+              href="/customer/processes"
+              className="inline-flex w-full justify-center rounded-lg border border-border px-4 py-3 font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-focus-ring"
+            >
+              Acompanhar processo
+            </a>
+          ) : closedProcess && !isNewSchedulingOpen ? (
+            <Button
+              variant="light"
+              className="w-full"
+              onClick={() => setIsNewSchedulingOpen(true)}
+            >
+              Fazer novo agendamento
+            </Button>
           ) : checkAppointmentError ? (
             <Alert variant="warning">
               <p className="text-sm">

@@ -14,6 +14,7 @@ vi.mock("../services/appointments.service", () => ({ checkExistingAppointment: v
 const found: ExistingAppointmentCheck = {
   exists: true, appointment_id: "appointment-1", process_id: "process-1", appointment_status: "PENDING",
   scheduling_method: "EMAIL", appointment_datetime: "2099-10-20T17:30:00.000Z",
+  process: { id: "process-1", status: "SCHEDULING", is_active: true, status_history: [] },
 };
 
 function deferred() {
@@ -29,7 +30,7 @@ async function advance(ms = 500) {
   await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
 }
 
-beforeEach(() => { useAuth.setState({ user: customer }); vi.useFakeTimers(); vi.mocked(checkExistingAppointment).mockResolvedValue({ exists: false }); });
+beforeEach(() => { useAuth.setState({ user: customer }); vi.useFakeTimers(); vi.mocked(checkExistingAppointment).mockResolvedValue({ exists: false, process: null }); });
 afterEach(() => { cleanup(); useAuth.setState({ user: null }); vi.useRealTimers(); vi.resetAllMocks(); });
 
 describe("owned appointment check hook", () => {
@@ -61,7 +62,7 @@ describe("owned appointment check hook", () => {
 
     it.each(scopeChanges.flatMap((change) => [
       { ...change, previous: found, resultName: "snapshot" },
-      { ...change, previous: { exists: false } as ExistingAppointmentCheck, resultName: "verified absence" },
+      { ...change, previous: { exists: false, process: null } as ExistingAppointmentCheck, resultName: "verified absence" },
     ]))("hides $resultName before effects on a change of $name", async ({ user, params, loading, previous }) => {
       vi.mocked(checkExistingAppointment).mockResolvedValueOnce(previous);
       const renders: ReturnType<typeof useCheckAppointment>[] = [];
@@ -105,7 +106,7 @@ describe("owned appointment check hook", () => {
 
     it.each([
       { name: "snapshot", value: found },
-      { name: "verified absence", value: { exists: false } as ExistingAppointmentCheck },
+      { name: "verified absence", value: { exists: false, process: null } as ExistingAppointmentCheck },
       { name: "rejection", value: null },
     ])("discards a stale $name across an account switch in every commit", async ({ value }) => {
       const earlier = deferred();
@@ -167,10 +168,36 @@ describe("owned appointment check hook", () => {
     expect(result.current).toEqual({ existingAppointment: found, isLoading: false, error: null });
   });
 
+  it("refetches silently when the tab becomes visible, keeping the last result", async () => {
+    const advanced: ExistingAppointmentCheck = {
+      ...found, appointment_id: null, appointment_status: null, scheduling_method: null, appointment_datetime: null,
+      process: { id: "process-1", status: "NEGOTIATION", is_active: true, status_history: [] },
+    };
+    vi.mocked(checkExistingAppointment).mockResolvedValueOnce(found).mockResolvedValueOnce(advanced);
+    const { result } = renderHook(() => useCheckAppointment("specialist-1", "CAR", "car-1"));
+    await advance();
+    expect(result.current.existingAppointment).toEqual(found);
+    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    expect(result.current).toEqual({ existingAppointment: found, isLoading: false, error: null });
+    await advance();
+    expect(checkExistingAppointment).toHaveBeenCalledTimes(2);
+    expect(result.current).toEqual({ existingAppointment: advanced, isLoading: false, error: null });
+  });
+
+  it("keeps the last result when a focus refetch fails", async () => {
+    vi.mocked(checkExistingAppointment).mockResolvedValueOnce(found).mockRejectedValueOnce(new Error("offline"));
+    const { result } = renderHook(() => useCheckAppointment("specialist-1", "CAR", "car-1"));
+    await advance();
+    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    await advance();
+    expect(checkExistingAppointment).toHaveBeenCalledTimes(2);
+    expect(result.current).toEqual({ existingAppointment: found, isLoading: false, error: null });
+  });
+
   it("exposes exists:false as a discriminated successful result", async () => {
     const { result } = renderHook(() => useCheckAppointment("specialist-1", "CAR", "car-1"));
     await advance();
-    expect(result.current.existingAppointment).toEqual({ exists: false });
+    expect(result.current.existingAppointment).toEqual({ exists: false, process: null });
     expect(result.current.error).toBeNull();
   });
 
@@ -201,7 +228,7 @@ describe("owned appointment check hook", () => {
     rerender({ productId: "car-2" });
     expect(result.current).toEqual({ existingAppointment: null, isLoading: true, error: null });
     await advance();
-    expect(result.current.existingAppointment).toEqual({ exists: false });
+    expect(result.current.existingAppointment).toEqual({ exists: false, process: null });
   });
 
   it("uses a readable fallback for a non-Error rejection", async () => {
@@ -221,19 +248,19 @@ describe("owned appointment check hook", () => {
     await advance();
     await act(async () => { if (outcome === "resolve") earlier.resolve(found); else earlier.reject(new Error("obsolete")); });
     expect(result.current).toEqual({ existingAppointment: null, isLoading: true, error: null });
-    await act(async () => { latest.resolve({ exists: false }); });
-    expect(result.current).toEqual({ existingAppointment: { exists: false }, isLoading: false, error: null });
+    await act(async () => { latest.resolve({ exists: false, process: null }); });
+    expect(result.current).toEqual({ existingAppointment: { exists: false, process: null }, isLoading: false, error: null });
   });
 
   it("does not let an earlier success replace the latest result", async () => {
     const earlier = deferred();
-    vi.mocked(checkExistingAppointment).mockReturnValueOnce(earlier.promise).mockResolvedValueOnce({ exists: false });
+    vi.mocked(checkExistingAppointment).mockReturnValueOnce(earlier.promise).mockResolvedValueOnce({ exists: false, process: null });
     const { result, rerender } = renderHook(({ productId }) => useCheckAppointment("specialist-1", "CAR", productId), { initialProps: { productId: "car-1" } });
     await advance();
     rerender({ productId: "car-2" });
     await advance();
     await act(async () => { earlier.resolve(found); });
-    expect(result.current).toEqual({ existingAppointment: { exists: false }, isLoading: false, error: null });
+    expect(result.current).toEqual({ existingAppointment: { exists: false, process: null }, isLoading: false, error: null });
   });
 
   it("invalidates an in-flight response when parameters become missing", async () => {
@@ -269,12 +296,12 @@ describe("owned appointment check hook", () => {
     const { result } = renderHook(() => useCheckAppointment("specialist-1", "CAR", "car-1"), { wrapper: StrictMode });
     await advance();
     expect(checkExistingAppointment).toHaveBeenCalledExactlyOnceWith("specialist-1", "CAR", "car-1");
-    expect(result.current).toEqual({ existingAppointment: { exists: false }, isLoading: false, error: null });
+    expect(result.current).toEqual({ existingAppointment: { exists: false, process: null }, isLoading: false, error: null });
   });
 
   it("invalidates a former customer's in-flight response on account switch", async () => {
     const earlier = deferred();
-    vi.mocked(checkExistingAppointment).mockReturnValueOnce(earlier.promise).mockResolvedValueOnce({ exists: false });
+    vi.mocked(checkExistingAppointment).mockReturnValueOnce(earlier.promise).mockResolvedValueOnce({ exists: false, process: null });
     const { result } = renderHook(() => useCheckAppointment("specialist-1", "CAR", "car-1"));
     await advance();
     act(() => { useAuth.setState({ user: { ...customer, id: "customer-2" } }); });
@@ -283,7 +310,7 @@ describe("owned appointment check hook", () => {
     expect(result.current.existingAppointment).toBeNull();
     await advance();
     expect(checkExistingAppointment).toHaveBeenCalledTimes(2);
-    expect(result.current.existingAppointment).toEqual({ exists: false });
+    expect(result.current.existingAppointment).toEqual({ exists: false, process: null });
   });
 
   it.each([null, { ...customer, role: "SPECIALIST" as const }])("does not check for a missing or non-customer identity", async (user) => {
