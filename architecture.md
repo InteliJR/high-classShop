@@ -699,25 +699,35 @@ Controllers:
 
 ### Appointments
 - `GET /appointments/check`
-  - payload:
-```json
-{
-  "client_id": "",
-  "specialist_id": "",
-  "product_type": "CAR",
-  "product_id": 0
-}
-```
-  - resposta:
+  - Apenas `CUSTOMER` (outros papéis: 403). O cliente vem do JWT; enviar `client_id` retorna 400.
+  - Query: `specialist_id`, `product_type` (`CAR` | `BOAT` | `AIRCRAFT`), `product_id`
+  - `exists`: há processo **ativo** (`SCHEDULING`…`DOCUMENTATION`) do cliente para o produto — é a trava anti-duplicidade do agendamento.
+  - `process`: o processo ativo ou, sem ativo, o `COMPLETED`/`REJECTED` mais recente (`null` se nunca houve). O histórico expõe só `status` + `changed_at`; o motivo de rejeição não é retornado.
+  - Campos de agendamento só para agendamento vigente (`PENDING`/`SCHEDULED`); senão `null`. `specialist_contact_email` só para pedido `EMAIL`.
+  - resposta (processo ativo):
 ```json
 {
   "success": true,
   "data": {
-    "id": "",
-    "status": "PENDING"
+    "exists": true,
+    "appointment_id": null,
+    "process_id": "uuid",
+    "appointment_status": null,
+    "scheduling_method": null,
+    "appointment_datetime": null,
+    "process": {
+      "id": "uuid",
+      "status": "NEGOTIATION",
+      "is_active": true,
+      "status_history": [
+        { "status": "SCHEDULING", "changed_at": "2026-10-01T12:00:00.000Z" },
+        { "status": "NEGOTIATION", "changed_at": "2026-10-03T12:00:00.000Z" }
+      ]
+    }
   }
 }
 ```
+  - resposta (sem processo ativo): `{ "exists": false, "process": { "status": "REJECTED", "is_active": false, ... } | null }`
 - `GET /appointments`
   - Query: paginação
   - Resposta: lista de agendamentos do usuário
