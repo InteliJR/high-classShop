@@ -2069,6 +2069,9 @@ export class AppointmentsService {
       },
     };
     // Ativo tem prioridade; sem ativo, mostra o encerrado mais recente.
+    // updated_at serve como data de encerramento porque processo COMPLETED/
+    // REJECTED com produto não recebe mais escrita (transições não saem de
+    // estado terminal); se isso mudar, ordenar pelo ProcessStatusHistory.
     const process =
       (await this.prisma.process.findFirst({
         where: { ...scope, status: { in: ACTIVE_PROCESS_STATUSES } },
