@@ -278,10 +278,14 @@ export class AircraftsService {
           image_url: await this.s3Service.getSignedUrl(image.image_url),
         })),
       );
-      return { ...aircraft, images: imagesWithUrls };
+      return {
+        ...aircraft,
+        valor: aircraft.valor.toNumber(),
+        images: imagesWithUrls,
+      };
     }
 
-    return { ...aircraft };
+    return { ...aircraft, valor: aircraft.valor.toNumber() };
   }
 
   // update(id: string, updateAircraftDto: UpdateAircraftDto) {

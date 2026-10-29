@@ -232,10 +232,14 @@ export class CarsService {
           image_url: await this.s3Service.getSignedUrl(image.image_url),
         })),
       );
-      return { ...car, images: imagesWithUrls };
+      return {
+        ...car,
+        valor: car.valor.toNumber(),
+        images: imagesWithUrls,
+      };
     }
 
-    return { ...car };
+    return { ...car, valor: car.valor.toNumber() };
   }
 
   async update(

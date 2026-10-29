@@ -7,7 +7,7 @@ export interface ProductListItem {
   marca: string;
   modelo: string;
   ano?: number;
-  valor: number;
+  valor: number | string;
   currency: ProductCurrency;
   estado?: string;
   descricao?: string;
@@ -91,7 +91,7 @@ export default function ResponsiveProductList({
                     <CurrencyBadge currency={product.currency} />
                   </div>
                   <p className="mt-2 text-lg font-semibold text-ink">
-                    {formatCurrency(product.valor ?? 0, product.currency)}
+                    {formatCurrency(product.valor, product.currency)}
                   </p>
                 </div>
               </div>
@@ -187,7 +187,7 @@ export default function ResponsiveProductList({
                     {product.ano || "-"}
                   </td>
                   <td className="whitespace-nowrap py-3 pr-3 font-medium text-ink">
-                    {formatCurrency(product.valor ?? 0, product.currency)}
+                    {formatCurrency(product.valor, product.currency)}
                   </td>
                   <td className="py-3 pr-3 capitalize text-ink-soft">
                     {product.estado || "-"}

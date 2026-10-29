@@ -18,7 +18,7 @@ export interface ProductOption extends Omit<SelectOption, "id"> {
   marca: string;
   modelo: string;
   ano: number;
-  valor: number;
+  valor: number | string;
   currency?: ProductCurrency;
   imageUrl?: string;
 }
