@@ -9,7 +9,10 @@ interface UseCheckAppointmentResult {
   error: string | null;
 }
 
-/** Debounced own-request check; null means unchecked/failed, exists:false means a successful absence. */
+/**
+ * Debounced own-request check; null means unchecked/failed, exists:false means a successful absence.
+ * Refetches silently when the tab becomes visible again, keeping the last result meanwhile.
+ */
 export function useCheckAppointment(
   specialistId: string | undefined,
   productType: "CAR" | "BOAT" | "AIRCRAFT" | undefined,
@@ -23,6 +26,16 @@ export function useCheckAppointment(
     scopeKey, existingAppointment: null, isLoading: isEligible, error: null,
   }));
   const requestToken = useRef(0);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  useEffect(() => {
+    if (!isEligible) return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") setRefreshTick((tick) => tick + 1);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [isEligible]);
 
   useEffect(() => {
     const token = ++requestToken.current;
@@ -30,7 +43,11 @@ export function useCheckAppointment(
       setState({ scopeKey, existingAppointment: null, isLoading: false, error: null });
       return () => { requestToken.current = token + 1; };
     }
-    setState({ scopeKey, existingAppointment: null, isLoading: true, error: null });
+    // A focus refresh keeps the current result instead of flashing the loading state.
+    setState((previous) =>
+      previous.scopeKey === scopeKey && previous.existingAppointment
+        ? previous
+        : { scopeKey, existingAppointment: null, isLoading: true, error: null });
     const timer = setTimeout(async () => {
       try {
         const result = await checkExistingAppointment(specialistId, productType, productId);
@@ -39,10 +56,13 @@ export function useCheckAppointment(
         }
       } catch (error) {
         if (token === requestToken.current) {
-          setState({
-            scopeKey, existingAppointment: null, isLoading: false,
-            error: error instanceof Error ? error.message : "Erro ao verificar agendamentos",
-          });
+          setState((previous) =>
+            previous.scopeKey === scopeKey && previous.existingAppointment
+              ? previous
+              : {
+                  scopeKey, existingAppointment: null, isLoading: false,
+                  error: error instanceof Error ? error.message : "Erro ao verificar agendamentos",
+                });
         }
       }
     }, 500);
@@ -50,7 +70,7 @@ export function useCheckAppointment(
       requestToken.current = token + 1;
       clearTimeout(timer);
     };
-  }, [userId, role, specialistId, productType, productId, scopeKey]);
+  }, [userId, role, specialistId, productType, productId, scopeKey, refreshTick]);
 
   // Scope changes must be safe during render, before passive effects reset state.
   if (!isEligible || state.scopeKey !== scopeKey) {

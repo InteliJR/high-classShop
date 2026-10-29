@@ -57,16 +57,34 @@ export interface ApiResponse<T> {
   data: T;
 }
 
+export type ProductProcessStatus =
+  | "SCHEDULING"
+  | "NEGOTIATION"
+  | "PROCESSING_CONTRACT"
+  | "DOCUMENTATION"
+  | "COMPLETED"
+  | "REJECTED";
+
+/** Processo do cliente no produto: o ativo ou, sem ativo, o encerrado mais recente. */
+export interface ProductProcessSummary {
+  id: string;
+  status: ProductProcessStatus;
+  is_active: boolean;
+  status_history: { status: ProductProcessStatus; changed_at: string }[];
+}
+
+/** exists indica processo ativo; campos de agendamento só para agendamento vigente. */
 export type ExistingAppointmentCheck =
-  | { exists: false }
+  | { exists: false; process: ProductProcessSummary | null }
   | {
       exists: true;
-      appointment_id: string;
+      appointment_id: string | null;
       process_id: string;
-      appointment_status: Appointment["status"];
+      appointment_status: Appointment["status"] | null;
       scheduling_method: AppointmentSchedulingMethod | null;
       appointment_datetime: string | null;
       specialist_contact_email?: string;
+      process: ProductProcessSummary;
     };
 
 export interface ActiveProcessSnapshot {
