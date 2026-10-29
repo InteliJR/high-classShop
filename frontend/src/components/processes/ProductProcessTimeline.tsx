@@ -1,6 +1,5 @@
 import { Check, CheckCircle, XCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { StatusBadge } from "../patterns/StatusBadge";
 import type {
   ProductProcessStatus,
   ProductProcessSummary,
@@ -88,8 +87,7 @@ export default function ProductProcessTimeline({
         {isRejected && (
           <XCircle size={18} className="text-status-bad" aria-hidden="true" />
         )}
-        <p className="text-sm font-semibold text-ink">Etapa do processo:</p>
-        <StatusBadge status={process.status} />
+        <p className="text-sm font-semibold text-ink">Etapa do processo</p>
       </div>
       <p className="mt-1 text-sm text-muted">
         {STAGE_DESCRIPTION[process.status]}
@@ -98,11 +96,13 @@ export default function ProductProcessTimeline({
         {steps.map((step, index) => {
           const isFinal = index === steps.length - 1;
           // Na rejeição, a etapa em que o processo parou também foi alcançada.
+          // Em PROCESSING_CONTRACT (1.5), Negociação segue como etapa atual, sem check;
+          // a descrição informa que o contrato está sendo preparado.
           const done = isFinal
             ? isCompleted || isRejected
             : isRejected
               ? index <= reachedIndex
-              : index < reachedIndex;
+              : index < Math.floor(reachedIndex);
           const current =
             !isFinal && !isCompleted && !isRejected && index === Math.floor(reachedIndex);
           const date = lastChange(step.statuses);
