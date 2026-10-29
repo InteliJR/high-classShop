@@ -25,6 +25,7 @@ const checkKeys = [
   'scheduling_method',
   'appointment_datetime',
   'specialist_contact_email',
+  'process',
 ];
 
 // A dedicated URL opts in to the real PostgreSQL gate. Ordinary e2e discovery
@@ -503,7 +504,7 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
       .auth(customerToken, { type: 'bearer' })
       .query(checkQuery(fixture.cars[0].id))
       .expect(200);
-    expect(own.body.data).toEqual({ exists: false });
+    expect(own.body.data).toEqual({ exists: false, process: null });
     assertNoContacts(own.body);
     await request(app!.getHttpServer())
       .get('/api/appointments/check')
@@ -637,6 +638,14 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
         scheduling_method: 'EMAIL',
         appointment_datetime: proposedIso,
         specialist_contact_email: config.credentials.specialist.email,
+        process: {
+          id: response.body.data.process_id,
+          status: 'SCHEDULING',
+          is_active: true,
+          status_history: [
+            { status: 'SCHEDULING', changed_at: expect.any(String) },
+          ],
+        },
       });
       assertOwnerScopedSpecialistEmail(own.body);
       const duplicate = await request(app!.getHttpServer())
@@ -645,7 +654,8 @@ describeHttp('no-Calendly email scheduling (HTTP + PostgreSQL)', () => {
         .send(pendingBody(car.id))
         .expect(409);
       expect(duplicate.body.error.code).toBe('ACTIVE_PROCESS_EXISTS');
-      const { exists: _exists, ...snapshot } = own.body.data;
+      const { exists: _exists, process: _process, ...snapshot } =
+        own.body.data;
       expect(duplicate.body.error.details).toEqual({
         existing_request: snapshot,
       });
