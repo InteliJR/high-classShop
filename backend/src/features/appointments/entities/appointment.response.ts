@@ -1,21 +1,36 @@
 import {
   AppointmentSchedulingMethod,
   ProductCurrency,
+  ProcessStatus,
   ProductType,
   StatusAgendamento,
 } from '@prisma/client';
 import { Expose, Type } from 'class-transformer';
 
+/** Processo do cliente no produto; histórico expõe apenas status e data. */
+export interface ProductProcessSummary {
+  id: string;
+  status: ProcessStatus;
+  is_active: boolean;
+  status_history: { status: ProcessStatus; changed_at: Date }[];
+}
+
+/**
+ * exists indica processo ativo (trava anti-duplicidade); process traz o ativo
+ * ou, sem ativo, o encerrado mais recente. Campos de agendamento só para
+ * agendamento vigente (PENDING/SCHEDULED).
+ */
 export type ExistingAppointmentCheck =
-  | { exists: false }
+  | { exists: false; process: ProductProcessSummary | null }
   | {
       exists: true;
-      appointment_id: string;
+      appointment_id: string | null;
       process_id: string;
-      appointment_status: StatusAgendamento;
+      appointment_status: StatusAgendamento | null;
       scheduling_method: AppointmentSchedulingMethod | null;
       appointment_datetime: Date | null;
       specialist_contact_email?: string;
+      process: ProductProcessSummary;
     };
 
 export interface ActiveProcessSnapshot {
