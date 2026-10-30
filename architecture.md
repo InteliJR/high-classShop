@@ -362,6 +362,20 @@ Cada domínio expõe:
   "updated": true
 }
 ```
+- `PATCH /cars|boats|aircrafts/:id/specialist` (somente ADMIN) — transfere o produto para outro especialista ativo da mesma especialidade. `409 PRODUCT_HAS_OPEN_PROCESSES` se houver processo não concluído/rejeitado ou agendamento pendente/agendado; processos antigos mantêm o especialista original. Auditado como `PRODUCT_TRANSFER`.
+  - payload:
+```json
+{
+  "specialist_id": "uuid"
+}
+```
+  - resposta:
+```json
+{
+  "fromSpecialistId": "uuid",
+  "toSpecialistId": "uuid"
+}
+```
 - `DELETE /cars|boats|aircrafts/:id`
   - payload:
 ```json

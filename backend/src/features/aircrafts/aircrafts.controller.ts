@@ -37,6 +37,8 @@ import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-
 import { ProductCsvImportDto } from '../product-import-jobs/dto/product-csv-import.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { randomUUID } from 'node:crypto';
+import { TransferProductDto } from '../products/dto/transfer-product.dto';
+import { transferProductAsAdmin } from '../products/product-transfer';
 
 @Controller('aircrafts')
 export class AircraftsController {
@@ -257,6 +259,26 @@ export class AircraftsController {
   @Public()
   findOne(@Param('id') id: string) {
     return this.aircraftsService.findOne(id);
+  }
+
+  @Patch(':id/specialist')
+  @Roles(UserRole.ADMIN)
+  transferSpecialist(
+    @Param('id') id: string,
+    @Body() body: TransferProductDto,
+    @CurrentUser() user: UserEntity,
+  ) {
+    return transferProductAsAdmin(
+      {
+        prisma: this.prisma,
+        actorContextService: this.actorContextService,
+        delegatedAudit: this.delegatedAudit,
+      },
+      user,
+      ProductType.AIRCRAFT,
+      id,
+      body.specialist_id,
+    );
   }
 
   @Patch(':id')
