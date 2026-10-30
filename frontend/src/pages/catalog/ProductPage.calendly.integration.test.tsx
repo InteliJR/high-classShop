@@ -113,7 +113,7 @@ describe("delegated EMAIL flow with the real Radix dialog", () => {
       updated_at: "2026-01-01T00:00:00.000Z",
     });
     vi.mocked(getPublicSpecialistById).mockResolvedValue(specialist);
-    vi.mocked(checkExistingAppointment).mockResolvedValue({ exists: false });
+    vi.mocked(checkExistingAppointment).mockResolvedValue({ exists: false, process: null });
     vi.mocked(getClients).mockResolvedValue([client]);
     vi.mocked(officeService.listClients).mockResolvedValue([
       {
