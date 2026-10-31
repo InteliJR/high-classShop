@@ -417,7 +417,7 @@ export default function ProductForm({
             </button>
           </div>
           <p className="text-gray-500 text-sm mt-2">
-            Importe vários produtos de uma vez usando um arquivo CSV.
+            Importe vários produtos de uma vez usando a planilha modelo (.xlsx) ou um .csv.
           </p>
         </div>
       )}
@@ -426,7 +426,7 @@ export default function ProductForm({
       <Dialog open={isCsvModalOpen} onOpenChange={setIsCsvModalOpen}>
         <DialogContent
           open={isCsvModalOpen}
-          title={`Importar ${productType === "CAR" ? "Carros" : productType === "BOAT" ? "Lanchas" : "Aeronaves"} via CSV`}
+          title={`Importar ${productType === "CAR" ? "Carros" : productType === "BOAT" ? "Lanchas" : "Aeronaves"} via planilha`}
           className="w-[min(672px,92vw)]"
         >
           <XlsxImporter

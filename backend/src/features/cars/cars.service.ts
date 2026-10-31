@@ -16,7 +16,6 @@ import {
   FiltersCarMeta,
   RangeCarFilters,
 } from 'src/shared/dto/filters.dto';
-import { CAR_COLUMNS } from 'src/shared/constants/product-columns';
 import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 import { publicCarSelect } from 'src/shared/selects/public-catalog.select';
 import { randomUUID } from 'node:crypto';
@@ -31,8 +30,6 @@ import {
 export class CarsService {
   private readonly logger = new Logger(CarsService.name);
 
-  // Colunas da planilha de carros — fonte única em shared/constants/product-columns.ts
-  private readonly xlsxColumns = CAR_COLUMNS;
 
   constructor(
     private prismaService: PrismaService,
@@ -324,27 +321,4 @@ export class CarsService {
     }
   }
 
-  async getCsvTemplate(): Promise<Buffer> {
-    const headers = this.xlsxColumns.map((column) => column.name).join(';');
-    const exampleValues = [
-      'BMW-X5-1',
-      'BMW',
-      'X5',
-      '450000',
-      'BRL',
-      'São Paulo',
-      '2023',
-      'Preto',
-      '15000',
-      'Automático',
-      'Gasolina',
-      'SUV',
-      'Carro em excelente estado',
-      'https://drive.google.com/drive/folders/SEU_FOLDER_ID',
-    ].join(';');
-
-    const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
-    const content = Buffer.from(`${headers}\n${exampleValues}\n`, 'utf-8');
-    return Buffer.concat([BOM, content]);
-  }
 }

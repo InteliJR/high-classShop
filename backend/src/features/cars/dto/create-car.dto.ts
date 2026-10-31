@@ -39,8 +39,9 @@ export class CreateCarDto {
   @IsString()
   estado: string;
 
+  @IsOptional()
   @IsNumber()
-  ano: number;
+  ano?: number;
 
   @IsOptional()
   @IsString()

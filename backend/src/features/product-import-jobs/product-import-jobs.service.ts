@@ -127,14 +127,37 @@ class ProductImportJobLeaseLostError extends Error {
   }
 }
 
+// identificador nunca chega vazio de parseImportRows (é gerado quando falta);
+// a checagem protege payloads montados por outro caminho.
 const REQUIRED_PRODUCT_FIELDS = [
-  { key: 'identificador', label: 'Identificador do veículo' },
-  { key: 'marca', label: 'Marca do veículo' },
-  { key: 'modelo', label: 'Nome do veículo' },
-  { key: 'valor', label: 'Valor do veículo' },
-  { key: 'estado', label: 'Estado do veículo' },
-  { key: 'ano', label: 'Ano do veículo' },
+  { key: 'identificador', label: 'Identificador' },
+  { key: 'valor', label: 'Valor do produto' },
+  { key: 'currency', label: 'Moeda (use BRL ou USD)' },
 ] as const;
+
+// Produto importado só com valor e moeda: o que aparece no catálogo até alguém
+// completar o cadastro. Aplicado só na criação, para um reimport não apagar o
+// que foi editado à mão.
+const DEFAULT_MARCA: Record<ProductType, string> = {
+  [ProductType.CAR]: 'Carro',
+  [ProductType.BOAT]: 'Lancha',
+  [ProductType.AIRCRAFT]: 'Aeronave',
+};
+const DEFAULT_ESTADO = 'não informado';
+
+// Colunas que não descrevem o produto: ficam fora do identificador automático
+// para que reimportar com outro preço ou outras fotos atualize o mesmo produto.
+const NON_DESCRIPTIVE_COLUMNS = new Set([
+  'identificador',
+  'valor',
+  'currency',
+  'folder_url',
+]);
+export const AUTO_IDENTIFIER_PREFIX = 'auto-';
+
+export function isImportSpreadsheet(fileName?: string): boolean {
+  return /\.(xlsx|csv)$/i.test(fileName ?? '');
+}
 
 @Injectable()
 export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
@@ -232,24 +255,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    const { rows } = this.xlsxImportService.parseCsv(fileBuffer);
-
-    const structureValidation = this.xlsxImportService.validateStructure(
-      rows,
-      this.getColumnsForType(productType),
-    );
-
-    if (!structureValidation.valid) {
-      throw new BadRequestException({
-        message: 'Estrutura do CSV inválida',
-        errors: structureValidation.errors,
-        missingRequired: structureValidation.missingRequired,
-        unknownColumns: structureValidation.unknownColumns,
-      });
-    }
-
-    const normalizedRows = rows.map((row) => this.normalizeProductRow(row));
-    this.validateUniqueIdentifiers(normalizedRows);
+    const normalizedRows = await this.parseImportRows(fileBuffer, productType);
     const specialistId = options.context?.specialistId ?? user.id;
     let creationResult;
     try {
@@ -370,21 +376,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         'Modo de importação inválido. Use ADDITIVE ou SYNCHRONIZE.',
       );
     }
-    const { rows } = this.xlsxImportService.parseCsv(fileBuffer);
-    const structureValidation = this.xlsxImportService.validateStructure(
-      rows,
-      this.getColumnsForType(productType),
-    );
-    if (!structureValidation.valid) {
-      throw new BadRequestException({
-        message: 'Estrutura do CSV inválida',
-        errors: structureValidation.errors,
-        missingRequired: structureValidation.missingRequired,
-        unknownColumns: structureValidation.unknownColumns,
-      });
-    }
-    const normalizedRows = rows.map((row) => this.normalizeProductRow(row));
-    this.validateUniqueIdentifiers(normalizedRows);
+    const normalizedRows = await this.parseImportRows(fileBuffer, productType);
     const catalogSnapshot = await this.getSynchronizationCatalogSnapshot(
       productType,
       specialistId,
@@ -1981,15 +1973,13 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
     if (productType === ProductType.CAR) {
       const data = {
-        marca: row.marca,
-        modelo: row.modelo,
+        marca: row.marca || undefined,
+        modelo: row.modelo || undefined,
         identificador,
         valor: Number(row.valor),
-        currency: row.currency
-          ? (row.currency.toUpperCase() as ProductCurrency)
-          : undefined,
-        estado: row.estado,
-        ano: Number(row.ano),
+        currency: row.currency.toUpperCase() as ProductCurrency,
+        estado: row.estado || undefined,
+        ano: row.ano ? Number(row.ano) : undefined,
         cor: row.cor || undefined,
         km: row.km ? Number(row.km) : undefined,
         cambio: row.cambio || undefined,
@@ -1999,7 +1989,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         specialist_id: specialistId,
       };
 
-      await this.validatePayload(data, CreateCarDto);
+      const createData = this.withCreationDefaults(ProductType.CAR, data);
+      await this.validatePayload(createData, CreateCarDto);
 
       const existing = await (client as PrismaService).car.findFirst({
         where: {
@@ -2032,7 +2023,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         };
       }
 
-      const created = await (client as PrismaService).car.create({ data });
+      const created = await (client as PrismaService).car.create({ data: createData });
       return {
         productId: created.id,
         action: 'CREATED',
@@ -2042,15 +2033,13 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
     if (productType === ProductType.BOAT) {
       const data = {
-        marca: row.marca,
-        modelo: row.modelo,
+        marca: row.marca || undefined,
+        modelo: row.modelo || undefined,
         identificador,
         valor: Number(row.valor),
-        currency: row.currency
-          ? (row.currency.toUpperCase() as ProductCurrency)
-          : undefined,
-        estado: row.estado,
-        ano: Number(row.ano),
+        currency: row.currency.toUpperCase() as ProductCurrency,
+        estado: row.estado || undefined,
+        ano: row.ano ? Number(row.ano) : undefined,
         fabricante: row.fabricante || undefined,
         tamanho: row.tamanho || undefined,
         estilo: row.estilo || undefined,
@@ -2063,7 +2052,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         specialist_id: specialistId,
       };
 
-      await this.validatePayload(data, CreateBoatDto);
+      const createData = this.withCreationDefaults(ProductType.BOAT, data);
+      await this.validatePayload(createData, CreateBoatDto);
 
       const existing = await (client as PrismaService).boat.findFirst({
         where: {
@@ -2096,7 +2086,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         };
       }
 
-      const created = await (client as PrismaService).boat.create({ data });
+      const created = await (client as PrismaService).boat.create({ data: createData });
       return {
         productId: created.id,
         action: 'CREATED',
@@ -2105,15 +2095,13 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     }
 
     const data = {
-      marca: row.marca,
-      modelo: row.modelo,
+      marca: row.marca || undefined,
+      modelo: row.modelo || undefined,
       identificador,
       valor: Number(row.valor),
-      currency: row.currency
-        ? (row.currency.toUpperCase() as ProductCurrency)
-        : undefined,
-      estado: row.estado,
-      ano: Number(row.ano),
+      currency: row.currency.toUpperCase() as ProductCurrency,
+      estado: row.estado || undefined,
+      ano: row.ano ? Number(row.ano) : undefined,
       categoria: row.categoria || undefined,
       assentos: row.assentos ? Number(row.assentos) : undefined,
       tipo_aeronave: row.tipo_aeronave || undefined,
@@ -2121,7 +2109,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       specialist_id: specialistId,
     };
 
-    await this.validatePayload(data, CreateAircraftDto);
+    const createData = this.withCreationDefaults(ProductType.AIRCRAFT, data);
+    await this.validatePayload(createData, CreateAircraftDto);
 
     const existing = await (client as PrismaService).aircraft.findFirst({
       where: {
@@ -2154,7 +2143,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
-    const created = await (client as PrismaService).aircraft.create({ data });
+    const created = await (client as PrismaService).aircraft.create({ data: createData });
     return {
       productId: created.id,
       action: 'CREATED',
@@ -2171,6 +2160,93 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /**
+   * Lê .xlsx (o modelo baixado) ou .csv, valida o cabeçalho e devolve as
+   * linhas normalizadas, já com identificador. Todo o resto do import (prévia,
+   * sincronização, payload dos itens) usa estas linhas.
+   */
+  getImportTemplate(productType: ProductType): Promise<Buffer> {
+    return this.xlsxImportService.generateTemplate(
+      this.getColumnsForType(productType),
+    );
+  }
+
+  private async parseImportRows(
+    fileBuffer: Buffer,
+    productType: ProductType,
+  ): Promise<ImportParsedRow[]> {
+    // .xlsx é um zip: começa com "PK".
+    const isXlsx = fileBuffer[0] === 0x50 && fileBuffer[1] === 0x4b;
+    const { rows } = isXlsx
+      ? await this.xlsxImportService.parseWorkbook(fileBuffer)
+      : this.xlsxImportService.parseCsv(fileBuffer);
+    const columns = this.getColumnsForType(productType);
+    const structureValidation = this.xlsxImportService.validateStructure(
+      rows,
+      columns,
+    );
+    if (!structureValidation.valid) {
+      throw new BadRequestException({
+        message: 'Estrutura da planilha inválida',
+        errors: structureValidation.errors,
+        missingRequired: structureValidation.missingRequired,
+        unknownColumns: structureValidation.unknownColumns,
+      });
+    }
+    const normalizedRows = rows.map((row) =>
+      this.withIdentifier(productType, this.normalizeProductRow(row), columns),
+    );
+    this.validateUniqueIdentifiers(normalizedRows);
+    return normalizedRows;
+  }
+
+  /**
+   * Linha sem identificador ganha um derivado dos dados descritivos, para que
+   * reimportar a mesma linha atualize o produto em vez de duplicar.
+   * ponytail: mudar um dado descritivo (marca, km...) numa linha sem
+   * identificador gera outro id e cria um produto novo; a aba Instruções
+   * orienta a preencher o identificador quando a linha for editada depois.
+   */
+  private withIdentifier(
+    productType: ProductType,
+    row: ImportParsedRow,
+    columns: XlsxColumnDefinition[],
+  ): ImportParsedRow {
+    if (row.identificador) return row;
+    const descriptive = columns
+      .map((column) => column.name)
+      .filter((name) => !NON_DESCRIPTIVE_COLUMNS.has(name) && row[name])
+      .map((name) => [name, row[name].toLowerCase()]);
+    // Sem nenhum dado descritivo, só o preço distingue uma linha da outra.
+    const basis = descriptive.length
+      ? descriptive
+      : [
+          ['valor', row.valor],
+          ['currency', row.currency?.toUpperCase()],
+        ];
+    const hash = this.sha256(JSON.stringify([productType, basis])).slice(0, 12);
+    return { ...row, identificador: `${AUTO_IDENTIFIER_PREFIX}${hash}` };
+  }
+
+  private withCreationDefaults<
+    T extends {
+      identificador: string;
+      marca?: string;
+      modelo?: string;
+      estado?: string;
+    },
+  >(
+    productType: ProductType,
+    data: T,
+  ): T & { marca: string; modelo: string; estado: string } {
+    return {
+      ...data,
+      marca: data.marca ?? DEFAULT_MARCA[productType],
+      modelo: data.modelo ?? data.identificador,
+      estado: data.estado ?? DEFAULT_ESTADO,
+    };
+  }
+
   private validateUniqueIdentifiers(rows: ImportParsedRow[]): void {
     const seen = new Set<string>();
     const duplicates = new Set<string>();
@@ -2180,11 +2256,15 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       if (seen.has(identifier)) duplicates.add(identifier);
       seen.add(identifier);
     }
-    if (duplicates.size > 0) {
-      throw new BadRequestException(
-        `O CSV contém identificadores duplicados: ${[...duplicates].join(', ')}.`,
-      );
-    }
+    if (duplicates.size === 0) return;
+    const manual = [...duplicates].filter(
+      (id) => !id.startsWith(AUTO_IDENTIFIER_PREFIX),
+    );
+    throw new BadRequestException(
+      manual.length > 0
+        ? `A planilha contém identificadores duplicados: ${manual.join(', ')}.`
+        : 'A planilha contém linhas sem identificador com os mesmos dados. Preencha o identificador para diferenciá-las.',
+    );
   }
 
   private validateRequiredProductFields(row: ImportParsedRow): void {
@@ -2193,12 +2273,22 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     );
 
     if (missingFields.length === 0) {
+      this.validateCurrency(row);
       return;
     }
 
     throw new BadRequestException(
       missingFields.map(({ label }) => `${label} faltando`).join('; '),
     );
+  }
+
+  private validateCurrency(row: ImportParsedRow): void {
+    const currency = row.currency.toUpperCase();
+    if (currency !== ProductCurrency.BRL && currency !== ProductCurrency.USD) {
+      throw new BadRequestException(
+        `Moeda inválida "${row.currency}": use BRL ou USD.`,
+      );
+    }
   }
 
   private async validatePayload<T extends object>(

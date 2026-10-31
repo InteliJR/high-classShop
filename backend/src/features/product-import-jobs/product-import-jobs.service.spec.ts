@@ -1,5 +1,6 @@
 import { ProductImportJobsService } from './product-import-jobs.service';
 import { Prisma, ProductCurrency, ProductType } from '@prisma/client';
+import { XlsxImportService } from 'src/shared/services/xlsx-import.service';
 
 describe('ProductImportJobsService', () => {
   beforeEach(() => {
@@ -50,6 +51,7 @@ describe('ProductImportJobsService', () => {
     modelo: 'Roma',
     identificador: 'FERRARI-ROMA-1',
     valor: '1000000',
+    currency: 'BRL',
     estado: 'SP',
     ano: '2024',
   };
@@ -74,12 +76,10 @@ describe('ProductImportJobsService', () => {
   });
 
   it.each([
-    ['identificador', '-', 'Identificador do veículo faltando'],
-    ['marca', ' - ', 'Marca do veículo faltando'],
-    ['modelo', '-', 'Nome do veículo faltando'],
-    ['valor', '   ', 'Valor do veículo faltando'],
-    ['estado', '-', 'Estado do veículo faltando'],
-    ['ano', ' - ', 'Ano do veículo faltando'],
+    ['identificador', '-', 'Identificador faltando'],
+    ['valor', '   ', 'Valor do produto faltando'],
+    ['currency', ' - ', 'Moeda (use BRL ou USD) faltando'],
+    ['currency', 'EUR', 'Moeda inválida "EUR": use BRL ou USD.'],
   ])(
     'trata %s com marcador de ausência como erro natural da linha',
     async (field, emptyValue, expectedMessage) => {
@@ -115,7 +115,6 @@ describe('ProductImportJobsService', () => {
         ProductType.CAR,
         {
           ...validCarRow,
-          currency: '-',
           cor: ' - ',
           km: '-',
           cambio: '   ',
@@ -126,7 +125,7 @@ describe('ProductImportJobsService', () => {
 
     expect(create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        currency: undefined,
+        currency: ProductCurrency.BRL,
         cor: undefined,
         km: undefined,
         cambio: undefined,
@@ -153,7 +152,7 @@ describe('ProductImportJobsService', () => {
             {
               id: 'item-2',
               status: 'PENDING',
-              payload: { ...validCarRow, modelo: '-' },
+              payload: { ...validCarRow, valor: '-' },
               folder_url: null,
             },
           ],
@@ -196,7 +195,7 @@ describe('ProductImportJobsService', () => {
       where: { id: 'item-2' },
       data: expect.objectContaining({
         status: 'FAILED',
-        error_message: 'Nome do veículo faltando',
+        error_message: 'Valor do produto faltando',
       }),
     });
   });
@@ -777,6 +776,108 @@ describe('ProductImportJobsService', () => {
     });
   });
 
+  it('produto só com valor e moeda é criado com valores padrão', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'uuid-1' });
+    const prisma = {
+      car: { findFirst: jest.fn().mockResolvedValue(null), create },
+    } as any;
+    const service = new ProductImportJobsService(prisma, {} as any, {} as any);
+
+    await (service as any).upsertProductFromRow(
+      ProductType.CAR,
+      { identificador: 'auto-abc', valor: '450000', currency: 'usd' },
+      '00000000-0000-4000-8000-000000000001',
+    );
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        identificador: 'auto-abc',
+        marca: 'Carro',
+        modelo: 'auto-abc',
+        estado: 'não informado',
+        ano: undefined,
+        valor: 450000,
+        currency: ProductCurrency.USD,
+      }),
+    });
+  });
+
+  it('reimport não sobrescreve com valores padrão o que foi editado à mão', async () => {
+    const existing = { id: 'product-1', is_active: true };
+    const update = jest.fn().mockResolvedValue({ updated_at: new Date() });
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      car: {
+        findFirst: jest.fn().mockResolvedValue(existing),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'product-1',
+          valor: new Prisma.Decimal(450000),
+          currency: ProductCurrency.BRL,
+        }),
+        update,
+        create: jest.fn(),
+      },
+      process: { findFirst: jest.fn().mockResolvedValue(null) },
+    } as any;
+    const service = new ProductImportJobsService(tx, {} as any, {} as any);
+
+    await (service as any).upsertProductFromRow(
+      ProductType.CAR,
+      { identificador: 'auto-abc', valor: '450000', currency: 'BRL' },
+      '00000000-0000-4000-8000-000000000001',
+      tx,
+    );
+
+    const data = update.mock.calls[0][0].data;
+    expect(data).toMatchObject({ identificador: 'auto-abc', valor: 450000 });
+    expect(data.marca).toBeUndefined();
+    expect(data.modelo).toBeUndefined();
+    expect(data.estado).toBeUndefined();
+    expect(tx.car.create).not.toHaveBeenCalled();
+  });
+
+  describe('identificador automático', () => {
+    const parse = async (lines: string[]) => {
+      const service = new ProductImportJobsService(
+        {} as any,
+        new XlsxImportService(),
+        {} as any,
+      );
+      return (service as any).parseImportRows(
+        Buffer.from(lines.join('\n'), 'utf-8'),
+        ProductType.CAR,
+      );
+    };
+
+    it('a mesma linha gera o mesmo identificador, mesmo com outro preço', async () => {
+      const [first] = await parse(['marca;modelo;valor;currency', 'BMW;X5;450000;BRL']);
+      const [repriced] = await parse(['marca;modelo;valor;currency', 'bmw;X5;399000;USD']);
+      const [other] = await parse(['marca;modelo;valor;currency', 'BMW;X6;450000;BRL']);
+
+      expect(first.identificador).toMatch(/^auto-[0-9a-f]{12}$/);
+      expect(repriced.identificador).toBe(first.identificador);
+      expect(other.identificador).not.toBe(first.identificador);
+    });
+
+    it('linhas só com valor e moeda se distinguem pelo preço', async () => {
+      const rows = await parse(['valor;currency', '100;BRL', '200;BRL']);
+
+      expect(rows[0].identificador).not.toBe(rows[1].identificador);
+    });
+
+    it('identificador informado é mantido', async () => {
+      const [row] = await parse(['identificador;valor;currency', 'BMW-1;100;BRL']);
+
+      expect(row.identificador).toBe('BMW-1');
+    });
+
+    it('rejeita linhas sem identificador com os mesmos dados', async () => {
+      await expect(
+        parse(['marca;valor;currency', 'BMW;100;BRL', 'BMW;200;BRL']),
+      ).rejects.toThrow(/sem identificador com os mesmos dados/);
+    });
+  });
+
   it('lanca erro quando identificador vem vazio', async () => {
     const prisma = { car: { findFirst: jest.fn(), create: jest.fn() } } as any;
     const service = new ProductImportJobsService(prisma, {} as any, {} as any);
@@ -789,6 +890,7 @@ describe('ProductImportJobsService', () => {
           modelo: 'X',
           identificador: '  ',
           valor: '100',
+          currency: 'BRL',
           estado: 'SP',
           ano: '2020',
         },
@@ -811,6 +913,7 @@ describe('ProductImportJobsService', () => {
         modelo: 'X',
         identificador: 'FERRARI-X-2',
         valor: '100',
+        currency: 'BRL',
         estado: 'SP',
         ano: '2020',
       },

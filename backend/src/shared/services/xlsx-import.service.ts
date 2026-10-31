@@ -17,6 +17,9 @@ export interface XlsxColumnDefinition {
   name: string;
   required: boolean;
   type: 'string' | 'number' | 'boolean';
+  /** Explicação exibida na aba "Instruções" do template. */
+  description?: string;
+  example?: string;
 }
 
 /**
@@ -86,13 +89,13 @@ export class XlsxImportService {
 
       headers.forEach((header, colIndex) => {
         if (!header) return;
-        const cell = row.getCell(colIndex + 1);
-        const value = cell.value;
+        // `text` em vez de `value`: o Excel transforma links (ex.: folder_url)
+        // em objetos hyperlink, que viravam "[object Object]" com String().
+        const value = row.getCell(colIndex + 1).text.trim();
 
-        if (value !== null && value !== undefined && value !== '') {
+        if (value !== '') {
           hasData = true;
-          // ExcelJS pode retornar números diretamente — converter para string pois ImportParsedRow usa Record<string, string>
-          parsedRow[header] = String(value);
+          parsedRow[header] = value;
         } else {
           parsedRow[header] = '';
         }
@@ -454,84 +457,42 @@ export class XlsxImportService {
   }
 
   /**
-   * Gera um workbook XLSX template para download.
-   * @param columnDefinitions Definições de colunas
-   * @param exampleData Dados de exemplo para a segunda linha
-   * @param instructions Instruções por coluna (para comentários nas células do header)
-   * @returns Buffer do arquivo XLSX
+   * Gera o modelo de importação: aba de dados só com o cabeçalho (sem linha
+   * de exemplo, para não ser importada por engano) e aba "Instruções" com
+   * formato e exemplo de cada coluna.
    */
   async generateTemplate(
     columnDefinitions: XlsxColumnDefinition[],
-    exampleData: Record<string, any>,
-    instructions: Record<string, string>,
   ): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Template');
-
-    // Definir colunas (sem 'imagens' — agora são embutidas)
-    const columns = columnDefinitions.map((col) => ({
+    // A primeira aba é a lida pelo import (parseWorkbook).
+    const dataSheet = workbook.addWorksheet('Produtos');
+    dataSheet.columns = columnDefinitions.map((col) => ({
       header: col.name,
       key: col.name,
       width: Math.max(col.name.length + 5, 15),
     }));
-    worksheet.columns = columns;
-
-    // Estilizar header
-    const headerRow = worksheet.getRow(1);
-    headerRow.eachCell((cell: ExcelJS.Cell, colNumber: number) => {
-      const colDef = columnDefinitions[colNumber - 1];
+    dataSheet.getRow(1).eachCell((cell, colNumber) => {
+      const col = columnDefinitions[colNumber - 1];
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: colDef?.required ? 'FF2563EB' : 'FF6B7280' },
+        fgColor: { argb: col.required ? 'FF2563EB' : 'FF6B7280' },
       };
-      cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      cell.border = {
-        bottom: { style: 'thin', color: { argb: 'FF000000' } },
-      };
-
-      // Adicionar nota/comentário com instrução
-      const colName = colDef?.name;
-      if (colName && instructions[colName]) {
-        cell.note = {
-          texts: [
-            {
-              text: `${colDef.required ? '(Obrigatório) ' : '(Opcional) '}${instructions[colName]}`,
-              font: { size: 10 },
-            },
-          ],
-        };
-      }
+      cell.note = `${col.required ? '(Obrigatório)' : '(Opcional)'} ${col.description ?? ''} Ex.: ${col.example ?? ''}`;
     });
+    dataSheet.views = [{ state: 'frozen', ySplit: 1 }];
 
-    // Adicionar linha de exemplo
-    const exampleRow: Record<string, any> = {};
-    columnDefinitions.forEach((col) => {
-      if (exampleData[col.name] !== undefined) {
-        exampleRow[col.name] = exampleData[col.name];
-      }
-    });
-    worksheet.addRow(exampleRow);
-
-    // Estilizar linha de exemplo
-    const exRow = worksheet.getRow(2);
-    exRow.eachCell((cell: ExcelJS.Cell) => {
-      cell.font = { italic: true, color: { argb: 'FF9CA3AF' } };
-    });
-
-    // Adicionar aba de instruções
-    const instrSheet = workbook.addWorksheet('Instruções');
-    instrSheet.columns = [
+    const instructions = workbook.addWorksheet('Instruções');
+    instructions.columns = [
       { header: 'Coluna', key: 'coluna', width: 20 },
-      { header: 'Obrigatório', key: 'obrigatorio', width: 15 },
-      { header: 'Tipo', key: 'tipo', width: 15 },
-      { header: 'Descrição', key: 'descricao', width: 60 },
+      { header: 'Obrigatório', key: 'obrigatorio', width: 13 },
+      { header: 'Formato', key: 'formato', width: 12 },
+      { header: 'Exemplo', key: 'exemplo', width: 30 },
+      { header: 'Como preencher', key: 'descricao', width: 90 },
     ];
-
-    // Estilizar header da aba de instruções
-    const instrHeader = instrSheet.getRow(1);
-    instrHeader.eachCell((cell: ExcelJS.Cell) => {
+    instructions.getRow(1).eachCell((cell) => {
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = {
         type: 'pattern',
@@ -539,27 +500,27 @@ export class XlsxImportService {
         fgColor: { argb: 'FF2563EB' },
       };
     });
-
-    columnDefinitions.forEach((col) => {
-      instrSheet.addRow({
+    for (const col of columnDefinitions) {
+      const row = instructions.addRow({
         coluna: col.name,
         obrigatorio: col.required ? 'Sim' : 'Não',
-        tipo: col.type,
-        descricao: instructions[col.name] || '',
+        formato: col.type === 'number' ? 'Número' : 'Texto',
+        exemplo: col.example ?? '',
+        descricao: col.description ?? '',
       });
-    });
+      row.alignment = { wrapText: true, vertical: 'top' };
+      if (col.required) row.font = { bold: true };
+    }
+    instructions.addRow({});
+    for (const note of [
+      'Preencha uma linha por produto na aba "Produtos" e importe este arquivo (.xlsx) ou salve como .csv.',
+      'Só valor e currency são obrigatórios. Colunas vazias recebem um valor padrão e podem ser completadas depois na edição do produto.',
+      'Reimportar a mesma linha atualiza o produto existente em vez de criar outro.',
+    ]) {
+      instructions.addRow({ coluna: note });
+      instructions.mergeCells(`A${instructions.rowCount}:E${instructions.rowCount}`);
+    }
 
-    // Adicionar instrução sobre imagens
-    instrSheet.addRow({});
-    instrSheet.addRow({
-      coluna: '📷 IMAGENS',
-      obrigatorio: '',
-      tipo: '',
-      descricao:
-        'Para adicionar imagens, insira-as diretamente na planilha (aba Template). Cole/insira a imagem na linha do produto correspondente. A primeira imagem de cada linha será a principal.',
-    });
-
-    const xlsxBuffer = await workbook.xlsx.writeBuffer();
-    return Buffer.from(xlsxBuffer);
+    return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 }

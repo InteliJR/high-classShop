@@ -7,6 +7,7 @@ const baseRow = {
   marca: 'Marca',
   modelo: 'Modelo',
   valor: '100',
+  currency: 'BRL',
   estado: 'SP',
   ano: '2020',
 };

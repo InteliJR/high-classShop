@@ -12,7 +12,7 @@ export class Boat {
   valor: number;
   currency: ProductCurrency;
   estado: string;
-  ano: number;
+  ano: number | null;
   fabricante: string | null;
   tamanho: string | null;
   estilo: string | null;
