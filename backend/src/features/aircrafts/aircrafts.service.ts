@@ -16,7 +16,6 @@ import {
   RangeAircraftFilters,
 } from 'src/shared/dto/filters.dto';
 import { Prisma, ProductType } from '@prisma/client';
-import { AIRCRAFT_COLUMNS } from 'src/shared/constants/product-columns';
 import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 import { publicAircraftSelect } from 'src/shared/selects/public-catalog.select';
 import { randomUUID } from 'node:crypto';
@@ -31,8 +30,6 @@ import {
 export class AircraftsService {
   private readonly logger = new Logger(AircraftsService.name);
 
-  // Colunas da planilha de aeronaves — fonte única em shared/constants/product-columns.ts
-  private readonly xlsxColumns = AIRCRAFT_COLUMNS;
 
   constructor(
     private prismaService: PrismaService,
@@ -412,25 +409,4 @@ export class AircraftsService {
     }
   }
 
-  async getCsvTemplate(): Promise<Buffer> {
-    const headers = this.xlsxColumns.map((column) => column.name).join(';');
-    const exampleValues = [
-      'Embraer-Phenom 300-1',
-      'Embraer',
-      'Phenom 300',
-      '15000000',
-      'BRL',
-      'São Paulo',
-      '2021',
-      'Light Jet',
-      '8',
-      'Jato Executivo',
-      'Aeronave com baixas horas de voo e interior renovado',
-      'https://drive.google.com/drive/folders/SEU_FOLDER_ID',
-    ].join(';');
-
-    const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
-    const content = Buffer.from(`${headers}\n${exampleValues}\n`, 'utf-8');
-    return Buffer.concat([BOM, content]);
-  }
 }

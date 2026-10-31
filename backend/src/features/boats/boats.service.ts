@@ -16,7 +16,6 @@ import {
   FiltersBoatMeta,
   RangeBoatFilters,
 } from 'src/shared/dto/filters.dto';
-import { BOAT_COLUMNS } from 'src/shared/constants/product-columns';
 import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 import { publicBoatSelect } from 'src/shared/selects/public-catalog.select';
 import { randomUUID } from 'node:crypto';
@@ -31,8 +30,6 @@ import {
 export class BoatsService {
   private readonly logger = new Logger(BoatsService.name);
 
-  // Colunas da planilha de barcos — fonte única em shared/constants/product-columns.ts
-  private readonly xlsxColumns = BOAT_COLUMNS;
 
   constructor(
     private prismaService: PrismaService,
@@ -343,30 +340,4 @@ export class BoatsService {
     }
   }
 
-  async getCsvTemplate(): Promise<Buffer> {
-    const headers = this.xlsxColumns.map((column) => column.name).join(';');
-    const exampleValues = [
-      'Azimut-55 Fly-1',
-      'Azimut',
-      '55 Fly',
-      '3500000',
-      'BRL',
-      'São Paulo',
-      '2022',
-      'Azimut',
-      '55 pés',
-      'Flybridge',
-      'Diesel',
-      'Volvo Penta D6',
-      '2022',
-      'Lancha',
-      'Embarcação em excelente estado com todos os opcionais',
-      'GPS Garmin - Ar condicionado - Gerador',
-      'https://drive.google.com/drive/folders/SEU_FOLDER_ID',
-    ].join(';');
-
-    const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
-    const content = Buffer.from(`${headers}\n${exampleValues}\n`, 'utf-8');
-    return Buffer.concat([BOM, content]);
-  }
 }

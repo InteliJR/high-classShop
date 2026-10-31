@@ -285,7 +285,7 @@ Cada domínio expõe:
   "images": []
 }
 ```
-- `POST /cars|boats|aircrafts/import-csv`
+- `POST /cars|boats|aircrafts/import-csv` — aceita `.xlsx` (template) ou `.csv`. Só `valor` e `currency` (`BRL`/`USD`) são obrigatórios. Sem `identificador`, o import gera `auto-<hash>` a partir dos campos descritivos da linha (sem valor/moeda/folder_url), então reimportar a mesma linha atualiza em vez de duplicar. Na criação, campos vazios viram padrão: `marca` = tipo (Carro/Lancha/Aeronave), `modelo` = identificador, `estado` = "não informado", `ano` = null; no update, campos vazios não sobrescrevem o que existe.
   - payload:
 ```json
 {
@@ -299,17 +299,12 @@ Cada domínio expõe:
   "status": "PENDING"
 }
 ```
-- `GET /cars|boats|aircrafts/csv-template`
+- `GET /cars|boats|aircrafts/import-template`
   - payload:
 ```json
 {}
 ```
-  - resposta:
-```json
-{
-  "file": "template.csv"
-}
-```
+  - resposta: arquivo `template_<tipo>.xlsx` com a aba "Produtos" (só cabeçalho) e a aba "Instruções" (coluna, obrigatório, formato, exemplo, como preencher), geradas de `backend/src/shared/constants/product-columns.ts`.
 - `GET /cars|boats|aircrafts`
   - payload:
 ```json

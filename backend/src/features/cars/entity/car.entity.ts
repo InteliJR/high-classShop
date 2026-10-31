@@ -12,7 +12,7 @@ export class Car {
   valor: number;
   currency: ProductCurrency;
   estado: string;
-  ano: number;
+  ano: number | null;
   cor: string | null;
   km: number | null;
   cambio: string | null;

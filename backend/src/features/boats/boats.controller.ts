@@ -31,7 +31,10 @@ import {
   assertSpecialistOwnsProduct,
 } from 'src/shared/helpers/specialist-auth.helper';
 import { Public } from 'src/shared/decorators/public.decorator';
-import { ProductImportJobsService } from '../product-import-jobs/product-import-jobs.service';
+import {
+  isImportSpreadsheet,
+  ProductImportJobsService,
+} from '../product-import-jobs/product-import-jobs.service';
 import { ActorContextService } from 'src/shared/actor-context/actor-context.service';
 import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
 import { ProductCsvImportDto } from '../product-import-jobs/dto/product-csv-import.dto';
@@ -103,8 +106,8 @@ export class BoatsController {
       options.specialist_id,
       ProductType.BOAT,
     );
-    if (!file?.originalname?.toLowerCase().endsWith('.csv')) {
-      throw new BadRequestException('Arquivo CSV é obrigatório.');
+    if (!isImportSpreadsheet(file?.originalname)) {
+      throw new BadRequestException('Envie a planilha modelo (.xlsx) ou um .csv.');
     }
     return this.productImportJobsService.previewCsvImport(
       file.buffer,
@@ -131,16 +134,11 @@ export class BoatsController {
     );
 
     if (!file) {
-      throw new BadRequestException('Arquivo CSV é obrigatório.');
+      throw new BadRequestException('A planilha é obrigatória.');
     }
 
-    const isCsvFile =
-      file.mimetype === 'text/csv' ||
-      file.mimetype === 'application/vnd.ms-excel' ||
-      file.originalname?.toLowerCase().endsWith('.csv');
-
-    if (!isCsvFile) {
-      throw new BadRequestException('Apenas arquivos .csv são aceitos.');
+    if (!isImportSpreadsheet(file.originalname)) {
+      throw new BadRequestException('Apenas arquivos .xlsx ou .csv são aceitos.');
     }
 
     return this.productImportJobsService.createJobFromCsv(
@@ -156,12 +154,15 @@ export class BoatsController {
     );
   }
 
-  @Get('csv-template')
-  async getCsvTemplate(@Res({ passthrough: true }) res: any) {
-    const buffer = await this.boatsService.getCsvTemplate();
+  @Get('import-template')
+  async getImportTemplate(@Res({ passthrough: true }) res: any) {
+    const buffer = await this.productImportJobsService.getImportTemplate(
+      ProductType.BOAT,
+    );
     res.set({
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': 'attachment; filename=template_lanchas.csv',
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename=template_lanchas.xlsx',
     });
     return new StreamableFile(buffer);
   }

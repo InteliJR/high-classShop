@@ -169,16 +169,16 @@ export async function deleteCar(id: string): Promise<void> {
   }
 }
 
-// Get /cars/csv-template (downloads .csv file)
+// Get /cars/import-template (planilha .xlsx com aba de instruções)
 export async function getCarsCsvTemplate(): Promise<void> {
   try {
-    const response = await api.get("/cars/csv-template", {
+    const response = await api.get("/cars/import-template", {
       responseType: "blob",
     });
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", "template_carros.csv");
+    link.setAttribute("download", "template_carros.xlsx");
     document.body.appendChild(link);
     link.click();
     link.remove();

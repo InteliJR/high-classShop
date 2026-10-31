@@ -78,7 +78,7 @@ export default function SpecialistJourneyProductsPage() {
         ),
       );
     } catch {
-      setError("CSV inválido ou incompatível com a especialidade selecionada.");
+      setError("Planilha inválida ou incompatível com a especialidade selecionada.");
     }
   };
 
@@ -139,13 +139,13 @@ export default function SpecialistJourneyProductsPage() {
       <div className="rounded-xl border border-border bg-surface p-5">
         <div className="flex items-center gap-2">
           <Upload size={18} />
-          <h3 className="font-semibold text-ink">Importação CSV segura</h3>
+          <h3 className="font-semibold text-ink">Importação de planilha segura</h3>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-[1fr_220px_auto]">
           <input
-            aria-label="Arquivo CSV"
+            aria-label="Planilha de produtos"
             type="file"
-            accept=".csv,text/csv"
+            accept=".xlsx,.csv"
             onChange={(event) => {
               setFile(event.target.files?.[0] ?? null);
               setPreview(null);

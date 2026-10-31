@@ -56,8 +56,13 @@ const COLUMN_DEFINITIONS: Record<
   { required: string[]; optional: string[] }
 > = {
   CAR: {
-    required: ["identificador", "marca", "modelo", "valor", "estado", "ano"],
+    required: ["valor", "currency"],
     optional: [
+      "identificador",
+      "marca",
+      "modelo",
+      "estado",
+      "ano",
       "cor",
       "km",
       "cambio",
@@ -68,8 +73,13 @@ const COLUMN_DEFINITIONS: Record<
     ],
   },
   BOAT: {
-    required: ["identificador", "marca", "modelo", "valor", "estado", "ano"],
+    required: ["valor", "currency"],
     optional: [
+      "identificador",
+      "marca",
+      "modelo",
+      "estado",
+      "ano",
       "fabricante",
       "tamanho",
       "estilo",
@@ -83,8 +93,13 @@ const COLUMN_DEFINITIONS: Record<
     ],
   },
   AIRCRAFT: {
-    required: ["identificador", "marca", "modelo", "valor", "estado", "ano"],
+    required: ["valor", "currency"],
     optional: [
+      "identificador",
+      "marca",
+      "modelo",
+      "estado",
+      "ano",
       "categoria",
       "assentos",
       "tipo_aeronave",
@@ -126,8 +141,8 @@ export function XlsxImporter({
       setFileError(null);
 
       // Validar extensão
-      if (!selectedFile.name.toLowerCase().endsWith(".csv")) {
-        setFileError("Apenas arquivos .csv são aceitos.");
+      if (!/\.(xlsx|csv)$/i.test(selectedFile.name)) {
+        setFileError("Envie a planilha modelo (.xlsx) ou um arquivo .csv.");
         setFile(null);
         return;
       }
@@ -317,17 +332,21 @@ export function XlsxImporter({
             <ul className="space-y-1.5 text-sm text-gray-600">
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
-                Formato aceito: <strong className="text-gray-900">.csv</strong>
+                Baixe o template: a aba{" "}
+                <strong className="text-gray-900">Instruções</strong> explica
+                cada coluna, com formato e exemplo. Aceita .xlsx ou .csv
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
-                <strong className="text-gray-900">valor</strong>: numero inteiro
-                sem pontos
+                <strong className="text-gray-900">valor</strong> e{" "}
+                <strong className="text-gray-900">currency</strong> (BRL ou
+                USD) são os únicos obrigatórios; colunas vazias recebem um
+                valor padrão e podem ser completadas na edição do produto
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
-                <strong className="text-gray-900">ano</strong>: 4 digitos (ex:
-                2024)
+                <strong className="text-gray-900">valor</strong>: só números,
+                sem pontos (ex: 450000)
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
@@ -337,10 +356,11 @@ export function XlsxImporter({
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
                 <span>
-                  Produtos com o mesmo{" "}
-                  <strong className="text-gray-900">identificador</strong>{" "}
-                  serão atualizados em vez de duplicados (marca e modelo podem
-                  se repetir entre produtos diferentes).
+                  Reimportar a mesma linha atualiza o produto em vez de
+                  duplicar. Sem{" "}
+                  <strong className="text-gray-900">identificador</strong>, ele
+                  é gerado a partir dos dados da linha; preencha-o se for
+                  editar a linha depois.
                 </span>
               </li>
             </ul>
@@ -365,7 +385,7 @@ export function XlsxImporter({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".csv,text/csv"
+          accept=".xlsx,.csv"
           onChange={handleFileSelect}
           disabled={disabled || isLoading}
           className="hidden"
@@ -392,10 +412,10 @@ export function XlsxImporter({
               <p className="text-sm font-medium text-gray-900">
                 {isDragging
                   ? "Solte o arquivo aqui"
-                  : "Arraste um arquivo CSV ou clique para selecionar"}
+                  : "Arraste a planilha ou clique para selecionar"}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Apenas arquivos .csv (max {MAX_FILE_SIZE_MB} MB)
+                Planilha .xlsx ou .csv (max {MAX_FILE_SIZE_MB} MB)
               </p>
             </div>
           </div>

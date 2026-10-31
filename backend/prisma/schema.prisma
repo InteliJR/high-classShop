@@ -699,7 +699,7 @@ model Car {
   valor                      Decimal
   currency                   ProductCurrency @default(BRL)
   estado                     String
-  ano                        Int
+  ano                        Int?
   descricao                  String?
   cor                        String?
   km                         Int?
@@ -744,7 +744,7 @@ model Boat {
   identificador              String
   valor                      Decimal
   currency                   ProductCurrency @default(BRL)
-  ano                        Int
+  ano                        Int?
   fabricante                 String?
   tamanho                    String?
   estilo                     String?
@@ -789,7 +789,7 @@ model Aircraft {
   deactivated_at             DateTime?
   deactivated_by_sync_job_id String?   @db.Uuid
   categoria                  String?
-  ano                        Int
+  ano                        Int?
   marca                      String
   modelo                     String
   identificador              String
