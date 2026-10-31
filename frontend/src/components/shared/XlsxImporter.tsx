@@ -253,7 +253,7 @@ export function XlsxImporter({
               Importar {PRODUCT_NAMES[productType]}
             </h4>
             <p className="text-sm text-gray-500">
-              Importe varios produtos de uma vez via CSV
+              Importe vários produtos de uma vez via planilha
             </p>
           </div>
         </div>
@@ -332,16 +332,20 @@ export function XlsxImporter({
             <ul className="space-y-1.5 text-sm text-gray-600">
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
-                Baixe o template: a aba{" "}
-                <strong className="text-gray-900">Instruções</strong> explica
-                cada coluna, com formato e exemplo. Aceita .xlsx ou .csv
+                <span>
+                  Baixe o template: a aba{" "}
+                  <strong className="text-gray-900">Instruções</strong> explica
+                  cada coluna, com formato e exemplo. Aceita .xlsx ou .csv
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
-                <strong className="text-gray-900">valor</strong> e{" "}
-                <strong className="text-gray-900">currency</strong> (BRL ou
-                USD) são os únicos obrigatórios; colunas vazias recebem um
-                valor padrão e podem ser completadas na edição do produto
+                <span>
+                  <strong className="text-gray-900">valor</strong> e{" "}
+                  <strong className="text-gray-900">currency</strong> (BRL ou
+                  USD) são os únicos obrigatórios; colunas vazias recebem um
+                  valor padrão e podem ser completadas na edição do produto
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1 h-1 mt-2 bg-gray-400 rounded-full shrink-0"></span>
@@ -483,7 +487,7 @@ export function XlsxImporter({
           ) : (
             <>
               <Upload className="w-4 h-4" />
-              Importar CSV
+              Importar planilha
             </>
           )}
         </button>
