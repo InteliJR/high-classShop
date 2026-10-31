@@ -6,6 +6,7 @@ import {
   getAdminSpecialistProducts,
   importAdminCatalogCsv,
   previewAdminCatalogCsv,
+  transferAdminProduct,
   type AdminCatalogProduct,
   type CsvImportPreview,
   type ProductImportMode,
@@ -13,6 +14,10 @@ import {
 import { deleteCar } from "../../services/cars.service";
 import { deleteBoat } from "../../services/boats.service";
 import { deleteAircraft } from "../../services/aircrafts.service";
+import {
+  getSpecialists,
+  type Specialist,
+} from "../../services/specialists.service";
 import { formatCurrency } from "../../lib/currency";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
@@ -30,6 +35,15 @@ export default function SpecialistJourneyProductsPage() {
   const [preview, setPreview] = useState<CsvImportPreview | null>(null);
   const [syncConfirmed, setSyncConfirmed] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [specialists, setSpecialists] = useState<Specialist[]>([]);
+  const [transferringId, setTransferringId] = useState<string | null>(null);
+  const [transferTo, setTransferTo] = useState("");
+
+  useEffect(() => {
+    void getSpecialists()
+      .then(setSpecialists)
+      .catch(() => setSpecialists([]));
+  }, []);
 
   if (!context) return null;
   const productType = context.specialist.speciality;
@@ -62,6 +76,37 @@ export default function SpecialistJourneyProductsPage() {
     else if (productType === "BOAT") await deleteBoat(id);
     else await deleteAircraft(id);
     await load();
+  };
+
+  const transferTargets = specialists.filter(
+    (item) =>
+      item.is_active !== false &&
+      item.speciality === productType &&
+      item.id !== context.targetSpecialistId,
+  );
+
+  const transfer = async (id: string) => {
+    const target = transferTargets.find((item) => item.id === transferTo);
+    if (!target) return;
+    if (
+      !window.confirm(
+        `Transferir este produto para ${target.name} ${target.surname}?`,
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    try {
+      await transferAdminProduct(productType, id, target.id);
+      setTransferringId(null);
+      setTransferTo("");
+      await load();
+    } catch (caught) {
+      setError(
+        (caught as { friendlyMessage?: string })?.friendlyMessage ??
+          "Não foi possível transferir o produto.",
+      );
+    }
   };
 
   const runPreview = async () => {
@@ -126,7 +171,7 @@ export default function SpecialistJourneyProductsPage() {
         <div>
           <h2 className="text-2xl font-semibold text-ink">Catálogo administrativo</h2>
           <p className="text-sm text-ink-soft">
-            Itens ativos e inativos de {context.specialist.name} {context.specialist.surname}; dono imutável após a criação.
+            Itens ativos e inativos de {context.specialist.name} {context.specialist.surname}; transferência bloqueada enquanto houver processos em andamento.
           </p>
         </div>
         <Button onClick={() => navigate("/admin/journey/products/new")}>
@@ -215,8 +260,29 @@ export default function SpecialistJourneyProductsPage() {
                     </span>
                   </td>
                   <td className="py-3 text-right">
-                    <button className="mr-3 text-ink underline" onClick={() => navigate(`/admin/journey/products/edit/${productType.toLowerCase()}s/${product.id}`)}>Editar</button>
-                    {product.is_active && <button className="text-status-bad underline" onClick={() => void remove(product.id)}>Desativar</button>}
+                    {transferringId === product.id ? (
+                      <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                        <select
+                          aria-label="Novo especialista responsável"
+                          value={transferTo}
+                          onChange={(event) => setTransferTo(event.target.value)}
+                          className="rounded-lg border border-border bg-surface px-2 py-1 text-sm"
+                        >
+                          <option value="">Selecione o especialista</option>
+                          {transferTargets.map((item) => (
+                            <option key={item.id} value={item.id}>{item.name} {item.surname}</option>
+                          ))}
+                        </select>
+                        <button className="text-ink underline disabled:opacity-50" disabled={!transferTo} onClick={() => void transfer(product.id)}>Confirmar</button>
+                        <button className="text-muted underline" onClick={() => setTransferringId(null)}>Cancelar</button>
+                      </span>
+                    ) : (
+                      <>
+                        <button className="mr-3 text-ink underline" onClick={() => navigate(`/admin/journey/products/edit/${productType.toLowerCase()}s/${product.id}`)}>Editar</button>
+                        <button className="mr-3 text-ink underline" onClick={() => { setTransferringId(product.id); setTransferTo(""); }}>Transferir</button>
+                        {product.is_active && <button className="text-status-bad underline" onClick={() => void remove(product.id)}>Desativar</button>}
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

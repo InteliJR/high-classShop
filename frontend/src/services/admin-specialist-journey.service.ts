@@ -54,6 +54,19 @@ export async function getAdminSpecialistProducts(
   return { products, pagination: response.data.meta.pagination };
 }
 
+// Transfere o produto para outro especialista. O backend bloqueia (409)
+// enquanto houver processo ou agendamento em andamento.
+export async function transferAdminProduct(
+  productType: JourneyProductType,
+  productId: string,
+  specialistId: string,
+): Promise<void> {
+  const resource = resourceByType[productType];
+  await api.patch(`/${resource}/${productId}/specialist`, {
+    specialist_id: specialistId,
+  });
+}
+
 export type CsvImportPreview = {
   productType: JourneyProductType;
   targetSpecialistId: string;
