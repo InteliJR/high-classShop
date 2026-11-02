@@ -364,7 +364,8 @@ export function XlsxImporter({
                   duplicar. Sem{" "}
                   <strong className="text-gray-900">identificador</strong>, ele
                   é gerado a partir dos dados da linha; preencha-o se for
-                  editar a linha depois.
+                  editar a linha depois (na sincronização do catálogo ele é
+                  obrigatório).
                 </span>
               </li>
             </ul>

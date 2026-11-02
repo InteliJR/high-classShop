@@ -837,7 +837,7 @@ describe('ProductImportJobsService', () => {
   });
 
   describe('identificador automático', () => {
-    const parse = async (lines: string[]) => {
+    const parse = async (lines: string[], mode = 'ADDITIVE') => {
       const service = new ProductImportJobsService(
         {} as any,
         new XlsxImportService(),
@@ -846,6 +846,7 @@ describe('ProductImportJobsService', () => {
       return (service as any).parseImportRows(
         Buffer.from(lines.join('\n'), 'utf-8'),
         ProductType.CAR,
+        mode,
       );
     };
 
@@ -875,6 +876,15 @@ describe('ProductImportJobsService', () => {
       await expect(
         parse(['marca;valor;currency', 'BMW;100;BRL', 'BMW;200;BRL']),
       ).rejects.toThrow(/sem identificador com os mesmos dados/);
+    });
+
+    it('sincronização exige identificador em todas as linhas', async () => {
+      const lines = ['identificador;valor;currency', 'BMW-1;100;BRL', ';200;BRL'];
+
+      await expect(parse(lines, 'SYNCHRONIZE')).rejects.toThrow(
+        /preencha o identificador.*linhas 3\)/,
+      );
+      await expect(parse(lines)).resolves.toHaveLength(2);
     });
   });
 

@@ -38,7 +38,7 @@ const IDENTIFICADOR: XlsxColumnDefinition = {
   required: false,
   type: 'string',
   description:
-    'Código único do produto no seu catálogo. Reimportar o mesmo código atualiza o produto em vez de duplicar. Se ficar vazio, é gerado a partir dos dados da linha — nesse caso, mudar marca, modelo ou outro dado descritivo cria um produto novo. Preencha se for editar a linha depois.',
+    'Código único do produto no seu catálogo. Reimportar o mesmo código atualiza o produto em vez de duplicar. Se ficar vazio, é gerado a partir dos dados da linha — nesse caso, mudar marca, modelo ou outro dado descritivo cria um produto novo. Preencha se for editar a linha depois. Obrigatório para sincronizar o catálogo.',
   example: 'BMW-X5-2023-01',
 };
 

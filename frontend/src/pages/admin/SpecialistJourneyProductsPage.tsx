@@ -77,8 +77,11 @@ export default function SpecialistJourneyProductsPage() {
           mode,
         ),
       );
-    } catch {
-      setError("Planilha inválida ou incompatível com a especialidade selecionada.");
+    } catch (caught) {
+      setError(
+        (caught as { friendlyMessage?: string }).friendlyMessage ??
+          "Planilha inválida ou incompatível com a especialidade selecionada.",
+      );
     }
   };
 

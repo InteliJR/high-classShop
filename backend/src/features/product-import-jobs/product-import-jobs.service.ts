@@ -255,7 +255,11 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    const normalizedRows = await this.parseImportRows(fileBuffer, productType);
+    const normalizedRows = await this.parseImportRows(
+      fileBuffer,
+      productType,
+      mode,
+    );
     const specialistId = options.context?.specialistId ?? user.id;
     let creationResult;
     try {
@@ -376,7 +380,11 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         'Modo de importação inválido. Use ADDITIVE ou SYNCHRONIZE.',
       );
     }
-    const normalizedRows = await this.parseImportRows(fileBuffer, productType);
+    const normalizedRows = await this.parseImportRows(
+      fileBuffer,
+      productType,
+      mode,
+    );
     const catalogSnapshot = await this.getSynchronizationCatalogSnapshot(
       productType,
       specialistId,
@@ -2174,6 +2182,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   private async parseImportRows(
     fileBuffer: Buffer,
     productType: ProductType,
+    mode: string,
   ): Promise<ImportParsedRow[]> {
     // .xlsx é um zip: começa com "PK".
     const isXlsx = fileBuffer[0] === 0x50 && fileBuffer[1] === 0x4b;
@@ -2193,8 +2202,12 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         unknownColumns: structureValidation.unknownColumns,
       });
     }
-    const normalizedRows = rows.map((row) =>
-      this.withIdentifier(productType, this.normalizeProductRow(row), columns),
+    const parsedRows = rows.map((row) => this.normalizeProductRow(row));
+    if (mode === 'SYNCHRONIZE') {
+      this.requireIdentifiers(parsedRows);
+    }
+    const normalizedRows = parsedRows.map((row) =>
+      this.withIdentifier(productType, row, columns),
     );
     this.validateUniqueIdentifiers(normalizedRows);
     return normalizedRows;
@@ -2245,6 +2258,21 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       modelo: data.modelo ?? data.identificador,
       estado: data.estado ?? DEFAULT_ESTADO,
     };
+  }
+
+  /**
+   * Na sincronização, um id gerado que muda com a linha desativaria o produto
+   * antigo e criaria outro no lugar; por isso ali o identificador é exigido.
+   */
+  private requireIdentifiers(rows: ImportParsedRow[]): void {
+    // +2: cabeçalho na linha 1 e linhas da planilha começando em 1.
+    const lines = rows.flatMap((row, index) =>
+      row.identificador ? [] : [index + 2],
+    );
+    if (lines.length === 0) return;
+    throw new BadRequestException(
+      `Para sincronizar o catálogo, preencha o identificador de todas as linhas (faltando nas linhas ${lines.join(', ')}).`,
+    );
   }
 
   private validateUniqueIdentifiers(rows: ImportParsedRow[]): void {
