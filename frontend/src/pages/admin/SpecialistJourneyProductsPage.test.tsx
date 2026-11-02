@@ -56,7 +56,7 @@ describe("SpecialistJourneyProductsPage", () => {
     fireEvent.change(screen.getByLabelText("Modo da importação"), {
       target: { value: "SYNCHRONIZE" },
     });
-    fireEvent.change(screen.getByLabelText("Arquivo CSV"), {
+    fireEvent.change(screen.getByLabelText("Planilha de produtos"), {
       target: {
         files: [new File(["csv"], "catalog.csv", { type: "text/csv" })],
       },

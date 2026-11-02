@@ -23,6 +23,7 @@ describeWithPostgres('product synchronization preview — PostgreSQL', () => {
     modelo: 'Roma',
     identificador: `KEEP-${suffix}`,
     valor: '1000000',
+    currency: 'BRL',
     estado: 'SP',
     ano: '2024',
   };

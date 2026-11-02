@@ -1,6 +1,4 @@
-import { CarsService } from './cars/cars.service';
-import { BoatsService } from './boats/boats.service';
-import { AircraftsService } from './aircrafts/aircrafts.service';
+import * as ExcelJS from 'exceljs';
 import {
   AIRCRAFT_COLUMNS,
   BOAT_COLUMNS,
@@ -8,63 +6,76 @@ import {
 } from 'src/shared/constants/product-columns';
 import { XlsxImportService } from 'src/shared/services/xlsx-import.service';
 
-// getCsvTemplate só lê `xlsxColumns`, então as deps podem ser nulas aqui.
 const cases = [
-  [
-    'carros',
-    new CarsService(null as any, null as any, null as any),
-    CAR_COLUMNS,
-  ],
-  [
-    'barcos',
-    new BoatsService(null as any, null as any, null as any),
-    BOAT_COLUMNS,
-  ],
-  [
-    'aeronaves',
-    new AircraftsService(null as any, null as any, null as any),
-    AIRCRAFT_COLUMNS,
-  ],
+  ['carros', CAR_COLUMNS],
+  ['barcos', BOAT_COLUMNS],
+  ['aeronaves', AIRCRAFT_COLUMNS],
 ] as const;
+
+async function loadTemplate(xlsx: XlsxImportService, columns: typeof CAR_COLUMNS) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load((await xlsx.generateTemplate(columns)) as any);
+  return workbook;
+}
+
+function rowValues(sheet: ExcelJS.Worksheet, rowNumber: number): string[] {
+  const values: string[] = [];
+  sheet.getRow(rowNumber).eachCell((cell) => values.push(cell.text));
+  return values;
+}
 
 describe('template de importação de produtos', () => {
   const xlsx = new XlsxImportService();
 
   it.each(cases)(
     'template de %s casa com a fonte única de colunas',
-    async (_label, service, columns) => {
-      const csv = (await service.getCsvTemplate()).toString('utf-8');
-      const [headerLine, exampleLine] = csv
-        .replace(/^\uFEFF/, '')
-        .trim()
-        .split('\n');
-      const headers = headerLine.split(';');
+    async (_label, columns) => {
+      const workbook = await loadTemplate(xlsx, columns);
+      const data = workbook.worksheets[0];
 
       // o header vem da mesma lista que o import valida — se divergir, o
       // usuário baixa um template que o próprio import rejeita
-      expect(headers).toEqual(columns.map((column) => column.name));
-      expect(headers[0]).toBe('identificador');
-
-      // a linha de exemplo é posicional: casa cada valor com sua coluna para
-      // pegar desalinhamento, não só o primeiro campo
-      const values = exampleLine.split(';');
-      expect(values).toHaveLength(headers.length);
-      const example = Object.fromEntries(
-        headers.map((header, index) => [header, values[index]]),
-      );
-      expect(example.identificador).toMatch(/-1$/);
-      for (const column of columns.filter((c) => c.type === 'number')) {
-        expect(example[column.name]).toMatch(/^\d+$/);
-      }
+      expect(rowValues(data, 1)).toEqual(columns.map((column) => column.name));
+      // sem linha de exemplo na aba de dados: ela seria importada por engano
+      expect(data.rowCount).toBe(1);
     },
   );
 
   it.each(cases)(
-    'o template de %s é aceito pelo próprio parser de import',
-    async (_label, service, columns) => {
-      const buffer = await service.getCsvTemplate();
-      const { rows } = xlsx.parseCsv(buffer);
+    'aba Instruções de %s explica cada coluna e só exige valor e moeda',
+    async (_label, columns) => {
+      const instructions = (await loadTemplate(xlsx, columns)).getWorksheet(
+        'Instruções',
+      )!;
 
+      const documented = columns.map((_, index) => rowValues(instructions, index + 2));
+      expect(documented.map(([name]) => name)).toEqual(
+        columns.map((column) => column.name),
+      );
+      for (const [, , , example, description] of documented) {
+        expect(example).toBeTruthy();
+        expect(description).toBeTruthy();
+      }
+      expect(
+        documented.filter(([, required]) => required === 'Sim').map(([name]) => name),
+      ).toEqual(['valor', 'currency']);
+    },
+  );
+
+  it.each(cases)(
+    'o template de %s preenchido só com valor e moeda é aceito pelo parser',
+    async (_label, columns) => {
+      const workbook = await loadTemplate(xlsx, columns);
+      const data = workbook.worksheets[0];
+      const row = data.getRow(2);
+      row.getCell(columns.findIndex((c) => c.name === 'valor') + 1).value = 450000;
+      row.getCell(columns.findIndex((c) => c.name === 'currency') + 1).value = 'USD';
+      const filled = Buffer.from(await workbook.xlsx.writeBuffer());
+
+      const { rows } = await xlsx.parseWorkbook(filled);
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ valor: '450000', currency: 'USD' });
       expect(xlsx.validateStructure(rows, columns as any)).toMatchObject({
         valid: true,
         missingRequired: [],
@@ -73,16 +84,38 @@ describe('template de importação de produtos', () => {
     },
   );
 
-  it('planilha na ordem antiga (identificador em 3º) continua válida', () => {
-    const legacy = [
-      'marca;modelo;identificador;valor;estado;ano',
-      'BMW;X5;BMW-X5-1;450000;São Paulo;2023',
+  it('link do Drive vindo como hyperlink do Excel é lido como texto', async () => {
+    const workbook = await loadTemplate(xlsx, CAR_COLUMNS);
+    const data = workbook.worksheets[0];
+    const url = 'https://drive.google.com/drive/folders/abc';
+    data.getRow(2).getCell(CAR_COLUMNS.length).value = { text: url, hyperlink: url };
+    data.getRow(2).getCell(4).value = 1;
+
+    const { rows } = await xlsx.parseWorkbook(
+      Buffer.from(await workbook.xlsx.writeBuffer()),
+    );
+
+    expect(rows[0].folder_url).toBe(url);
+  });
+
+  it('CSV em outra ordem de colunas continua válido', () => {
+    const csv = [
+      'marca;modelo;identificador;valor;currency;estado;ano',
+      'BMW;X5;BMW-X5-1;450000;BRL;São Paulo;2023',
     ].join('\n');
-    const { rows } = xlsx.parseCsv(Buffer.from(legacy, 'utf-8'));
+    const { rows } = xlsx.parseCsv(Buffer.from(csv, 'utf-8'));
 
     expect(rows[0]).toMatchObject({ marca: 'BMW', identificador: 'BMW-X5-1' });
     expect(xlsx.validateStructure(rows, CAR_COLUMNS).missingRequired).toEqual(
       [],
     );
+  });
+
+  it('CSV sem a coluna de moeda é rejeitado', () => {
+    const { rows } = xlsx.parseCsv(Buffer.from('valor\n450000', 'utf-8'));
+
+    expect(xlsx.validateStructure(rows, CAR_COLUMNS).missingRequired).toEqual([
+      'currency',
+    ]);
   });
 });

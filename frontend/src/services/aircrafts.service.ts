@@ -166,16 +166,16 @@ export async function deleteAircraft(id: string): Promise<void> {
   }
 }
 
-// Get /aircrafts/csv-template (downloads .csv file)
+// Get /aircrafts/import-template (planilha .xlsx com aba de instruções)
 export async function getAircraftsCsvTemplate(): Promise<void> {
   try {
-    const response = await api.get("/aircrafts/csv-template", {
+    const response = await api.get("/aircrafts/import-template", {
       responseType: "blob",
     });
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", "template_aeronaves.csv");
+    link.setAttribute("download", "template_aeronaves.xlsx");
     document.body.appendChild(link);
     link.click();
     link.remove();
