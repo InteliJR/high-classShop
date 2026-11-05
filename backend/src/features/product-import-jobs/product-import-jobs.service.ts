@@ -145,15 +145,15 @@ const DEFAULT_MARCA: Record<ProductType, string> = {
 };
 const DEFAULT_ESTADO = 'não informado';
 
-// Colunas que não descrevem o produto: ficam fora do identificador automático
-// para que reimportar com outro preço ou outras fotos atualize o mesmo produto.
-const NON_DESCRIPTIVE_COLUMNS = new Set([
-  'identificador',
-  'valor',
-  'currency',
-  'folder_url',
-]);
+// Sem identificador, não há como saber se duas linhas de importações diferentes
+// são a mesma unidade. O id gerado usa a linha inteira (inclusive preço, moeda
+// e pasta de fotos): reimportar a linha igual atualiza o mesmo produto, e duas
+// unidades que só diferem no preço ou nas fotos nunca se fundem. Mudar qualquer
+// dado de uma linha sem identificador cria outro produto; para atualizar depois
+// (ex.: novo preço), o identificador precisa ser preenchido.
 export const AUTO_IDENTIFIER_PREFIX = 'auto-';
+// Valores do select de estado em CommonProductFields.tsx.
+const PRODUCT_ESTADOS = new Set(['novo', 'seminovo', 'colecao']);
 
 export function isImportSpreadsheet(fileName?: string): boolean {
   return /\.(xlsx|csv)$/i.test(fileName ?? '');
@@ -255,7 +255,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    const normalizedRows = await this.parseImportRows(
+    const { rows: normalizedRows, rowNumbers } = await this.parseImportRows(
       fileBuffer,
       productType,
       mode,
@@ -305,7 +305,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
             items: {
               createMany: {
                 data: normalizedRows.map((row, index) => ({
-                  row_number: index + 2,
+                  row_number: rowNumbers[index],
                   payload: row,
                   folder_url: row.folder_url?.trim() || null,
                 })),
@@ -380,7 +380,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         'Modo de importação inválido. Use ADDITIVE ou SYNCHRONIZE.',
       );
     }
-    const normalizedRows = await this.parseImportRows(
+    const { rows: normalizedRows } = await this.parseImportRows(
       fileBuffer,
       productType,
       mode,
@@ -2163,9 +2163,24 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     return Object.fromEntries(
       Object.entries(row).map(([key, rawValue]) => {
         const value = String(rawValue ?? '').trim();
-        return [key, value === '-' ? '' : value];
+        if (value === '-') return [key, ''];
+        return [key, key === 'estado' ? this.canonicalEstado(value) : value];
       }),
     );
+  }
+
+  /**
+   * "Seminovo", "Coleção" etc. viram o valor do select do formulário de
+   * edição (novo/seminovo/colecao); sem isso o campo abre vazio ao editar.
+   * Outros valores passam como vieram.
+   */
+  private canonicalEstado(value: string): string {
+    const key = value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[\s-]+/g, '');
+    return PRODUCT_ESTADOS.has(key) ? key : value;
   }
 
   /**
@@ -2183,10 +2198,10 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     fileBuffer: Buffer,
     productType: ProductType,
     mode: string,
-  ): Promise<ImportParsedRow[]> {
+  ): Promise<{ rows: ImportParsedRow[]; rowNumbers: number[] }> {
     // .xlsx é um zip: começa com "PK".
     const isXlsx = fileBuffer[0] === 0x50 && fileBuffer[1] === 0x4b;
-    const { rows } = isXlsx
+    const { rows, rowNumbers } = isXlsx
       ? await this.xlsxImportService.parseWorkbook(fileBuffer)
       : this.xlsxImportService.parseCsv(fileBuffer);
     const columns = this.getColumnsForType(productType);
@@ -2204,21 +2219,19 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     }
     const parsedRows = rows.map((row) => this.normalizeProductRow(row));
     if (mode === 'SYNCHRONIZE') {
-      this.requireIdentifiers(parsedRows);
+      this.requireIdentifiers(parsedRows, rowNumbers);
     }
     const normalizedRows = parsedRows.map((row) =>
       this.withIdentifier(productType, row, columns),
     );
     this.validateUniqueIdentifiers(normalizedRows);
-    return normalizedRows;
+    return { rows: normalizedRows, rowNumbers };
   }
 
   /**
-   * Linha sem identificador ganha um derivado dos dados descritivos, para que
-   * reimportar a mesma linha atualize o produto em vez de duplicar.
-   * ponytail: mudar um dado descritivo (marca, km...) numa linha sem
-   * identificador gera outro id e cria um produto novo; a aba Instruções
-   * orienta a preencher o identificador quando a linha for editada depois.
+   * Linha sem identificador ganha um derivado da linha inteira, para que
+   * reimportar a mesma linha atualize o produto em vez de duplicar (ver
+   * comentário de AUTO_IDENTIFIER_PREFIX).
    */
   private withIdentifier(
     productType: ProductType,
@@ -2226,17 +2239,10 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     columns: XlsxColumnDefinition[],
   ): ImportParsedRow {
     if (row.identificador) return row;
-    const descriptive = columns
+    const basis = columns
       .map((column) => column.name)
-      .filter((name) => !NON_DESCRIPTIVE_COLUMNS.has(name) && row[name])
-      .map((name) => [name, row[name].toLowerCase()]);
-    // Sem nenhum dado descritivo, só o preço distingue uma linha da outra.
-    const basis = descriptive.length
-      ? descriptive
-      : [
-          ['valor', row.valor],
-          ['currency', row.currency?.toUpperCase()],
-        ];
+      .filter((name) => name !== 'identificador' && row[name])
+      .map((name) => [name, row[name].trim().toLowerCase()]);
     const hash = this.sha256(JSON.stringify([productType, basis])).slice(0, 12);
     return { ...row, identificador: `${AUTO_IDENTIFIER_PREFIX}${hash}` };
   }
@@ -2264,10 +2270,12 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
    * Na sincronização, um id gerado que muda com a linha desativaria o produto
    * antigo e criaria outro no lugar; por isso ali o identificador é exigido.
    */
-  private requireIdentifiers(rows: ImportParsedRow[]): void {
-    // +2: cabeçalho na linha 1 e linhas da planilha começando em 1.
+  private requireIdentifiers(
+    rows: ImportParsedRow[],
+    rowNumbers: number[],
+  ): void {
     const lines = rows.flatMap((row, index) =>
-      row.identificador ? [] : [index + 2],
+      row.identificador ? [] : [rowNumbers[index]],
     );
     if (lines.length === 0) return;
     throw new BadRequestException(

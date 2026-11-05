@@ -1,4 +1,5 @@
 import * as ExcelJS from 'exceljs';
+import { BadRequestException } from '@nestjs/common';
 import {
   AIRCRAFT_COLUMNS,
   BOAT_COLUMNS,
@@ -96,6 +97,46 @@ describe('template de importação de produtos', () => {
     );
 
     expect(rows[0].folder_url).toBe(url);
+  });
+
+  it('hyperlink com rótulo ("Fotos") é lido pela URL de destino', async () => {
+    const workbook = await loadTemplate(xlsx, CAR_COLUMNS);
+    const data = workbook.worksheets[0];
+    const url = 'https://drive.google.com/drive/folders/abc';
+    data.getRow(2).getCell(CAR_COLUMNS.length).value = {
+      text: 'Fotos',
+      hyperlink: url,
+    };
+    data.getRow(2).getCell(4).value = 1;
+
+    const { rows } = await xlsx.parseWorkbook(
+      Buffer.from(await workbook.xlsx.writeBuffer()),
+    );
+
+    expect(rows[0].folder_url).toBe(url);
+  });
+
+  it('.xlsx corrompido responde 400, não erro interno', async () => {
+    await expect(
+      xlsx.parseWorkbook(Buffer.from('PK\x03\x04não é um xlsx', 'latin1')),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('número da linha ignora linhas em branco puladas', async () => {
+    const workbook = await loadTemplate(xlsx, CAR_COLUMNS);
+    const data = workbook.worksheets[0];
+    const valor = CAR_COLUMNS.findIndex((c) => c.name === 'valor') + 1;
+    data.getRow(2).getCell(valor).value = 100;
+    data.getRow(4).getCell(valor).value = 200;
+    const { rowNumbers } = await xlsx.parseWorkbook(
+      Buffer.from(await workbook.xlsx.writeBuffer()),
+    );
+    expect(rowNumbers).toEqual([2, 4]);
+
+    const csv = xlsx.parseCsv(
+      Buffer.from('valor;currency\n100;BRL\n\n200;BRL', 'utf-8'),
+    );
+    expect(csv.rowNumbers).toEqual([2, 4]);
   });
 
   it('CSV em outra ordem de colunas continua válido', () => {

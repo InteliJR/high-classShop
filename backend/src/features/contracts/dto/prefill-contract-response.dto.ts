@@ -38,7 +38,7 @@ export class PrefillContractResponseDto {
     id: string;
     brand: string;
     model: string;
-    year: number;
+    year: number | null; // null quando o produto foi importado sem ano
     price: number;
     registration_id?: string; // placa/inscrição/prefixo
     serial_number?: string; // chassi/hull_number/serial

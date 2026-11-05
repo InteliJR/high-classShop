@@ -39,7 +39,7 @@ export async function transferProductSpecialist(
   const delegate = (tx as any)[PRODUCT_DELEGATE_BY_TYPE[input.productType]];
   const product = await delegate.findUnique({
     where: { id: input.productId },
-    select: { id: true, specialist_id: true },
+    select: { id: true, specialist_id: true, identificador: true },
   });
   if (!product) throw new NotFoundException('Produto não encontrado');
   if (product.specialist_id === input.toSpecialistId) {
@@ -74,6 +74,25 @@ export async function transferProductSpecialist(
       message:
         'Este produto tem processos ou agendamentos em andamento. Conclua ou rejeite-os antes de transferir.',
     });
+  }
+
+  // O identificador é único por especialista, e o automático (`auto-…`) não
+  // inclui o especialista: a mesma linha importada por dois deles gera o mesmo
+  // id. Sem esta checagem o update cai no P2002 genérico.
+  if (product.identificador) {
+    const clash = await delegate.findFirst({
+      where: {
+        specialist_id: input.toSpecialistId,
+        identificador: product.identificador,
+      },
+      select: { id: true },
+    });
+    if (clash) {
+      throw new ConflictException({
+        code: 'PRODUCT_IDENTIFIER_CONFLICT',
+        message: `O especialista de destino já tem um produto com o identificador "${product.identificador}". Altere o identificador de um dos produtos antes de transferir.`,
+      });
+    }
   }
 
   await delegate.update({

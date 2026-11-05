@@ -291,7 +291,10 @@ export default function CreateContractPage() {
           "vehicle_model",
           `${data.product.brand} ${data.product.model}`,
         );
-        setValue("vehicle_year", String(data.product.year));
+        setValue(
+          "vehicle_year",
+          data.product.year ? String(data.product.year) : "",
+        );
         setValue("vehicle_registration_id", data.product.registration_id || "");
         setValue("vehicle_serial_number", data.product.serial_number || "");
         setValue("vehicle_technical_info", data.product.technical_info || "");

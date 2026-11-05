@@ -363,8 +363,9 @@ export function XlsxImporter({
                   Reimportar a mesma linha atualiza o produto em vez de
                   duplicar. Sem{" "}
                   <strong className="text-gray-900">identificador</strong>, ele
-                  é gerado a partir dos dados da linha; preencha-o se for
-                  editar a linha depois (na sincronização do catálogo ele é
+                  é gerado a partir da linha inteira: mudar qualquer dado,
+                  inclusive o valor, cria um produto novo. Preencha-o se for
+                  atualizar a linha depois (na sincronização do catálogo ele é
                   obrigatório).
                 </span>
               </li>

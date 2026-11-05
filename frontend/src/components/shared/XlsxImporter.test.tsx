@@ -19,14 +19,14 @@ describe("XlsxImporter", () => {
     const tip = screen.getByText(
       (_, element) =>
         element?.tagName === "LI" &&
-        element.textContent?.includes("Produtos com") === true &&
+        element.textContent?.includes("Reimportar a mesma linha") === true &&
         element.textContent?.includes("identificador") === true,
     );
     const sentence = tip.children[1];
 
     expect(sentence?.tagName).toBe("SPAN");
     expect(sentence?.textContent).toBe(
-      "Produtos com o mesmo identificador serão atualizados em vez de duplicados (marca e modelo podem se repetir entre produtos diferentes).",
+      "Reimportar a mesma linha atualiza o produto em vez de duplicar. Sem identificador, ele é gerado a partir da linha inteira: mudar qualquer dado, inclusive o valor, cria um produto novo. Preencha-o se for atualizar a linha depois (na sincronização do catálogo ele é obrigatório).",
     );
     expect(sentence?.querySelector("strong")?.textContent).toBe(
       "identificador",
