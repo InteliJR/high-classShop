@@ -16,6 +16,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { S3Service } from 'src/aws/s3.service';
 import { ImportDriveImagesDto } from './dto/import-drive-images.dto';
 import { UserEntity } from 'src/auth/entities/user.entity';
+import { extractDriveFolderId } from './drive-folder-id';
 
 type DriveFile = {
   id: string;
@@ -426,20 +427,8 @@ export class DriveImportService {
   }
 
   private extractFolderId(urlOrId: string): string {
-    const trimmed = urlOrId.trim();
-    const folderRegex = /\/folders\/([a-zA-Z0-9_-]{10,})/;
-    const idRegex = /[?&]id=([a-zA-Z0-9_-]{10,})/;
-
-    const fromFolderPath = trimmed.match(folderRegex)?.[1];
-    if (fromFolderPath) return fromFolderPath;
-
-    const fromQuery = trimmed.match(idRegex)?.[1];
-    if (fromQuery) return fromQuery;
-
-    if (/^[a-zA-Z0-9_-]{10,}$/.test(trimmed)) {
-      return trimmed;
-    }
-
+    const folderId = extractDriveFolderId(urlOrId);
+    if (folderId) return folderId;
     throw new BadRequestException('Link/ID da pasta do Google Drive inválido');
   }
 

@@ -53,7 +53,11 @@ export class XlsxImportService {
    * @param fileBuffer Buffer do arquivo XLSX
    * @returns Linhas parseadas + mapa de imagens por índice de linha (0-based, dados)
    */
-  async parseWorkbook(fileBuffer: Buffer): Promise<XlsxParseResult> {
+  async parseWorkbook(
+    fileBuffer: Buffer,
+    options: { linkColumns?: string[] } = {},
+  ): Promise<XlsxParseResult> {
+    const linkColumns = new Set(options.linkColumns ?? []);
     const workbook = new ExcelJS.Workbook();
     try {
       await workbook.xlsx.load(fileBuffer as any);
@@ -101,11 +105,15 @@ export class XlsxImportService {
 
       headers.forEach((header, colIndex) => {
         if (!header) return;
-        // O Excel transforma links (ex.: folder_url) em objetos hyperlink, que
-        // viravam "[object Object]" com String(). Num link com rótulo ("Fotos"),
-        // `text` é o rótulo; o dado é o destino, em `hyperlink`.
+        // `text` em vez de `value`: o Excel transforma links em objetos
+        // hyperlink, que viravam "[object Object]" com String(). Só nas
+        // colunas de link (ex.: folder_url) o dado é o destino, e não o rótulo
+        // exibido ("Fotos"); nas demais, um link num "modelo" não pode
+        // trocar o nome do produto pela URL.
         const cell = row.getCell(colIndex + 1);
-        const value = (cell.hyperlink ?? cell.text).trim();
+        const value = (
+          linkColumns.has(header) ? this.linkTarget(cell) : cell.text
+        ).trim();
 
         if (value !== '') {
           hasData = true;
@@ -174,6 +182,18 @@ export class XlsxImportService {
     }
 
     return { rows, rowNumbers, imageMap };
+  }
+
+  /**
+   * Destino de uma célula de link: hyperlink inserido pelo Excel, fórmula
+   * =HYPERLINK("url"; "rótulo") ou, sem link, o texto digitado.
+   */
+  private linkTarget(cell: ExcelJS.Cell): string {
+    if (cell.hyperlink) return cell.hyperlink;
+    const formulaUrl = cell.formula?.match(
+      /^\s*=?\s*HYPERLINK\(\s*"([^"]+)"/i,
+    )?.[1];
+    return formulaUrl ?? cell.text;
   }
 
   /**
@@ -535,7 +555,8 @@ export class XlsxImportService {
     for (const note of [
       'Preencha uma linha por produto na aba "Produtos" e importe este arquivo (.xlsx) ou salve como .csv.',
       'Só valor e currency são obrigatórios. Colunas vazias recebem um valor padrão e podem ser completadas depois na edição do produto.',
-      'Reimportar a mesma linha atualiza o produto existente em vez de criar outro.',
+      'Com identificador preenchido, reimportar a linha atualiza o produto existente (inclusive preço e fotos) em vez de criar outro.',
+      'Sem identificador, só a linha idêntica atualiza o mesmo produto: mudar qualquer dado, inclusive o valor, cria um produto novo e o anterior continua no catálogo. Uma linha idêntica à de um produto desativado o reativa.',
     ]) {
       instructions.addRow({ coluna: note });
       instructions.mergeCells(`A${instructions.rowCount}:E${instructions.rowCount}`);

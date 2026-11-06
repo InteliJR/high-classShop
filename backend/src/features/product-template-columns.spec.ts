@@ -94,6 +94,7 @@ describe('template de importação de produtos', () => {
 
     const { rows } = await xlsx.parseWorkbook(
       Buffer.from(await workbook.xlsx.writeBuffer()),
+      { linkColumns: ['folder_url'] },
     );
 
     expect(rows[0].folder_url).toBe(url);
@@ -111,6 +112,41 @@ describe('template de importação de produtos', () => {
 
     const { rows } = await xlsx.parseWorkbook(
       Buffer.from(await workbook.xlsx.writeBuffer()),
+      { linkColumns: ['folder_url'] },
+    );
+
+    expect(rows[0].folder_url).toBe(url);
+  });
+
+  it('link em coluna que não é de link mantém o texto exibido', async () => {
+    const workbook = await loadTemplate(xlsx, CAR_COLUMNS);
+    const data = workbook.worksheets[0];
+    const modelo = CAR_COLUMNS.findIndex((c) => c.name === 'modelo') + 1;
+    data.getRow(2).getCell(modelo).value = {
+      text: 'Phenom 300',
+      hyperlink: 'https://vendedor.com/phenom',
+    };
+
+    const { rows } = await xlsx.parseWorkbook(
+      Buffer.from(await workbook.xlsx.writeBuffer()),
+      { linkColumns: ['folder_url'] },
+    );
+
+    expect(rows[0].modelo).toBe('Phenom 300');
+  });
+
+  it('fórmula HYPERLINK em folder_url é lida pela URL', async () => {
+    const workbook = await loadTemplate(xlsx, CAR_COLUMNS);
+    const data = workbook.worksheets[0];
+    const url = 'https://drive.google.com/drive/folders/1AbCdEfGhIjK';
+    data.getRow(2).getCell(CAR_COLUMNS.length).value = {
+      formula: `HYPERLINK("${url}","Fotos")`,
+      result: 'Fotos',
+    } as ExcelJS.CellFormulaValue;
+
+    const { rows } = await xlsx.parseWorkbook(
+      Buffer.from(await workbook.xlsx.writeBuffer()),
+      { linkColumns: ['folder_url'] },
     );
 
     expect(rows[0].folder_url).toBe(url);

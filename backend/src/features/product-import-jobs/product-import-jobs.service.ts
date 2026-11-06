@@ -44,6 +44,7 @@ import {
 } from '../products/product-monetary-lock';
 import { ActorContext } from 'src/shared/actor-context/actor-context.service';
 import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
+import { extractDriveFolderId } from '../drive-import/drive-folder-id';
 import {
   createHash,
   createHmac,
@@ -92,7 +93,17 @@ type ImportImpact = {
   matchingItems: number;
   newOrReactivatedItems: number;
   deactivationCandidates: number;
+  // Linhas sem identificador: sem como casar com uma edição anterior, então
+  // criam produto novo (ex.: mesmo carro com preço novo) ou, se a linha for
+  // idêntica à de um produto desativado, reativam esse produto.
+  autoIdentifierNewItems: number;
+  autoIdentifierReactivatedItems: number;
 };
+
+type AutoIdentifierImpact = Pick<
+  ImportImpact,
+  'autoIdentifierNewItems' | 'autoIdentifierReactivatedItems'
+>;
 
 type SynchronizationCatalogSnapshot = {
   candidateIds: string[];
@@ -393,12 +404,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     const impact =
       mode === 'SYNCHRONIZE'
         ? catalogSnapshot.impact
-        : this.deriveImportImpact(
-            catalogSnapshot.impact.activeItemsBefore,
-            catalogSnapshot.impact.matchingItems,
-            normalizedRows,
-            0,
-          );
+        : { ...catalogSnapshot.impact, deactivationCandidates: 0 };
     const synchronizePreviewToken =
       mode === 'SYNCHRONIZE'
         ? this.createSynchronizePreviewToken(
@@ -545,6 +551,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         matchingItems,
         rows,
         candidateIds.length,
+        this.autoIdentifierImpact(rows, catalogProducts),
       ),
     };
   }
@@ -1408,11 +1415,30 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     return { ...snapshot.impact, deactivationCandidates: 0 };
   }
 
+  private autoIdentifierImpact(
+    rows: ImportParsedRow[],
+    catalogProducts: CatalogProductSnapshot[],
+  ): AutoIdentifierImpact {
+    const catalog = new Map(
+      catalogProducts.map((product) => [product.identificador, product]),
+    );
+    let autoIdentifierNewItems = 0;
+    let autoIdentifierReactivatedItems = 0;
+    for (const row of rows) {
+      if (!row.identificador?.startsWith(AUTO_IDENTIFIER_PREFIX)) continue;
+      const existing = catalog.get(row.identificador);
+      if (!existing) autoIdentifierNewItems += 1;
+      else if (!existing.isActive) autoIdentifierReactivatedItems += 1;
+    }
+    return { autoIdentifierNewItems, autoIdentifierReactivatedItems };
+  }
+
   private deriveImportImpact(
     activeItemsBefore: number,
     matchingItems: number,
     rows: ImportParsedRow[],
     deactivationCandidates: number,
+    autoIdentifier: AutoIdentifierImpact,
   ): ImportImpact {
     const incomingIdentifiers = new Set(
       rows.map((row) => row.identificador?.trim()).filter(Boolean),
@@ -1426,6 +1452,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         incomingIdentifiers.size - matchingItems,
       ),
       deactivationCandidates,
+      ...autoIdentifier,
     };
   }
 
@@ -2202,7 +2229,9 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     // .xlsx é um zip: começa com "PK".
     const isXlsx = fileBuffer[0] === 0x50 && fileBuffer[1] === 0x4b;
     const { rows, rowNumbers } = isXlsx
-      ? await this.xlsxImportService.parseWorkbook(fileBuffer)
+      ? await this.xlsxImportService.parseWorkbook(fileBuffer, {
+          linkColumns: ['folder_url'],
+        })
       : this.xlsxImportService.parseCsv(fileBuffer);
     const columns = this.getColumnsForType(productType);
     const structureValidation = this.xlsxImportService.validateStructure(
@@ -2218,6 +2247,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       });
     }
     const parsedRows = rows.map((row) => this.normalizeProductRow(row));
+    this.validateFolderUrls(parsedRows, rowNumbers);
     if (mode === 'SYNCHRONIZE') {
       this.requireIdentifiers(parsedRows, rowNumbers);
     }
@@ -2240,11 +2270,26 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
   ): ImportParsedRow {
     if (row.identificador) return row;
     const basis = columns
-      .map((column) => column.name)
-      .filter((name) => name !== 'identificador' && row[name])
-      .map((name) => [name, row[name].trim().toLowerCase()]);
+      .filter((column) => column.name !== 'identificador' && row[column.name])
+      .map((column) => [column.name, this.hashValue(column, row[column.name])]);
     const hash = this.sha256(JSON.stringify([productType, basis])).slice(0, 12);
     return { ...row, identificador: `${AUTO_IDENTIFIER_PREFIX}${hash}` };
+  }
+
+  /**
+   * Mesmo dado escrito de outro jeito gera o mesmo id: 450000 e 450000.00,
+   * ou o link da pasta com e sem ?usp=sharing.
+   */
+  private hashValue(column: XlsxColumnDefinition, raw: string): string {
+    const value = raw.trim();
+    if (column.type === 'number') {
+      const number = Number(value);
+      if (Number.isFinite(number)) return String(number);
+    }
+    if (column.name === 'folder_url') {
+      return extractDriveFolderId(value) ?? value;
+    }
+    return value.toLowerCase();
   }
 
   private withCreationDefaults<
@@ -2280,6 +2325,25 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     if (lines.length === 0) return;
     throw new BadRequestException(
       `Para sincronizar o catálogo, preencha o identificador de todas as linhas (faltando nas linhas ${lines.join(', ')}).`,
+    );
+  }
+
+  /**
+   * folder_url que não é link nem ID de pasta do Drive (ex.: o rótulo "Fotos"
+   * de um link que não deu para ler) é recusado antes de virar produto.
+   */
+  private validateFolderUrls(
+    rows: ImportParsedRow[],
+    rowNumbers: number[],
+  ): void {
+    const lines = rows.flatMap((row, index) =>
+      row.folder_url && !extractDriveFolderId(row.folder_url)
+        ? [rowNumbers[index]]
+        : [],
+    );
+    if (lines.length === 0) return;
+    throw new BadRequestException(
+      `folder_url precisa ser o link de uma pasta do Google Drive (https://drive.google.com/drive/folders/...). Valor inválido nas linhas ${lines.join(', ')}.`,
     );
   }
 
@@ -2366,12 +2430,22 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
     const warningRows: ImportErrorRow[] = [];
+    let autoIdentifierCreatedCount = 0;
+    let autoIdentifierReactivatedCount = 0;
 
     for (const item of items) {
       if (
         item.status === ProductImportItemStatus.COMPLETED ||
         item.status === ProductImportItemStatus.COMPLETED_WITH_WARNINGS
       ) {
+        const payload = item.payload as ImportItemPayload | null;
+        if (payload?.identificador?.startsWith(AUTO_IDENTIFIER_PREFIX)) {
+          if (item.action === 'CREATED') autoIdentifierCreatedCount += 1;
+          if (payload.__productImportEffect?.reactivated) {
+            autoIdentifierReactivatedCount += 1;
+          }
+        }
+
         if (item.action === 'CREATED' && item.product_id) {
           insertedIds.push(item.product_id);
         }
@@ -2439,6 +2513,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       deactivatedCount,
       deactivatedIds,
       reactivatedCount,
+      autoIdentifierCreatedCount,
+      autoIdentifierReactivatedCount,
     };
   }
 

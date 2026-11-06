@@ -864,9 +864,9 @@ describe('ProductImportJobsService', () => {
 
     it('a mesma linha gera o mesmo identificador em importações diferentes', async () => {
       const header = 'marca;modelo;valor;currency;folder_url';
-      const [first] = await parse([header, 'BMW;X5;450000;BRL;https://d/1']);
-      const [again] = await parse([header, 'bmw;X5;450000;brl;https://d/1']);
-      const [other] = await parse([header, 'BMW;X6;450000;BRL;https://d/1']);
+      const [first] = await parse([header, 'BMW;X5;450000;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK']);
+      const [again] = await parse([header, 'bmw;X5;450000;brl;https://drive.google.com/drive/folders/1AbCdEfGhIjK']);
+      const [other] = await parse([header, 'BMW;X6;450000;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK']);
 
       expect(first.identificador).toMatch(/^auto-[0-9a-f]{12}$/);
       expect(again.identificador).toBe(first.identificador);
@@ -877,13 +877,13 @@ describe('ProductImportJobsService', () => {
       const header = 'marca;modelo;ano;valor;currency;folder_url';
       const [base] = await parse([
         header,
-        'BMW;X5;2023;450000;BRL;https://d/1',
+        'BMW;X5;2023;450000;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK',
       ]);
       const variants = await Promise.all(
         [
-          'BMW;X5;2023;500000;BRL;https://d/1',
-          'BMW;X5;2023;450000;USD;https://d/1',
-          'BMW;X5;2023;450000;BRL;https://d/2',
+          'BMW;X5;2023;500000;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK',
+          'BMW;X5;2023;450000;USD;https://drive.google.com/drive/folders/1AbCdEfGhIjK',
+          'BMW;X5;2023;450000;BRL;https://drive.google.com/drive/folders/2ZyXwVuTsRqP',
         ].map(async (line) => (await parse([header, line]))[0]),
       );
 
@@ -911,6 +911,87 @@ describe('ProductImportJobsService', () => {
         'colecao',
         'usado',
       ]);
+    });
+
+    it('mesmo preço ou mesma pasta escritos de outro jeito geram o mesmo id', async () => {
+      const header = 'marca;valor;currency;folder_url';
+      const folder = 'https://drive.google.com/drive/folders/1AbCdEfGhIjK';
+      const [base] = await parse([header, `BMW;450000;BRL;${folder}`]);
+      const [variant] = await parse([
+        header,
+        `BMW;450000.00;BRL;${folder}?usp=sharing`,
+      ]);
+
+      expect(variant.identificador).toBe(base.identificador);
+    });
+
+    it('recusa folder_url que não é link de pasta do Drive', async () => {
+      await expect(
+        parse([
+          'identificador;valor;currency;folder_url',
+          'A;1;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK',
+          'B;1;BRL;Fotos',
+        ]),
+      ).rejects.toThrow(/folder_url.*linhas 3\./);
+    });
+
+    it('conta linhas sem identificador que criam ou reativam produto', () => {
+      const service = new ProductImportJobsService(
+        {} as any,
+        {} as any,
+        {} as any,
+      );
+      const impact = (service as any).autoIdentifierImpact(
+        [
+          { identificador: 'auto-novo' },
+          { identificador: 'auto-ativo' },
+          { identificador: 'auto-inativo' },
+          { identificador: 'MANUAL-1' },
+        ],
+        [
+          { identificador: 'auto-ativo', isActive: true },
+          { identificador: 'auto-inativo', isActive: false },
+          { identificador: 'MANUAL-1', isActive: false },
+        ],
+      );
+
+      expect(impact).toEqual({
+        autoIdentifierNewItems: 1,
+        autoIdentifierReactivatedItems: 1,
+      });
+    });
+
+    it('resultado informa produtos criados e reativados sem identificador', () => {
+      const service = new ProductImportJobsService(
+        {} as any,
+        {} as any,
+        {} as any,
+      );
+      const item = (overrides: Record<string, unknown>) => ({
+        row_number: 2,
+        status: 'COMPLETED',
+        action: 'CREATED',
+        product_id: 'p',
+        error_message: null,
+        warnings: null,
+        ...overrides,
+      });
+      const result = (service as any).buildImportResponse([
+        item({ payload: { identificador: 'auto-a' } }),
+        item({
+          action: 'UPDATED',
+          payload: {
+            identificador: 'auto-b',
+            __productImportEffect: { reactivated: true },
+          },
+        }),
+        item({ payload: { identificador: 'MANUAL-1' } }),
+      ]);
+
+      expect(result).toMatchObject({
+        autoIdentifierCreatedCount: 1,
+        autoIdentifierReactivatedCount: 1,
+      });
     });
 
     it('identificador informado é mantido', async () => {

@@ -16,7 +16,12 @@ function db(overrides: Record<string, unknown> = {}) {
     car: {
       findUnique: jest
         .fn()
-        .mockResolvedValue({ id: 'car-1', specialist_id: 'old' }),
+        .mockResolvedValue({
+          id: 'car-1',
+          specialist_id: 'old',
+          identificador: 'BMW-1',
+        }),
+      findFirst: jest.fn().mockResolvedValue(null),
       update: jest.fn().mockResolvedValue({}),
     },
     process: { findFirst: jest.fn().mockResolvedValue(null) },

@@ -79,20 +79,18 @@ export async function transferProductSpecialist(
   // O identificador é único por especialista, e o automático (`auto-…`) não
   // inclui o especialista: a mesma linha importada por dois deles gera o mesmo
   // id. Sem esta checagem o update cai no P2002 genérico.
-  if (product.identificador) {
-    const clash = await delegate.findFirst({
-      where: {
-        specialist_id: input.toSpecialistId,
-        identificador: product.identificador,
-      },
-      select: { id: true },
+  const clash = await delegate.findFirst({
+    where: {
+      specialist_id: input.toSpecialistId,
+      identificador: product.identificador,
+    },
+    select: { id: true },
+  });
+  if (clash) {
+    throw new ConflictException({
+      code: 'PRODUCT_IDENTIFIER_CONFLICT',
+      message: `O especialista de destino já tem um produto com o identificador "${product.identificador}". Altere o identificador de um dos produtos antes de transferir.`,
     });
-    if (clash) {
-      throw new ConflictException({
-        code: 'PRODUCT_IDENTIFIER_CONFLICT',
-        message: `O especialista de destino já tem um produto com o identificador "${product.identificador}". Altere o identificador de um dos produtos antes de transferir.`,
-      });
-    }
   }
 
   await delegate.update({
