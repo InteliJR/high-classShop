@@ -285,7 +285,7 @@ Cada domínio expõe:
   "images": []
 }
 ```
-- `POST /cars|boats|aircrafts/import-csv` — aceita `.xlsx` (template) ou `.csv`. Só `valor` e `currency` (`BRL`/`USD`) são obrigatórios. Sem `identificador`, o import gera `auto-<hash>` a partir dos campos descritivos da linha (sem valor/moeda/folder_url), então reimportar a mesma linha atualiza em vez de duplicar. Na criação, campos vazios viram padrão: `marca` = tipo (Carro/Lancha/Aeronave), `modelo` = identificador, `estado` = "não informado", `ano` = null; no update, campos vazios não sobrescrevem o que existe.
+- `POST /cars|boats|aircrafts/import-csv` — aceita `.xlsx` (template) ou `.csv`. Só `valor` e `currency` (`BRL`/`USD`) são obrigatórios. Sem `identificador`, o import gera `auto-<hash>` a partir da linha inteira, inclusive `valor`, `currency` e `folder_url` (normalizados: `450000` = `450000.00`; link da pasta comparado pelo ID do Drive). Reimportar a linha idêntica atualiza o mesmo produto (e reativa se estiver desativado); mudar qualquer dado, inclusive o preço, cria outro produto. Para atualizar uma linha depois, preencha o `identificador`. A prévia (`impact.autoIdentifierNewItems`/`autoIdentifierReactivatedItems`) e o resultado (`autoIdentifierCreatedCount`/`autoIdentifierReactivatedCount`) mostram quantas linhas sem identificador criam ou reativam produto. `folder_url` precisa ser link ou ID de pasta do Drive; no `.xlsx`, hyperlink e fórmula `HYPERLINK` valem pelo destino (só nessa coluna). Na criação, campos vazios viram padrão: `marca` = tipo (Carro/Lancha/Aeronave), `modelo` = identificador, `estado` = "não informado", `ano` = null; no update, campos vazios não sobrescrevem o que existe.
   - payload:
 ```json
 {
@@ -357,7 +357,7 @@ Cada domínio expõe:
   "updated": true
 }
 ```
-- `PATCH /cars|boats|aircrafts/:id/specialist` (somente ADMIN) — transfere o produto para outro especialista ativo da mesma especialidade. `409 PRODUCT_HAS_OPEN_PROCESSES` se houver processo não concluído/rejeitado ou agendamento pendente/agendado; processos antigos mantêm o especialista original. Auditado como `PRODUCT_TRANSFER`.
+- `PATCH /cars|boats|aircrafts/:id/specialist` (somente ADMIN) — transfere o produto para outro especialista ativo da mesma especialidade. `409 PRODUCT_HAS_OPEN_PROCESSES` se houver processo não concluído/rejeitado ou agendamento pendente/agendado; `409 PRODUCT_IDENTIFIER_CONFLICT` se o especialista de destino já tiver produto com o mesmo `identificador`; processos antigos mantêm o especialista original. Auditado como `PRODUCT_TRANSFER`.
   - payload:
 ```json
 {

@@ -44,6 +44,7 @@ import {
 } from '../products/product-monetary-lock';
 import { ActorContext } from 'src/shared/actor-context/actor-context.service';
 import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
+import { extractDriveFolderId } from '../drive-import/drive-folder-id';
 import {
   createHash,
   createHmac,
@@ -92,7 +93,17 @@ type ImportImpact = {
   matchingItems: number;
   newOrReactivatedItems: number;
   deactivationCandidates: number;
+  // Linhas sem identificador: sem como casar com uma edição anterior, então
+  // criam produto novo (ex.: mesmo carro com preço novo) ou, se a linha for
+  // idêntica à de um produto desativado, reativam esse produto.
+  autoIdentifierNewItems: number;
+  autoIdentifierReactivatedItems: number;
 };
+
+type AutoIdentifierImpact = Pick<
+  ImportImpact,
+  'autoIdentifierNewItems' | 'autoIdentifierReactivatedItems'
+>;
 
 type SynchronizationCatalogSnapshot = {
   candidateIds: string[];
@@ -145,15 +156,15 @@ const DEFAULT_MARCA: Record<ProductType, string> = {
 };
 const DEFAULT_ESTADO = 'não informado';
 
-// Colunas que não descrevem o produto: ficam fora do identificador automático
-// para que reimportar com outro preço ou outras fotos atualize o mesmo produto.
-const NON_DESCRIPTIVE_COLUMNS = new Set([
-  'identificador',
-  'valor',
-  'currency',
-  'folder_url',
-]);
+// Sem identificador, não há como saber se duas linhas de importações diferentes
+// são a mesma unidade. O id gerado usa a linha inteira (inclusive preço, moeda
+// e pasta de fotos): reimportar a linha igual atualiza o mesmo produto, e duas
+// unidades que só diferem no preço ou nas fotos nunca se fundem. Mudar qualquer
+// dado de uma linha sem identificador cria outro produto; para atualizar depois
+// (ex.: novo preço), o identificador precisa ser preenchido.
 export const AUTO_IDENTIFIER_PREFIX = 'auto-';
+// Valores do select de estado em CommonProductFields.tsx.
+const PRODUCT_ESTADOS = new Set(['novo', 'seminovo', 'colecao']);
 
 export function isImportSpreadsheet(fileName?: string): boolean {
   return /\.(xlsx|csv)$/i.test(fileName ?? '');
@@ -255,7 +266,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    const normalizedRows = await this.parseImportRows(
+    const { rows: normalizedRows, rowNumbers } = await this.parseImportRows(
       fileBuffer,
       productType,
       mode,
@@ -305,7 +316,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
             items: {
               createMany: {
                 data: normalizedRows.map((row, index) => ({
-                  row_number: index + 2,
+                  row_number: rowNumbers[index],
                   payload: row,
                   folder_url: row.folder_url?.trim() || null,
                 })),
@@ -380,7 +391,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         'Modo de importação inválido. Use ADDITIVE ou SYNCHRONIZE.',
       );
     }
-    const normalizedRows = await this.parseImportRows(
+    const { rows: normalizedRows } = await this.parseImportRows(
       fileBuffer,
       productType,
       mode,
@@ -393,12 +404,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     const impact =
       mode === 'SYNCHRONIZE'
         ? catalogSnapshot.impact
-        : this.deriveImportImpact(
-            catalogSnapshot.impact.activeItemsBefore,
-            catalogSnapshot.impact.matchingItems,
-            normalizedRows,
-            0,
-          );
+        : { ...catalogSnapshot.impact, deactivationCandidates: 0 };
     const synchronizePreviewToken =
       mode === 'SYNCHRONIZE'
         ? this.createSynchronizePreviewToken(
@@ -545,6 +551,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         matchingItems,
         rows,
         candidateIds.length,
+        this.autoIdentifierImpact(rows, catalogProducts),
       ),
     };
   }
@@ -1408,11 +1415,30 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     return { ...snapshot.impact, deactivationCandidates: 0 };
   }
 
+  private autoIdentifierImpact(
+    rows: ImportParsedRow[],
+    catalogProducts: CatalogProductSnapshot[],
+  ): AutoIdentifierImpact {
+    const catalog = new Map(
+      catalogProducts.map((product) => [product.identificador, product]),
+    );
+    let autoIdentifierNewItems = 0;
+    let autoIdentifierReactivatedItems = 0;
+    for (const row of rows) {
+      if (!row.identificador?.startsWith(AUTO_IDENTIFIER_PREFIX)) continue;
+      const existing = catalog.get(row.identificador);
+      if (!existing) autoIdentifierNewItems += 1;
+      else if (!existing.isActive) autoIdentifierReactivatedItems += 1;
+    }
+    return { autoIdentifierNewItems, autoIdentifierReactivatedItems };
+  }
+
   private deriveImportImpact(
     activeItemsBefore: number,
     matchingItems: number,
     rows: ImportParsedRow[],
     deactivationCandidates: number,
+    autoIdentifier: AutoIdentifierImpact,
   ): ImportImpact {
     const incomingIdentifiers = new Set(
       rows.map((row) => row.identificador?.trim()).filter(Boolean),
@@ -1426,6 +1452,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         incomingIdentifiers.size - matchingItems,
       ),
       deactivationCandidates,
+      ...autoIdentifier,
     };
   }
 
@@ -2163,9 +2190,24 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     return Object.fromEntries(
       Object.entries(row).map(([key, rawValue]) => {
         const value = String(rawValue ?? '').trim();
-        return [key, value === '-' ? '' : value];
+        if (value === '-') return [key, ''];
+        return [key, key === 'estado' ? this.canonicalEstado(value) : value];
       }),
     );
+  }
+
+  /**
+   * "Seminovo", "Coleção" etc. viram o valor do select do formulário de
+   * edição (novo/seminovo/colecao); sem isso o campo abre vazio ao editar.
+   * Outros valores passam como vieram.
+   */
+  private canonicalEstado(value: string): string {
+    const key = value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[\s-]+/g, '');
+    return PRODUCT_ESTADOS.has(key) ? key : value;
   }
 
   /**
@@ -2183,11 +2225,13 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     fileBuffer: Buffer,
     productType: ProductType,
     mode: string,
-  ): Promise<ImportParsedRow[]> {
+  ): Promise<{ rows: ImportParsedRow[]; rowNumbers: number[] }> {
     // .xlsx é um zip: começa com "PK".
     const isXlsx = fileBuffer[0] === 0x50 && fileBuffer[1] === 0x4b;
-    const { rows } = isXlsx
-      ? await this.xlsxImportService.parseWorkbook(fileBuffer)
+    const { rows, rowNumbers } = isXlsx
+      ? await this.xlsxImportService.parseWorkbook(fileBuffer, {
+          linkColumns: ['folder_url'],
+        })
       : this.xlsxImportService.parseCsv(fileBuffer);
     const columns = this.getColumnsForType(productType);
     const structureValidation = this.xlsxImportService.validateStructure(
@@ -2203,22 +2247,21 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       });
     }
     const parsedRows = rows.map((row) => this.normalizeProductRow(row));
+    this.validateFolderUrls(parsedRows, rowNumbers);
     if (mode === 'SYNCHRONIZE') {
-      this.requireIdentifiers(parsedRows);
+      this.requireIdentifiers(parsedRows, rowNumbers);
     }
     const normalizedRows = parsedRows.map((row) =>
       this.withIdentifier(productType, row, columns),
     );
     this.validateUniqueIdentifiers(normalizedRows);
-    return normalizedRows;
+    return { rows: normalizedRows, rowNumbers };
   }
 
   /**
-   * Linha sem identificador ganha um derivado dos dados descritivos, para que
-   * reimportar a mesma linha atualize o produto em vez de duplicar.
-   * ponytail: mudar um dado descritivo (marca, km...) numa linha sem
-   * identificador gera outro id e cria um produto novo; a aba Instruções
-   * orienta a preencher o identificador quando a linha for editada depois.
+   * Linha sem identificador ganha um derivado da linha inteira, para que
+   * reimportar a mesma linha atualize o produto em vez de duplicar (ver
+   * comentário de AUTO_IDENTIFIER_PREFIX).
    */
   private withIdentifier(
     productType: ProductType,
@@ -2226,19 +2269,27 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     columns: XlsxColumnDefinition[],
   ): ImportParsedRow {
     if (row.identificador) return row;
-    const descriptive = columns
-      .map((column) => column.name)
-      .filter((name) => !NON_DESCRIPTIVE_COLUMNS.has(name) && row[name])
-      .map((name) => [name, row[name].toLowerCase()]);
-    // Sem nenhum dado descritivo, só o preço distingue uma linha da outra.
-    const basis = descriptive.length
-      ? descriptive
-      : [
-          ['valor', row.valor],
-          ['currency', row.currency?.toUpperCase()],
-        ];
+    const basis = columns
+      .filter((column) => column.name !== 'identificador' && row[column.name])
+      .map((column) => [column.name, this.hashValue(column, row[column.name])]);
     const hash = this.sha256(JSON.stringify([productType, basis])).slice(0, 12);
     return { ...row, identificador: `${AUTO_IDENTIFIER_PREFIX}${hash}` };
+  }
+
+  /**
+   * Mesmo dado escrito de outro jeito gera o mesmo id: 450000 e 450000.00,
+   * ou o link da pasta com e sem ?usp=sharing.
+   */
+  private hashValue(column: XlsxColumnDefinition, raw: string): string {
+    const value = raw.trim();
+    if (column.type === 'number') {
+      const number = Number(value);
+      if (Number.isFinite(number)) return String(number);
+    }
+    if (column.name === 'folder_url') {
+      return extractDriveFolderId(value) ?? value;
+    }
+    return value.toLowerCase();
   }
 
   private withCreationDefaults<
@@ -2264,14 +2315,35 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
    * Na sincronização, um id gerado que muda com a linha desativaria o produto
    * antigo e criaria outro no lugar; por isso ali o identificador é exigido.
    */
-  private requireIdentifiers(rows: ImportParsedRow[]): void {
-    // +2: cabeçalho na linha 1 e linhas da planilha começando em 1.
+  private requireIdentifiers(
+    rows: ImportParsedRow[],
+    rowNumbers: number[],
+  ): void {
     const lines = rows.flatMap((row, index) =>
-      row.identificador ? [] : [index + 2],
+      row.identificador ? [] : [rowNumbers[index]],
     );
     if (lines.length === 0) return;
     throw new BadRequestException(
       `Para sincronizar o catálogo, preencha o identificador de todas as linhas (faltando nas linhas ${lines.join(', ')}).`,
+    );
+  }
+
+  /**
+   * folder_url que não é link nem ID de pasta do Drive (ex.: o rótulo "Fotos"
+   * de um link que não deu para ler) é recusado antes de virar produto.
+   */
+  private validateFolderUrls(
+    rows: ImportParsedRow[],
+    rowNumbers: number[],
+  ): void {
+    const lines = rows.flatMap((row, index) =>
+      row.folder_url && !extractDriveFolderId(row.folder_url)
+        ? [rowNumbers[index]]
+        : [],
+    );
+    if (lines.length === 0) return;
+    throw new BadRequestException(
+      `folder_url precisa ser o link de uma pasta do Google Drive (https://drive.google.com/drive/folders/...). Valor inválido nas linhas ${lines.join(', ')}.`,
     );
   }
 
@@ -2358,12 +2430,22 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
     const warningRows: ImportErrorRow[] = [];
+    let autoIdentifierCreatedCount = 0;
+    let autoIdentifierReactivatedCount = 0;
 
     for (const item of items) {
       if (
         item.status === ProductImportItemStatus.COMPLETED ||
         item.status === ProductImportItemStatus.COMPLETED_WITH_WARNINGS
       ) {
+        const payload = item.payload as ImportItemPayload | null;
+        if (payload?.identificador?.startsWith(AUTO_IDENTIFIER_PREFIX)) {
+          if (item.action === 'CREATED') autoIdentifierCreatedCount += 1;
+          if (payload.__productImportEffect?.reactivated) {
+            autoIdentifierReactivatedCount += 1;
+          }
+        }
+
         if (item.action === 'CREATED' && item.product_id) {
           insertedIds.push(item.product_id);
         }
@@ -2431,6 +2513,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       deactivatedCount,
       deactivatedIds,
       reactivatedCount,
+      autoIdentifierCreatedCount,
+      autoIdentifierReactivatedCount,
     };
   }
 

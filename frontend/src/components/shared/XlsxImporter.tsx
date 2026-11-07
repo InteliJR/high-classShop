@@ -23,6 +23,10 @@ export interface CsvImportResponse {
   deactivatedCount: number;
   deactivatedIds: number[];
   reactivatedCount: number;
+  /** Criados por linhas sem identificador (preço novo nessas linhas cria outro produto). */
+  autoIdentifierCreatedCount?: number;
+  /** Desativados reativados por linha sem identificador idêntica. */
+  autoIdentifierReactivatedCount?: number;
   errorRows: CsvErrorRow[];
   warningRows: CsvErrorRow[];
   insertedIds?: number[];
@@ -363,8 +367,9 @@ export function XlsxImporter({
                   Reimportar a mesma linha atualiza o produto em vez de
                   duplicar. Sem{" "}
                   <strong className="text-gray-900">identificador</strong>, ele
-                  é gerado a partir dos dados da linha; preencha-o se for
-                  editar a linha depois (na sincronização do catálogo ele é
+                  é gerado a partir da linha inteira: mudar qualquer dado,
+                  inclusive o valor, cria um produto novo. Preencha-o se for
+                  atualizar a linha depois (na sincronização do catálogo ele é
                   obrigatório).
                 </span>
               </li>
@@ -597,6 +602,33 @@ export function XlsxImporter({
                   </span>
                 </div>
               </div>
+
+              {((importResult.autoIdentifierCreatedCount ?? 0) > 0 ||
+                (importResult.autoIdentifierReactivatedCount ?? 0) > 0) && (
+                <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div className="space-y-1">
+                    {(importResult.autoIdentifierCreatedCount ?? 0) > 0 && (
+                      <p>
+                        {importResult.autoIdentifierCreatedCount} produto(s)
+                        criado(s) a partir de linhas sem identificador. Se
+                        alguma dessas linhas era um produto já cadastrado com
+                        outro dado (ex.: preço novo), o anúncio anterior
+                        continua no catálogo. Para atualizar produtos depois,
+                        preencha o identificador.
+                      </p>
+                    )}
+                    {(importResult.autoIdentifierReactivatedCount ?? 0) > 0 && (
+                      <p>
+                        {importResult.autoIdentifierReactivatedCount}{" "}
+                        produto(s) desativado(s) foram reativados por uma linha
+                        sem identificador idêntica. Confira se não é outra
+                        unidade.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {importResult.deactivatedCount > 0 && (
                 <p className="text-xs text-gray-500 mt-3">

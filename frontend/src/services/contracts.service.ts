@@ -28,7 +28,7 @@ export interface PrefillProduct {
   id: number;
   brand: string;
   model: string;
-  year: number;
+  year: number | null;
   price: number;
   registration_id?: string;
   serial_number?: string;

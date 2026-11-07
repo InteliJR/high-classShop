@@ -16,7 +16,12 @@ function db(overrides: Record<string, unknown> = {}) {
     car: {
       findUnique: jest
         .fn()
-        .mockResolvedValue({ id: 'car-1', specialist_id: 'old' }),
+        .mockResolvedValue({
+          id: 'car-1',
+          specialist_id: 'old',
+          identificador: 'BMW-1',
+        }),
+      findFirst: jest.fn().mockResolvedValue(null),
       update: jest.fn().mockResolvedValue({}),
     },
     process: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -64,6 +69,31 @@ describe('transferProductSpecialist', () => {
         },
       }),
     );
+  });
+
+  it('blocks with a clear code when the target already uses the identifier', async () => {
+    const tx = db({
+      car: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'car-1',
+          specialist_id: 'old',
+          identificador: 'auto-abc123',
+        }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'car-2' }),
+        update: jest.fn(),
+      },
+    });
+
+    await expect(transferProductSpecialist(tx, input)).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'PRODUCT_IDENTIFIER_CONFLICT',
+      }),
+    });
+    expect(tx.car.findFirst).toHaveBeenCalledWith({
+      where: { specialist_id: 'new', identificador: 'auto-abc123' },
+      select: { id: true },
+    });
+    expect(tx.car.update).not.toHaveBeenCalled();
   });
 
   it('blocks when a process is in progress', async () => {

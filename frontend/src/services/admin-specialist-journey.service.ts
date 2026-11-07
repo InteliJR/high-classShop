@@ -79,6 +79,8 @@ export type CsvImportPreview = {
     matchingItems: number;
     newOrReactivatedItems: number;
     deactivationCandidates: number;
+    autoIdentifierNewItems?: number;
+    autoIdentifierReactivatedItems?: number;
   };
 };
 

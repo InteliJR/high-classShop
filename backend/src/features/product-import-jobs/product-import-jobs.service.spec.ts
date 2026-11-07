@@ -448,7 +448,9 @@ describe('ProductImportJobsService', () => {
 
   it('exige confirmação explícita para sincronizar', async () => {
     const xlsxImportService = {
-      parseCsv: jest.fn().mockReturnValue({ rows: [validCarRow] }),
+      parseCsv: jest
+        .fn()
+        .mockReturnValue({ rows: [validCarRow], rowNumbers: [2] }),
       validateStructure: jest.fn().mockReturnValue({ valid: true }),
     } as any;
     const service = new ProductImportJobsService(
@@ -481,6 +483,7 @@ describe('ProductImportJobsService', () => {
     const xlsxImportService = {
       parseCsv: jest.fn().mockReturnValue({
         rows: [validCarRow, { ...validCarRow, modelo: 'Duplicado' }],
+        rowNumbers: [2, 3],
       }),
       validateStructure: jest.fn().mockReturnValue({ valid: true }),
     } as any;
@@ -502,7 +505,9 @@ describe('ProductImportJobsService', () => {
 
   it('exige token da prévia mesmo quando a sincronização foi confirmada', async () => {
     const xlsxImportService = {
-      parseCsv: jest.fn().mockReturnValue({ rows: [validCarRow] }),
+      parseCsv: jest
+        .fn()
+        .mockReturnValue({ rows: [validCarRow], rowNumbers: [2] }),
       validateStructure: jest.fn().mockReturnValue({ valid: true }),
     } as any;
     const prisma = {
@@ -554,7 +559,9 @@ describe('ProductImportJobsService', () => {
 
   it('calcula o impacto da sincronização antes de criar o job', async () => {
     const xlsxImportService = {
-      parseCsv: jest.fn().mockReturnValue({ rows: [validCarRow] }),
+      parseCsv: jest
+        .fn()
+        .mockReturnValue({ rows: [validCarRow], rowNumbers: [2] }),
       validateStructure: jest.fn().mockReturnValue({ valid: true }),
     } as any;
     const prisma = {
@@ -611,7 +618,9 @@ describe('ProductImportJobsService', () => {
         catalogReads.shift() ?? [productA, productC],
       );
     const xlsxImportService = {
-      parseCsv: jest.fn().mockReturnValue({ rows: [validCarRow] }),
+      parseCsv: jest
+        .fn()
+        .mockReturnValue({ rows: [validCarRow], rowNumbers: [2] }),
       validateStructure: jest.fn().mockReturnValue({ valid: true }),
     } as any;
     const prisma = {
@@ -680,7 +689,9 @@ describe('ProductImportJobsService', () => {
       { id: '22222222-2222-4222-8222-222222222222', identificador: 'STALE-B' },
     ];
     const xlsxImportService = {
-      parseCsv: jest.fn().mockReturnValue({ rows: [validCarRow] }),
+      parseCsv: jest
+        .fn()
+        .mockReturnValue({ rows: [validCarRow], rowNumbers: [2] }),
       validateStructure: jest.fn().mockReturnValue({ valid: true }),
     } as any;
     const findMany = jest.fn().mockImplementation(async () => [...activeProducts]);
@@ -843,21 +854,42 @@ describe('ProductImportJobsService', () => {
         new XlsxImportService(),
         {} as any,
       );
-      return (service as any).parseImportRows(
+      const { rows } = await (service as any).parseImportRows(
         Buffer.from(lines.join('\n'), 'utf-8'),
         ProductType.CAR,
         mode,
       );
+      return rows;
     };
 
-    it('a mesma linha gera o mesmo identificador, mesmo com outro preço', async () => {
-      const [first] = await parse(['marca;modelo;valor;currency', 'BMW;X5;450000;BRL']);
-      const [repriced] = await parse(['marca;modelo;valor;currency', 'bmw;X5;399000;USD']);
-      const [other] = await parse(['marca;modelo;valor;currency', 'BMW;X6;450000;BRL']);
+    it('a mesma linha gera o mesmo identificador em importações diferentes', async () => {
+      const header = 'marca;modelo;valor;currency;folder_url';
+      const [first] = await parse([header, 'BMW;X5;450000;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK']);
+      const [again] = await parse([header, 'bmw;X5;450000;brl;https://drive.google.com/drive/folders/1AbCdEfGhIjK']);
+      const [other] = await parse([header, 'BMW;X6;450000;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK']);
 
       expect(first.identificador).toMatch(/^auto-[0-9a-f]{12}$/);
-      expect(repriced.identificador).toBe(first.identificador);
+      expect(again.identificador).toBe(first.identificador);
       expect(other.identificador).not.toBe(first.identificador);
+    });
+
+    it('unidades que só diferem no preço, na moeda ou nas fotos não se fundem', async () => {
+      const header = 'marca;modelo;ano;valor;currency;folder_url';
+      const [base] = await parse([
+        header,
+        'BMW;X5;2023;450000;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK',
+      ]);
+      const variants = await Promise.all(
+        [
+          'BMW;X5;2023;500000;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK',
+          'BMW;X5;2023;450000;USD;https://drive.google.com/drive/folders/1AbCdEfGhIjK',
+          'BMW;X5;2023;450000;BRL;https://drive.google.com/drive/folders/2ZyXwVuTsRqP',
+        ].map(async (line) => (await parse([header, line]))[0]),
+      );
+
+      for (const variant of variants) {
+        expect(variant.identificador).not.toBe(base.identificador);
+      }
     });
 
     it('linhas só com valor e moeda se distinguem pelo preço', async () => {
@@ -866,25 +898,140 @@ describe('ProductImportJobsService', () => {
       expect(rows[0].identificador).not.toBe(rows[1].identificador);
     });
 
+    it('estado com maiúscula ou acento vira o valor do formulário', async () => {
+      const rows = await parse([
+        'identificador;estado;valor;currency',
+        'A;Seminovo;1;BRL',
+        'B;Coleção;1;BRL',
+        'C;usado;1;BRL',
+      ]);
+
+      expect(rows.map((row: any) => row.estado)).toEqual([
+        'seminovo',
+        'colecao',
+        'usado',
+      ]);
+    });
+
+    it('mesmo preço ou mesma pasta escritos de outro jeito geram o mesmo id', async () => {
+      const header = 'marca;valor;currency;folder_url';
+      const folder = 'https://drive.google.com/drive/folders/1AbCdEfGhIjK';
+      const [base] = await parse([header, `BMW;450000;BRL;${folder}`]);
+      const [variant] = await parse([
+        header,
+        `BMW;450000.00;BRL;${folder}?usp=sharing`,
+      ]);
+
+      expect(variant.identificador).toBe(base.identificador);
+    });
+
+    it('recusa folder_url que não é link de pasta do Drive', async () => {
+      await expect(
+        parse([
+          'identificador;valor;currency;folder_url',
+          'A;1;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK',
+          'B;1;BRL;Fotos',
+        ]),
+      ).rejects.toThrow(/folder_url.*linhas 3\./);
+    });
+
+    it('conta linhas sem identificador que criam ou reativam produto', () => {
+      const service = new ProductImportJobsService(
+        {} as any,
+        {} as any,
+        {} as any,
+      );
+      const impact = (service as any).autoIdentifierImpact(
+        [
+          { identificador: 'auto-novo' },
+          { identificador: 'auto-ativo' },
+          { identificador: 'auto-inativo' },
+          { identificador: 'MANUAL-1' },
+        ],
+        [
+          { identificador: 'auto-ativo', isActive: true },
+          { identificador: 'auto-inativo', isActive: false },
+          { identificador: 'MANUAL-1', isActive: false },
+        ],
+      );
+
+      expect(impact).toEqual({
+        autoIdentifierNewItems: 1,
+        autoIdentifierReactivatedItems: 1,
+      });
+    });
+
+    it('resultado informa produtos criados e reativados sem identificador', () => {
+      const service = new ProductImportJobsService(
+        {} as any,
+        {} as any,
+        {} as any,
+      );
+      const item = (overrides: Record<string, unknown>) => ({
+        row_number: 2,
+        status: 'COMPLETED',
+        action: 'CREATED',
+        product_id: 'p',
+        error_message: null,
+        warnings: null,
+        ...overrides,
+      });
+      const result = (service as any).buildImportResponse([
+        item({ payload: { identificador: 'auto-a' } }),
+        item({
+          action: 'UPDATED',
+          payload: {
+            identificador: 'auto-b',
+            __productImportEffect: { reactivated: true },
+          },
+        }),
+        item({ payload: { identificador: 'MANUAL-1' } }),
+      ]);
+
+      expect(result).toMatchObject({
+        autoIdentifierCreatedCount: 1,
+        autoIdentifierReactivatedCount: 1,
+      });
+    });
+
     it('identificador informado é mantido', async () => {
-      const [row] = await parse(['identificador;valor;currency', 'BMW-1;100;BRL']);
+      const [row] = await parse([
+        'identificador;valor;currency',
+        'BMW-1;100;BRL',
+      ]);
 
       expect(row.identificador).toBe('BMW-1');
     });
 
     it('rejeita linhas sem identificador com os mesmos dados', async () => {
       await expect(
-        parse(['marca;valor;currency', 'BMW;100;BRL', 'BMW;200;BRL']),
+        parse(['marca;valor;currency', 'BMW;100;BRL', 'BMW;100;BRL']),
       ).rejects.toThrow(/sem identificador com os mesmos dados/);
     });
 
     it('sincronização exige identificador em todas as linhas', async () => {
-      const lines = ['identificador;valor;currency', 'BMW-1;100;BRL', ';200;BRL'];
+      const lines = [
+        'identificador;valor;currency',
+        'BMW-1;100;BRL',
+        ';200;BRL',
+      ];
 
       await expect(parse(lines, 'SYNCHRONIZE')).rejects.toThrow(
         /preencha o identificador.*linhas 3\)/,
       );
       await expect(parse(lines)).resolves.toHaveLength(2);
+    });
+
+    it('aponta a linha real do arquivo quando há linhas em branco', async () => {
+      const lines = [
+        'identificador;valor;currency',
+        'BMW-1;100;BRL',
+        '',
+        'BMW-2;150;BRL',
+        ';200;BRL',
+      ];
+
+      await expect(parse(lines, 'SYNCHRONIZE')).rejects.toThrow(/linhas 5\)/);
     });
   });
 

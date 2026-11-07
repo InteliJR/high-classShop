@@ -222,6 +222,15 @@ export default function SpecialistJourneyProductsPage() {
             <p>
               {preview.impact.incomingItems} linhas · {preview.impact.newOrReactivatedItems} criações/reativações · {preview.impact.matchingItems} atualizações · <strong>{preview.impact.deactivationCandidates} desativações</strong>
             </p>
+            {((preview.impact.autoIdentifierNewItems ?? 0) > 0 ||
+              (preview.impact.autoIdentifierReactivatedItems ?? 0) > 0) && (
+              <p className="mt-2 text-amber-800">
+                Linhas sem identificador: {preview.impact.autoIdentifierNewItems ?? 0} vão criar produto novo
+                (um produto já cadastrado com preço ou outro dado alterado vira um segundo anúncio) e{" "}
+                {preview.impact.autoIdentifierReactivatedItems ?? 0} vão reativar um produto desativado.
+                Preencha o identificador para atualizar em vez de duplicar.
+              </p>
+            )}
             {mode === "SYNCHRONIZE" && (
               <label className="mt-3 flex items-start gap-2 text-ink">
                 <input

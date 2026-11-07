@@ -38,7 +38,7 @@ const IDENTIFICADOR: XlsxColumnDefinition = {
   required: false,
   type: 'string',
   description:
-    'Código único do produto no seu catálogo. Reimportar o mesmo código atualiza o produto em vez de duplicar. Se ficar vazio, é gerado a partir dos dados da linha — nesse caso, mudar marca, modelo ou outro dado descritivo cria um produto novo. Preencha se for editar a linha depois. Obrigatório para sincronizar o catálogo.',
+    'Código único do produto no seu catálogo. Reimportar o mesmo código atualiza o produto (inclusive preço e fotos) em vez de duplicar. Se ficar vazio, é gerado a partir da linha inteira — reimportar a linha idêntica atualiza o mesmo produto, mas mudar qualquer dado (inclusive valor, moeda ou pasta de fotos) cria um produto novo. Preencha se for atualizar a linha depois. Obrigatório para sincronizar o catálogo.',
   example: 'BMW-X5-2023-01',
 };
 
@@ -79,7 +79,7 @@ function common(
       required: false,
       type: 'string',
       description:
-        'Estado de conservação (ex.: novo, seminovo, usado). Se vazio, "não informado".',
+        'Estado de conservação: novo, seminovo ou colecao. Se vazio, "não informado".',
       example: 'seminovo',
     },
     {

@@ -35,11 +35,15 @@ export interface EmbeddedImage {
  */
 export interface XlsxParseResult {
   rows: ImportParsedRow[];
+  /** Linha da planilha (1 = cabeçalho) de cada item de `rows`; linhas em branco são puladas. */
+  rowNumbers: number[];
   imageMap: Map<number, EmbeddedImage[]>;
 }
 
 export interface CsvParseResult {
   rows: ImportParsedRow[];
+  /** Linha do arquivo (1 = cabeçalho) de cada item de `rows`; linhas em branco são puladas. */
+  rowNumbers: number[];
 }
 
 @Injectable()
@@ -49,9 +53,20 @@ export class XlsxImportService {
    * @param fileBuffer Buffer do arquivo XLSX
    * @returns Linhas parseadas + mapa de imagens por índice de linha (0-based, dados)
    */
-  async parseWorkbook(fileBuffer: Buffer): Promise<XlsxParseResult> {
+  async parseWorkbook(
+    fileBuffer: Buffer,
+    options: { linkColumns?: string[] } = {},
+  ): Promise<XlsxParseResult> {
+    const linkColumns = new Set(options.linkColumns ?? []);
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(fileBuffer as any);
+    try {
+      await workbook.xlsx.load(fileBuffer as any);
+    } catch {
+      // Zip truncado ou renomeado para .xlsx: o exceljs lança Error comum.
+      throw new BadRequestException(
+        'Não foi possível ler a planilha: o arquivo .xlsx está corrompido ou não é uma planilha válida. Baixe o modelo novamente e salve como .xlsx.',
+      );
+    }
 
     const worksheet = workbook.worksheets[0];
     if (!worksheet) {
@@ -80,6 +95,7 @@ export class XlsxImportService {
 
     // 2. Extrair dados (linha 2 em diante)
     const rows: ImportParsedRow[] = [];
+    const rowNumbers: number[] = [];
     const rowCount = worksheet.rowCount;
 
     for (let rowNum = 2; rowNum <= rowCount; rowNum++) {
@@ -89,9 +105,15 @@ export class XlsxImportService {
 
       headers.forEach((header, colIndex) => {
         if (!header) return;
-        // `text` em vez de `value`: o Excel transforma links (ex.: folder_url)
-        // em objetos hyperlink, que viravam "[object Object]" com String().
-        const value = row.getCell(colIndex + 1).text.trim();
+        // `text` em vez de `value`: o Excel transforma links em objetos
+        // hyperlink, que viravam "[object Object]" com String(). Só nas
+        // colunas de link (ex.: folder_url) o dado é o destino, e não o rótulo
+        // exibido ("Fotos"); nas demais, um link num "modelo" não pode
+        // trocar o nome do produto pela URL.
+        const cell = row.getCell(colIndex + 1);
+        const value = (
+          linkColumns.has(header) ? this.linkTarget(cell) : cell.text
+        ).trim();
 
         if (value !== '') {
           hasData = true;
@@ -103,6 +125,7 @@ export class XlsxImportService {
 
       if (hasData) {
         rows.push(parsedRow);
+        rowNumbers.push(rowNum);
       }
     }
 
@@ -158,7 +181,19 @@ export class XlsxImportService {
       });
     }
 
-    return { rows, imageMap };
+    return { rows, rowNumbers, imageMap };
+  }
+
+  /**
+   * Destino de uma célula de link: hyperlink inserido pelo Excel, fórmula
+   * =HYPERLINK("url"; "rótulo") ou, sem link, o texto digitado.
+   */
+  private linkTarget(cell: ExcelJS.Cell): string {
+    if (cell.hyperlink) return cell.hyperlink;
+    const formulaUrl = cell.formula?.match(
+      /^\s*=?\s*HYPERLINK\(\s*"([^"]+)"/i,
+    )?.[1];
+    return formulaUrl ?? cell.text;
   }
 
   /**
@@ -179,10 +214,13 @@ export class XlsxImportService {
     const rawText = utf8Attempt.includes('\uFFFD')
       ? iconv.decode(withoutBom, 'windows-1252')
       : utf8Attempt;
-    const lines = rawText
+    // Guarda o número original de cada linha para os erros apontarem a linha
+    // certa mesmo com linhas em branco no meio do arquivo.
+    const numberedLines = rawText
       .split(/\r\n|\n|\r/)
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
+      .map((line, index) => ({ text: line.trim(), number: index + 1 }))
+      .filter((line) => line.text.length > 0);
+    const lines = numberedLines.map((line) => line.text);
 
     if (lines.length < 2) {
       throw new BadRequestException(
@@ -201,6 +239,7 @@ export class XlsxImportService {
     }
 
     const rows: ImportParsedRow[] = [];
+    const rowNumbers: number[] = [];
 
     for (let lineIndex = 1; lineIndex < lines.length; lineIndex++) {
       const columns = this.splitCsvLine(lines[lineIndex], delimiter);
@@ -219,6 +258,7 @@ export class XlsxImportService {
 
       if (hasData) {
         rows.push(parsedRow);
+        rowNumbers.push(numberedLines[lineIndex].number);
       }
     }
 
@@ -228,7 +268,7 @@ export class XlsxImportService {
       );
     }
 
-    return { rows };
+    return { rows, rowNumbers };
   }
 
   /**
@@ -515,7 +555,8 @@ export class XlsxImportService {
     for (const note of [
       'Preencha uma linha por produto na aba "Produtos" e importe este arquivo (.xlsx) ou salve como .csv.',
       'Só valor e currency são obrigatórios. Colunas vazias recebem um valor padrão e podem ser completadas depois na edição do produto.',
-      'Reimportar a mesma linha atualiza o produto existente em vez de criar outro.',
+      'Com identificador preenchido, reimportar a linha atualiza o produto existente (inclusive preço e fotos) em vez de criar outro.',
+      'Sem identificador, só a linha idêntica atualiza o mesmo produto: mudar qualquer dado, inclusive o valor, cria um produto novo e o anterior continua no catálogo. Uma linha idêntica à de um produto desativado o reativa.',
     ]) {
       instructions.addRow({ coluna: note });
       instructions.mergeCells(`A${instructions.rowCount}:E${instructions.rowCount}`);
