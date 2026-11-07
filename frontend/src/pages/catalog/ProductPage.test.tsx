@@ -124,6 +124,13 @@ const existingRequest: ActiveProcessSnapshot = {
   specialist_contact_email: "private-specialist@example.com",
 };
 
+const activeProcess = {
+  id: "process-1",
+  status: "SCHEDULING" as const,
+  is_active: true,
+  status_history: [],
+};
+
 function ChangeProductButton() {
   const navigate = useNavigate();
   return (
@@ -186,7 +193,7 @@ describe("ProductPage scheduling", () => {
     };
     vi.mocked(getCarById).mockResolvedValue(product);
     vi.mocked(getPublicSpecialistById).mockResolvedValue(specialist);
-    vi.mocked(checkExistingAppointment).mockResolvedValue({ exists: false });
+    vi.mocked(checkExistingAppointment).mockResolvedValue({ exists: false, process: null });
     vi.mocked(createPendingAppointment).mockResolvedValue(appointment);
     vi.mocked(getClients).mockResolvedValue([{ id: "delegated-client", name: "Cliente", surname: "Delegado", email: "cliente@example.com", cpf: "12345678900", rg: "12345678", role: "CUSTOMER" }]);
     vi.spyOn(window, "open").mockImplementation(() => null);
@@ -605,6 +612,7 @@ describe("ProductPage scheduling", () => {
     vi.mocked(checkExistingAppointment).mockResolvedValue({
       ...existingRequest,
       exists: true,
+      process: activeProcess,
       appointment_id: appointment.id,
       appointment_status: "PENDING",
     });
@@ -632,6 +640,7 @@ describe("ProductPage scheduling", () => {
     vi.mocked(checkExistingAppointment).mockResolvedValue({
       ...existingRequest,
       exists: true,
+      process: activeProcess,
       appointment_id: "appointment-own-initial",
       appointment_status: "PENDING",
     });
@@ -654,6 +663,7 @@ describe("ProductPage scheduling", () => {
   it("does not compose email when an EMAIL snapshot lacks owner-scoped contact", async () => {
     vi.mocked(checkExistingAppointment).mockResolvedValue({
       exists: true,
+      process: activeProcess,
       appointment_id: "appointment-no-contact",
       appointment_status: "PENDING",
       scheduling_method: "EMAIL",
@@ -717,6 +727,7 @@ describe("ProductPage scheduling", () => {
       vi.mocked(checkExistingAppointment).mockResolvedValue({
         ...existingRequest,
         exists: true,
+        process: activeProcess,
         appointment_id: "existing-other",
         appointment_status,
         scheduling_method,
@@ -731,6 +742,113 @@ describe("ProductPage scheduling", () => {
       ).toBeNull();
     },
   );
+
+  it("shows an advanced active stage without appointment data and keeps scheduling blocked", async () => {
+    vi.mocked(checkExistingAppointment).mockResolvedValue({
+      exists: true,
+      appointment_id: null,
+      process_id: "process-1",
+      appointment_status: null,
+      scheduling_method: null,
+      appointment_datetime: null,
+      process: {
+        ...activeProcess,
+        status: "NEGOTIATION",
+        status_history: [
+          { status: "SCHEDULING", changed_at: "2099-01-01T10:00:00.000Z" },
+          { status: "NEGOTIATION", changed_at: "2099-01-02T10:00:00.000Z" },
+        ],
+      },
+    });
+    render(page());
+    const stage = await screen.findByRole(
+      "region",
+      { name: "Etapa do processo" },
+      { timeout: 2000 },
+    );
+    expect(stage.textContent).toContain("Negociação");
+    expect(
+      stage.querySelector('[aria-current="step"]')?.textContent,
+    ).toContain("Negociação");
+    expect(
+      screen.getByText("Você já possui um processo ativo para este produto"),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Solicitar reunião" }),
+    ).toBeNull();
+  });
+
+  it("shows a completed process without offering a new scheduling", async () => {
+    vi.mocked(checkExistingAppointment).mockResolvedValue({
+      exists: false,
+      process: { ...activeProcess, status: "COMPLETED", is_active: false },
+    });
+    render(page());
+    const stage = await screen.findByRole(
+      "region",
+      { name: "Etapa do processo" },
+      { timeout: 2000 },
+    );
+    expect(stage.textContent).toContain("Este processo foi concluído.");
+    expect(
+      screen
+        .getByRole("link", { name: "Acompanhar processo" })
+        .getAttribute("href"),
+    ).toBe("/customer/processes");
+    expect(
+      screen.queryByRole("button", { name: "Fazer novo agendamento" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Solicitar reunião" }),
+    ).toBeNull();
+  });
+
+  it("offers a new scheduling only after a rejected process is acknowledged", async () => {
+    vi.mocked(checkExistingAppointment).mockResolvedValue({
+      exists: false,
+      process: {
+        ...activeProcess,
+        status: "REJECTED",
+        is_active: false,
+        status_history: [
+          { status: "SCHEDULING", changed_at: "2099-01-01T10:00:00.000Z" },
+          { status: "REJECTED", changed_at: "2099-01-03T10:00:00.000Z" },
+        ],
+      },
+    });
+    render(page());
+    const stage = await screen.findByRole(
+      "region",
+      { name: "Etapa do processo" },
+      { timeout: 2000 },
+    );
+    expect(stage.textContent).toContain("Rejeitado");
+    expect(
+      screen.queryByRole("button", { name: "Solicitar reunião" }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Fazer novo agendamento" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Solicitar reunião" }),
+    ).toBeTruthy();
+  });
+
+  it("does not check or show process data for a visitor", async () => {
+    (authState as { user: unknown }).user = null;
+    render(page());
+    expect(
+      await screen.findByRole(
+        "button",
+        { name: "Criar Conta para Agendar" },
+        { timeout: 2000 },
+      ),
+    ).toBeTruthy();
+    expect(checkExistingAppointment).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("region", { name: "Etapa do processo" }),
+    ).toBeNull();
+  });
 
   it("blocks creation when the own-request check fails", async () => {
     vi.mocked(checkExistingAppointment).mockRejectedValue(

@@ -44,6 +44,7 @@ import {
 } from '../products/product-monetary-lock';
 import { ActorContext } from 'src/shared/actor-context/actor-context.service';
 import { DelegatedActionAuditService } from 'src/shared/actor-context/delegated-action-audit.service';
+import { extractDriveFolderId } from '../drive-import/drive-folder-id';
 import {
   createHash,
   createHmac,
@@ -92,7 +93,17 @@ type ImportImpact = {
   matchingItems: number;
   newOrReactivatedItems: number;
   deactivationCandidates: number;
+  // Linhas sem identificador: sem como casar com uma edição anterior, então
+  // criam produto novo (ex.: mesmo carro com preço novo) ou, se a linha for
+  // idêntica à de um produto desativado, reativam esse produto.
+  autoIdentifierNewItems: number;
+  autoIdentifierReactivatedItems: number;
 };
+
+type AutoIdentifierImpact = Pick<
+  ImportImpact,
+  'autoIdentifierNewItems' | 'autoIdentifierReactivatedItems'
+>;
 
 type SynchronizationCatalogSnapshot = {
   candidateIds: string[];
@@ -127,14 +138,37 @@ class ProductImportJobLeaseLostError extends Error {
   }
 }
 
+// identificador nunca chega vazio de parseImportRows (é gerado quando falta);
+// a checagem protege payloads montados por outro caminho.
 const REQUIRED_PRODUCT_FIELDS = [
-  { key: 'identificador', label: 'Identificador do veículo' },
-  { key: 'marca', label: 'Marca do veículo' },
-  { key: 'modelo', label: 'Nome do veículo' },
-  { key: 'valor', label: 'Valor do veículo' },
-  { key: 'estado', label: 'Estado do veículo' },
-  { key: 'ano', label: 'Ano do veículo' },
+  { key: 'identificador', label: 'Identificador' },
+  { key: 'valor', label: 'Valor do produto' },
+  { key: 'currency', label: 'Moeda (use BRL ou USD)' },
 ] as const;
+
+// Produto importado só com valor e moeda: o que aparece no catálogo até alguém
+// completar o cadastro. Aplicado só na criação, para um reimport não apagar o
+// que foi editado à mão.
+const DEFAULT_MARCA: Record<ProductType, string> = {
+  [ProductType.CAR]: 'Carro',
+  [ProductType.BOAT]: 'Lancha',
+  [ProductType.AIRCRAFT]: 'Aeronave',
+};
+const DEFAULT_ESTADO = 'não informado';
+
+// Sem identificador, não há como saber se duas linhas de importações diferentes
+// são a mesma unidade. O id gerado usa a linha inteira (inclusive preço, moeda
+// e pasta de fotos): reimportar a linha igual atualiza o mesmo produto, e duas
+// unidades que só diferem no preço ou nas fotos nunca se fundem. Mudar qualquer
+// dado de uma linha sem identificador cria outro produto; para atualizar depois
+// (ex.: novo preço), o identificador precisa ser preenchido.
+export const AUTO_IDENTIFIER_PREFIX = 'auto-';
+// Valores do select de estado em CommonProductFields.tsx.
+const PRODUCT_ESTADOS = new Set(['novo', 'seminovo', 'colecao']);
+
+export function isImportSpreadsheet(fileName?: string): boolean {
+  return /\.(xlsx|csv)$/i.test(fileName ?? '');
+}
 
 @Injectable()
 export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
@@ -232,24 +266,11 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    const { rows } = this.xlsxImportService.parseCsv(fileBuffer);
-
-    const structureValidation = this.xlsxImportService.validateStructure(
-      rows,
-      this.getColumnsForType(productType),
+    const { rows: normalizedRows, rowNumbers } = await this.parseImportRows(
+      fileBuffer,
+      productType,
+      mode,
     );
-
-    if (!structureValidation.valid) {
-      throw new BadRequestException({
-        message: 'Estrutura do CSV inválida',
-        errors: structureValidation.errors,
-        missingRequired: structureValidation.missingRequired,
-        unknownColumns: structureValidation.unknownColumns,
-      });
-    }
-
-    const normalizedRows = rows.map((row) => this.normalizeProductRow(row));
-    this.validateUniqueIdentifiers(normalizedRows);
     const specialistId = options.context?.specialistId ?? user.id;
     let creationResult;
     try {
@@ -295,7 +316,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
             items: {
               createMany: {
                 data: normalizedRows.map((row, index) => ({
-                  row_number: index + 2,
+                  row_number: rowNumbers[index],
                   payload: row,
                   folder_url: row.folder_url?.trim() || null,
                 })),
@@ -370,21 +391,11 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         'Modo de importação inválido. Use ADDITIVE ou SYNCHRONIZE.',
       );
     }
-    const { rows } = this.xlsxImportService.parseCsv(fileBuffer);
-    const structureValidation = this.xlsxImportService.validateStructure(
-      rows,
-      this.getColumnsForType(productType),
+    const { rows: normalizedRows } = await this.parseImportRows(
+      fileBuffer,
+      productType,
+      mode,
     );
-    if (!structureValidation.valid) {
-      throw new BadRequestException({
-        message: 'Estrutura do CSV inválida',
-        errors: structureValidation.errors,
-        missingRequired: structureValidation.missingRequired,
-        unknownColumns: structureValidation.unknownColumns,
-      });
-    }
-    const normalizedRows = rows.map((row) => this.normalizeProductRow(row));
-    this.validateUniqueIdentifiers(normalizedRows);
     const catalogSnapshot = await this.getSynchronizationCatalogSnapshot(
       productType,
       specialistId,
@@ -393,12 +404,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     const impact =
       mode === 'SYNCHRONIZE'
         ? catalogSnapshot.impact
-        : this.deriveImportImpact(
-            catalogSnapshot.impact.activeItemsBefore,
-            catalogSnapshot.impact.matchingItems,
-            normalizedRows,
-            0,
-          );
+        : { ...catalogSnapshot.impact, deactivationCandidates: 0 };
     const synchronizePreviewToken =
       mode === 'SYNCHRONIZE'
         ? this.createSynchronizePreviewToken(
@@ -545,6 +551,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         matchingItems,
         rows,
         candidateIds.length,
+        this.autoIdentifierImpact(rows, catalogProducts),
       ),
     };
   }
@@ -1408,11 +1415,30 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     return { ...snapshot.impact, deactivationCandidates: 0 };
   }
 
+  private autoIdentifierImpact(
+    rows: ImportParsedRow[],
+    catalogProducts: CatalogProductSnapshot[],
+  ): AutoIdentifierImpact {
+    const catalog = new Map(
+      catalogProducts.map((product) => [product.identificador, product]),
+    );
+    let autoIdentifierNewItems = 0;
+    let autoIdentifierReactivatedItems = 0;
+    for (const row of rows) {
+      if (!row.identificador?.startsWith(AUTO_IDENTIFIER_PREFIX)) continue;
+      const existing = catalog.get(row.identificador);
+      if (!existing) autoIdentifierNewItems += 1;
+      else if (!existing.isActive) autoIdentifierReactivatedItems += 1;
+    }
+    return { autoIdentifierNewItems, autoIdentifierReactivatedItems };
+  }
+
   private deriveImportImpact(
     activeItemsBefore: number,
     matchingItems: number,
     rows: ImportParsedRow[],
     deactivationCandidates: number,
+    autoIdentifier: AutoIdentifierImpact,
   ): ImportImpact {
     const incomingIdentifiers = new Set(
       rows.map((row) => row.identificador?.trim()).filter(Boolean),
@@ -1426,6 +1452,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         incomingIdentifiers.size - matchingItems,
       ),
       deactivationCandidates,
+      ...autoIdentifier,
     };
   }
 
@@ -1981,15 +2008,13 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
     if (productType === ProductType.CAR) {
       const data = {
-        marca: row.marca,
-        modelo: row.modelo,
+        marca: row.marca || undefined,
+        modelo: row.modelo || undefined,
         identificador,
         valor: Number(row.valor),
-        currency: row.currency
-          ? (row.currency.toUpperCase() as ProductCurrency)
-          : undefined,
-        estado: row.estado,
-        ano: Number(row.ano),
+        currency: row.currency.toUpperCase() as ProductCurrency,
+        estado: row.estado || undefined,
+        ano: row.ano ? Number(row.ano) : undefined,
         cor: row.cor || undefined,
         km: row.km ? Number(row.km) : undefined,
         cambio: row.cambio || undefined,
@@ -1999,7 +2024,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         specialist_id: specialistId,
       };
 
-      await this.validatePayload(data, CreateCarDto);
+      const createData = this.withCreationDefaults(ProductType.CAR, data);
+      await this.validatePayload(createData, CreateCarDto);
 
       const existing = await (client as PrismaService).car.findFirst({
         where: {
@@ -2032,7 +2058,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         };
       }
 
-      const created = await (client as PrismaService).car.create({ data });
+      const created = await (client as PrismaService).car.create({ data: createData });
       return {
         productId: created.id,
         action: 'CREATED',
@@ -2042,15 +2068,13 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
 
     if (productType === ProductType.BOAT) {
       const data = {
-        marca: row.marca,
-        modelo: row.modelo,
+        marca: row.marca || undefined,
+        modelo: row.modelo || undefined,
         identificador,
         valor: Number(row.valor),
-        currency: row.currency
-          ? (row.currency.toUpperCase() as ProductCurrency)
-          : undefined,
-        estado: row.estado,
-        ano: Number(row.ano),
+        currency: row.currency.toUpperCase() as ProductCurrency,
+        estado: row.estado || undefined,
+        ano: row.ano ? Number(row.ano) : undefined,
         fabricante: row.fabricante || undefined,
         tamanho: row.tamanho || undefined,
         estilo: row.estilo || undefined,
@@ -2063,7 +2087,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         specialist_id: specialistId,
       };
 
-      await this.validatePayload(data, CreateBoatDto);
+      const createData = this.withCreationDefaults(ProductType.BOAT, data);
+      await this.validatePayload(createData, CreateBoatDto);
 
       const existing = await (client as PrismaService).boat.findFirst({
         where: {
@@ -2096,7 +2121,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
         };
       }
 
-      const created = await (client as PrismaService).boat.create({ data });
+      const created = await (client as PrismaService).boat.create({ data: createData });
       return {
         productId: created.id,
         action: 'CREATED',
@@ -2105,15 +2130,13 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     }
 
     const data = {
-      marca: row.marca,
-      modelo: row.modelo,
+      marca: row.marca || undefined,
+      modelo: row.modelo || undefined,
       identificador,
       valor: Number(row.valor),
-      currency: row.currency
-        ? (row.currency.toUpperCase() as ProductCurrency)
-        : undefined,
-      estado: row.estado,
-      ano: Number(row.ano),
+      currency: row.currency.toUpperCase() as ProductCurrency,
+      estado: row.estado || undefined,
+      ano: row.ano ? Number(row.ano) : undefined,
       categoria: row.categoria || undefined,
       assentos: row.assentos ? Number(row.assentos) : undefined,
       tipo_aeronave: row.tipo_aeronave || undefined,
@@ -2121,7 +2144,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       specialist_id: specialistId,
     };
 
-    await this.validatePayload(data, CreateAircraftDto);
+    const createData = this.withCreationDefaults(ProductType.AIRCRAFT, data);
+    await this.validatePayload(createData, CreateAircraftDto);
 
     const existing = await (client as PrismaService).aircraft.findFirst({
       where: {
@@ -2154,7 +2178,7 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
-    const created = await (client as PrismaService).aircraft.create({ data });
+    const created = await (client as PrismaService).aircraft.create({ data: createData });
     return {
       productId: created.id,
       action: 'CREATED',
@@ -2166,8 +2190,160 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     return Object.fromEntries(
       Object.entries(row).map(([key, rawValue]) => {
         const value = String(rawValue ?? '').trim();
-        return [key, value === '-' ? '' : value];
+        if (value === '-') return [key, ''];
+        return [key, key === 'estado' ? this.canonicalEstado(value) : value];
       }),
+    );
+  }
+
+  /**
+   * "Seminovo", "Coleção" etc. viram o valor do select do formulário de
+   * edição (novo/seminovo/colecao); sem isso o campo abre vazio ao editar.
+   * Outros valores passam como vieram.
+   */
+  private canonicalEstado(value: string): string {
+    const key = value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[\s-]+/g, '');
+    return PRODUCT_ESTADOS.has(key) ? key : value;
+  }
+
+  /**
+   * Lê .xlsx (o modelo baixado) ou .csv, valida o cabeçalho e devolve as
+   * linhas normalizadas, já com identificador. Todo o resto do import (prévia,
+   * sincronização, payload dos itens) usa estas linhas.
+   */
+  getImportTemplate(productType: ProductType): Promise<Buffer> {
+    return this.xlsxImportService.generateTemplate(
+      this.getColumnsForType(productType),
+    );
+  }
+
+  private async parseImportRows(
+    fileBuffer: Buffer,
+    productType: ProductType,
+    mode: string,
+  ): Promise<{ rows: ImportParsedRow[]; rowNumbers: number[] }> {
+    // .xlsx é um zip: começa com "PK".
+    const isXlsx = fileBuffer[0] === 0x50 && fileBuffer[1] === 0x4b;
+    const { rows, rowNumbers } = isXlsx
+      ? await this.xlsxImportService.parseWorkbook(fileBuffer, {
+          linkColumns: ['folder_url'],
+        })
+      : this.xlsxImportService.parseCsv(fileBuffer);
+    const columns = this.getColumnsForType(productType);
+    const structureValidation = this.xlsxImportService.validateStructure(
+      rows,
+      columns,
+    );
+    if (!structureValidation.valid) {
+      throw new BadRequestException({
+        message: 'Estrutura da planilha inválida',
+        errors: structureValidation.errors,
+        missingRequired: structureValidation.missingRequired,
+        unknownColumns: structureValidation.unknownColumns,
+      });
+    }
+    const parsedRows = rows.map((row) => this.normalizeProductRow(row));
+    this.validateFolderUrls(parsedRows, rowNumbers);
+    if (mode === 'SYNCHRONIZE') {
+      this.requireIdentifiers(parsedRows, rowNumbers);
+    }
+    const normalizedRows = parsedRows.map((row) =>
+      this.withIdentifier(productType, row, columns),
+    );
+    this.validateUniqueIdentifiers(normalizedRows);
+    return { rows: normalizedRows, rowNumbers };
+  }
+
+  /**
+   * Linha sem identificador ganha um derivado da linha inteira, para que
+   * reimportar a mesma linha atualize o produto em vez de duplicar (ver
+   * comentário de AUTO_IDENTIFIER_PREFIX).
+   */
+  private withIdentifier(
+    productType: ProductType,
+    row: ImportParsedRow,
+    columns: XlsxColumnDefinition[],
+  ): ImportParsedRow {
+    if (row.identificador) return row;
+    const basis = columns
+      .filter((column) => column.name !== 'identificador' && row[column.name])
+      .map((column) => [column.name, this.hashValue(column, row[column.name])]);
+    const hash = this.sha256(JSON.stringify([productType, basis])).slice(0, 12);
+    return { ...row, identificador: `${AUTO_IDENTIFIER_PREFIX}${hash}` };
+  }
+
+  /**
+   * Mesmo dado escrito de outro jeito gera o mesmo id: 450000 e 450000.00,
+   * ou o link da pasta com e sem ?usp=sharing.
+   */
+  private hashValue(column: XlsxColumnDefinition, raw: string): string {
+    const value = raw.trim();
+    if (column.type === 'number') {
+      const number = Number(value);
+      if (Number.isFinite(number)) return String(number);
+    }
+    if (column.name === 'folder_url') {
+      return extractDriveFolderId(value) ?? value;
+    }
+    return value.toLowerCase();
+  }
+
+  private withCreationDefaults<
+    T extends {
+      identificador: string;
+      marca?: string;
+      modelo?: string;
+      estado?: string;
+    },
+  >(
+    productType: ProductType,
+    data: T,
+  ): T & { marca: string; modelo: string; estado: string } {
+    return {
+      ...data,
+      marca: data.marca ?? DEFAULT_MARCA[productType],
+      modelo: data.modelo ?? data.identificador,
+      estado: data.estado ?? DEFAULT_ESTADO,
+    };
+  }
+
+  /**
+   * Na sincronização, um id gerado que muda com a linha desativaria o produto
+   * antigo e criaria outro no lugar; por isso ali o identificador é exigido.
+   */
+  private requireIdentifiers(
+    rows: ImportParsedRow[],
+    rowNumbers: number[],
+  ): void {
+    const lines = rows.flatMap((row, index) =>
+      row.identificador ? [] : [rowNumbers[index]],
+    );
+    if (lines.length === 0) return;
+    throw new BadRequestException(
+      `Para sincronizar o catálogo, preencha o identificador de todas as linhas (faltando nas linhas ${lines.join(', ')}).`,
+    );
+  }
+
+  /**
+   * folder_url que não é link nem ID de pasta do Drive (ex.: o rótulo "Fotos"
+   * de um link que não deu para ler) é recusado antes de virar produto.
+   */
+  private validateFolderUrls(
+    rows: ImportParsedRow[],
+    rowNumbers: number[],
+  ): void {
+    const lines = rows.flatMap((row, index) =>
+      row.folder_url && !extractDriveFolderId(row.folder_url)
+        ? [rowNumbers[index]]
+        : [],
+    );
+    if (lines.length === 0) return;
+    throw new BadRequestException(
+      `folder_url precisa ser o link de uma pasta do Google Drive (https://drive.google.com/drive/folders/...). Valor inválido nas linhas ${lines.join(', ')}.`,
     );
   }
 
@@ -2180,11 +2356,15 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       if (seen.has(identifier)) duplicates.add(identifier);
       seen.add(identifier);
     }
-    if (duplicates.size > 0) {
-      throw new BadRequestException(
-        `O CSV contém identificadores duplicados: ${[...duplicates].join(', ')}.`,
-      );
-    }
+    if (duplicates.size === 0) return;
+    const manual = [...duplicates].filter(
+      (id) => !id.startsWith(AUTO_IDENTIFIER_PREFIX),
+    );
+    throw new BadRequestException(
+      manual.length > 0
+        ? `A planilha contém identificadores duplicados: ${manual.join(', ')}.`
+        : 'A planilha contém linhas sem identificador com os mesmos dados. Preencha o identificador para diferenciá-las.',
+    );
   }
 
   private validateRequiredProductFields(row: ImportParsedRow): void {
@@ -2193,12 +2373,22 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     );
 
     if (missingFields.length === 0) {
+      this.validateCurrency(row);
       return;
     }
 
     throw new BadRequestException(
       missingFields.map(({ label }) => `${label} faltando`).join('; '),
     );
+  }
+
+  private validateCurrency(row: ImportParsedRow): void {
+    const currency = row.currency.toUpperCase();
+    if (currency !== ProductCurrency.BRL && currency !== ProductCurrency.USD) {
+      throw new BadRequestException(
+        `Moeda inválida "${row.currency}": use BRL ou USD.`,
+      );
+    }
   }
 
   private async validatePayload<T extends object>(
@@ -2240,12 +2430,22 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
     const updatedIds: string[] = [];
     const errorRows: ImportErrorRow[] = [];
     const warningRows: ImportErrorRow[] = [];
+    let autoIdentifierCreatedCount = 0;
+    let autoIdentifierReactivatedCount = 0;
 
     for (const item of items) {
       if (
         item.status === ProductImportItemStatus.COMPLETED ||
         item.status === ProductImportItemStatus.COMPLETED_WITH_WARNINGS
       ) {
+        const payload = item.payload as ImportItemPayload | null;
+        if (payload?.identificador?.startsWith(AUTO_IDENTIFIER_PREFIX)) {
+          if (item.action === 'CREATED') autoIdentifierCreatedCount += 1;
+          if (payload.__productImportEffect?.reactivated) {
+            autoIdentifierReactivatedCount += 1;
+          }
+        }
+
         if (item.action === 'CREATED' && item.product_id) {
           insertedIds.push(item.product_id);
         }
@@ -2313,6 +2513,8 @@ export class ProductImportJobsService implements OnModuleInit, OnModuleDestroy {
       deactivatedCount,
       deactivatedIds,
       reactivatedCount,
+      autoIdentifierCreatedCount,
+      autoIdentifierReactivatedCount,
     };
   }
 

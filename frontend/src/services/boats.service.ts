@@ -180,16 +180,16 @@ export async function deleteBoat(id: string): Promise<void> {
   }
 }
 
-// Get /boats/csv-template (downloads .csv file)
+// Get /boats/import-template (planilha .xlsx com aba de instruções)
 export async function getBoatsCsvTemplate(): Promise<void> {
   try {
-    const response = await api.get("/boats/csv-template", {
+    const response = await api.get("/boats/import-template", {
       responseType: "blob",
     });
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", "template_lanchas.csv");
+    link.setAttribute("download", "template_lanchas.xlsx");
     document.body.appendChild(link);
     link.click();
     link.remove();

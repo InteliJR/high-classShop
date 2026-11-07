@@ -43,7 +43,13 @@ A remarcação de um compromisso já confirmado continua sendo uma ação separa
 | `GET /api/specialists/:id/public-profile` | ID, nome comercial, especialidade, e-mail comercial, URL Calendly e booleano de capacidade. Não inclui documentos, telefone pessoal ou dados OAuth. |
 | `GET/PATCH /api/users/:id` | Perfil privado: somente o próprio usuário ou `ADMIN`. Apenas especialista pode definir uma URL Calendly; `null` remove a URL. |
 
-A consulta do próprio pedido retorna somente `{ exists: false }` ou `{ exists: true, appointment_id, process_id, appointment_status, scheduling_method, appointment_datetime }`, sem nomes ou contatos. Um pedido ativo duplicado responde `409/ACTIVE_PROCESS_EXISTS` com `error.details.existing_request` nesse mesmo formato mínimo, sem o discriminante `exists`. Outros conflitos não expõem IDs ou contatos do compromisso concorrente.
+A consulta do próprio pedido retorna somente:
+
+- `{ exists: false, process: null }` quando o cliente nunca abriu processo para esse produto e especialista;
+- `{ exists: false, process }` quando o processo mais recente já foi encerrado (`COMPLETED` ou `REJECTED`);
+- `{ exists: true, appointment_id, process_id, appointment_status, scheduling_method, appointment_datetime, process }` quando há processo ativo. Os campos do agendamento vêm `null` se o processo ativo não tiver agendamento `PENDING`/`SCHEDULED` do próprio cliente. Em pedido `EMAIL`, inclui também `specialist_contact_email` (o e-mail comercial, que já é público).
+
+`process` é a linha do tempo mínima: `{ id, status, is_active, status_history: [{ status, changed_at }] }`. Nenhuma das formas traz nomes ou contatos do cliente. Um pedido ativo duplicado responde `409/ACTIVE_PROCESS_EXISTS` com `error.details.existing_request` no formato do caso ativo, sem `exists` e sem `process`. Outros conflitos não expõem IDs ou contatos do compromisso concorrente.
 
 Os contatos do cliente aparecem na lista e no detalhe somente para o especialista atribuído ao pedido `PENDING/EMAIL` em `SCHEDULING` e continuam disponíveis para ele após a confirmação. Outros especialistas não podem listar ou abrir esse processo. As projeções de cliente não recebem os contatos privados nesse estado. O e-mail comercial do especialista é intencionalmente público para permitir a composição da mensagem.
 

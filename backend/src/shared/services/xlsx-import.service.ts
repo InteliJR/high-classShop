@@ -17,6 +17,9 @@ export interface XlsxColumnDefinition {
   name: string;
   required: boolean;
   type: 'string' | 'number' | 'boolean';
+  /** Explicação exibida na aba "Instruções" do template. */
+  description?: string;
+  example?: string;
 }
 
 /**
@@ -32,11 +35,15 @@ export interface EmbeddedImage {
  */
 export interface XlsxParseResult {
   rows: ImportParsedRow[];
+  /** Linha da planilha (1 = cabeçalho) de cada item de `rows`; linhas em branco são puladas. */
+  rowNumbers: number[];
   imageMap: Map<number, EmbeddedImage[]>;
 }
 
 export interface CsvParseResult {
   rows: ImportParsedRow[];
+  /** Linha do arquivo (1 = cabeçalho) de cada item de `rows`; linhas em branco são puladas. */
+  rowNumbers: number[];
 }
 
 @Injectable()
@@ -46,9 +53,20 @@ export class XlsxImportService {
    * @param fileBuffer Buffer do arquivo XLSX
    * @returns Linhas parseadas + mapa de imagens por índice de linha (0-based, dados)
    */
-  async parseWorkbook(fileBuffer: Buffer): Promise<XlsxParseResult> {
+  async parseWorkbook(
+    fileBuffer: Buffer,
+    options: { linkColumns?: string[] } = {},
+  ): Promise<XlsxParseResult> {
+    const linkColumns = new Set(options.linkColumns ?? []);
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(fileBuffer as any);
+    try {
+      await workbook.xlsx.load(fileBuffer as any);
+    } catch {
+      // Zip truncado ou renomeado para .xlsx: o exceljs lança Error comum.
+      throw new BadRequestException(
+        'Não foi possível ler a planilha: o arquivo .xlsx está corrompido ou não é uma planilha válida. Baixe o modelo novamente e salve como .xlsx.',
+      );
+    }
 
     const worksheet = workbook.worksheets[0];
     if (!worksheet) {
@@ -77,6 +95,7 @@ export class XlsxImportService {
 
     // 2. Extrair dados (linha 2 em diante)
     const rows: ImportParsedRow[] = [];
+    const rowNumbers: number[] = [];
     const rowCount = worksheet.rowCount;
 
     for (let rowNum = 2; rowNum <= rowCount; rowNum++) {
@@ -86,13 +105,19 @@ export class XlsxImportService {
 
       headers.forEach((header, colIndex) => {
         if (!header) return;
+        // `text` em vez de `value`: o Excel transforma links em objetos
+        // hyperlink, que viravam "[object Object]" com String(). Só nas
+        // colunas de link (ex.: folder_url) o dado é o destino, e não o rótulo
+        // exibido ("Fotos"); nas demais, um link num "modelo" não pode
+        // trocar o nome do produto pela URL.
         const cell = row.getCell(colIndex + 1);
-        const value = cell.value;
+        const value = (
+          linkColumns.has(header) ? this.linkTarget(cell) : cell.text
+        ).trim();
 
-        if (value !== null && value !== undefined && value !== '') {
+        if (value !== '') {
           hasData = true;
-          // ExcelJS pode retornar números diretamente — converter para string pois ImportParsedRow usa Record<string, string>
-          parsedRow[header] = String(value);
+          parsedRow[header] = value;
         } else {
           parsedRow[header] = '';
         }
@@ -100,6 +125,7 @@ export class XlsxImportService {
 
       if (hasData) {
         rows.push(parsedRow);
+        rowNumbers.push(rowNum);
       }
     }
 
@@ -155,7 +181,19 @@ export class XlsxImportService {
       });
     }
 
-    return { rows, imageMap };
+    return { rows, rowNumbers, imageMap };
+  }
+
+  /**
+   * Destino de uma célula de link: hyperlink inserido pelo Excel, fórmula
+   * =HYPERLINK("url"; "rótulo") ou, sem link, o texto digitado.
+   */
+  private linkTarget(cell: ExcelJS.Cell): string {
+    if (cell.hyperlink) return cell.hyperlink;
+    const formulaUrl = cell.formula?.match(
+      /^\s*=?\s*HYPERLINK\(\s*"([^"]+)"/i,
+    )?.[1];
+    return formulaUrl ?? cell.text;
   }
 
   /**
@@ -176,10 +214,13 @@ export class XlsxImportService {
     const rawText = utf8Attempt.includes('\uFFFD')
       ? iconv.decode(withoutBom, 'windows-1252')
       : utf8Attempt;
-    const lines = rawText
+    // Guarda o número original de cada linha para os erros apontarem a linha
+    // certa mesmo com linhas em branco no meio do arquivo.
+    const numberedLines = rawText
       .split(/\r\n|\n|\r/)
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
+      .map((line, index) => ({ text: line.trim(), number: index + 1 }))
+      .filter((line) => line.text.length > 0);
+    const lines = numberedLines.map((line) => line.text);
 
     if (lines.length < 2) {
       throw new BadRequestException(
@@ -198,6 +239,7 @@ export class XlsxImportService {
     }
 
     const rows: ImportParsedRow[] = [];
+    const rowNumbers: number[] = [];
 
     for (let lineIndex = 1; lineIndex < lines.length; lineIndex++) {
       const columns = this.splitCsvLine(lines[lineIndex], delimiter);
@@ -216,6 +258,7 @@ export class XlsxImportService {
 
       if (hasData) {
         rows.push(parsedRow);
+        rowNumbers.push(numberedLines[lineIndex].number);
       }
     }
 
@@ -225,7 +268,7 @@ export class XlsxImportService {
       );
     }
 
-    return { rows };
+    return { rows, rowNumbers };
   }
 
   /**
@@ -454,84 +497,42 @@ export class XlsxImportService {
   }
 
   /**
-   * Gera um workbook XLSX template para download.
-   * @param columnDefinitions Definições de colunas
-   * @param exampleData Dados de exemplo para a segunda linha
-   * @param instructions Instruções por coluna (para comentários nas células do header)
-   * @returns Buffer do arquivo XLSX
+   * Gera o modelo de importação: aba de dados só com o cabeçalho (sem linha
+   * de exemplo, para não ser importada por engano) e aba "Instruções" com
+   * formato e exemplo de cada coluna.
    */
   async generateTemplate(
     columnDefinitions: XlsxColumnDefinition[],
-    exampleData: Record<string, any>,
-    instructions: Record<string, string>,
   ): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Template');
-
-    // Definir colunas (sem 'imagens' — agora são embutidas)
-    const columns = columnDefinitions.map((col) => ({
+    // A primeira aba é a lida pelo import (parseWorkbook).
+    const dataSheet = workbook.addWorksheet('Produtos');
+    dataSheet.columns = columnDefinitions.map((col) => ({
       header: col.name,
       key: col.name,
       width: Math.max(col.name.length + 5, 15),
     }));
-    worksheet.columns = columns;
-
-    // Estilizar header
-    const headerRow = worksheet.getRow(1);
-    headerRow.eachCell((cell: ExcelJS.Cell, colNumber: number) => {
-      const colDef = columnDefinitions[colNumber - 1];
+    dataSheet.getRow(1).eachCell((cell, colNumber) => {
+      const col = columnDefinitions[colNumber - 1];
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: colDef?.required ? 'FF2563EB' : 'FF6B7280' },
+        fgColor: { argb: col.required ? 'FF2563EB' : 'FF6B7280' },
       };
-      cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      cell.border = {
-        bottom: { style: 'thin', color: { argb: 'FF000000' } },
-      };
-
-      // Adicionar nota/comentário com instrução
-      const colName = colDef?.name;
-      if (colName && instructions[colName]) {
-        cell.note = {
-          texts: [
-            {
-              text: `${colDef.required ? '(Obrigatório) ' : '(Opcional) '}${instructions[colName]}`,
-              font: { size: 10 },
-            },
-          ],
-        };
-      }
+      cell.note = `${col.required ? '(Obrigatório)' : '(Opcional)'} ${col.description ?? ''} Ex.: ${col.example ?? ''}`;
     });
+    dataSheet.views = [{ state: 'frozen', ySplit: 1 }];
 
-    // Adicionar linha de exemplo
-    const exampleRow: Record<string, any> = {};
-    columnDefinitions.forEach((col) => {
-      if (exampleData[col.name] !== undefined) {
-        exampleRow[col.name] = exampleData[col.name];
-      }
-    });
-    worksheet.addRow(exampleRow);
-
-    // Estilizar linha de exemplo
-    const exRow = worksheet.getRow(2);
-    exRow.eachCell((cell: ExcelJS.Cell) => {
-      cell.font = { italic: true, color: { argb: 'FF9CA3AF' } };
-    });
-
-    // Adicionar aba de instruções
-    const instrSheet = workbook.addWorksheet('Instruções');
-    instrSheet.columns = [
+    const instructions = workbook.addWorksheet('Instruções');
+    instructions.columns = [
       { header: 'Coluna', key: 'coluna', width: 20 },
-      { header: 'Obrigatório', key: 'obrigatorio', width: 15 },
-      { header: 'Tipo', key: 'tipo', width: 15 },
-      { header: 'Descrição', key: 'descricao', width: 60 },
+      { header: 'Obrigatório', key: 'obrigatorio', width: 13 },
+      { header: 'Formato', key: 'formato', width: 12 },
+      { header: 'Exemplo', key: 'exemplo', width: 30 },
+      { header: 'Como preencher', key: 'descricao', width: 90 },
     ];
-
-    // Estilizar header da aba de instruções
-    const instrHeader = instrSheet.getRow(1);
-    instrHeader.eachCell((cell: ExcelJS.Cell) => {
+    instructions.getRow(1).eachCell((cell) => {
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = {
         type: 'pattern',
@@ -539,27 +540,28 @@ export class XlsxImportService {
         fgColor: { argb: 'FF2563EB' },
       };
     });
-
-    columnDefinitions.forEach((col) => {
-      instrSheet.addRow({
+    for (const col of columnDefinitions) {
+      const row = instructions.addRow({
         coluna: col.name,
         obrigatorio: col.required ? 'Sim' : 'Não',
-        tipo: col.type,
-        descricao: instructions[col.name] || '',
+        formato: col.type === 'number' ? 'Número' : 'Texto',
+        exemplo: col.example ?? '',
+        descricao: col.description ?? '',
       });
-    });
+      row.alignment = { wrapText: true, vertical: 'top' };
+      if (col.required) row.font = { bold: true };
+    }
+    instructions.addRow({});
+    for (const note of [
+      'Preencha uma linha por produto na aba "Produtos" e importe este arquivo (.xlsx) ou salve como .csv.',
+      'Só valor e currency são obrigatórios. Colunas vazias recebem um valor padrão e podem ser completadas depois na edição do produto.',
+      'Com identificador preenchido, reimportar a linha atualiza o produto existente (inclusive preço e fotos) em vez de criar outro.',
+      'Sem identificador, só a linha idêntica atualiza o mesmo produto: mudar qualquer dado, inclusive o valor, cria um produto novo e o anterior continua no catálogo. Uma linha idêntica à de um produto desativado o reativa.',
+    ]) {
+      instructions.addRow({ coluna: note });
+      instructions.mergeCells(`A${instructions.rowCount}:E${instructions.rowCount}`);
+    }
 
-    // Adicionar instrução sobre imagens
-    instrSheet.addRow({});
-    instrSheet.addRow({
-      coluna: '📷 IMAGENS',
-      obrigatorio: '',
-      tipo: '',
-      descricao:
-        'Para adicionar imagens, insira-as diretamente na planilha (aba Template). Cole/insira a imagem na linha do produto correspondente. A primeira imagem de cada linha será a principal.',
-    });
-
-    const xlsxBuffer = await workbook.xlsx.writeBuffer();
-    return Buffer.from(xlsxBuffer);
+    return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 }

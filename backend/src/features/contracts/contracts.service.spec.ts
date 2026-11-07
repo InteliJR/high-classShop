@@ -170,6 +170,18 @@ describe('ContractsService — prefillContract', () => {
     expect(result.product.price).toBe(120000);
   });
 
+  it('keeps the year empty when the product was imported without one', async () => {
+    const prisma = mkPrisma();
+    prisma.process.findUnique.mockResolvedValue(
+      processFixture({ car: { ...carFixture, ano: null } }),
+    );
+    const service = mkSvc(prisma, mkPlatformCompanyService(10));
+
+    const result = await service.prefillContract('process-1', 'specialist-1');
+
+    expect(result.product.year).toBeNull();
+  });
+
   it('rejects contract prefill without a negotiation snapshot', async () => {
     const prisma = mkPrisma();
     prisma.process.findUnique.mockResolvedValue(

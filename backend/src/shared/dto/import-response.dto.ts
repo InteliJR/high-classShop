@@ -42,6 +42,13 @@ export interface ImportResponseDto {
   deactivatedIds: string[];
   /** Quantidade de produtos reativados (voltaram na planilha) */
   reactivatedCount: number;
+  /**
+   * Produtos criados por linhas sem identificador. Mudar o preço numa dessas
+   * linhas e reimportar cria outro produto em vez de atualizar.
+   */
+  autoIdentifierCreatedCount?: number;
+  /** Produtos desativados reativados por uma linha sem identificador idêntica. */
+  autoIdentifierReactivatedCount?: number;
 }
 
 /**

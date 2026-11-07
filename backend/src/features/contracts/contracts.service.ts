@@ -733,7 +733,7 @@ export class ContractsService {
       id: string;
       brand: string;
       model: string;
-      year: number;
+      year: number | null;
       price: number;
       registration_id?: string;
       serial_number?: string;
@@ -760,7 +760,7 @@ export class ContractsService {
           id: processData.car.id,
           brand: processData.car.marca || '',
           model: processData.car.modelo || '',
-          year: processData.car.ano || 0,
+          year: processData.car.ano ?? null,
           price: frozenProductPrice,
           registration_id: '', // Placa - preenchido pelo especialista
           serial_number: '', // Chassi - preenchido pelo especialista
@@ -787,7 +787,7 @@ export class ContractsService {
           id: processData.boat.id,
           brand: processData.boat.marca || '',
           model: processData.boat.modelo || '',
-          year: processData.boat.ano || 0,
+          year: processData.boat.ano ?? null,
           price: frozenProductPrice,
           registration_id: '', // Inscrição - preenchido pelo especialista
           serial_number: '', // Hull number - preenchido pelo especialista
@@ -814,7 +814,7 @@ export class ContractsService {
           id: processData.aircraft.id,
           brand: processData.aircraft.marca || '',
           model: processData.aircraft.modelo || '',
-          year: processData.aircraft.ano || 0,
+          year: processData.aircraft.ano ?? null,
           price: frozenProductPrice,
           registration_id: '', // Prefixo - preenchido pelo especialista
           serial_number: '', // Serial number - preenchido pelo especialista

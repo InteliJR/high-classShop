@@ -462,30 +462,27 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
         Object.entries(where).every(([key, value]) =>
           value !== null && typeof value === 'object' && 'in' in value
             ? (value.in as unknown[]).includes(row[key])
-            : row[key] === value,
+            : value !== null && typeof value === 'object' && 'notIn' in value
+              ? !(value.notIn as unknown[]).includes(row[key])
+              : row[key] === value,
         );
       tx.process.findFirst.mockImplementation(
         async ({ where }) =>
           storedProcesses.find((row) => matches(row, where)) ?? null,
       );
-      prisma.appointment.findFirst.mockImplementation(async ({ where }) => {
-        const { process: processFilter, ...appointmentFilter } = where;
-        const rows = reverse
-          ? [...storedAppointments].reverse()
-          : storedAppointments;
-        for (const appointment of rows) {
-          const process = storedProcesses.find(
-            (row) => row.appointment_id === appointment.id,
-          );
-          if (
-            matches(appointment, appointmentFilter) &&
-            process &&
-            matches(process, processFilter.is)
-          ) {
-            return { ...appointment, process };
-          }
-        }
-        return null;
+      prisma.process.findFirst = jest.fn(async ({ where }) => {
+        const rows = reverse ? [...storedProcesses].reverse() : storedProcesses;
+        const process = rows.find((row) => matches(row, where));
+        if (!process) return null;
+        return {
+          ...process,
+          appointment:
+            storedAppointments.find(
+              (appointment) => appointment.id === process.appointment_id,
+            ) ?? null,
+          specialist: { email: specialist.email },
+          ProcessStatusHistory: [],
+        };
       });
 
       await service.createPending(dto, client.id, UserRole.CUSTOMER);
@@ -511,6 +508,13 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
         appointment_status: StatusAgendamento.PENDING,
         scheduling_method: AppointmentSchedulingMethod.EMAIL,
         appointment_datetime: new Date(dto.appointment_datetime!),
+        specialist_contact_email: specialist.email,
+        process: {
+          id: replacement.process_id,
+          status: ProcessStatus.SCHEDULING,
+          is_active: true,
+          status_history: [],
+        },
       });
 
       storedProcesses[1].status = ProcessStatus.REJECTED;
@@ -521,7 +525,13 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
           ProductType.CAR,
           activeProduct.id,
         ),
-      ).toEqual({ exists: false });
+      ).toEqual({
+        exists: false,
+        process: expect.objectContaining({
+          status: ProcessStatus.REJECTED,
+          is_active: false,
+        }),
+      });
     },
   );
 
@@ -893,34 +903,65 @@ describe('AppointmentsService.createPending — associação e atomicidade', () 
   );
 });
 
-describe('AppointmentsService.findExistingAppointment — own minimal projection', () => {
-  const ownedAppointment = {
-    id: 'appointment-1',
+describe('AppointmentsService.findExistingAppointment — processo do cliente no produto', () => {
+  const history = [
+    {
+      status: ProcessStatus.SCHEDULING,
+      changed_at: new Date('2099-01-01T10:00:00.000Z'),
+    },
+    {
+      status: ProcessStatus.NEGOTIATION,
+      changed_at: new Date('2099-01-02T10:00:00.000Z'),
+    },
+  ];
+  const ownedProcess = {
+    id: 'process-1',
+    client_id: 'client-1',
+    status: ProcessStatus.SCHEDULING,
+    appointment: {
+      id: 'appointment-1',
+      client_id: 'client-1',
+      status: StatusAgendamento.PENDING,
+      scheduling_method: AppointmentSchedulingMethod.EMAIL,
+      appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
+    },
+    specialist: { email: 'specialist@example.com' },
+    ProcessStatusHistory: history.slice(0, 1),
+  };
+  const expectedSelect = {
+    id: true,
+    client_id: true,
+    status: true,
+    appointment: {
+      select: {
+        id: true,
+        client_id: true,
+        status: true,
+        scheduling_method: true,
+        appointment_datetime: true,
+      },
+    },
+    specialist: { select: { email: true } },
+    ProcessStatusHistory: {
+      select: { status: true, changed_at: true },
+      orderBy: { changed_at: 'asc' },
+    },
+  };
+  const scope = {
     client_id: 'client-1',
     specialist_id: 'specialist-1',
     product_type: ProductType.CAR,
-    product_id: 'car-1',
-    status: StatusAgendamento.PENDING,
-    scheduling_method: AppointmentSchedulingMethod.EMAIL,
-    appointment_datetime: new Date('2099-01-01T10:00:00.000Z'),
-    process: { id: 'process-1', client_id: 'client-1' },
-    client: {
-      id: 'client-1',
-      name: 'Private Client',
-      email: 'private@example.com',
-    },
-    specialist: {
-      id: 'specialist-1',
-      name: 'Specialist',
-      email: 'specialist@example.com',
-    },
-    notes: 'private-notes',
-    created_at: new Date(),
-    updated_at: new Date(),
+    car_id: 'car-1',
+    removed_at: null,
   };
-  function harness(appointment: any) {
+  function harness(active: any, terminal: any = null) {
     const prisma = {
-      appointment: { findFirst: jest.fn().mockResolvedValue(appointment) },
+      process: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce(active)
+          .mockResolvedValueOnce(terminal),
+      },
       car: { findUnique: jest.fn().mockResolvedValue({ id: 'car-1' }) },
     } as any;
     return {
@@ -928,109 +969,178 @@ describe('AppointmentsService.findExistingAppointment — own minimal projection
       service: new AppointmentsService(prisma, {} as any, {} as any),
     };
   }
-  it.each([
-    ownedAppointment,
-    {
-      ...ownedAppointment,
-      scheduling_method: null,
-      appointment_datetime: null,
-    },
-  ])(
-    'returns only the owned discriminator and supports legacy date/method nulls',
-    async (appointment) => {
-      const { prisma, service } = harness(appointment);
-      expect(
-        await service.findExistingAppointment(
-          'client-1',
-          'specialist-1',
-          ProductType.CAR,
-          'car-1',
-        ),
-      ).toEqual({
-        exists: true,
-        appointment_id: appointment.id,
-        process_id: 'process-1',
-        appointment_status: appointment.status,
-        scheduling_method: appointment.scheduling_method,
-        appointment_datetime: appointment.appointment_datetime,
-        ...(appointment.scheduling_method === AppointmentSchedulingMethod.EMAIL
-          ? { specialist_contact_email: 'specialist@example.com' }
-          : {}),
-      });
-      expect(prisma.appointment.findFirst).toHaveBeenCalledWith({
-        where: expect.objectContaining({
-          client_id: 'client-1',
-          specialist_id: 'specialist-1',
-          product_type: ProductType.CAR,
-          product_id: 'car-1',
-          process: {
-            is: {
-              client_id: 'client-1',
-              specialist_id: 'specialist-1',
-              product_type: ProductType.CAR,
-              car_id: 'car-1',
-              removed_at: null,
-              status: {
-                in: [
-                  ProcessStatus.SCHEDULING,
-                  ProcessStatus.NEGOTIATION,
-                  ProcessStatus.PROCESSING_CONTRACT,
-                  ProcessStatus.DOCUMENTATION,
-                ],
-              },
-            },
-          },
-        }),
-        select: {
-          id: true,
-          client_id: true,
-          status: true,
-          scheduling_method: true,
-          appointment_datetime: true,
-          process: { select: { id: true, client_id: true } },
-          specialist: { select: { email: true } },
-        },
-      });
-      expect(prisma.car.findUnique).not.toHaveBeenCalled();
-    },
-  );
-  it('não expõe contato do especialista para pedido CALENDLY', async () => {
-    const { service } = harness({
-      ...ownedAppointment,
-      scheduling_method: AppointmentSchedulingMethod.CALENDLY,
-    });
-
-    const result = await service.findExistingAppointment(
+  const check = (service: AppointmentsService) =>
+    service.findExistingAppointment(
       'client-1',
       'specialist-1',
       ProductType.CAR,
       'car-1',
     );
 
-    expect(result).not.toHaveProperty('specialist_contact_email');
-  });
   it.each([
-    null,
-    { ...ownedAppointment, client_id: 'another-client' },
-    { ...ownedAppointment, process: null },
+    ownedProcess,
     {
-      ...ownedAppointment,
-      process: { id: 'private-process', client_id: 'another-client' },
+      ...ownedProcess,
+      appointment: {
+        ...ownedProcess.appointment,
+        scheduling_method: null,
+        appointment_datetime: null,
+      },
     },
   ])(
-    'fails closed for missing or unowned appointment/process %o',
-    async (appointment) => {
-      const { service } = harness(appointment);
-      expect(
-        await service.findExistingAppointment(
-          'client-1',
-          'specialist-1',
-          ProductType.CAR,
-          'car-1',
-        ),
-      ).toEqual({ exists: false });
+    'returns the owned active process with its current appointment',
+    async (process) => {
+      const { prisma, service } = harness(process);
+      expect(await check(service)).toEqual({
+        exists: true,
+        appointment_id: 'appointment-1',
+        process_id: 'process-1',
+        appointment_status: StatusAgendamento.PENDING,
+        scheduling_method: process.appointment.scheduling_method,
+        appointment_datetime: process.appointment.appointment_datetime,
+        ...(process.appointment.scheduling_method ===
+        AppointmentSchedulingMethod.EMAIL
+          ? { specialist_contact_email: 'specialist@example.com' }
+          : {}),
+        process: {
+          id: 'process-1',
+          status: ProcessStatus.SCHEDULING,
+          is_active: true,
+          status_history: history.slice(0, 1),
+        },
+      });
+      expect(prisma.process.findFirst).toHaveBeenCalledTimes(1);
+      expect(prisma.process.findFirst).toHaveBeenCalledWith({
+        where: {
+          ...scope,
+          status: {
+            in: [
+              ProcessStatus.SCHEDULING,
+              ProcessStatus.NEGOTIATION,
+              ProcessStatus.PROCESSING_CONTRACT,
+              ProcessStatus.DOCUMENTATION,
+            ],
+          },
+        },
+        select: expectedSelect,
+      });
+      expect(prisma.car.findUnique).not.toHaveBeenCalled();
     },
   );
+
+  it.each([StatusAgendamento.COMPLETED, StatusAgendamento.CANCELLED])(
+    'keeps blocking an advanced process whose appointment is %s, without appointment data',
+    async (appointmentStatus) => {
+      const { service } = harness({
+        ...ownedProcess,
+        status: ProcessStatus.NEGOTIATION,
+        appointment: { ...ownedProcess.appointment, status: appointmentStatus },
+        ProcessStatusHistory: history,
+      });
+      expect(await check(service)).toEqual({
+        exists: true,
+        appointment_id: null,
+        process_id: 'process-1',
+        appointment_status: null,
+        scheduling_method: null,
+        appointment_datetime: null,
+        process: {
+          id: 'process-1',
+          status: ProcessStatus.NEGOTIATION,
+          is_active: true,
+          status_history: history,
+        },
+      });
+    },
+  );
+
+  it('não expõe contato do especialista para pedido CALENDLY', async () => {
+    const { service } = harness({
+      ...ownedProcess,
+      appointment: {
+        ...ownedProcess.appointment,
+        scheduling_method: AppointmentSchedulingMethod.CALENDLY,
+      },
+    });
+    expect(await check(service)).not.toHaveProperty('specialist_contact_email');
+  });
+
+  it.each([ProcessStatus.COMPLETED, ProcessStatus.REJECTED])(
+    'returns the latest %s process without unlocking appointment data',
+    async (status) => {
+      const { prisma, service } = harness(null, {
+        ...ownedProcess,
+        status,
+        ProcessStatusHistory: history,
+      });
+      expect(await check(service)).toEqual({
+        exists: false,
+        process: {
+          id: 'process-1',
+          status,
+          is_active: false,
+          status_history: history,
+        },
+      });
+      expect(prisma.process.findFirst).toHaveBeenLastCalledWith({
+        where: {
+          ...scope,
+          status: {
+            notIn: [
+              ProcessStatus.SCHEDULING,
+              ProcessStatus.NEGOTIATION,
+              ProcessStatus.PROCESSING_CONTRACT,
+              ProcessStatus.DOCUMENTATION,
+            ],
+          },
+        },
+        orderBy: { updated_at: 'desc' },
+        select: expectedSelect,
+      });
+    },
+  );
+
+  it.each([
+    [null, null],
+    [{ ...ownedProcess, client_id: 'another-client' }, null],
+    [
+      null,
+      {
+        ...ownedProcess,
+        status: ProcessStatus.REJECTED,
+        client_id: 'another-client',
+      },
+    ],
+  ])(
+    'fails closed for missing or unowned process %#',
+    async (active, terminal) => {
+      const { service } = harness(active, terminal);
+      expect(await check(service)).toEqual({ exists: false, process: null });
+    },
+  );
+
+  it('omits appointment data from another client on an owned process', async () => {
+    const { service } = harness({
+      ...ownedProcess,
+      appointment: { ...ownedProcess.appointment, client_id: 'another-client' },
+    });
+    expect(await check(service)).toMatchObject({
+      exists: true,
+      appointment_id: null,
+      appointment_status: null,
+    });
+    expect(
+      await check(
+        harness({
+          ...ownedProcess,
+          appointment: {
+            ...ownedProcess.appointment,
+            client_id: 'another-client',
+          },
+        }).service,
+      ),
+    ).not.toHaveProperty('specialist_contact_email');
+  });
 });
 
 describe('AppointmentsService.createPending — integridade das partes', () => {

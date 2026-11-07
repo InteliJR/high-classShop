@@ -9,7 +9,7 @@ export class Aircraft {
   deactivated_by_sync_job_id: string | null;
   categoria: string | null;
   specialist_id: string | null;
-  ano: number;
+  ano: number | null;
   marca: string;
   modelo: string;
   assentos: number | null;

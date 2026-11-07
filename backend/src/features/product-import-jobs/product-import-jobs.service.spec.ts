@@ -1,5 +1,6 @@
 import { ProductImportJobsService } from './product-import-jobs.service';
 import { Prisma, ProductCurrency, ProductType } from '@prisma/client';
+import { XlsxImportService } from 'src/shared/services/xlsx-import.service';
 
 describe('ProductImportJobsService', () => {
   beforeEach(() => {
@@ -50,6 +51,7 @@ describe('ProductImportJobsService', () => {
     modelo: 'Roma',
     identificador: 'FERRARI-ROMA-1',
     valor: '1000000',
+    currency: 'BRL',
     estado: 'SP',
     ano: '2024',
   };
@@ -74,12 +76,10 @@ describe('ProductImportJobsService', () => {
   });
 
   it.each([
-    ['identificador', '-', 'Identificador do veículo faltando'],
-    ['marca', ' - ', 'Marca do veículo faltando'],
-    ['modelo', '-', 'Nome do veículo faltando'],
-    ['valor', '   ', 'Valor do veículo faltando'],
-    ['estado', '-', 'Estado do veículo faltando'],
-    ['ano', ' - ', 'Ano do veículo faltando'],
+    ['identificador', '-', 'Identificador faltando'],
+    ['valor', '   ', 'Valor do produto faltando'],
+    ['currency', ' - ', 'Moeda (use BRL ou USD) faltando'],
+    ['currency', 'EUR', 'Moeda inválida "EUR": use BRL ou USD.'],
   ])(
     'trata %s com marcador de ausência como erro natural da linha',
     async (field, emptyValue, expectedMessage) => {
@@ -115,7 +115,6 @@ describe('ProductImportJobsService', () => {
         ProductType.CAR,
         {
           ...validCarRow,
-          currency: '-',
           cor: ' - ',
           km: '-',
           cambio: '   ',
@@ -126,7 +125,7 @@ describe('ProductImportJobsService', () => {
 
     expect(create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        currency: undefined,
+        currency: ProductCurrency.BRL,
         cor: undefined,
         km: undefined,
         cambio: undefined,
@@ -153,7 +152,7 @@ describe('ProductImportJobsService', () => {
             {
               id: 'item-2',
               status: 'PENDING',
-              payload: { ...validCarRow, modelo: '-' },
+              payload: { ...validCarRow, valor: '-' },
               folder_url: null,
             },
           ],
@@ -196,7 +195,7 @@ describe('ProductImportJobsService', () => {
       where: { id: 'item-2' },
       data: expect.objectContaining({
         status: 'FAILED',
-        error_message: 'Nome do veículo faltando',
+        error_message: 'Valor do produto faltando',
       }),
     });
   });
@@ -449,7 +448,9 @@ describe('ProductImportJobsService', () => {
 
   it('exige confirmação explícita para sincronizar', async () => {
     const xlsxImportService = {
-      parseCsv: jest.fn().mockReturnValue({ rows: [validCarRow] }),
+      parseCsv: jest
+        .fn()
+        .mockReturnValue({ rows: [validCarRow], rowNumbers: [2] }),
       validateStructure: jest.fn().mockReturnValue({ valid: true }),
     } as any;
     const service = new ProductImportJobsService(
@@ -482,6 +483,7 @@ describe('ProductImportJobsService', () => {
     const xlsxImportService = {
       parseCsv: jest.fn().mockReturnValue({
         rows: [validCarRow, { ...validCarRow, modelo: 'Duplicado' }],
+        rowNumbers: [2, 3],
       }),
       validateStructure: jest.fn().mockReturnValue({ valid: true }),
     } as any;
@@ -503,7 +505,9 @@ describe('ProductImportJobsService', () => {
 
   it('exige token da prévia mesmo quando a sincronização foi confirmada', async () => {
     const xlsxImportService = {
-      parseCsv: jest.fn().mockReturnValue({ rows: [validCarRow] }),
+      parseCsv: jest
+        .fn()
+        .mockReturnValue({ rows: [validCarRow], rowNumbers: [2] }),
       validateStructure: jest.fn().mockReturnValue({ valid: true }),
     } as any;
     const prisma = {
@@ -555,7 +559,9 @@ describe('ProductImportJobsService', () => {
 
   it('calcula o impacto da sincronização antes de criar o job', async () => {
     const xlsxImportService = {
-      parseCsv: jest.fn().mockReturnValue({ rows: [validCarRow] }),
+      parseCsv: jest
+        .fn()
+        .mockReturnValue({ rows: [validCarRow], rowNumbers: [2] }),
       validateStructure: jest.fn().mockReturnValue({ valid: true }),
     } as any;
     const prisma = {
@@ -612,7 +618,9 @@ describe('ProductImportJobsService', () => {
         catalogReads.shift() ?? [productA, productC],
       );
     const xlsxImportService = {
-      parseCsv: jest.fn().mockReturnValue({ rows: [validCarRow] }),
+      parseCsv: jest
+        .fn()
+        .mockReturnValue({ rows: [validCarRow], rowNumbers: [2] }),
       validateStructure: jest.fn().mockReturnValue({ valid: true }),
     } as any;
     const prisma = {
@@ -681,7 +689,9 @@ describe('ProductImportJobsService', () => {
       { id: '22222222-2222-4222-8222-222222222222', identificador: 'STALE-B' },
     ];
     const xlsxImportService = {
-      parseCsv: jest.fn().mockReturnValue({ rows: [validCarRow] }),
+      parseCsv: jest
+        .fn()
+        .mockReturnValue({ rows: [validCarRow], rowNumbers: [2] }),
       validateStructure: jest.fn().mockReturnValue({ valid: true }),
     } as any;
     const findMany = jest.fn().mockImplementation(async () => [...activeProducts]);
@@ -777,6 +787,254 @@ describe('ProductImportJobsService', () => {
     });
   });
 
+  it('produto só com valor e moeda é criado com valores padrão', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'uuid-1' });
+    const prisma = {
+      car: { findFirst: jest.fn().mockResolvedValue(null), create },
+    } as any;
+    const service = new ProductImportJobsService(prisma, {} as any, {} as any);
+
+    await (service as any).upsertProductFromRow(
+      ProductType.CAR,
+      { identificador: 'auto-abc', valor: '450000', currency: 'usd' },
+      '00000000-0000-4000-8000-000000000001',
+    );
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        identificador: 'auto-abc',
+        marca: 'Carro',
+        modelo: 'auto-abc',
+        estado: 'não informado',
+        ano: undefined,
+        valor: 450000,
+        currency: ProductCurrency.USD,
+      }),
+    });
+  });
+
+  it('reimport não sobrescreve com valores padrão o que foi editado à mão', async () => {
+    const existing = { id: 'product-1', is_active: true };
+    const update = jest.fn().mockResolvedValue({ updated_at: new Date() });
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      car: {
+        findFirst: jest.fn().mockResolvedValue(existing),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'product-1',
+          valor: new Prisma.Decimal(450000),
+          currency: ProductCurrency.BRL,
+        }),
+        update,
+        create: jest.fn(),
+      },
+      process: { findFirst: jest.fn().mockResolvedValue(null) },
+    } as any;
+    const service = new ProductImportJobsService(tx, {} as any, {} as any);
+
+    await (service as any).upsertProductFromRow(
+      ProductType.CAR,
+      { identificador: 'auto-abc', valor: '450000', currency: 'BRL' },
+      '00000000-0000-4000-8000-000000000001',
+      tx,
+    );
+
+    const data = update.mock.calls[0][0].data;
+    expect(data).toMatchObject({ identificador: 'auto-abc', valor: 450000 });
+    expect(data.marca).toBeUndefined();
+    expect(data.modelo).toBeUndefined();
+    expect(data.estado).toBeUndefined();
+    expect(tx.car.create).not.toHaveBeenCalled();
+  });
+
+  describe('identificador automático', () => {
+    const parse = async (lines: string[], mode = 'ADDITIVE') => {
+      const service = new ProductImportJobsService(
+        {} as any,
+        new XlsxImportService(),
+        {} as any,
+      );
+      const { rows } = await (service as any).parseImportRows(
+        Buffer.from(lines.join('\n'), 'utf-8'),
+        ProductType.CAR,
+        mode,
+      );
+      return rows;
+    };
+
+    it('a mesma linha gera o mesmo identificador em importações diferentes', async () => {
+      const header = 'marca;modelo;valor;currency;folder_url';
+      const [first] = await parse([header, 'BMW;X5;450000;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK']);
+      const [again] = await parse([header, 'bmw;X5;450000;brl;https://drive.google.com/drive/folders/1AbCdEfGhIjK']);
+      const [other] = await parse([header, 'BMW;X6;450000;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK']);
+
+      expect(first.identificador).toMatch(/^auto-[0-9a-f]{12}$/);
+      expect(again.identificador).toBe(first.identificador);
+      expect(other.identificador).not.toBe(first.identificador);
+    });
+
+    it('unidades que só diferem no preço, na moeda ou nas fotos não se fundem', async () => {
+      const header = 'marca;modelo;ano;valor;currency;folder_url';
+      const [base] = await parse([
+        header,
+        'BMW;X5;2023;450000;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK',
+      ]);
+      const variants = await Promise.all(
+        [
+          'BMW;X5;2023;500000;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK',
+          'BMW;X5;2023;450000;USD;https://drive.google.com/drive/folders/1AbCdEfGhIjK',
+          'BMW;X5;2023;450000;BRL;https://drive.google.com/drive/folders/2ZyXwVuTsRqP',
+        ].map(async (line) => (await parse([header, line]))[0]),
+      );
+
+      for (const variant of variants) {
+        expect(variant.identificador).not.toBe(base.identificador);
+      }
+    });
+
+    it('linhas só com valor e moeda se distinguem pelo preço', async () => {
+      const rows = await parse(['valor;currency', '100;BRL', '200;BRL']);
+
+      expect(rows[0].identificador).not.toBe(rows[1].identificador);
+    });
+
+    it('estado com maiúscula ou acento vira o valor do formulário', async () => {
+      const rows = await parse([
+        'identificador;estado;valor;currency',
+        'A;Seminovo;1;BRL',
+        'B;Coleção;1;BRL',
+        'C;usado;1;BRL',
+      ]);
+
+      expect(rows.map((row: any) => row.estado)).toEqual([
+        'seminovo',
+        'colecao',
+        'usado',
+      ]);
+    });
+
+    it('mesmo preço ou mesma pasta escritos de outro jeito geram o mesmo id', async () => {
+      const header = 'marca;valor;currency;folder_url';
+      const folder = 'https://drive.google.com/drive/folders/1AbCdEfGhIjK';
+      const [base] = await parse([header, `BMW;450000;BRL;${folder}`]);
+      const [variant] = await parse([
+        header,
+        `BMW;450000.00;BRL;${folder}?usp=sharing`,
+      ]);
+
+      expect(variant.identificador).toBe(base.identificador);
+    });
+
+    it('recusa folder_url que não é link de pasta do Drive', async () => {
+      await expect(
+        parse([
+          'identificador;valor;currency;folder_url',
+          'A;1;BRL;https://drive.google.com/drive/folders/1AbCdEfGhIjK',
+          'B;1;BRL;Fotos',
+        ]),
+      ).rejects.toThrow(/folder_url.*linhas 3\./);
+    });
+
+    it('conta linhas sem identificador que criam ou reativam produto', () => {
+      const service = new ProductImportJobsService(
+        {} as any,
+        {} as any,
+        {} as any,
+      );
+      const impact = (service as any).autoIdentifierImpact(
+        [
+          { identificador: 'auto-novo' },
+          { identificador: 'auto-ativo' },
+          { identificador: 'auto-inativo' },
+          { identificador: 'MANUAL-1' },
+        ],
+        [
+          { identificador: 'auto-ativo', isActive: true },
+          { identificador: 'auto-inativo', isActive: false },
+          { identificador: 'MANUAL-1', isActive: false },
+        ],
+      );
+
+      expect(impact).toEqual({
+        autoIdentifierNewItems: 1,
+        autoIdentifierReactivatedItems: 1,
+      });
+    });
+
+    it('resultado informa produtos criados e reativados sem identificador', () => {
+      const service = new ProductImportJobsService(
+        {} as any,
+        {} as any,
+        {} as any,
+      );
+      const item = (overrides: Record<string, unknown>) => ({
+        row_number: 2,
+        status: 'COMPLETED',
+        action: 'CREATED',
+        product_id: 'p',
+        error_message: null,
+        warnings: null,
+        ...overrides,
+      });
+      const result = (service as any).buildImportResponse([
+        item({ payload: { identificador: 'auto-a' } }),
+        item({
+          action: 'UPDATED',
+          payload: {
+            identificador: 'auto-b',
+            __productImportEffect: { reactivated: true },
+          },
+        }),
+        item({ payload: { identificador: 'MANUAL-1' } }),
+      ]);
+
+      expect(result).toMatchObject({
+        autoIdentifierCreatedCount: 1,
+        autoIdentifierReactivatedCount: 1,
+      });
+    });
+
+    it('identificador informado é mantido', async () => {
+      const [row] = await parse([
+        'identificador;valor;currency',
+        'BMW-1;100;BRL',
+      ]);
+
+      expect(row.identificador).toBe('BMW-1');
+    });
+
+    it('rejeita linhas sem identificador com os mesmos dados', async () => {
+      await expect(
+        parse(['marca;valor;currency', 'BMW;100;BRL', 'BMW;100;BRL']),
+      ).rejects.toThrow(/sem identificador com os mesmos dados/);
+    });
+
+    it('sincronização exige identificador em todas as linhas', async () => {
+      const lines = [
+        'identificador;valor;currency',
+        'BMW-1;100;BRL',
+        ';200;BRL',
+      ];
+
+      await expect(parse(lines, 'SYNCHRONIZE')).rejects.toThrow(
+        /preencha o identificador.*linhas 3\)/,
+      );
+      await expect(parse(lines)).resolves.toHaveLength(2);
+    });
+
+    it('aponta a linha real do arquivo quando há linhas em branco', async () => {
+      const lines = [
+        'identificador;valor;currency',
+        'BMW-1;100;BRL',
+        '',
+        'BMW-2;150;BRL',
+        ';200;BRL',
+      ];
+
+      await expect(parse(lines, 'SYNCHRONIZE')).rejects.toThrow(/linhas 5\)/);
+    });
+  });
+
   it('lanca erro quando identificador vem vazio', async () => {
     const prisma = { car: { findFirst: jest.fn(), create: jest.fn() } } as any;
     const service = new ProductImportJobsService(prisma, {} as any, {} as any);
@@ -789,6 +1047,7 @@ describe('ProductImportJobsService', () => {
           modelo: 'X',
           identificador: '  ',
           valor: '100',
+          currency: 'BRL',
           estado: 'SP',
           ano: '2020',
         },
@@ -811,6 +1070,7 @@ describe('ProductImportJobsService', () => {
         modelo: 'X',
         identificador: 'FERRARI-X-2',
         valor: '100',
+        currency: 'BRL',
         estado: 'SP',
         ano: '2020',
       },
