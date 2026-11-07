@@ -23,6 +23,7 @@ import {
   SpecialistResponseDto,
   ProductResponseDto,
   ExistingAppointmentCheck,
+  ProductProcessSummary,
 } from './entities/appointment.response';
 import {
   AppointmentSchedulingMethod,
@@ -2041,57 +2042,81 @@ export class AppointmentsService {
         : productType === ProductType.BOAT
           ? 'boat_id'
           : 'aircraft_id';
-    const appointment = await this.prisma.appointment.findFirst({
-      where: {
-        client_id: clientId,
-        specialist_id: specialistId,
-        product_type: productType,
-        product_id: productId,
-        status: {
-          in: [StatusAgendamento.PENDING, StatusAgendamento.SCHEDULED],
-        },
-        process: {
-          is: {
-            client_id: clientId,
-            specialist_id: specialistId,
-            product_type: productType,
-            [productField]: productId,
-            status: { in: ACTIVE_PROCESS_STATUSES },
-            removed_at: null,
-          },
+    const scope = {
+      client_id: clientId,
+      specialist_id: specialistId,
+      product_type: productType,
+      [productField]: productId,
+      removed_at: null,
+    };
+    const select = {
+      id: true,
+      client_id: true,
+      status: true,
+      appointment: {
+        select: {
+          id: true,
+          client_id: true,
+          status: true,
+          scheduling_method: true,
+          appointment_datetime: true,
         },
       },
-      select: {
-        id: true,
-        client_id: true,
-        status: true,
-        scheduling_method: true,
-        appointment_datetime: true,
-        process: { select: { id: true, client_id: true } },
-        specialist: { select: { email: true } },
+      specialist: { select: { email: true } },
+      ProcessStatusHistory: {
+        select: { status: true, changed_at: true },
+        orderBy: { changed_at: 'asc' as const },
       },
-    });
+    };
+    // Ativo tem prioridade; sem ativo, mostra o encerrado mais recente.
+    // updated_at serve como data de encerramento porque processo COMPLETED/
+    // REJECTED com produto não recebe mais escrita (transições não saem de
+    // estado terminal); se isso mudar, ordenar pelo ProcessStatusHistory.
+    const process =
+      (await this.prisma.process.findFirst({
+        where: { ...scope, status: { in: ACTIVE_PROCESS_STATUSES } },
+        select,
+      })) ??
+      (await this.prisma.process.findFirst({
+        where: { ...scope, status: { notIn: ACTIVE_PROCESS_STATUSES } },
+        orderBy: { updated_at: 'desc' },
+        select,
+      }));
 
-    if (
-      !appointment ||
-      appointment.client_id !== clientId ||
-      !appointment.process ||
-      appointment.process.client_id !== clientId
-    ) {
-      return { exists: false };
+    if (!process || process.client_id !== clientId) {
+      return { exists: false, process: null };
     }
-    const specialistContactEmail = appointment.specialist?.email;
+    const isActive = ACTIVE_PROCESS_STATUSES.includes(process.status);
+    const summary: ProductProcessSummary = {
+      id: process.id,
+      status: process.status,
+      is_active: isActive,
+      status_history: process.ProcessStatusHistory.map((entry) => ({
+        status: entry.status,
+        changed_at: entry.changed_at,
+      })),
+    };
+    if (!isActive) return { exists: false, process: summary };
+
+    const appointment =
+      process.appointment?.client_id === clientId &&
+      (process.appointment.status === StatusAgendamento.PENDING ||
+        process.appointment.status === StatusAgendamento.SCHEDULED)
+        ? process.appointment
+        : null;
+    const specialistContactEmail = process.specialist?.email;
     return {
       exists: true,
-      appointment_id: appointment.id,
-      process_id: appointment.process.id,
-      appointment_status: appointment.status,
-      scheduling_method: appointment.scheduling_method,
-      appointment_datetime: appointment.appointment_datetime,
-      ...(appointment.scheduling_method === AppointmentSchedulingMethod.EMAIL &&
-      specialistContactEmail
+      appointment_id: appointment?.id ?? null,
+      process_id: process.id,
+      appointment_status: appointment?.status ?? null,
+      scheduling_method: appointment?.scheduling_method ?? null,
+      appointment_datetime: appointment?.appointment_datetime ?? null,
+      ...(appointment?.scheduling_method ===
+        AppointmentSchedulingMethod.EMAIL && specialistContactEmail
         ? { specialist_contact_email: specialistContactEmail }
         : {}),
+      process: summary,
     };
   }
 

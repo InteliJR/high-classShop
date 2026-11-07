@@ -23,11 +23,12 @@ describeWithPostgres('product synchronization preview — PostgreSQL', () => {
     modelo: 'Roma',
     identificador: `KEEP-${suffix}`,
     valor: '1000000',
+    currency: 'BRL',
     estado: 'SP',
     ano: '2024',
   };
   const xlsx = {
-    parseCsv: jest.fn().mockReturnValue({ rows: [row] }),
+    parseCsv: jest.fn().mockReturnValue({ rows: [row], rowNumbers: [2] }),
     validateStructure: jest.fn().mockReturnValue({ valid: true }),
   } as any;
 
@@ -48,7 +49,7 @@ describeWithPostgres('product synchronization preview — PostgreSQL', () => {
   });
 
   beforeEach(async () => {
-    xlsx.parseCsv.mockReturnValue({ rows: [row] });
+    xlsx.parseCsv.mockReturnValue({ rows: [row], rowNumbers: [2] });
     await prisma.productImportJob.deleteMany({
       where: { specialist_id: specialistId },
     });
@@ -721,7 +722,7 @@ describeWithPostgres('product synchronization preview — PostgreSQL', () => {
       identificador: `CREATED-THEN-DELETED-${suffix}`,
       modelo: 'Created then deleted',
     };
-    xlsx.parseCsv.mockReturnValue({ rows: [createdRow] });
+    xlsx.parseCsv.mockReturnValue({ rows: [createdRow], rowNumbers: [2] });
     let createdId = '';
     const drive = {
       importImagesForProductFromFolder: jest.fn(async ({ product_id }) => {

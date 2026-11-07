@@ -6,6 +6,7 @@ import {
   getAdminSpecialistProducts,
   importAdminCatalogCsv,
   previewAdminCatalogCsv,
+  transferAdminProduct,
   type AdminCatalogProduct,
   type CsvImportPreview,
   type ProductImportMode,
@@ -13,6 +14,10 @@ import {
 import { deleteCar } from "../../services/cars.service";
 import { deleteBoat } from "../../services/boats.service";
 import { deleteAircraft } from "../../services/aircrafts.service";
+import {
+  getSpecialists,
+  type Specialist,
+} from "../../services/specialists.service";
 import { formatCurrency } from "../../lib/currency";
 import Button from "../../components/ui/button";
 import { Alert } from "../../components/ui/alert";
@@ -30,6 +35,15 @@ export default function SpecialistJourneyProductsPage() {
   const [preview, setPreview] = useState<CsvImportPreview | null>(null);
   const [syncConfirmed, setSyncConfirmed] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [specialists, setSpecialists] = useState<Specialist[]>([]);
+  const [transferringId, setTransferringId] = useState<string | null>(null);
+  const [transferTo, setTransferTo] = useState("");
+
+  useEffect(() => {
+    void getSpecialists()
+      .then(setSpecialists)
+      .catch(() => setSpecialists([]));
+  }, []);
 
   if (!context) return null;
   const productType = context.specialist.speciality;
@@ -64,6 +78,37 @@ export default function SpecialistJourneyProductsPage() {
     await load();
   };
 
+  const transferTargets = specialists.filter(
+    (item) =>
+      item.is_active !== false &&
+      item.speciality === productType &&
+      item.id !== context.targetSpecialistId,
+  );
+
+  const transfer = async (id: string) => {
+    const target = transferTargets.find((item) => item.id === transferTo);
+    if (!target) return;
+    if (
+      !window.confirm(
+        `Transferir este produto para ${target.name} ${target.surname}?`,
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    try {
+      await transferAdminProduct(productType, id, target.id);
+      setTransferringId(null);
+      setTransferTo("");
+      await load();
+    } catch (caught) {
+      setError(
+        (caught as { friendlyMessage?: string })?.friendlyMessage ??
+          "Não foi possível transferir o produto.",
+      );
+    }
+  };
+
   const runPreview = async () => {
     if (!file) return;
     setError(null);
@@ -77,8 +122,11 @@ export default function SpecialistJourneyProductsPage() {
           mode,
         ),
       );
-    } catch {
-      setError("CSV inválido ou incompatível com a especialidade selecionada.");
+    } catch (caught) {
+      setError(
+        (caught as { friendlyMessage?: string }).friendlyMessage ??
+          "Planilha inválida ou incompatível com a especialidade selecionada.",
+      );
     }
   };
 
@@ -126,7 +174,7 @@ export default function SpecialistJourneyProductsPage() {
         <div>
           <h2 className="text-2xl font-semibold text-ink">Catálogo administrativo</h2>
           <p className="text-sm text-ink-soft">
-            Itens ativos e inativos de {context.specialist.name} {context.specialist.surname}; dono imutável após a criação.
+            Itens ativos e inativos de {context.specialist.name} {context.specialist.surname}; transferência bloqueada enquanto houver processos em andamento.
           </p>
         </div>
         <Button onClick={() => navigate("/admin/journey/products/new")}>
@@ -139,13 +187,13 @@ export default function SpecialistJourneyProductsPage() {
       <div className="rounded-xl border border-border bg-surface p-5">
         <div className="flex items-center gap-2">
           <Upload size={18} />
-          <h3 className="font-semibold text-ink">Importação CSV segura</h3>
+          <h3 className="font-semibold text-ink">Importação de planilha segura</h3>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-[1fr_220px_auto]">
           <input
-            aria-label="Arquivo CSV"
+            aria-label="Planilha de produtos"
             type="file"
-            accept=".csv,text/csv"
+            accept=".xlsx,.csv"
             onChange={(event) => {
               setFile(event.target.files?.[0] ?? null);
               setPreview(null);
@@ -174,6 +222,15 @@ export default function SpecialistJourneyProductsPage() {
             <p>
               {preview.impact.incomingItems} linhas · {preview.impact.newOrReactivatedItems} criações/reativações · {preview.impact.matchingItems} atualizações · <strong>{preview.impact.deactivationCandidates} desativações</strong>
             </p>
+            {((preview.impact.autoIdentifierNewItems ?? 0) > 0 ||
+              (preview.impact.autoIdentifierReactivatedItems ?? 0) > 0) && (
+              <p className="mt-2 text-amber-800">
+                Linhas sem identificador: {preview.impact.autoIdentifierNewItems ?? 0} vão criar produto novo
+                (um produto já cadastrado com preço ou outro dado alterado vira um segundo anúncio) e{" "}
+                {preview.impact.autoIdentifierReactivatedItems ?? 0} vão reativar um produto desativado.
+                Preencha o identificador para atualizar em vez de duplicar.
+              </p>
+            )}
             {mode === "SYNCHRONIZE" && (
               <label className="mt-3 flex items-start gap-2 text-ink">
                 <input
@@ -215,8 +272,29 @@ export default function SpecialistJourneyProductsPage() {
                     </span>
                   </td>
                   <td className="py-3 text-right">
-                    <button className="mr-3 text-ink underline" onClick={() => navigate(`/admin/journey/products/edit/${productType.toLowerCase()}s/${product.id}`)}>Editar</button>
-                    {product.is_active && <button className="text-status-bad underline" onClick={() => void remove(product.id)}>Desativar</button>}
+                    {transferringId === product.id ? (
+                      <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                        <select
+                          aria-label="Novo especialista responsável"
+                          value={transferTo}
+                          onChange={(event) => setTransferTo(event.target.value)}
+                          className="rounded-lg border border-border bg-surface px-2 py-1 text-sm"
+                        >
+                          <option value="">Selecione o especialista</option>
+                          {transferTargets.map((item) => (
+                            <option key={item.id} value={item.id}>{item.name} {item.surname}</option>
+                          ))}
+                        </select>
+                        <button className="text-ink underline disabled:opacity-50" disabled={!transferTo} onClick={() => void transfer(product.id)}>Confirmar</button>
+                        <button className="text-muted underline" onClick={() => setTransferringId(null)}>Cancelar</button>
+                      </span>
+                    ) : (
+                      <>
+                        <button className="mr-3 text-ink underline" onClick={() => navigate(`/admin/journey/products/edit/${productType.toLowerCase()}s/${product.id}`)}>Editar</button>
+                        <button className="mr-3 text-ink underline" onClick={() => { setTransferringId(product.id); setTransferTo(""); }}>Transferir</button>
+                        {product.is_active && <button className="text-status-bad underline" onClick={() => void remove(product.id)}>Desativar</button>}
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

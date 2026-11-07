@@ -48,13 +48,13 @@ type TransactionLockClient = {
   ): Promise<T>;
 };
 
-const PRODUCT_DELEGATE_BY_TYPE = {
+export const PRODUCT_DELEGATE_BY_TYPE = {
   [ProductType.CAR]: 'car',
   [ProductType.BOAT]: 'boat',
   [ProductType.AIRCRAFT]: 'aircraft',
 } as const;
 
-const PROCESS_FOREIGN_KEY_BY_TYPE = {
+export const PROCESS_FOREIGN_KEY_BY_TYPE = {
   [ProductType.CAR]: 'car_id',
   [ProductType.BOAT]: 'boat_id',
   [ProductType.AIRCRAFT]: 'aircraft_id',

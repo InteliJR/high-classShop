@@ -17,6 +17,10 @@ export interface CsvImportResponse {
   deactivatedCount: number;
   deactivatedIds: number[];
   reactivatedCount: number;
+  /** Criados por linhas sem identificador (preço novo nessas linhas cria outro produto). */
+  autoIdentifierCreatedCount?: number;
+  /** Desativados reativados por linha sem identificador idêntica. */
+  autoIdentifierReactivatedCount?: number;
   errorRows: CsvErrorRow[];
   warningRows: CsvErrorRow[];
   insertedIds?: number[];

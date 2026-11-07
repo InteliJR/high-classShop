@@ -285,7 +285,7 @@ Cada domínio expõe:
   "images": []
 }
 ```
-- `POST /cars|boats|aircrafts/import-csv`
+- `POST /cars|boats|aircrafts/import-csv` — aceita `.xlsx` (template) ou `.csv`. Só `valor` e `currency` (`BRL`/`USD`) são obrigatórios. Sem `identificador`, o import gera `auto-<hash>` a partir da linha inteira, inclusive `valor`, `currency` e `folder_url` (normalizados: `450000` = `450000.00`; link da pasta comparado pelo ID do Drive). Reimportar a linha idêntica atualiza o mesmo produto (e reativa se estiver desativado); mudar qualquer dado, inclusive o preço, cria outro produto. Para atualizar uma linha depois, preencha o `identificador`. A prévia (`impact.autoIdentifierNewItems`/`autoIdentifierReactivatedItems`) e o resultado (`autoIdentifierCreatedCount`/`autoIdentifierReactivatedCount`) mostram quantas linhas sem identificador criam ou reativam produto. `folder_url` precisa ser link ou ID de pasta do Drive; no `.xlsx`, hyperlink e fórmula `HYPERLINK` valem pelo destino (só nessa coluna). Na criação, campos vazios viram padrão: `marca` = tipo (Carro/Lancha/Aeronave), `modelo` = identificador, `estado` = "não informado", `ano` = null; no update, campos vazios não sobrescrevem o que existe.
   - payload:
 ```json
 {
@@ -299,17 +299,12 @@ Cada domínio expõe:
   "status": "PENDING"
 }
 ```
-- `GET /cars|boats|aircrafts/csv-template`
+- `GET /cars|boats|aircrafts/import-template`
   - payload:
 ```json
 {}
 ```
-  - resposta:
-```json
-{
-  "file": "template.csv"
-}
-```
+  - resposta: arquivo `template_<tipo>.xlsx` com a aba "Produtos" (só cabeçalho) e a aba "Instruções" (coluna, obrigatório, formato, exemplo, como preencher), geradas de `backend/src/shared/constants/product-columns.ts`.
 - `GET /cars|boats|aircrafts`
   - payload:
 ```json
@@ -360,6 +355,20 @@ Cada domínio expõe:
 {
   "id": 0,
   "updated": true
+}
+```
+- `PATCH /cars|boats|aircrafts/:id/specialist` (somente ADMIN) — transfere o produto para outro especialista ativo da mesma especialidade. `409 PRODUCT_HAS_OPEN_PROCESSES` se houver processo não concluído/rejeitado ou agendamento pendente/agendado; `409 PRODUCT_IDENTIFIER_CONFLICT` se o especialista de destino já tiver produto com o mesmo `identificador`; processos antigos mantêm o especialista original. Auditado como `PRODUCT_TRANSFER`.
+  - payload:
+```json
+{
+  "specialist_id": "uuid"
+}
+```
+  - resposta:
+```json
+{
+  "fromSpecialistId": "uuid",
+  "toSpecialistId": "uuid"
 }
 ```
 - `DELETE /cars|boats|aircrafts/:id`
@@ -699,25 +708,35 @@ Controllers:
 
 ### Appointments
 - `GET /appointments/check`
-  - payload:
-```json
-{
-  "client_id": "",
-  "specialist_id": "",
-  "product_type": "CAR",
-  "product_id": 0
-}
-```
-  - resposta:
+  - Apenas `CUSTOMER` (outros papéis: 403). O cliente vem do JWT; enviar `client_id` retorna 400.
+  - Query: `specialist_id`, `product_type` (`CAR` | `BOAT` | `AIRCRAFT`), `product_id`
+  - `exists`: há processo **ativo** (`SCHEDULING`…`DOCUMENTATION`) do cliente para o produto — é a trava anti-duplicidade do agendamento.
+  - `process`: o processo ativo ou, sem ativo, o `COMPLETED`/`REJECTED` mais recente (`null` se nunca houve). O histórico expõe só `status` + `changed_at`; o motivo de rejeição não é retornado.
+  - Campos de agendamento só para agendamento vigente (`PENDING`/`SCHEDULED`); senão `null`. `specialist_contact_email` só para pedido `EMAIL`.
+  - resposta (processo ativo):
 ```json
 {
   "success": true,
   "data": {
-    "id": "",
-    "status": "PENDING"
+    "exists": true,
+    "appointment_id": null,
+    "process_id": "uuid",
+    "appointment_status": null,
+    "scheduling_method": null,
+    "appointment_datetime": null,
+    "process": {
+      "id": "uuid",
+      "status": "NEGOTIATION",
+      "is_active": true,
+      "status_history": [
+        { "status": "SCHEDULING", "changed_at": "2026-10-01T12:00:00.000Z" },
+        { "status": "NEGOTIATION", "changed_at": "2026-10-03T12:00:00.000Z" }
+      ]
+    }
   }
 }
 ```
+  - resposta (sem processo ativo): `{ "exists": false, "process": { "status": "REJECTED", "is_active": false, ... } | null }`
 - `GET /appointments`
   - Query: paginação
   - Resposta: lista de agendamentos do usuário
