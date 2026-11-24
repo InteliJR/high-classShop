@@ -25,6 +25,7 @@ import {
   PreparedProductImage,
   ProductImageInput,
 } from '../products/product-image-preparation';
+import { buildProductSearchConditions } from 'src/shared/helpers/product-search.helper';
 
 @Injectable()
 export class BoatsService {
@@ -187,12 +188,23 @@ export class BoatsService {
       where.specialist_id = appliedFilters.specialist_id;
     }
 
+    // Busca textual (marca/modelo e ano exato) — usada na "Gestão de Produtos".
+    // Nenhum outro filtro usa `OR`; se passar a usar, combinar via `AND`.
+    const searchConditions = buildProductSearchConditions(
+      appliedFilters?.search,
+    );
+    if (searchConditions) {
+      where.OR = searchConditions;
+    }
+
     // Agrupamento das operções para serem realizadas no banco de dados
     const [boats, total] = await this.prismaService.$transaction([
       this.prismaService.boat.findMany({
         skip: skip,
         take: take,
         where: where,
+        // Ordem estável para a paginação não repetir/pular itens.
+        orderBy: [{ created_at: 'desc' }, { id: 'asc' }],
         select: publicBoatSelect,
       }),
       this.prismaService.boat.count({ where }),

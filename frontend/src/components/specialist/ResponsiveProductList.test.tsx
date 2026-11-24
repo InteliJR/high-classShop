@@ -57,7 +57,7 @@ describe("ResponsiveProductList", () => {
     expect(screen.getAllByText("US$ 120.000,00")).toHaveLength(2);
   });
 
-  it("mantém ações de editar e excluir acessíveis nos cartões", () => {
+  it("mantém ações de editar e desativar acessíveis nos cartões", () => {
     const onEdit = vi.fn();
     const onDelete = vi.fn();
 
@@ -76,11 +76,35 @@ describe("ResponsiveProductList", () => {
     );
     fireEvent.click(
       screen.getAllByRole("button", {
-        name: "Excluir Aurum Sedan 120",
+        name: "Desativar Aurum Sedan 120",
       })[0],
     );
 
     expect(onEdit).toHaveBeenCalledWith("brl");
     expect(onDelete).toHaveBeenCalledWith("brl");
+  });
+
+  it("marca produto inativo e não oferece desativá-lo de novo", () => {
+    render(
+      <ResponsiveProductList
+        products={[{ ...products[0], is_active: false }, products[1]]}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    // Cartão + tabela renderizam juntos; o CSS escolhe qual aparece.
+    expect(screen.getAllByText("Inativo")).toHaveLength(2);
+    expect(
+      screen.queryAllByRole("button", { name: "Desativar Aurum Sedan 120" }),
+    ).toHaveLength(0);
+    expect(
+      screen.getAllByRole("button", { name: "Editar Aurum Sedan 120" }),
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", {
+        name: "Desativar Aurum Grand Tourer 120",
+      }),
+    ).toHaveLength(2);
   });
 });

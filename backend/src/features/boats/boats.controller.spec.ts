@@ -1,4 +1,8 @@
-import { ProductType } from '@prisma/client';
+import { ProductType, UserRole } from '@prisma/client';
+import { Reflector } from '@nestjs/core';
+import { ForbiddenException } from '@nestjs/common';
+import { ROLES_KEY } from 'src/shared/decorators/roles.decorator';
+import { ActorContextService } from 'src/shared/actor-context/actor-context.service';
 import { BoatsController } from './boats.controller';
 
 function mkController() {
@@ -171,6 +175,102 @@ describe('BoatsController — Calendly opcional', () => {
         confirmSynchronize: false,
         context: expect.objectContaining({ specialistId: specialist.id }),
       }),
+    );
+  });
+});
+
+describe('BoatsController — admin/all (Gestão de Produtos)', () => {
+  function mkListController() {
+    const boatsService = {
+      getAllBoats: jest.fn().mockResolvedValue({
+        data: [],
+        count: 0,
+        filters: {},
+      }),
+    } as any;
+    const prisma = { user: { findUnique: jest.fn() } } as any;
+    // ActorContextService real: é ele quem restringe o SPECIALIST a si mesmo.
+    const actorContext = new ActorContextService(prisma);
+    const controller = new (BoatsController as any)(
+      boatsService,
+      {} as any,
+      actorContext,
+      {} as any,
+      prisma,
+    );
+    return { controller, boatsService, prisma };
+  }
+
+  const owner = {
+    id: 'spec-1',
+    role: UserRole.SPECIALIST,
+    speciality: ProductType.BOAT,
+    is_active: true,
+    name: 'Esp',
+    surname: 'Um',
+  } as any;
+
+  it('libera ADMIN e SPECIALIST nos metadados de roles', () => {
+    const roles = new Reflector().get(
+      ROLES_KEY,
+      BoatsController.prototype.getAllBoatsForAdmin,
+    );
+    expect(roles).toEqual(
+      expect.arrayContaining([UserRole.ADMIN, UserRole.SPECIALIST]),
+    );
+  });
+
+  it('lista só os produtos do próprio especialista, incluindo inativos', async () => {
+    const { controller, boatsService } = mkListController();
+
+    await controller.getAllBoatsForAdmin(
+      { page: '2', perPage: '20', search: 'abc', specialist_id: 'spec-2' },
+      owner,
+    );
+
+    expect(boatsService.getAllBoats).toHaveBeenCalledWith(
+      {
+        page: 2,
+        perPage: 20,
+        appliedFilters: { search: 'abc', specialist_id: 'spec-1' },
+      },
+      true,
+    );
+  });
+
+  it('responde 403 se o especialista pedir outro target_specialist_id', async () => {
+    const { controller, boatsService } = mkListController();
+
+    await expect(
+      controller.getAllBoatsForAdmin({ target_specialist_id: 'spec-2' }, owner),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(boatsService.getAllBoats).not.toHaveBeenCalled();
+  });
+
+  it('responde 403 se a especialidade não corresponder ao recurso', async () => {
+    const { controller, boatsService } = mkListController();
+
+    await expect(
+      controller.getAllBoatsForAdmin(
+        {},
+        { ...owner, speciality: ProductType.CAR },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(boatsService.getAllBoats).not.toHaveBeenCalled();
+  });
+
+  it('admin/all normaliza page negativo e limita perPage a 100', async () => {
+    const { controller, boatsService, prisma } = mkListController();
+    prisma.user.findUnique.mockResolvedValue(owner);
+
+    await controller.getAllBoatsForAdmin(
+      { page: '-1', perPage: '100000' },
+      owner,
+    );
+
+    expect(boatsService.getAllBoats).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, perPage: 100 }),
+      true,
     );
   });
 });

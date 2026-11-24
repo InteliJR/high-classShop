@@ -63,6 +63,7 @@ export type combustivelBoatValues = [
 export type tipoEmbarcacaoBoatValues = string;
 export type tamanhoBoatValues = ['ate_30_pes', '30_50_pes', 'acima_50_pes'];
 export class FiltersBoatMeta {
+  search?: string;
   marca?: string;
   modelo?: string;
   ano_min?: number;
@@ -101,6 +102,7 @@ export class RangeBoatFilters {
 // Aeronaves
 export type tipoAeronaveValues = string;
 export class FiltersAircraftMeta {
+  search?: string;
   marca?: string;
   modelo?: string;
   ano_min?: number;

@@ -12,6 +12,8 @@ export interface ProductListItem {
   estado?: string;
   descricao?: string;
   imageUrl?: string;
+  // Ausente = ativo (listas antigas não mandam o campo).
+  is_active?: boolean;
 }
 
 interface ResponsiveProductListProps {
@@ -28,6 +30,20 @@ function CurrencyBadge({ currency }: { currency: ProductCurrency }) {
   return (
     <span className="inline-flex shrink-0 rounded-full border border-border bg-bg px-2 py-0.5 text-xs font-medium text-ink-soft">
       Produto {currency}
+    </span>
+  );
+}
+
+function isInactive(product: ProductListItem) {
+  return product.is_active === false;
+}
+
+// Desativar não apaga: o produto sai do catálogo público mas continua na
+// lista do especialista, por isso o selo e a ausência do botão de desativar.
+function InactiveBadge() {
+  return (
+    <span className="inline-flex shrink-0 rounded-full bg-border-soft px-2 py-0.5 text-xs font-medium text-muted">
+      Inativo
     </span>
   );
 }
@@ -89,6 +105,7 @@ export default function ResponsiveProductList({
                       {productName}
                     </h3>
                     <CurrencyBadge currency={product.currency} />
+                    {isInactive(product) && <InactiveBadge />}
                   </div>
                   <p className="mt-2 text-lg font-semibold text-ink">
                     {formatCurrency(product.valor, product.currency)}
@@ -117,21 +134,23 @@ export default function ResponsiveProductList({
                 <button
                   type="button"
                   onClick={() => onEdit(product.id)}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-ink-soft transition hover:bg-border-soft"
+                  className={`${isInactive(product) ? "col-span-2 " : ""}inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-ink-soft transition hover:bg-border-soft`}
                   aria-label={`Editar ${productName}`}
                 >
                   <Pencil size={16} />
                   Editar
                 </button>
-                <button
-                  type="button"
-                  onClick={() => onDelete(product.id)}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-status-bad/30 px-3 py-2 text-sm font-medium text-status-bad transition hover:bg-status-bad-wash"
-                  aria-label={`Excluir ${productName}`}
-                >
-                  <Trash2 size={16} />
-                  Excluir
-                </button>
+                {!isInactive(product) && (
+                  <button
+                    type="button"
+                    onClick={() => onDelete(product.id)}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-status-bad/30 px-3 py-2 text-sm font-medium text-status-bad transition hover:bg-status-bad-wash"
+                    aria-label={`Desativar ${productName}`}
+                  >
+                    <Trash2 size={16} />
+                    Desativar
+                  </button>
+                )}
               </div>
             </article>
           );
@@ -179,6 +198,7 @@ export default function ResponsiveProductList({
                             {productName}
                           </span>
                           <CurrencyBadge currency={product.currency} />
+                          {isInactive(product) && <InactiveBadge />}
                         </div>
                       </div>
                     </div>
@@ -203,15 +223,21 @@ export default function ResponsiveProductList({
                       >
                         <Pencil size={18} />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => onDelete(product.id)}
-                        className="rounded p-2 text-status-bad transition hover:bg-status-bad-wash"
-                        aria-label={`Excluir ${productName}`}
-                        title="Excluir"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      {/* Espaço do botão ausente mantém o lápis alinhado. */}
+                      {isInactive(product) && (
+                        <span className="w-[34px]" aria-hidden />
+                      )}
+                      {!isInactive(product) && (
+                        <button
+                          type="button"
+                          onClick={() => onDelete(product.id)}
+                          className="rounded p-2 text-status-bad transition hover:bg-status-bad-wash"
+                          aria-label={`Desativar ${productName}`}
+                          title="Desativar"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
