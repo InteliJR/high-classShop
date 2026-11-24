@@ -14,7 +14,6 @@ import {
   ContainsCarFilters,
   ExactCarFilters,
   FiltersCarMeta,
-  RangeCarFilters,
 } from 'src/shared/dto/filters.dto';
 import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 import { publicCarSelect } from 'src/shared/selects/public-catalog.select';
@@ -26,6 +25,7 @@ import {
   ProductImageInput,
 } from '../products/product-image-preparation';
 import { buildProductSearchConditions } from 'src/shared/helpers/product-search.helper';
+import { applyRangeFilters } from 'src/shared/helpers/product-range.helper';
 
 @Injectable()
 export class CarsService {
@@ -139,31 +139,16 @@ export class CarsService {
       }
     }
 
-    // Range
-    const rangeFilters: RangeCarFilters = {
-      ano_max: appliedFilters?.ano_max,
-      ano_min: appliedFilters?.ano_min,
-      km_max: appliedFilters?.km_max,
-      preco_max: appliedFilters?.preco_max,
-      preco_min: appliedFilters?.preco_min,
-    };
-    // Cria um objeto para orientar um where que usa gte e lte
-    const rangeMap = {
-      preco: { gte: rangeFilters.preco_min, lte: rangeFilters.preco_max },
-      ano: { gte: rangeFilters.ano_min, lte: rangeFilters.ano_max },
-      km: { gte: undefined, lte: rangeFilters.km_max },
-    };
-    // Insere a filtragem que são um intervalo na variável where
-    for (const [key, { gte, lte }] of Object.entries(rangeMap)) {
-      const hasGte = gte !== undefined && gte !== null;
-      const hasLte = lte !== undefined && lte !== null;
-      // Crie o objeto caso tenha lte ou gte
-      if (hasGte || hasLte) {
-        where[key] = {};
-        if (hasGte) where[key].gte = gte;
-        if (hasLte) where[key].lte = lte;
-      }
-    }
+    // Range: coluna de preço é `valor`; valores da query chegam como texto.
+    applyRangeFilters(where, {
+      valor: { min: appliedFilters?.preco_min, max: appliedFilters?.preco_max },
+      ano: {
+        min: appliedFilters?.ano_min,
+        max: appliedFilters?.ano_max,
+        integer: true,
+      },
+      km: { min: undefined, max: appliedFilters?.km_max, integer: true },
+    });
 
     // Filtro por especialista (usado na tela "Meus Produtos")
     if (appliedFilters?.specialist_id) {

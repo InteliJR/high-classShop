@@ -97,4 +97,27 @@ describe('AircraftsService — getAllAircrafts (busca e ordenação)', () => {
       100,
     );
   });
+
+  it('filtra ano, preço (`valor`) e assentos (`assentos`) na direção certa', async () => {
+    const { service, findMany } = mkService();
+
+    await service.getAllAircrafts({
+      page: 1,
+      perPage: 20,
+      appliedFilters: {
+        ano_min: '2015',
+        ano_max: '2020',
+        preco_min: '2000000',
+        assentos_min: '6',
+        assentos_max: '12',
+      } as any,
+    });
+
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      is_active: true,
+      ano: { gte: 2015, lte: 2020 },
+      valor: { gte: 2000000 },
+      assentos: { gte: 6, lte: 12 },
+    });
+  });
 });

@@ -14,7 +14,6 @@ import {
   ContainsBoatFilters,
   ExactBoatFilters,
   FiltersBoatMeta,
-  RangeBoatFilters,
 } from 'src/shared/dto/filters.dto';
 import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
 import { publicBoatSelect } from 'src/shared/selects/public-catalog.select';
@@ -26,6 +25,7 @@ import {
   ProductImageInput,
 } from '../products/product-image-preparation';
 import { buildProductSearchConditions } from 'src/shared/helpers/product-search.helper';
+import { applyRangeFilters } from 'src/shared/helpers/product-range.helper';
 
 @Injectable()
 export class BoatsService {
@@ -160,28 +160,16 @@ export class BoatsService {
       }
     }
 
-    // Range
-    const rangeFilter: RangeBoatFilters = {
-      ano_max: appliedFilters?.ano_max,
-      ano_min: appliedFilters?.ano_min,
-      preco_max: appliedFilters?.preco_max,
-      preco_min: appliedFilters?.preco_min,
-    };
-    // Objeto para orientar o where que utiliza gte e lte
-    const rangeMap = {
-      ano: { gte: rangeFilter.ano_max, lte: rangeFilter.ano_min },
-      preco: { gte: rangeFilter.preco_max, lte: rangeFilter.preco_min },
-    };
-    // Insere a filtragem como um intervalo na variável where
-    for (const [key, { gte, lte }] of Object.entries(rangeMap)) {
-      const hasGte = gte !== undefined && gte !== null;
-      const hasLte = lte !== undefined && lte !== null;
-      if (hasGte || hasLte) {
-        where[key] = {};
-        if (hasGte) where[key].gte = gte;
-        if (hasLte) where[key].lte = lte;
-      }
-    }
+    // Range: antes o min/max estavam invertidos e o preço apontava para
+    // `preco`, coluna que não existe (é `valor`).
+    applyRangeFilters(where, {
+      ano: {
+        min: appliedFilters?.ano_min,
+        max: appliedFilters?.ano_max,
+        integer: true,
+      },
+      valor: { min: appliedFilters?.preco_min, max: appliedFilters?.preco_max },
+    });
 
     // Filtro por especialista (usado na tela "Meus Produtos")
     if (appliedFilters?.specialist_id) {

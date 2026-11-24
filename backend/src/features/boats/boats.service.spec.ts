@@ -97,4 +97,38 @@ describe('BoatsService — getAllBoats (busca e ordenação)', () => {
       100,
     );
   });
+
+  it('filtra faixas de ano e preço na direção certa, em `valor` e como número', async () => {
+    const { service, findMany } = mkService();
+
+    await service.getAllBoats({
+      page: 1,
+      perPage: 20,
+      // Como chega da query string: texto.
+      appliedFilters: {
+        ano_min: '2018',
+        ano_max: '2022',
+        preco_min: '1000000',
+        preco_max: '5000000',
+      } as any,
+    });
+
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      is_active: true,
+      ano: { gte: 2018, lte: 2022 },
+      valor: { gte: 1000000, lte: 5000000 },
+    });
+  });
+
+  it('ignora limites de faixa vazios ou não numéricos', async () => {
+    const { service, findMany } = mkService();
+
+    await service.getAllBoats({
+      page: 1,
+      perPage: 20,
+      appliedFilters: { ano_min: 'abc', preco_max: '' } as any,
+    });
+
+    expect(findMany.mock.calls[0][0].where).toEqual({ is_active: true });
+  });
 });

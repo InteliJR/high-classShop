@@ -156,4 +156,25 @@ describe('CarsService — getAllCars (busca e ordenação)', () => {
       100,
     );
   });
+
+  it('converte faixas da query em número e filtra preço em `valor`', async () => {
+    const { service, findMany } = mkService();
+
+    await service.getAllCars({
+      page: 1,
+      perPage: 20,
+      appliedFilters: {
+        ano_min: '2019',
+        preco_max: '900000',
+        km_max: '30000',
+      } as any,
+    });
+
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      is_active: true,
+      ano: { gte: 2019 },
+      valor: { lte: 900000 },
+      km: { lte: 30000 },
+    });
+  });
 });

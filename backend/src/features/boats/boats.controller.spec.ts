@@ -259,6 +259,21 @@ describe('BoatsController — admin/all (Gestão de Produtos)', () => {
     expect(boatsService.getAllBoats).not.toHaveBeenCalled();
   });
 
+  it('listagem pública arredonda total_pages para cima', async () => {
+    const { controller, boatsService } = mkListController();
+    boatsService.getAllBoats.mockResolvedValueOnce({
+      data: [],
+      count: 47,
+      filters: {},
+    });
+
+    const result = await controller.getAllBoats({ page: '1', perPage: '20' });
+
+    // Antes: 47 / 20 = 2.35, e o "ir para a última página" do catálogo
+    // pedia page=2.35.
+    expect(result.meta.pagination.total_pages).toBe(3);
+  });
+
   it('admin/all normaliza page negativo e limita perPage a 100', async () => {
     const { controller, boatsService, prisma } = mkListController();
     prisma.user.findUnique.mockResolvedValue(owner);
