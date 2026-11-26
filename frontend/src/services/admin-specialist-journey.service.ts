@@ -34,15 +34,26 @@ export async function getAdminClientOptions(
   return response.data;
 }
 
+// Catálogo de gestão (ativos + inativos) de um especialista. Serve à jornada
+// do admin (o interceptor injeta target_specialist_id) e à tela "Gestão de
+// Produtos" do próprio especialista (o backend força o id dele).
 export async function getAdminSpecialistProducts(
   productType: JourneyProductType,
   page: number,
   perPage: number,
+  search?: string,
 ): Promise<{ products: AdminCatalogProduct[]; pagination: PaginationMeta }> {
   const resource = resourceByType[productType];
+  const trimmedSearch = search?.trim();
   const response = await api.get<ResponseAPI<any, Record<string, unknown>>>(
     `/${resource}/admin/all`,
-    { params: { page, perPage } },
+    {
+      params: {
+        page,
+        perPage,
+        ...(trimmedSearch ? { search: trimmedSearch } : {}),
+      },
+    },
   );
   const products = response.data.data.map((raw) => ({
     ...raw,

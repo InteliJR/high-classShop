@@ -13,7 +13,6 @@ import {
   ContainsAircraftFilters,
   ExactAircraftFilters,
   FiltersAircraftMeta,
-  RangeAircraftFilters,
 } from 'src/shared/dto/filters.dto';
 import { Prisma, ProductType } from '@prisma/client';
 import { updateProductWithMonetaryLock } from '../products/product-monetary-lock';
@@ -25,6 +24,8 @@ import {
   PreparedProductImage,
   ProductImageInput,
 } from '../products/product-image-preparation';
+import { buildProductSearchConditions } from 'src/shared/helpers/product-search.helper';
+import { applyRangeFilters } from 'src/shared/helpers/product-range.helper';
 
 @Injectable()
 export class AircraftsService {
@@ -186,33 +187,34 @@ export class AircraftsService {
       }
     }
 
-    // Range
-    const rangeFilters: RangeAircraftFilters = {
-      ...appliedFilters,
-    };
-    // Objeto para orientar o where wu utiliza gte e lte
-    const rangeMap = {
-      ano: { gte: rangeFilters?.ano_max, lte: rangeFilters?.ano_min },
-      preco: { gte: rangeFilters?.preco_max, lte: rangeFilters?.preco_min },
-      assento: {
-        gte: rangeFilters?.assentos_max,
-        lte: rangeFilters?.assentos_min,
+    // Range: antes o min/max estavam invertidos e os campos apontavam para
+    // `preco`/`assento`, colunas que não existem (são `valor`/`assentos`).
+    applyRangeFilters(where, {
+      ano: {
+        min: appliedFilters?.ano_min,
+        max: appliedFilters?.ano_max,
+        integer: true,
       },
-    };
-    // Insere a filtragem como um intervalo na variável where
-    for (const [key, { gte, lte }] of Object.entries(rangeMap)) {
-      const hasGte = gte !== undefined && gte !== null;
-      const hasLte = lte !== undefined && lte !== null;
-      if (hasGte || hasLte) {
-        where[key] = {};
-        if (hasGte) where[key].gte = gte;
-        if (hasLte) where[key].lte = lte;
-      }
-    }
+      valor: { min: appliedFilters?.preco_min, max: appliedFilters?.preco_max },
+      assentos: {
+        min: appliedFilters?.assentos_min,
+        max: appliedFilters?.assentos_max,
+        integer: true,
+      },
+    });
 
     // Filtro por especialista (usado na tela "Meus Produtos")
     if (appliedFilters?.specialist_id) {
       where.specialist_id = appliedFilters.specialist_id;
+    }
+
+    // Busca textual (marca/modelo/estado e ano exato) — usada na "Gestão de Produtos".
+    // Nenhum outro filtro usa `OR`; se passar a usar, combinar via `AND`.
+    const searchConditions = buildProductSearchConditions(
+      appliedFilters?.search,
+    );
+    if (searchConditions) {
+      where.OR = searchConditions;
     }
 
     //Agrupamento das operações que serão realizadas no banco de dados
@@ -221,6 +223,8 @@ export class AircraftsService {
         skip: skip,
         take: take,
         where: where,
+        // Ordem estável para a paginação não repetir/pular itens.
+        orderBy: [{ created_at: 'desc' }, { id: 'asc' }],
         select: publicAircraftSelect,
       }),
       this.prismaService.aircraft.count({ where }),
