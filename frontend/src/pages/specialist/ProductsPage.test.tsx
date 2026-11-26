@@ -191,14 +191,12 @@ describe("ProductsPage (especialista)", () => {
     expect(screen.queryByText("Nenhum produto cadastrado")).toBeNull();
   });
 
-  it("confirma a desativação e recarrega a mesma página", async () => {
+  it("confirma a desativação e marca o item como inativo sem recarregar", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.mocked(deleteBoat).mockResolvedValueOnce(undefined as never);
-    getProducts
-      .mockResolvedValueOnce(pageResult([boat("b1", "Flybridge 68")], {}))
-      .mockResolvedValueOnce(
-        pageResult([boat("b1", "Flybridge 68", false)], {}),
-      );
+    getProducts.mockResolvedValueOnce(
+      pageResult([boat("b1", "Flybridge 68")], {}),
+    );
 
     renderPage();
     await screen.findAllByText("Azimut Flybridge 68");
@@ -212,8 +210,45 @@ describe("ProductsPage (especialista)", () => {
       "Produto desativado",
     );
     expect(deleteBoat).toHaveBeenCalledWith("b1");
-    expect(getProducts).toHaveBeenLastCalledWith("BOAT", 1, 20, "");
+    expect(getProducts).toHaveBeenCalledTimes(1);
     expect(screen.getAllByText("Inativo")).toHaveLength(2);
+    expect(screen.queryByRole("alert", { name: /Não foi possível/ })).toBeNull();
+  });
+
+  it("não sobrescreve uma busca feita enquanto a desativação está em andamento", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    let resolveDelete: () => void = () => {};
+    vi.mocked(deleteBoat).mockImplementationOnce(
+      () => new Promise<never>((resolve) => (resolveDelete = () => resolve(undefined as never))),
+    );
+    getProducts
+      .mockResolvedValueOnce(
+        pageResult([boat("b1", "Flybridge 68"), boat("b2", "S7")], {}),
+      )
+      .mockResolvedValueOnce(pageResult([boat("b2", "S7")], {}));
+
+    const { setSearch } = renderPage();
+    await screen.findAllByText("Azimut Flybridge 68");
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Desativar Azimut Flybridge 68" })[0],
+    );
+    setSearch("s7");
+    await waitFor(() =>
+      expect(getProducts).toHaveBeenLastCalledWith("BOAT", 1, 20, "s7"),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Azimut Flybridge 68")).toBeNull(),
+    );
+
+    await act(async () => resolveDelete());
+
+    expect(await screen.findByRole("status")).toBeTruthy();
+    // Nenhuma nova listagem com o termo antigo depois do DELETE.
+    expect(getProducts).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Azimut Flybridge 68")).toBeNull();
+    expect(screen.getAllByText("Azimut S7")).toHaveLength(2);
+    expect(screen.queryByText("Inativo")).toBeNull();
   });
 
   it("bloqueia a paginação enquanto a busca digitada ainda não foi aplicada", async () => {

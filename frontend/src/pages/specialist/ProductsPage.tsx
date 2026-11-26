@@ -122,9 +122,15 @@ export default function ProductsPage() {
       if (speciality === "CAR") await deleteCar(id);
       else if (speciality === "BOAT") await deleteBoat(id);
       else await deleteAircraft(id);
-      // O produto continua na lista (agora inativo), então a página atual
-      // segue válida.
-      await loadProducts(page);
+      // Atualiza só o item, sem recarregar: um reload aqui usaria a busca e a
+      // página do momento do clique e poderia sobrescrever uma busca feita
+      // enquanto o DELETE estava em andamento (e um erro do reload apareceria
+      // junto com a mensagem de sucesso). Se o item já saiu da lista, nada muda.
+      setProducts((current) =>
+        current.map((product) =>
+          product.id === id ? { ...product, is_active: false } : product,
+        ),
+      );
       setNotice("Produto desativado. Ele continua na lista como inativo.");
     } catch (caught) {
       console.error("Erro ao desativar produto:", caught);

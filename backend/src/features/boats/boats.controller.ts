@@ -175,8 +175,9 @@ export class BoatsController {
   async getAllBoats(@Query() query: any) {
     // Tratamento das varíaveis recebidas do front
     let { page, perPage, ...rawFilters } = query;
-    page = Number(page);
-    perPage = Number(perPage);
+    // Rota pública (sem login): limita perPage para ninguém pedir o catálogo
+    // inteiro de uma vez, com uma URL do S3 assinada por imagem.
+    ({ page, perPage } = parsePaginationParams(page, perPage));
 
     const appliedFilters: FiltersBoatMeta = rawFilters;
 

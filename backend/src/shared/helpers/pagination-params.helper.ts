@@ -8,7 +8,7 @@ function toPositiveInt(value: unknown): number | undefined {
 
 /**
  * Normaliza `page`/`perPage` vindos da query: página inteira >= 1 e até
- * MAX_PER_PAGE itens (limite documentado em docs/docs/tecnologias.md).
+ * MAX_PER_PAGE itens por página.
  * Evita `skip` negativo (erro do Prisma) e páginas gigantes, que assinariam
  * uma URL do S3 por imagem de cada produto numa só requisição.
  */

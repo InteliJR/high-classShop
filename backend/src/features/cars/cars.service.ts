@@ -155,7 +155,7 @@ export class CarsService {
       where.specialist_id = appliedFilters.specialist_id;
     }
 
-    // Busca textual (marca/modelo e ano exato) — usada na "Gestão de Produtos".
+    // Busca textual (marca/modelo/estado e ano exato) — usada na "Gestão de Produtos".
     // Nenhum outro filtro usa `OR`; se passar a usar, combinar via `AND`.
     const searchConditions = buildProductSearchConditions(
       appliedFilters?.search,

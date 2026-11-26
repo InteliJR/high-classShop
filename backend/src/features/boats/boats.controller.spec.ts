@@ -274,6 +274,16 @@ describe('BoatsController — admin/all (Gestão de Produtos)', () => {
     expect(result.meta.pagination.total_pages).toBe(3);
   });
 
+  it('listagem pública (sem login) limita perPage a 100 e normaliza page', async () => {
+    const { controller, boatsService } = mkListController();
+
+    await controller.getAllBoats({ page: '-3', perPage: '100000' });
+
+    expect(boatsService.getAllBoats).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, perPage: 100 }),
+    );
+  });
+
   it('admin/all normaliza page negativo e limita perPage a 100', async () => {
     const { controller, boatsService, prisma } = mkListController();
     prisma.user.findUnique.mockResolvedValue(owner);
