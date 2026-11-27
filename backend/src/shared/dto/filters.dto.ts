@@ -45,13 +45,6 @@ export class ExactCarFilters {
   cambio?: cambioCarValues;
   combustivel?: combustivelCarValues;
 }
-export class RangeCarFilters {
-  ano_min?: number;
-  ano_max?: number;
-  preco_min?: number;
-  preco_max?: number;
-  km_max?: number;
-}
 
 // Barco
 export type combustivelBoatValues = [
@@ -63,6 +56,7 @@ export type combustivelBoatValues = [
 export type tipoEmbarcacaoBoatValues = string;
 export type tamanhoBoatValues = ['ate_30_pes', '30_50_pes', 'acima_50_pes'];
 export class FiltersBoatMeta {
+  search?: string;
   marca?: string;
   modelo?: string;
   ano_min?: number;
@@ -91,16 +85,11 @@ export class ContainsBoatFilters {
   fabricante?: string;
   motor?: string;
 }
-export class RangeBoatFilters {
-  ano_min?: number;
-  ano_max?: number;
-  preco_min?: number;
-  preco_max?: number;
-}
 
 // Aeronaves
 export type tipoAeronaveValues = string;
 export class FiltersAircraftMeta {
+  search?: string;
   marca?: string;
   modelo?: string;
   ano_min?: number;
@@ -123,14 +112,6 @@ export class ContainsAircraftFilters {
   marca?: string;
   modelo?: string;
   categoria?: string;
-}
-export class RangeAircraftFilters {
-  ano_min?: number;
-  ano_max?: number;
-  preco_min?: number;
-  preco_max?: number;
-  assentos_min?: number;
-  assentos_max?: number;
 }
 
 // MetaData de filtros

@@ -42,6 +42,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { randomUUID } from 'node:crypto';
 import { TransferProductDto } from '../products/dto/transfer-product.dto';
 import { transferProductAsAdmin } from '../products/product-transfer';
+import { parsePaginationParams } from 'src/shared/helpers/pagination-params.helper';
 
 @Controller('aircrafts')
 export class AircraftsController {
@@ -175,8 +176,9 @@ export class AircraftsController {
   async getAllAircrafts(@Query() query: any) {
     //Tratamento das variáveis recebidas do front
     let { page, perPage, ...rawFilters } = query;
-    page = Number(page);
-    perPage = Number(perPage);
+    // Rota pública (sem login): limita perPage para ninguém pedir o catálogo
+    // inteiro de uma vez, com uma URL do S3 assinada por imagem.
+    ({ page, perPage } = parsePaginationParams(page, perPage));
 
     const appliedFilters: FiltersAircraftMeta = rawFilters;
 
@@ -197,7 +199,7 @@ export class AircraftsController {
     // Atualiza os metadados de paginação
     const pagination = new PaginationDto();
     pagination.current_page = page;
-    pagination.total_pages = count / perPage;
+    pagination.total_pages = Math.ceil(count / perPage);
     pagination.has_next = skip + perPage < count;
     pagination.has_prev = skip > 0;
     pagination.total = count;
@@ -217,15 +219,17 @@ export class AircraftsController {
     };
   }
 
+  // SPECIALIST também acessa (tela "Gestão de Produtos", inclui inativos):
+  // o ActorContextService força specialistId = próprio id e responde 403 se
+  // target_specialist_id for de outro especialista ou a especialidade divergir.
   @Get('admin/all')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.SPECIALIST)
   async getAllAircraftsForAdmin(
     @Query() query: any,
     @CurrentUser() user: UserEntity,
   ) {
     let { page, perPage, target_specialist_id, ...rawFilters } = query;
-    page = Number(page) || 1;
-    perPage = Number(perPage) || 20;
+    ({ page, perPage } = parsePaginationParams(page, perPage));
     const context = await this.actorContextService.resolve(
       user,
       target_specialist_id,
